@@ -303,6 +303,22 @@ describe('akış (sahte cihaz)', () => {
     expect((await refresh(again.json.receipt.id)).status).toBe('tamamlandi');
   });
 
+  it('kart reddinden sonra satış cihazdan düşerse (sonuç sorgusu "satış yok") sepet kendiliğinden kapanır, yeniden gönderilir', async () => {
+    const o = await newOrder(1);
+    device.nextSaleReply = { HasError: false, Message: 'Ödeme alınamadı', Data: null };
+    const r = await send(o);
+    expect(r.status).toBe(200);
+    device.sales.delete(pavoOrderNo(r.json.receipt.id));
+    await settle();
+    expect((await refresh(r.json.receipt.id)).status).toBe('iptal');
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('acik');
+    const again = await send(o);
+    expect(again.status).toBe(200);
+    device.pay(pavoOrderNo(again.json.receipt.id), [{ type: 1, amount: o.total / 100 }], { invoiceNo: 'LAF2026000000045' });
+    await settle();
+    expect((await refresh(again.json.receipt.id)).status).toBe('tamamlandi');
+  });
+
   it('cihaz satışı hemen reddederse kasiyer hatayı görür, sepet hataya düşer, adisyon kilitli kalmaz', async () => {
     const o = await newOrder(1);
     device.nextSaleReply = { HasError: true, HasAbondon: false, ErrorCode: '4012', Message: 'Vergi grubu bulunamadı' };
