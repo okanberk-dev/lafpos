@@ -112,6 +112,12 @@ PAVO_SERIAL=<cihazın seri numarası>
    değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
 2. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
    tek boylu üründe boy rozeti düzeldi. Sırada adisyon ürün karoları ve yönetim formları (`DESIGN.md`).
+3. **Yemeksepeti ve Getir gelen kutusu şubeye ayrılmalı (ikinci şubeden önce):** platform anahtarları şubeye göre
+   (`docs/PAKET-PLATFORMLARI.md` › Anahtarlar buluttan) ama LafPOS Uzaktan'daki gelen kutusu (`lafpos:ys:*`, Getir'inki)
+   bütün şubelerde ortak; aktarıcı her şubenin `YEMEKSEPETI_<ŞUBE>_REMOTE_ID`'sini kabul eder, kasa başka restoranın
+   siparişini atlar. İkinci şube LafPOS üzerinden Yemeksepeti'ne (ya da Getir'e) geçmeden önce kutu şubeye ayrılmalı
+   (kasa yalnız kendi şubesinin kutusunu çeker ve siler). Şube başına ayrı kafe anahtarı da aynı işte düşünülür (bugün
+   `LAFPOS_CLOUD_SECRET` ortak; `?sube=` yanlışlık önlemi, yetki sınırı değil).
 
 ## Çalışma kuralları (kısa)
 

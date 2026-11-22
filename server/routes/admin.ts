@@ -23,6 +23,7 @@ import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
+import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
@@ -1098,6 +1099,9 @@ adminRoutes.put('/settings', async (c) => {
   });
   fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
   fx.flush();
+  // Şube değişti: eski şubenin platform anahtarları hemen bırakılır, yenisininkiler beklemeden çekilir (beklenmez;
+  // çekim olmazsa kayıt yine başarılı, 10 dakikalık çekim yeniden dener)
+  if (patronChanged.includes('branchId')) void platformKeysBranchChanged();
   return c.json(getSettings());
 });
 

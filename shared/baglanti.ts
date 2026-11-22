@@ -122,6 +122,35 @@ export const CLOUD_KEY_GROUPS = [
 ] as const;
 export const CLOUD_KEYS: readonly string[] = CLOUD_KEY_GROUPS.flatMap((g) => g.keys);
 
+const TR_ASCII: Record<string, string> = { ç: 'c', Ç: 'C', ğ: 'g', Ğ: 'G', ı: 'i', İ: 'I', ö: 'o', Ö: 'O', ş: 's', Ş: 'S', ü: 'u', Ü: 'U' };
+
+/**
+ * Şubenin Vercel ortamındaki adı: büyük harf, Türkçe karaktersiz, yalnız harf ve rakam ('marina' → 'MARINA',
+ * 'tuzla-2' → 'TUZLA2', 'Kadıköy' → 'KADIKOY'). Boş ya da geçersizse null: şubesi bilinmeyen kasa hiçbir platform
+ * anahtarı almaz
+ */
+export function subeEtiketi(branchId: unknown): string | null {
+  if (typeof branchId !== 'string') return null;
+  const s = branchId
+    .trim()
+    .replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_ASCII[c] ?? c)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  return /^[A-Z0-9]{1,32}$/.test(s) ? s : null;
+}
+
+/**
+ * Platform anahtarları şubeye göre (#75): bulutta her değer `<PLATFORM>_<ŞUBE>_<ALAN>` adıyla durur
+ * (TRENDYOL_API_KEY + TUZLA → TRENDYOL_TUZLA_API_KEY, YEMEKSEPETI_REMOTE_ID + MARINA → YEMEKSEPETI_MARINA_REMOTE_ID).
+ * Öneksiz eski adlar hiçbir kasaya verilmez: bir şubenin anahtarı yanlışlıkla öbürüne gitmesin
+ */
+export function subeKeyName(key: string, sube: string): string {
+  const group = CLOUD_KEY_GROUPS.find((g) => (g.keys as readonly string[]).includes(key));
+  if (!group) throw new Error(`Bulut anahtarı değil: ${key}`);
+  const prefix = `${group.id.toUpperCase()}_`;
+  return `${prefix}${sube}_${key.slice(prefix.length)}`;
+}
+
 /** Buluttan gelen değerlerin süzgeci: yalnız listedeki anahtarlar, dolu ve alanın kuralına uyanlar */
 export function cleanCloudKeys(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};

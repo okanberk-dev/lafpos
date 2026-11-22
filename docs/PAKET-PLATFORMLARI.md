@@ -146,7 +146,8 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     ortamında bir tur atılmalı (alanlar belgeden yazıldı).
     Kafede `.env`: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID` ve
     LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
-    Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID` (başka restoranın siparişi 400). Kurulum
+    Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (aktarıcı bunların hepsini ve eski
+    öneksiz `YEMEKSEPETI_REMOTE_ID`'yi kabul eder, başka restoranın siparişi 400; hiçbiri yoksa süzgeç yok). Kurulum
     durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false` (değer asla).
   - **Getir Yemek** (GetirFood API; `server/delivery/getir.ts`, aktarıcı `api/uzaktan.ts` `getir/*`): Getir siparişi
     bizim verdiğimiz iki adrese iter; LafPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
@@ -257,24 +258,52 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
 
 ## Anahtarlar buluttan
 
-Sahibin tek adımı: **Trendyol panelinden değerleri Vercel'e yapıştırın, gerisi kendiliğinden.** Kasada Bağlantı
-bilgilerine platform anahtarı girmek gerekmez.
+Anahtarlar **şubeye göre** durur: Vercel'de her değerin adı `<PLATFORM>_<ŞUBE>_<ALAN>`; kasa yalnız kendi şubesininkileri
+alır. ŞUBE, kasanın **Şube kimliği**nden gelir (Yönetim › Ayarlar ve yedek › Kasa ve gün › Şube kimliği; lafmaliyet'teki
+şube kimliği, ilk kasada `marina`). Kural: büyük harf, Türkçe harf İngilizce karşılığına (ç→C, ğ→G, ı→I, ö→O, ş→S, ü→U),
+harf ve rakam dışındaki her şey (tire de) atılır: `marina` → `MARINA`, `tuzla` → `TUZLA`, `tuzla-2` → `TUZLA2`.
+Merkez'deki **Şube kodu** (`TZL` gibi, fişin başlığındaki) başka bir şeydir, Vercel adında kullanılmaz. Kasa hangi adı
+beklediğini Yönetim › Bağlantı bilgileri'nde platform kartında yazar ("Şube: TUZLA · Vercel'de TRENDYOL_TUZLA_… adıyla").
+Kasada Bağlantı bilgilerine platform anahtarı girmek gerekmez.
 
-1. Trendyol satıcı paneli › Hesap Bilgileri › Entegrasyon Bilgileri: satıcı no, API Key, API Secret.
-2. Vercel › `lafpos` projesi › Settings › Environment Variables, ortam **Production**, gizliler **Sensitive**:
-   `TRENDYOL_SUPPLIER_ID`, `TRENDYOL_API_KEY`, `TRENDYOL_API_SECRET`, `TRENDYOL_EXECUTOR_EMAIL` (panelde işlemi yapan
-   kullanıcının e-postası). Yemeksepeti bilgileri gelince: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`,
-   `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID`. Sonra Deployments › son yayın › Redeploy (ortam yayınla geçer).
-3. Kasa en geç 10 dakika içinde çeker; Yönetim › Bağlantı bilgileri'nde Trendyol kartı "Kaynak: bulut · son çekim
-   SS:DD" der. Platform Kapalı kalır: Yönetim › Paket platformları'ndan açmak sahibin kararı.
+Sahibin adımları, Tuzla LafPOS'a geçince (Marina'da Trendyol yok):
 
-Nasıl çalışır: kasa `GET /api/uzaktan/anahtarlar`'ı kafe anahtarıyla (`LAFPOS_CLOUD_SECRET`, gelen kutusu uçlarıyla
-aynı imza) açılışta ve 10 dakikada bir çeker. Uç yalnız Vercel ortamını okur, Redis'e dokunmaz; yanlış imzada 401,
-her yanıtta `cache-control: no-store`. Bulutta dolu olan değer kasadaki yerel değeri ezer, bulutta boşsa yerel kalır.
-Değer değişince kasa veri klasöründeki `platform-anahtarlari.json`'a (yalnız sahibine okunur) yazar, bağdaştırıcıyı
-yeniden başlatmadan kurar ve denetim kaydına değersiz bir satır düşer ("Trendyol anahtarları buluttan güncellendi").
-Değerler arayüzde, günlükte, denetim kaydında, veritabanında, bulut özetinde ve depoda hiç yazılmaz. İnternet yokken
-kasa son çekilen değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
+1. Tuzla kasasında Yönetim › Ayarlar ve yedek › Kasa ve gün › **Şube kimliği** = `tuzla` (yalnız patron değiştirir),
+   Kaydet. Şube değişince kasa eski şubenin anahtarlarını hemen bırakır ve yenisininkileri ister.
+2. Trendyol satıcı paneli › Hesap Bilgileri › Entegrasyon Bilgileri: satıcı no, API Key, API Secret.
+3. Vercel › `lafpos` projesi › Settings › Environment Variables, ortam **Production**, gizliler **Sensitive**:
+   `TRENDYOL_TUZLA_SUPPLIER_ID` (satıcı no; o olmadan Trendyol tanımlı sayılmaz), `TRENDYOL_TUZLA_API_KEY`,
+   `TRENDYOL_TUZLA_API_SECRET`, `TRENDYOL_TUZLA_EXECUTOR_EMAIL` (panelde işlemi yapan kullanıcının e-postası). Satıcı no
+   ve e-posta Vercel'de öneksiz adla (`TRENDYOL_SUPPLIER_ID`, `TRENDYOL_EXECUTOR_EMAIL`) zaten var: aynı değerleri şube
+   adıyla yeniden girin; eksik olan API Key ve API Secret. Yemeksepeti bilgileri gelince, şubesinin adıyla (Marina için):
+   `YEMEKSEPETI_MARINA_MW_URL`, `YEMEKSEPETI_MARINA_USERNAME`, `YEMEKSEPETI_MARINA_PASSWORD`,
+   `YEMEKSEPETI_MARINA_REMOTE_ID`. Sonra Deployments › son yayın › Redeploy (ortam yayınla geçer).
+4. Öneksiz girilmiş eski değerleri (`TRENDYOL_SUPPLIER_ID`, `TRENDYOL_API_KEY`, `TRENDYOL_API_SECRET`,
+   `TRENDYOL_EXECUTOR_EMAIL`, `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`,
+   `YEMEKSEPETI_REMOTE_ID`) şube adıyla girdikten sonra silin: #86'dan beri **hiçbir kasaya gitmezler**, bir şubenin
+   anahtarı yanlışlıkla öbürüne gitmesin diye. (Aktarıcının `YEMEKSEPETI_PLUGIN_SECRET`'i şubesiz kalır.)
+5. O şubenin kasası en geç 10 dakika içinde çeker; platform kartı "Kaynak: bulut · son çekim SS:DD" der. Son çekim
+   başarılıysa ve şubede değer yoksa "Bu şubede tanımlı değil"; hiç çekilmediyse, çekim olmadıysa ya da LafPOS Uzaktan
+   kurulu değilse nedenini yazar. Platform Kapalı kalır: Yönetim › Paket platformları'ndan açmak sahibin kararı.
+
+Şubesini göndermeyen (eski) ya da şube kimliği geçersiz kasa hiçbir platform anahtarı almaz.
+
+Nasıl çalışır: kasa `GET /api/uzaktan/anahtarlar?sube=<Şube kimliği>`'ni kafe anahtarıyla (`LAFPOS_CLOUD_SECRET`, gelen
+kutusu uçlarıyla aynı imza; sorgu da imzanın içinde) açılışta, 10 dakikada bir ve şube kimliği değişince hemen çeker.
+Uç yalnız Vercel ortamını okur, Redis'e dokunmaz; yanlış imzada 401, her yanıtta `cache-control: no-store`. Bulutta
+dolu olan değer kasadaki yerel değeri ezer, bulutta boşsa (ya da yalnız boşluksa) yerel kalır. Değer değişince kasa veri
+klasöründeki `platform-anahtarlari.json`'a (yalnız sahibine okunur) hangi şube için çekildiğiyle birlikte yazar,
+bağdaştırıcıyı yeniden başlatmadan kurar ve denetim kaydına değersiz bir satır düşer ("Trendyol anahtarları buluttan
+güncellendi"). Dosyadaki değerler yalnız kasanın şimdiki şubesi için çekildiyse kullanılır: şube kimliği değişince
+eskisininkiler bırakılır (şubesiz eski dosyada da), bir sonraki çekim yenisininkileri getirir. Değerler arayüzde,
+günlükte, denetim kaydında, veritabanında, bulut özetinde ve depoda hiç yazılmaz. İnternet yokken kasa son çekilen
+değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
+
+**Bilinen sınırlar.** Kafe anahtarı (`LAFPOS_CLOUD_SECRET`) bütün şubelerde aynı: `?sube=` imzalıdır (imzadan sonra
+değiştirilemez) ama uç isteyen kasanın gerçekten o şube olduğunu doğrulamaz. Şube adı bir yanlışlık önlemidir (Marina
+kasası Tuzla'nın anahtarını yanlışlıkla almaz), yetki sınırı değildir: kafe anahtarını bilen her şubenin anahtarını
+isteyebilir. Şube başına ayrı anahtar ileride. Yemeksepeti ve Getir'in gelen kutusu da şubeler arasında ortak
+(`docs/KALANLAR.md`).
 
 ## Otomatik kabul
 İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik

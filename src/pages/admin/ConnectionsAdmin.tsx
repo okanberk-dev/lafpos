@@ -19,8 +19,11 @@ interface ConnView {
   restart: 'otomatik' | 'elle' | null;
   pending: boolean;
   groups: { id: string; fields: { key: string; set: boolean; value: string | null; source?: 'bulut' | 'yerel' }[] }[];
-  /** Platform anahtarlarının buluttan son çekimi (#75 İş 2) */
-  bulut?: { at: number | null; ok: boolean | null; error: string | null };
+  /**
+   * Platform anahtarlarının buluttan son çekimi (#75 İş 2): bu şube için son başarılı çekim, son denemenin sonucu,
+   * kasanın şube etiketi (Vercel adındaki ŞUBE; geçersizse null) ve LafPOS Uzaktan'ın kurulu olup olmadığı
+   */
+  bulut?: { at: number | null; ok: boolean | null; error: string | null; sube: string | null; uzaktan: boolean };
 }
 type FieldState = ConnView['groups'][number]['fields'][number];
 
@@ -34,13 +37,32 @@ const savedText = (v: ConnView) => (v.restart === 'otomatik' ? 'Kaydedildi; LafP
  * ("Tanımlı" yazar; yazılırsa değişir, boş bırakılırsa aynen kalır). Kaydet yalnız değişen alanları gönderir; adresi
  * silmek satırı kaldırır. "Bağlantıyı kaldır" kartın bütün satırlarını siler
  */
-/** Platform kartında anahtarların kaynağı: bulut (Vercel'deki LafPOS Uzaktan) ya da yerel, ve son çekimin saati */
+/** Platform kartında şube: Vercel'de bu şubenin anahtarları hangi adla girilir (yalnız ad, değer değil) */
+function subeLine(groupId: string, bulut: ConnView['bulut']): string {
+  if (!bulut?.sube) return 'Şube kimliği geçersiz: buluttan anahtar gelmez (Ayarlar ve yedek › Şube kimliği)';
+  return `Şube: ${bulut.sube} · Vercel'de ${groupId.toUpperCase()}_${bulut.sube}_… adıyla`;
+}
+
+/**
+ * Platform kartında anahtarların kaynağı: bulut (Vercel'deki LafPOS Uzaktan, yalnız bu şubenin adıyla girilenler) ya da
+ * yerel, ve son çekimin saati. İkisi de yoksa "Bu şubede tanımlı değil" yalnız bu şube için son çekim başarılıysa
+ * (Marina'da Trendyol yok); hiç çekilmediyse, son çekim olmadıysa, Uzaktan kurulu değilse ya da şube geçersizse nedeni yazar
+ */
 function cloudLine(state: FieldState[], bulut: ConnView['bulut']): string {
   const fromCloud = state.some((s) => s.source === 'bulut');
   const fromLocal = state.some((s) => s.source === 'yerel');
-  const source = fromCloud && fromLocal ? 'Kaynak: bulut ve yerel' : fromCloud ? 'Kaynak: bulut' : fromLocal ? 'Kaynak: yerel' : 'Bulutta tanımlı değil';
-  const at = bulut?.at ? `son çekim ${fmtTime(bulut.at)}` : 'buluttan henüz çekilmedi';
-  return `${source} · ${at}${bulut?.ok === false && bulut.error ? ` · ${bulut.error}` : ''}`;
+  const error = bulut?.ok === false && bulut.error ? bulut.error : null;
+  const line = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ');
+  if (fromCloud || fromLocal) {
+    const source = fromCloud && fromLocal ? 'Kaynak: bulut ve yerel' : fromCloud ? 'Kaynak: bulut' : 'Kaynak: yerel';
+    const at = !bulut?.uzaktan ? 'LafPOS Uzaktan kurulu değil' : bulut.at ? `son çekim ${fmtTime(bulut.at)}` : 'buluttan henüz çekilmedi';
+    return line(source, at, error);
+  }
+  if (!bulut?.uzaktan) return 'Tanımlı değil · LafPOS Uzaktan kurulu değil, buluttan anahtar gelmez';
+  if (!bulut.sube) return 'Tanımlı değil · şube kimliği geçersiz';
+  if (!bulut.at) return line(bulut.ok === false ? 'Buluttan çekilemedi' : 'Buluttan henüz çekilmedi', error);
+  if (bulut.ok === false) return line('Son çekim olmadı', `son başarılı çekim ${fmtTime(bulut.at)}`, error);
+  return `Bu şubede tanımlı değil · son çekim ${fmtTime(bulut.at)}`;
 }
 
 function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGroup; state: FieldState[]; editable: boolean; onSaved: (v: ConnView) => void; bulut?: ConnView['bulut'] }) {
@@ -113,9 +135,10 @@ function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGrou
         }}
       >
         {cloudGroup && (
-          <p className="text-[13px] text-[var(--admin-text-soft)]" data-bulut-kaynak>
-            {cloudLine(state, bulut)}
-          </p>
+          <div className="space-y-0.5 text-[13px] text-[var(--admin-text-soft)] [overflow-wrap:anywhere]">
+            <p data-bulut-sube>{subeLine(group.id, bulut)}</p>
+            <p data-bulut-kaynak>{cloudLine(state, bulut)}</p>
+          </div>
         )}
         {group.fields.map((f) => {
           const st = fieldOf(f.key);
