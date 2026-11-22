@@ -130,7 +130,7 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
       <Button autoFocus={!prompt && tone === 'danger'} onClick={() => close(null)}>
         {o.cancelLabel ?? 'Vazgeç'}
       </Button>
-      <Button type="submit" form={formId} variant={tone === 'danger' ? 'danger' : 'primary'} autoFocus={!prompt && tone === 'primary'} className="whitespace-normal leading-tight">
+      <Button type="submit" form={formId} variant={tone === 'danger' ? 'danger' : 'primary'} autoFocus={!prompt && tone === 'primary'} wrap>
         {o.confirmLabel}
       </Button>
     </div>

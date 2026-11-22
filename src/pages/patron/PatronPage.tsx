@@ -7,7 +7,7 @@ import { businessHourIndex } from '@shared/time';
 import type { OffDeviceTotals } from '@shared/order-calc';
 import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { agoText, cutoffMinute, dayLabel, type PatronStats, statsSource, summaryCompares, todayStats, topCompare } from '@shared/today-stats';
-import { Button } from '@/components/ui/Button';
+import { Button, IconButton } from '@/components/ui/Button';
 import { ErrorState, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
@@ -336,9 +336,9 @@ export default function PatronPage() {
               <div className="mt-2 flex items-start justify-between gap-3">
                 <h2 className="font-headline text-[clamp(1.25rem,1rem+1vw,1.75rem)] font-normal leading-tight tracking-[-0.02em] text-ink">Bugünkü ciro</h2>
                 {reportsLink && (
-                  <button type="button" onClick={() => navigate('/raporlar')} aria-label="Raporlar" title="Raporlar" className="k-round -mt-1 lg:hidden">
+                  <IconButton label="Raporlar" variant="secondary" size="lg" onClick={() => navigate('/raporlar')} className="-mt-1 rounded-full lg:hidden">
                     <ArrowUpRight aria-hidden="true" className="size-[18px]" />
-                  </button>
+                  </IconButton>
                 )}
               </div>
               <div className="mt-1 flex flex-wrap items-end gap-x-6 gap-y-3">
@@ -348,15 +348,14 @@ export default function PatronPage() {
                 {(reportsLink || canKasa) && (
                   <div className="flex shrink-0 gap-2 pb-1.5 max-lg:hidden">
                     {reportsLink && (
-                      <button type="button" onClick={() => navigate('/raporlar')} className="k-ink-btn">
-                        <BarChart3 aria-hidden="true" className="size-4" />
+                      <Button variant="ink" size="lg" ring={false} icon={<BarChart3 aria-hidden="true" className="size-4" />} onClick={() => navigate('/raporlar')}>
                         Raporlar
-                      </button>
+                      </Button>
                     )}
                     {canKasa && (
-                      <button type="button" onClick={() => navigate('/kasa')} className="k-ghost-btn">
+                      <Button variant="secondary" size="lg" onClick={() => navigate('/kasa')}>
                         Kasa
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}

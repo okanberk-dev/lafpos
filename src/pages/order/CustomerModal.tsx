@@ -115,7 +115,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
       <Button disabled={busy === 'create'} onClick={() => setCreating(false)}>
         Geri
       </Button>
-      <Button type="submit" form={formId} variant="primary" className="whitespace-normal leading-tight" loading={busy === 'create'}>
+      <Button type="submit" form={formId} variant="primary" wrap loading={busy === 'create'}>
         Kaydet ve ekle
       </Button>
     </div>

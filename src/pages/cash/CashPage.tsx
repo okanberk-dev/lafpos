@@ -27,7 +27,7 @@ import { ZView } from './ZView';
 import { DayCloseGuide } from './DayCloseGuide';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
-const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-sm:whitespace-normal max-sm:leading-tight max-[400px]:[&>svg]:hidden';
+const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-[400px]:[&>svg]:hidden';
 
 type MoveKind = 'harcama' | 'teslim' | 'giris';
 interface Movement {
@@ -400,7 +400,7 @@ export default function CashPage() {
                   {MOVE_KINDS.map((k) => {
                     const Icon = MOVE_ICON[k];
                     return (
-                      <Button key={k} icon={<Icon className="size-4" />} className={MOVE_BTN} onClick={() => openMove(k)}>
+                      <Button key={k} wrap icon={<Icon className="size-4" />} className={MOVE_BTN} onClick={() => openMove(k)}>
                         {MOVE_LABEL[k]}
                       </Button>
                     );

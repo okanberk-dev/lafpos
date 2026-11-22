@@ -34,7 +34,7 @@ import { Avatar, Badge } from './ui/misc';
 import { useUzaktanErisim } from '@/lib/kontrol';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsClaim, TopTabsSlot } from './shellSlots';
-import { Button } from './ui/Button';
+import { Button, IconButton } from './ui/Button';
 
 /** "Denemeyi bitir" penceresi yalnız patron basınca yüklenir (yönetim kodu kasa ekranının paketine girmez) */
 const DenemeFinish = lazy(() => import('./admin/DenemeCard').then((m) => ({ default: m.DenemeFinishLauncher })));
@@ -368,9 +368,9 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         <header className="flex min-h-16 items-center gap-0.5 bg-bg pb-1.5 pl-3 pr-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <LafTile size="md" />
           <span className="ml-3 min-w-0 flex-1 truncate font-headline text-[19px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
-          <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-press">
+          <IconButton label="Ara ya da git" size="lg" onClick={() => setPalette(true)} className="rounded-full pointer-coarse:size-11">
             <Search className="size-5" />
-          </button>
+          </IconButton>
           {status()}
           <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
             {avatar('sm')}
@@ -498,9 +498,9 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
               {REMOTE && <RemoteShopPicker />}
               {healthPill}
-              <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
+              <IconButton label="Ara ya da git" title="Ara ya da git (Ctrl K)" onClick={() => setPalette(true)} className="rounded-xl">
                 <Search className="size-5" />
-              </button>
+              </IconButton>
               {/*
                * Kişinin düğmesi (panonun avatarı ve oku): kişinin menüsünü (Araçlar çekmecesi) açar. Ana eylemle yarışmasın diye
                * kenarsız; geniş ekranda adı ve rolü yanında

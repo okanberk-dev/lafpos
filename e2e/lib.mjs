@@ -314,9 +314,64 @@ export async function overflowReport(page) {
       const hex = (c) => `#${[0, 1, 2].map((i) => Math.round(c[i]).toString(16).padStart(2, '0')).join('')}`;
       faint.push({ kind: 'okunmayan yazı', text: `${describe(el)} ${ratio.toFixed(1)}:1 (yazı ${hex(fg)}, zemin ${hex(bg)})`, right: Math.round(r.right), left: Math.round(r.left) });
     }
+    /*
+     * Kırpılan düğme (22 Kas 2026, sahip: "birkaç buton bozuk, tam gözükmüyor"): düğmenin içeriği kutusuna sığmıyor
+     * (yazı ya da ikon kenardan taşıyor/kesiliyor) ya da etiketi üç noktayla kısalmış ama tam adı title'da yok
+     */
+    const clipped = [];
+    for (const el of document.querySelectorAll('button, [role="button"], [role="tab"], a[class*="--r-btn"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (el.closest('[aria-hidden="true"], .sr-only, [data-overflow-ok], [inert]')) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === 'hidden' || st.display === 'none' || Number(st.opacity) === 0) continue;
+      let why = null;
+      // Yazı ya da ikon düğmenin kutusunun dışına uzanıyor (kırpılıyor ya da taşıyor); iç boşluğa girmesi sayılmaz
+      const leaves = [...el.querySelectorAll('svg, *:not(:has(*))')];
+      // Düğmenin doğrudan yazısı (öğesiz metin): aralıkla ölçülür
+      for (const n of el.childNodes) {
+        if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        leaves.push({ text: n.textContent, rect: range.getBoundingClientRect() });
+      }
+      for (const leaf of leaves) {
+        if (!(leaf instanceof Element)) {
+          const lr = leaf.rect;
+          const dx = Math.max(r.left - lr.left, lr.right - r.right);
+          const dy = Math.max(r.top - lr.top, lr.bottom - r.bottom);
+          if (dx > 1 || dy > 1) {
+            why = `"${leaf.text.trim().slice(0, 24)}" kutudan ${Math.round(Math.max(dx, dy))} px taşıyor`;
+            break;
+          }
+          continue;
+        }
+        if (leaf.closest('svg') && leaf.closest('svg') !== leaf) continue;
+        const lr = leaf.getBoundingClientRect();
+        if (lr.width < 1 || lr.height < 1) continue;
+        const ls = getComputedStyle(leaf);
+        if (ls.visibility === 'hidden' || ls.position === 'absolute' || ls.position === 'fixed') continue;
+        const dx = Math.max(r.left - lr.left, lr.right - r.right);
+        const dy = Math.max(r.top - lr.top, lr.bottom - r.bottom);
+        if (dx > 1 || dy > 1) {
+          why = `${leaf.tagName.toLowerCase() === 'svg' ? 'ikon' : `"${(leaf.textContent ?? '').trim().slice(0, 24)}"`} kutudan ${Math.round(Math.max(dx, dy))} px taşıyor`;
+          break;
+        }
+      }
+      if (!why) {
+        for (const t of [el, ...el.querySelectorAll('*')]) {
+          if (t.scrollWidth <= t.clientWidth + 1) continue;
+          if (getComputedStyle(t).textOverflow !== 'ellipsis') continue;
+          if (t.closest('[title]') || el.getAttribute('title')) continue;
+          why = `etiket kısaltılmış, title yok ("${(t.textContent ?? '').trim().slice(0, 30)}")`;
+          break;
+        }
+      }
+      if (why) clipped.push({ kind: 'kırpılan düğme', text: `${describe(el)}: ${why}`, right: Math.round(r.right), left: Math.round(r.left) });
+    }
     return {
       page: document.documentElement.scrollWidth - vw,
-      items: [...bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })), ...faint.slice(0, 8)],
+      items: [...bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })), ...faint.slice(0, 8), ...clipped.slice(0, 8)],
     };
   });
 }

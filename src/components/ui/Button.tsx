@@ -90,6 +90,18 @@ const sizes: Record<ButtonSize, string> = {
   lg: 'h-11 px-5 text-[15px] gap-2 rounded-[var(--r-btn)] pointer-coarse:h-12',
   xl: 'h-12 px-6 text-base gap-2.5 rounded-[var(--r-btn)] pointer-coarse:h-14',
 };
+/**
+ * Uzun etiketli düğme (`wrap`): yükseklik sabit değil en az o kadar; dar yerde yazı alt satıra iner, düğme uzar,
+ * yazı kesilmez ve kenara dayanmaz. Sabit yükseklikli merdivenin üstüne `whitespace-normal` vermek dokunmatikte
+ * (`pointer-coarse:h-11`) iki satırı 44 px'e sıkıştırıyordu (dokunmatik kasa PC'sinde ödeme penceresi, 22 Kas 2026)
+ */
+const WRAP = 'whitespace-normal text-balance leading-tight';
+const wrapSizes: Record<ButtonSize, string> = {
+  sm: 'min-h-8 py-1 px-3 text-[13px] gap-1.5 rounded-[var(--r-btn)] pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-3.5 pointer-coarse:text-sm [[data-area=admin][data-density=compact]_&]:pointer-fine:min-h-8',
+  md: 'min-h-10 py-1.5 px-4 text-sm gap-2 rounded-[var(--r-btn)] pointer-coarse:min-h-11 pointer-coarse:px-5 pointer-coarse:text-[15px] [[data-area=admin]_&]:pointer-fine:min-h-9 [[data-area=admin][data-density=compact]_&]:pointer-fine:min-h-8',
+  lg: 'min-h-11 py-2 px-5 text-[15px] gap-2 rounded-[var(--r-btn)] pointer-coarse:min-h-12',
+  xl: 'min-h-12 py-2 px-6 text-base gap-2.5 rounded-[var(--r-btn)] pointer-coarse:min-h-14',
+};
 /** Kare ikon düğmesi: genişlik yükseklikle aynı adımda; dar satırda daralmaz */
 const squares: Record<ButtonSize, string> = {
   sm: 'w-8 shrink-0 px-0 pointer-coarse:w-11 pointer-coarse:px-0 [[data-area=admin][data-density=compact]_&]:pointer-fine:w-8',
@@ -117,14 +129,14 @@ const DISABLED_BASE = 'disabled:cursor-not-allowed disabled:active:scale-100 dis
 
 /**
  * Düğme sınıfları, `<Link>` / `<NavLink>` / `<a>` gibi düğme olmayan öğe için: `className={buttonClass('primary')}`.
- * `square` ikon düğmesi genişliği verir.
+ * `square` ikon düğmesi genişliği verir; `wrap` uzun etiketi alt satıra indirir (düğme uzar).
  */
-export function buttonClass(variant: ButtonVariant = 'secondary', size: ButtonSize = 'md', opts: { square?: boolean; block?: boolean; loading?: boolean; ring?: boolean; className?: string } = {}): string {
+export function buttonClass(variant: ButtonVariant = 'secondary', size: ButtonSize = 'md', opts: { square?: boolean; block?: boolean; loading?: boolean; ring?: boolean; wrap?: boolean; className?: string } = {}): string {
   return cn(
     BASE,
     variants[variant],
     opts.loading ? 'cursor-progress' : cn(DISABLED_BASE, disabledStyles[variant]),
-    sizes[size],
+    opts.wrap ? cn(wrapSizes[size], WRAP) : sizes[size],
     opts.ring && ringSizes[size],
     opts.square && squares[size],
     // Geniş ana düğmede yazı solda, halka sağda (kitin .btn.primary.full'ı)
@@ -151,13 +163,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   block?: boolean;
   /** Ok halkası (primary ve ink'te kendiliğinden); kare ikon düğmesinde yok */
   ring?: boolean;
+  /** Uzun etiket: dar yerde alt satıra iner, düğme uzar (yazı kesilmez) */
+  wrap?: boolean;
 }
 
-export function Button({ variant = 'secondary', size = 'md', icon, loading, block, ring, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
+export function Button({ variant = 'secondary', size = 'md', icon, loading, block, ring, wrap, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
   // Ana eylemde baştaki ikon yok (kit): yön ve anlamı halkadaki ok taşır
   const ringed = (ring ?? RING.includes(variant)) && children != null && children !== false;
   return (
-    <button type={type} disabled={disabled || loading} aria-busy={loading || undefined} className={buttonClass(variant, size, { block, loading, ring: ringed, className })} {...rest}>
+    <button type={type} disabled={disabled || loading} aria-busy={loading || undefined} className={buttonClass(variant, size, { block, loading, ring: ringed, wrap, className })} {...rest}>
       {loading ? (
         <>
           {/* Etiket yerinde kalır (genişlik ve erişilebilir ad), yalnız görünmez; gösterge ortada */}

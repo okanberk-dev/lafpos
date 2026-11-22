@@ -19,6 +19,7 @@ import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { setBarTheme, useTheme } from '@/lib/theme';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { visibleSections } from './admin/sections';
+import { Button } from '@/components/ui/Button';
 
 interface Entry {
   id: string;
@@ -231,9 +232,9 @@ function Palette({ onClose }: { onClose: () => void }) {
           />
           {/* Fareyle Esc tuşu (yönetimdeki Ctrl K tuşuyla aynı); dokunmatikte kapatma düğmesi */}
           <kbd className="rounded-md border border-line bg-surface-2 px-1.5 py-px font-sans text-xs text-muted pointer-coarse:hidden">Esc</kbd>
-          <button type="button" onClick={onClose} className="-mr-2 hidden min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-medium text-ink-2 transition-colors duration-150 active:bg-press pointer-coarse:inline-flex">
+          <Button variant="ghost" size="sm" onClick={onClose} className="-mr-2 hidden pointer-coarse:inline-flex">
             Vazgeç
-          </button>
+          </Button>
         </div>
         <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
           {results.length === 0 && (
