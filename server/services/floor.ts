@@ -183,31 +183,74 @@ export function ordersAwaitingHand(t: Tx | DB, now = Date.now()): string[] {
     .map((r) => r.id);
 }
 
+type KitchenOrderRow = typeof schema.orders.$inferSelect;
+type KitchenItemRow = typeof schema.orderItems.$inferSelect;
+
+/** Bar fişinin başlığı (kalemsiz): aktif fişler, Hazır sekmesi ve bar geçmişi (`services/history.ts`) aynı künyeyi kurar */
+export function kitchenTicketOf(order: KitchenOrderRow, item: Pick<KitchenItemRow, 'batch' | 'sentAt'>, key: string, names: Map<string, string>, tableNames: Map<string, string>): KitchenTicket {
+  return {
+    key,
+    orderId: order.id,
+    orderNo: order.source === 'laffogato' ? (order.extNo ?? order.no) : order.no,
+    batch: item.batch,
+    label: orderLabel(order, order.tableId ? tableNames.get(order.tableId) : null),
+    type: order.type,
+    source: order.source,
+    waiterName: order.waiterId ? (names.get(order.waiterId) ?? null) : null,
+    note: order.note,
+    sentAt: item.sentAt,
+    scheduledFor: order.scheduledFor,
+    numarator: order.numarator ?? null,
+    platform: order.platform ?? null,
+    // Hesabı kapanmış (ödenmiş ya da ciro dışı: ikram, ödenmez, zayi) ya da tamamı ödenmiş: barista tahsil edecek bir
+    // şey olmadığını bilir. Açık ₺0 adisyon "Ödendi" demez
+    paid: order.status === 'kapali' || (order.total > 0 && order.paid >= order.total),
+    items: [],
+  };
+}
+
+/** Bar fişinin kalemi (aktif fişler, Hazır sekmesi, bar geçmişi) */
+export function kitchenItemOf(item: KitchenItemRow): KitchenTicket['items'][number] {
+  return {
+    id: item.id,
+    name: item.name,
+    size: item.size,
+    optionsText: item.optionsText,
+    qty: item.qty,
+    note: item.note,
+    status: item.status,
+    voided: item.voided,
+    stationId: item.stationId,
+    sentAt: item.sentAt,
+    startedAt: item.startedAt,
+    readyAt: item.readyAt,
+  };
+}
+
 /**
  * Bar/mutfak ekranı. Varsayılan: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına
  * gruplu. `ready` (Hazır sekmesi): teslim bekleyen hazır kalemler (`awaitingHandWhere`: son 30 dakikada hazır, açık
  * günün; açık gün yoksa boş), sipariş başına tek fiş (müşteri siparişi bütün alır); site ve paket platformu siparişleri
  * gelmez, onların teslimi kendi akışlarında. Kasanın siparişinde kalemin durumu esastır: teslim edilmiş gel-al'a
- * sonradan eklenen kalem hazır olunca burada görünür. `history` (Geçmiş): son 90 dakikada hazır olanlar ve teslim edilenler.
+ * sonradan eklenen kalem hazır olunca burada görünür. Geçmiş (bugün hazırlananlar ve teslim edilenler) ayrı:
+ * `kitchenHistory` (`services/history.ts`).
  */
-export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean; ready?: boolean } = {}): KitchenTicket[] {
+export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; ready?: boolean } = {}): KitchenTicket[] {
   const now = Date.now();
   const since = kitchenSince(getOpenDay(t), now);
 
   // Ödeme bekleyen kalem (tezgâh satışında "Öde") bara henüz gitmedi: ödeme alınınca gönderim anıyla düşer
   const base = and(gt(schema.orderItems.sentAt, since), eq(schema.orderItems.held, false), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
-  const where = opts.history
-    ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
-    : opts.ready
-      ? awaitingHandWhere(t, now, opts.stationId)
-      : and(
-          base,
-          or(
-            and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
-            // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
-            and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
-          ),
-        );
+  const where = opts.ready
+    ? awaitingHandWhere(t, now, opts.stationId)
+    : and(
+        base,
+        or(
+          and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
+          // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
+          and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
+        ),
+      );
   if (!where) return [];
 
   const rows = t
@@ -230,48 +273,16 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
     const key = opts.ready ? `${order.id}:hazir` : `${order.id}:${item.batch}`;
     let ticket = tickets.get(key);
     if (!ticket) {
-      ticket = {
-        key,
-        orderId: order.id,
-        orderNo: order.source === 'laffogato' ? (order.extNo ?? order.no) : order.no,
-        batch: item.batch,
-        label: orderLabel(order, order.tableId ? tableNames.get(order.tableId) : null),
-        type: order.type,
-        source: order.source,
-        waiterName: order.waiterId ? (names.get(order.waiterId) ?? null) : null,
-        note: order.note,
-        sentAt: item.sentAt,
-        scheduledFor: order.scheduledFor,
-        numarator: order.numarator ?? null,
-        platform: order.platform ?? null,
-        // Hesabı kapanmış (ödenmiş ya da ciro dışı: ikram, ödenmez, zayi) ya da tamamı ödenmiş: barista tahsil edecek bir
-        // şey olmadığını bilir. Açık ₺0 adisyon "Ödendi" demez
-        paid: order.status === 'kapali' || (order.total > 0 && order.paid >= order.total),
-        items: [],
-      };
+      ticket = kitchenTicketOf(order, item, key, names, tableNames);
       tickets.set(key, ticket);
     }
     if (!item.voided) due.set(key, (due.get(key) ?? false) || (!item.complimentary && item.paidQty < item.qty));
-    ticket.items.push({
-      id: item.id,
-      name: item.name,
-      size: item.size,
-      optionsText: item.optionsText,
-      qty: item.qty,
-      note: item.note,
-      status: item.status,
-      voided: item.voided,
-      stationId: item.stationId,
-      sentAt: item.sentAt,
-      startedAt: item.startedAt,
-      readyAt: item.readyAt,
-    });
+    ticket.items.push(kitchenItemOf(item));
   }
   for (const [key, open] of due) if (!open) tickets.get(key)!.paid = true;
   // Yalnız iptal satırı kalan fişte bile iptal bildirimi gösterilsin; ama hiç kalemi kalmayan fiş yok
   const list = [...tickets.values()].filter((tk) => tk.items.length);
   // Hazır: en uzun bekleyen önce (alınmayan sipariş üstte kalır)
   const readyOf = (tk: KitchenTicket) => Math.max(...tk.items.map((i) => i.readyAt ?? 0));
-  if (opts.ready) return list.sort((a, b) => readyOf(a) - readyOf(b));
-  return opts.history ? list.sort((a, b) => b.sentAt - a.sentAt) : list;
+  return opts.ready ? list.sort((a, b) => readyOf(a) - readyOf(b)) : list;
 }

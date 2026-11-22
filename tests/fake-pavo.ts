@@ -40,7 +40,8 @@ export interface FakePavo {
    * `/PrintEODCopy`'nin yanıtı: `null` normal · `http404` gövdesiz HTTP 404 (sahada N86, uç yok) · nesne: bu JSON yanıt
    * (ör. eşleştirmesi bozulmuş cihazın 74'ü)
    */
-  eodCopyReply: null | 'http404' | Record<string, unknown>;
+  /** `httpNNN`: gövdesiz HTTP yanıtı (404 uç yok, 500 cihazın iç hatası...) */
+  eodCopyReply: null | `http${number}` | Record<string, unknown>;
   /** `/Ping` JSON yerine bu HTTP koduyla gövdesiz yanıt verir (seri no'suz Ping'i reddeden cihaz) */
   pingHttpStatus: number | null;
   /** `/PaymentMediators`'ın `Data`'sı (biçimi belgesiz; farklı biçimler denenir) */
@@ -248,11 +249,12 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
       if (device.eodDelayMs > 0) return void setTimeout(() => send(res, reply), device.eodDelayMs);
       return send(res, reply);
     }
-    if (path === '/PrintEODCopy' && device.eodCopyReply === 'http404') {
-      res.writeHead(404);
+    const copyReply = device.eodCopyReply;
+    if (path === '/PrintEODCopy' && typeof copyReply === 'string') {
+      res.writeHead(Number(copyReply.slice(4)));
       return res.end();
     }
-    if (path === '/PrintEODCopy' && device.eodCopyReply && device.eodCopyReply !== 'http404') return send(res, device.eodCopyReply);
+    if (path === '/PrintEODCopy' && copyReply && typeof copyReply === 'object') return send(res, copyReply);
     if (path === '/PrintEODCopy') {
       const want = (body.EODCopy as { batchNo?: number } | undefined)?.batchNo;
       const batch = want == null ? device.batches.at(-1) : device.batches.find((b) => b.batchNo === want);

@@ -31,16 +31,35 @@ afterAll(() => {
   h.cleanup();
 });
 
-/** Saat ileri alınmış gibi (Date.now); gerisi gerçek */
+/** Saat ileri alınmış gibi (Date.now); gerisi gerçek. `pinClock` çağrıldıysa onun anından sayar */
 function later(ms: number) {
-  const now = Date.now() + ms;
+  const now = (anchor ?? Date.now()) + ms;
   vi.spyOn(Date, 'now').mockReturnValue(now);
 }
+
+/**
+ * Testin saatini sabitler: gerçek saat, ama 05:00 iş günü sınırına (İstanbul, UTC+3) 45 dk'dan yakınsa sınırın 1 saat
+ * sonrası. Testler saati 30 dk'ya kadar ileri alır; 04:30-05:00 arası koşan CI'da gün değişiyor, özet "değişti" sayılıp
+ * nabız gidiyordu (22 Kasım 2026, main CI)
+ */
+let anchor: number | null = null;
+function pinClock() {
+  const DAY = 86_400_000;
+  const now = Date.now();
+  const intoDay = (now + 3 * 3_600_000) % DAY;
+  const untilBoundary = (5 * 3_600_000 - intoDay + DAY) % DAY;
+  anchor = untilBoundary < 45 * 60_000 ? now + untilBoundary + 3_600_000 : now;
+  vi.spyOn(Date, 'now').mockReturnValue(anchor);
+}
+afterEach(() => {
+  anchor = null;
+});
 
 describe('LafPOS Uzaktan itmesi', () => {
   it('değişmeyen özet gitmez; zaman damgaları değişiklik sayılmaz', async () => {
     const { pushSnapshot, resetCloudSync, buildSnapshot, snapshotHash } = await import('../server/sync/cloud');
     resetCloudSync();
+    pinClock();
     pushes = [];
     expect(await pushSnapshot()).toBe('sent');
     expect(pushes).toHaveLength(1);
@@ -57,6 +76,7 @@ describe('LafPOS Uzaktan itmesi', () => {
     const { pushSnapshot, resetCloudSync, KEEPALIVE_MS } = await import('../server/sync/cloud');
     expect(KEEPALIVE_MS).toBe(15 * 60_000);
     resetCloudSync();
+    pinClock();
     pushes = [];
     expect(await pushSnapshot()).toBe('sent');
     later(10 * 60_000);

@@ -1975,6 +1975,12 @@
 .rc-foot-note {
   margin-top: 1mm;
 }
+/* İki fiş tek yazdırmada (işyeri nüshası, bilgi fişi): yazıcı arada keser */
+.rc-cut {
+  break-after: page;
+  page-break-after: always;
+  height: 0;
+}
 
 @media print {
   /* Kâğıt boyu: genişlik 80 mm, uzunluk içerik kadar (sürücünün rulo kâğıdı); kenar boşluğu alanın kendi dolgusunda */

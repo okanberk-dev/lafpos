@@ -167,6 +167,69 @@ export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO
   );
 }
 
+/**
+ * İşyeri nüshası: ödemeden sonra fiş yazıcısından çıkan kısa kayıt (kalem dökümü yok). Müşterinin fişini yazarkasa
+ * basar; bu kâğıt kasada kalır. `device`: yazarkasanın fiş ve Z no'su (cihazdan geldiyse)
+ */
+export function StoreCopyReceipt({
+  order,
+  boot,
+  payments,
+  device,
+  cashier,
+  at = Date.now(),
+}: {
+  order: OrderDTO;
+  boot: BootstrapDTO;
+  payments: Pick<OrderDTO['payments'][number], 'id' | 'methodName' | 'amount' | 'tip'>[];
+  device?: { receiptNo: number | null; zNo: number | null; docId?: string | null; docLabel?: string | null } | null;
+  cashier: string | null;
+  at?: number;
+}) {
+  const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
+  const branch = branchLine(boot);
+  const paid = payments.reduce((a, p) => a + p.amount + p.tip, 0);
+  return (
+    <div className="rc">
+      <div className="rc-head">
+        <div className="rc-name">{boot.settings.businessName}</div>
+        {branch && <div className="rc-sub">{branch}</div>}
+        <div className="rc-title">İŞYERİ NÜSHASI</div>
+      </div>
+      <div className="rc-block">
+        <Row strong l={place} r={`No ${order.no}`} />
+        <Row l="Tarih" r={fmtDateTime(at)} />
+        {cashier && <Row l={`Kasiyer ${cashier}`} />}
+      </div>
+      <Hr />
+      <Row l="Adisyon toplamı" r={tlPlain(order.total)} />
+      <div className="rc-block">
+        {payments.map((p) => (
+          <Row key={p.id} l={p.tip > 0 ? `${p.methodName} (bahşiş ${tlPlain(p.tip)})` : p.methodName} r={tlPlain(p.amount + p.tip)} />
+        ))}
+      </div>
+      <div className="rc-total">
+        <span>ALINAN</span>
+        <span className="rc-r">{tlPlain(paid)} TL</span>
+      </div>
+      {order.total - order.paid > 0 && <Row strong l="Kalan" r={`${tlPlain(order.total - order.paid)} TL`} />}
+      {device && (device.receiptNo != null || device.zNo != null || device.docId) && (
+        <div className="rc-block">
+          {device.receiptNo != null && <Row l={`Yazarkasa ${device.docLabel ?? 'fiş'} no`} r={String(device.receiptNo)} />}
+          {device.zNo != null && <Row l="Z no" r={String(device.zNo)} />}
+          {device.docId && <Row small l={device.docId} />}
+        </div>
+      )}
+      <div className="rc-foot">
+        <div className="rc-strong">İŞYERİ NÜSHASI · MALİ DEĞERİ YOKTUR</div>
+      </div>
+    </div>
+  );
+}
+
+/** Birden çok fiş tek yazdırmada (işyeri nüshası ve bilgi fişi): aralarında kâğıt kesilir */
+export const PrintCut = () => <div className="rc-cut" aria-hidden="true" />;
+
 /** Gün sonu (Z) ya da gün açıkken ara rapor (X) çıktısı: X'te kapanış anı yoktur */
 export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO; date: string; zNo: number; s: ZSummary; closedAt: number | null }) {
   return (

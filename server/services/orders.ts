@@ -1815,6 +1815,11 @@ const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazir
  * düşer); onun "Geri al"ı "servis"ten "hazir"a döndürür: hazır olduğu an korunur, hazır uyarısı yinelenmez. Kasanın
  * kendi gel-al siparişinin aşaması bardan izler (`syncPickupDelivery`; Siparişler'de aynı sipariş için ikinci bir
  * düğme kalmasın; bar "Hazır"ı geri alınca aşama da "Hazırlanıyor"a döner).
+ *
+ * Geri almalar denetim kaydına yazılır (`kitchen.undo`, adisyon başına bir kayıt). Yanlışlıkla "Hazır" denen kalemi
+ * bekleyenlere döndürmek bar yetkisi ister (`mutfak.ekran`; yalnız sipariş alan garson yapamaz): fiş kuyruğa döner,
+ * çağrı ekranında "Hazırlanıyor"a geçer. Teslimi geri almak teslim edebilen herkese açık (bildirimdeki Geri al).
+ * "Hazır" ve "Teslim edildi" diyen kişi kaleme yazılır (`readyBy`, `servedBy`: bar geçmişi), geri alınınca silinir.
  */
 export function setItemsStatus(
   t: Tx,
@@ -1833,6 +1838,10 @@ export function setItemsStatus(
   /** Teslimin geri alındığı adisyonlar ve öteki dokunuşlarda türetilen aşamanın teslimden dönüş nedeni (denetim) */
   const undone = new Set<string>();
   const cause = new Map<string, string>();
+  /** Geri alınan kalemler, adisyon başına (denetim): "hazır"dan bekleyenlere ve teslimden hazıra */
+  const backToQueue = new Map<string, ItemRow[]>();
+  const backToReady = new Map<string, ItemRow[]>();
+  const push = (m: Map<string, ItemRow[]>, it: ItemRow) => m.set(it.orderId, [...(m.get(it.orderId) ?? []), it]);
   for (const it of items) {
     if (it.voided) continue;
     let status = input.status ?? NEXT[it.status];
@@ -1842,20 +1851,51 @@ export function setItemsStatus(
     if (!status || status === it.status) continue;
     // Teslimin geri alınışı: kalem yeniden hazırlanmadı, yalnız teslim zamanı silinir
     const undo = it.status === 'servis' && status === 'hazir' && it.readyAt != null;
-    if (undo) undone.add(it.orderId);
-    else cause.set(it.orderId, status === 'hazirlaniyor' ? 'bar hazırı geri aldı' : 'aşama bardan izlenir');
+    if (undo) {
+      undone.add(it.orderId);
+      push(backToReady, it);
+    } else cause.set(it.orderId, status === 'hazirlaniyor' ? 'bar hazırı geri aldı' : 'aşama bardan izlenir');
+    // "Hazır"ı geri alma: fiş bekleyenlere döner. Bar yetkisi ister; sipariş alan garson barın işini geri almaz
+    if (it.status === 'hazir' && status === 'hazirlaniyor') {
+      needDirect(actor, 'mutfak.ekran');
+      push(backToQueue, it);
+    }
     if (status === 'hazir' && !undo) readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
     // Teslimden geri dönen kalemin teslim zamanı kalmaz (hazırdan teslime süresi yalnız gerçek teslimi sayar)
-    if (status === 'hazirlaniyor') Object.assign(patch, { startedAt: it.startedAt ?? now, servedAt: null });
-    if (status === 'hazir') Object.assign(patch, undo ? { servedAt: null } : { startedAt: it.startedAt ?? now, readyAt: now, servedAt: null });
-    if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });
+    if (status === 'hazirlaniyor') Object.assign(patch, { startedAt: it.startedAt ?? now, servedAt: null, readyBy: null, servedBy: null });
+    if (status === 'hazir') Object.assign(patch, undo ? { servedAt: null, servedBy: null } : { startedAt: it.startedAt ?? now, readyAt: now, servedAt: null, readyBy: actor.user.id, servedBy: null });
+    // Hazır denmeden teslim edilen kalemi (kasadan tek dokunuş) teslim eden hazırlamış sayılır
+    if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now, readyBy: it.readyAt != null ? it.readyBy : actor.user.id, servedBy: actor.user.id });
     t.update(schema.orderItems).set(patch).where(eq(schema.orderItems.id, it.id)).run();
     orders.add(it.orderId);
     if (it.stationId) stations.add(it.stationId);
   }
+  const listed = (rows: ItemRow[]) => rows.map((i) => `${i.qty} ${i.name}`).join(', ');
   for (const id of orders) {
-    const o = syncPickupDelivery(t, actor, fx, loadOrder(t, id), undone.has(id) ? undefined : cause.get(id));
+    const before = loadOrder(t, id);
+    const o = syncPickupDelivery(t, actor, fx, before, undone.has(id) ? undefined : cause.get(id));
+    const queued = backToQueue.get(id);
+    if (queued) {
+      fx.audit(t, {
+        userId: actor.user.id,
+        action: 'kitchen.undo',
+        orderId: id,
+        message: `${actor.user.name} #${o.no} siparişinde “Hazır”ı geri aldı (${listed(queued)}); fiş bekleyenlere döndü`,
+        data: { step: 'hazir', itemIds: queued.map((i) => i.id) },
+      });
+    }
+    const unserved = backToReady.get(id);
+    // Kasanın gel-al'ında teslimden dönüş aşamayla birlikte yazıldı (`delivery.undo`): ikinci kayıt açılmaz
+    if (unserved && !(before.deliveryStatus === 'teslim' && o.deliveryStatus !== 'teslim')) {
+      fx.audit(t, {
+        userId: actor.user.id,
+        action: 'kitchen.undo',
+        orderId: id,
+        message: `${actor.user.name} #${o.no} siparişinde teslimi geri aldı (${listed(unserved)}); sipariş yeniden teslim bekliyor`,
+        data: { step: 'teslim', itemIds: unserved.map((i) => i.id) },
+      });
+    }
     orderEvents(fx, o, actor.user.id, 'item.status');
     const ready = readyCount.get(id);
     // Platform siparişinin "siparişi alanı" kabul edendir (otomatik kabulde ayarda seçilen, kafede olmayabilir): uyarı

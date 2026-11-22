@@ -183,6 +183,10 @@ export interface PublicSettings {
   receiptFooter: string;
   /** Adisyonda (hesap fişi) bağlı müşterinin adı yazılsın mı (varsayılan kapalı; müşteri yoksa hiç yazılmaz) */
   receiptCustomerName: boolean;
+  /** Ödeme alınınca fiş yazıcısından kısa işyeri nüshası (kasa bilgisayarında; varsayılan açık) */
+  receiptStoreCopy: boolean;
+  /** Yazarkasa bağlı değilken ödemeden sonra müşteriye bilgi fişi ("mali değeri yoktur"; varsayılan kapalı) */
+  receiptInfoSlip: boolean;
   serviceRate: number;
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
@@ -277,7 +281,10 @@ export interface BootstrapDTO {
    */
   branch?: { name: string | null; code: string | null } | null;
   integrations: {
-    okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste' };
+    /** `auto`: "Ödemeyi al" sepeti kendiliğinden cihaza yollar (Yönetim › Yazarkasa POS) */
+    okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste'; auto: boolean };
+    /** Kasa bilgisayarında fiş yazıcısı bulundu (Windows kasa kısayolu bildirdi): ödeme sonrası fişler sessiz basılır */
+    receiptPrinter: boolean;
     laffogatoPanel: boolean;
     lafmaliyetPush: boolean;
     /** Site adresi; boşsa site bağlantısı kurulmadı (LAFFOGATO_URL yok) */
@@ -553,6 +560,8 @@ export interface KitchenTicketItem {
   sentAt: number;
   startedAt: number | null;
   readyAt: number | null;
+  /** Teslim anı (bar geçmişi; eski sunucu göndermez) */
+  servedAt?: number | null;
 }
 
 export interface KitchenTicket {
@@ -576,6 +585,12 @@ export interface KitchenTicket {
    * ödendi ya da ikram (tezgâh satışı ödeme alınınca bara düşer): fişte "Ödendi"; eski sunucu göndermez
    */
   paid?: boolean;
+  /**
+   * Bar geçmişi (`GET /kitchen?history=1`; öteki görünümlerde ve eski sunucuda yok): fişin hazır olduğu an (kalemlerin
+   * en geçi; sitenin kendi akışında ilerleyen online siparişte bilinmez, null), hepsi teslim edildiyse teslim anı,
+   * "Hazır" ve "Teslim edildi" diyenlerin adı
+   */
+  history?: { readyAt: number | null; servedAt: number | null; readyBy: string | null; servedBy: string | null };
   items: KitchenTicketItem[];
 }
 

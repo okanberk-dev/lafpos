@@ -42,6 +42,8 @@ okcRoutes.put('/settings', async (c) => {
       operatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
       /** Pavo: gün kapanınca cihazda banka gün sonu */
       pavoAutoEod: z.boolean().optional(),
+      /** Ödemeyi alınca cihaza gönder (kasada ödeme); null: varsayılan (gerçek cihazda açık, eğitim cihazında kapalı) */
+      auto: z.boolean().nullable().optional(),
     }),
   );
   // Pavo yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
@@ -53,6 +55,7 @@ okcRoutes.put('/settings', async (c) => {
     ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
     ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
     ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
+    ...(input.auto !== undefined ? { okcAuto: input.auto } : {}),
   });
   return c.json(okcStatus(c.get('user')));
 });
