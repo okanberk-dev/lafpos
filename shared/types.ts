@@ -187,6 +187,11 @@ export interface PublicSettings {
   receiptStoreCopy: boolean;
   /** Yazarkasa bağlı değilken ödemeden sonra müşteriye bilgi fişi ("mali değeri yoktur"; varsayılan kapalı) */
   receiptInfoSlip: boolean;
+  /**
+   * Fişi yazdırma penceresi açmadan doğrudan ağdaki fiş yazıcısına gönder (server/lib/escpos.ts; varsayılan açık).
+   * Yazıcının ağ adresi yoksa ya da ulaşılamazsa tarayıcıdan basılır. A4 masa kartları hep tarayıcıdan
+   */
+  receiptDirect: boolean;
   serviceRate: number;
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */

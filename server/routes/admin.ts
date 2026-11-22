@@ -960,6 +960,7 @@ const settingsShape = patchOf(
     receiptCustomerName: z.boolean(),
     receiptStoreCopy: z.boolean(),
     receiptInfoSlip: z.boolean(),
+    receiptDirect: z.boolean(),
     serviceRate: z.number().int().min(0).max(30),
     autoLockMinutes: z.number().int().min(0).max(120),
     keepAwake: z.boolean(),

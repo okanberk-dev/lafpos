@@ -1,10 +1,14 @@
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { create } from 'zustand';
 import { COMP_LABEL } from '@shared/comp';
 import { tlPlain } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO, PublicSettings } from '@shared/types';
 import type { ZSummary } from '@shared/types';
+import { post } from './api';
 
 /** Sunucunun verdiği banka gün sonu kâğıdı (`server/okc/service.ts` `PavoEodSlip`) */
 export interface BankEodSlip {
@@ -19,23 +23,36 @@ export interface BankEodSlip {
 import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/service-mode';
 
 /**
- * Tarayıcıdan 80 mm termal yazıcıya çıktı (kasa bilgisayarında kiosk Chrome, XP-80C gibi). İçerik `.print-area`ya
- * çizilir, `window.print()` çağrılır; sayfanın geri kalanı yazdırmada gizlidir. Fişin bütün görünümü index.css'teki
+ * 80 mm termal yazıcıya çıktı (kasa bilgisayarında kiosk Chrome, XP-80C gibi). Varsayılan yol doğrudan: fiş görüntüye
+ * çevrilip sunucudan ağdaki yazıcıya ESC/POS gider, yazdırma penceresi açılmaz (`printNow`). Olmazsa tarayıcıdan: içerik
+ * `.print-area`ya çizilir, `window.print()` çağrılır; sayfanın geri kalanı yazdırmada gizlidir. Fişin bütün görünümü index.css'teki
  * `.rc-*` sınıflarındadır: 80 mm kâğıtta 72 mm ortalı yazı alanı, yalnız siyah (gri ve zemin termal kâğıtta noktalı
  * basılır), sistemin eş aralıklı yazısı (yazdırma anında yüklenmesi gereken yazı tipi yok), sütunlu rakam. Tutarlar
  * sunucunun DTO'sundan gelir; burada yeni hesap yok
  */
 const usePrint = create<{ content: ReactNode | null; sheet: boolean; set: (c: ReactNode | null, sheet?: boolean) => void }>((set) => ({ content: null, sheet: false, set: (content, sheet = false) => set({ content, sheet }) }));
 
-/**
- * `sheet`: 80 mm fiş değil A4 sayfa (masa kartları); index.css `.print-sheet`. Dönen söz yazdırma komutu verilince
- * biter (kiosk Chrome'da `window.print()` fişi yazıcıya gönderip döner): işyeri nüshasının "basıldı" onayı bundan sonra
- * gider. Yazdırılamazsa reddedilir
- */
-export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Promise<void> {
-  usePrint.getState().set(content, !!opts.sheet);
+/** Açılış verisini okumak için (PrintHost kaydeder): doğrudan basma ayarı yazdırma anında okunur */
+let queryClient: QueryClient | null = null;
+const directEnabled = () => !!queryClient?.getQueryData<BootstrapDTO>(['bootstrap'])?.settings.receiptDirect;
+
+/** Tarayıcı yazdırması: içerik `.print-area`ya çizilir, `window.print()`. `finished`: `afterprint` (en çok 6 sn) */
+function browserPrint(content: ReactNode, sheet: boolean): { sent: Promise<void>; finished: Promise<void> } {
+  // Kiosk Chrome'da afterprint window.print() içinde gelebilir: dinleyici önce kurulur
+  const finished = new Promise<void>((done) => {
+    const t = setTimeout(done, 6000);
+    window.addEventListener(
+      'afterprint',
+      () => {
+        clearTimeout(t);
+        done();
+      },
+      { once: true },
+    );
+  });
+  usePrint.getState().set(content, sheet);
   // İçerik çizilsin diye bir kare bekle
-  return new Promise((done, fail) =>
+  const sent = new Promise<void>((done, fail) =>
     requestAnimationFrame(() =>
       setTimeout(() => {
         try {
@@ -47,34 +64,123 @@ export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Pr
       }, 30),
     ),
   );
+  return { sent, finished };
+}
+
+/** 80 mm termal yazıcının noktası: 576 nokta = 72 mm (203 dpi); fiş ekranda 72 mm (CSS, `.rc-raster`) çizilip ölçeklenir */
+const RASTER_WIDTH = 576;
+
+/** Tuval → 1 bitlik satırlar (en soldaki en yüksek bit, 1 = siyah); saydam beyaz sayılır */
+export function packBits(rgba: Uint8ClampedArray, width: number, height: number, threshold = 160): Uint8Array {
+  const rowBytes = width / 8;
+  const out = new Uint8Array(rowBytes * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const a = rgba[i + 3]! / 255;
+      const lum = (0.299 * rgba[i]! + 0.587 * rgba[i + 1]! + 0.114 * rgba[i + 2]!) * a + 255 * (1 - a);
+      if (lum < threshold) out[y * rowBytes + (x >> 3)]! |= 0x80 >> (x & 7);
+    }
+  }
+  return out;
+}
+
+const toBase64 = (b: Uint8Array) => {
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+/**
+ * Fişi görüntüye çevirip sunucuya yollar (server/lib/escpos.ts: ESC/POS raster ve kesme, yazıcının IP'sine TCP). Fiş
+ * bugünkü bileşenle ekran dışında (`.rc-raster`, index.css) çizilir. Sunucu basamazsa reddedilir
+ */
+async function directPrint(content: ReactNode): Promise<void> {
+  const host = document.createElement('div');
+  host.className = 'rc-raster';
+  host.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    flushSync(() => root.render(content));
+    const { toCanvas } = await import('html-to-image');
+    const shot = await toCanvas(host, {
+      pixelRatio: RASTER_WIDTH / host.offsetWidth,
+      backgroundColor: '#fff',
+      skipFonts: true,
+      // Kopya ekran dışındaki konumunu taşımasın (yoksa görüntü boş çıkar)
+      style: { position: 'static', left: '0', top: '0' },
+    });
+    const height = Math.max(1, Math.round((shot.height * RASTER_WIDTH) / shot.width));
+    const canvas = document.createElement('canvas');
+    canvas.width = RASTER_WIDTH;
+    canvas.height = height;
+    const g = canvas.getContext('2d');
+    if (!g) throw new Error('Tuval yok');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, RASTER_WIDTH, height);
+    g.drawImage(shot, 0, 0, RASTER_WIDTH, height);
+    const bits = packBits(g.getImageData(0, 0, RASTER_WIDTH, height).data, RASTER_WIDTH, height);
+    await post('/kasa/fis', { width: RASTER_WIDTH, height, data: toBase64(bits) });
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 /**
- * Birkaç fişi ayrı yazdırma işleri olarak basar: termal yazıcı her işin sonunda keser (saha, 22 Kas 2026: iki nüsha
- * böyle ayrı kâğıt çıkıyor). Her iş `afterprint` olayıyla (en çok 6 sn) biter, sonraki kısa bir aradan sonra gider
+ * Doğrudan basmayı dener, olmazsa tarayıcıdan basar (fiş kaybolmaz). A4 sayfa ve ayar kapalıyken hep tarayıcıdan.
+ * Saf karar (test: tests/fis-dogrudan.test.ts)
+ */
+export async function printVia<T>(opts: { sheet: boolean; enabled: boolean; direct: () => Promise<void>; browser: () => T }): Promise<{ how: 'direct' } | { how: 'browser'; result: T }> {
+  if (!opts.sheet && opts.enabled) {
+    try {
+      await opts.direct();
+      return { how: 'direct' };
+    } catch (e) {
+      console.warn('[fiş] doğrudan basılamadı, tarayıcıdan basılıyor', e);
+    }
+  }
+  return { how: 'browser', result: opts.browser() };
+}
+
+/** Tek iş: nasıl basıldığı ve (tarayıcıdan basıldıysa) `afterprint`i bekleyen söz */
+async function printOne(content: ReactNode, sheet: boolean): Promise<{ how: 'direct' | 'browser'; finished: Promise<void> }> {
+  const r = await printVia({ sheet, enabled: directEnabled(), direct: () => directPrint(content), browser: () => browserPrint(content, sheet) });
+  if (r.how === 'direct') return { how: 'direct', finished: Promise.resolve() };
+  await r.result.sent;
+  return { how: 'browser', finished: r.result.finished };
+}
+
+/**
+ * Fiş: ayar açıkken (Yönetim › Ayarlar ve yedek › Fiş yazıcısı, varsayılan açık) yazdırma penceresi açılmadan doğrudan
+ * ağdaki fiş yazıcısına (`directPrint`); yazıcının adresi yoksa ya da ulaşılamazsa tarayıcıdan. `sheet`: 80 mm fiş değil
+ * A4 sayfa (masa kartları; hep tarayıcıdan, index.css `.print-sheet`). Dönen söz fiş yazıcıya gidince (ya da yazdırma
+ * komutu verilince; kiosk Chrome'da `window.print()` fişi yazıcıya gönderip döner) biter: işyeri nüshasının "basıldı"
+ * onayı bundan sonra gider. Yazdırılamazsa reddedilir
+ */
+export async function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Promise<'direct' | 'browser'> {
+  return (await printOne(content, !!opts.sheet)).how;
+}
+
+/**
+ * Birkaç fişi ayrı işler olarak basar: her biri ayrı kesilir (saha, 22 Kas 2026: iki nüsha böyle ayrı kâğıt çıkıyor).
+ * Tarayıcı işi `afterprint` olayıyla (en çok 6 sn) biter, sonraki kısa bir aradan sonra gider
  */
 export async function printEach(parts: ReactNode[]): Promise<void> {
   for (let i = 0; i < parts.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 300));
-    const finished = new Promise<void>((done) => {
-      const t = setTimeout(done, 6000);
-      window.addEventListener(
-        'afterprint',
-        () => {
-          clearTimeout(t);
-          done();
-        },
-        { once: true },
-      );
-    });
-    await printNow(parts[i]);
-    await finished;
+    await (await printOne(parts[i], false)).finished;
   }
 }
 
 export function PrintHost() {
   const content = usePrint((s) => s.content);
   const sheet = usePrint((s) => s.sheet);
+  const qc = useQueryClient();
+  useEffect(() => {
+    queryClient = qc;
+  }, [qc]);
   useEffect(() => {
     const done = () => usePrint.getState().set(null);
     window.addEventListener('afterprint', done);
