@@ -190,7 +190,10 @@ function autoDayEndTick() {
   const s = getSettings();
   if (!s.autoDayEnd) return;
   const p = istanbulParts(Date.now());
-  if (p.hour !== s.autoDayEndHour || p.minute > 15) return;
+  // Saat yarımlı olabilir (22.5 = 22:30): o dakikadan sonraki 15 dakikada
+  const hour = Math.floor(s.autoDayEndHour);
+  const minute = Math.round((s.autoDayEndHour - hour) * 60);
+  if (p.hour !== hour || p.minute < minute || p.minute > minute + 15) return;
   const day = getOpenDay(db);
   // Yeni açılmış (ya da gün sonundan sonra yeniden açılmış) gün hemen kapatılmaz
   if (!day || Date.now() - Math.max(day.openedAt, day.reopenedAt ?? 0) < 3 * 3600_000) return;

@@ -64,3 +64,13 @@ describe('yeniden açılan gün', () => {
     }
   });
 });
+
+describe('otomatik gün sonu saati', () => {
+  it('yarım saat seçilebilir (22.5 = 22:30); çeyrek saat reddedilir', async () => {
+    await relogin();
+    await h.ok('patron', 'PUT', '/admin/settings', { autoDayEndHour: 22.5 });
+    expect((await h.ok<{ autoDayEndHour: number }>('patron', 'GET', '/admin/settings')).autoDayEndHour).toBe(22.5);
+    expect((await h.call('patron', 'PUT', '/admin/settings', { autoDayEndHour: 22.25 })).status).toBe(422);
+    await h.ok('patron', 'PUT', '/admin/settings', { autoDayEndHour: 6 });
+  });
+});
