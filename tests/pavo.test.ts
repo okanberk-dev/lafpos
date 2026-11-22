@@ -520,7 +520,7 @@ describe('akış (sahte cihaz)', () => {
       }
     });
 
-    it('gün kapanınca cihazda gün sonu alınır: özet saklanır (kart no yok), kart toplamı LafPOS ile aynı, slip istenmez', async () => {
+    it('gün kapanınca cihazda gün sonu alınır: özet saklanır (kart no yok), kart toplamı LafPOS ile aynı, cihaz slibini basar (kayıt için)', async () => {
       const before = eodRequests().length;
       const t0 = Date.now();
       const day = await closeDay();
@@ -537,9 +537,9 @@ describe('akış (sahte cihaz)', () => {
 
       const [req] = eodRequests().slice(before);
       expect(req!.body.PerformEOD).toEqual({
-        AdditionalInfo: { useSummary: true, print: false, receiptImage: false, receiptWidth: '58mm', printData: { receiptJsonEnabled: false, receiptTextEnabled: false } },
+        AdditionalInfo: { useSummary: true, print: true, receiptImage: false, receiptWidth: '58mm', printData: { receiptJsonEnabled: false, receiptTextEnabled: false } },
       });
-      // Gönderimden hemen önce cihazın son gün sonu okunur (taban); slip basılmaz
+      // Gönderimden hemen önce cihazın son gün sonu okunur (taban; kopya basılmaz), gün sonu slibi cihazda basılır
       const at = device.requests.indexOf(req!);
       expect(device.requests[at - 1]).toMatchObject({ path: '/PrintEODCopy', body: { EODCopy: { useSummary: true, print: false, receiptImage: false } } });
       // Saklanan yalnız özet: kart no, işlem dökümü, işyeri bilgisi yok
@@ -555,8 +555,14 @@ describe('akış (sahte cihaz)', () => {
       // Fiş yazıcısı kâğıdı: batch başına bir kez, ilk soran kasa ekranına; kör kasada LafPOS kıyası gitmez
       expect((await h.call('garson', 'POST', '/okc/eod/slip', {})).status).toBe(403);
       const first = await h.ok<{ slip: { batchNo: string; grandTotalKurus: number; dayCardKurus: number | null } | null }>('kasa', 'POST', '/okc/eod/slip', {});
-      expect(first.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: null, trigger: 'otomatik' });
+      // Kayıt kâğıdı: kıyas kör kasada da basılır, kapanan günün Z'si birlikte gelir
+      expect(first.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: eod.dayCardKurus, trigger: 'otomatik', z: { zNo: expect.any(Number) } });
       expect((await h.ok<{ slip: unknown }>('patron', 'POST', '/okc/eod/slip', {})).slip).toBeNull();
+
+      // lafmaliyet'e giden gün paketinde Pavo - LafPOS kıyası (TL)
+      const { buildDayPayload } = await import('../server/sync/lafmaliyet');
+      const bank = (buildDayPayload(day.id) as { bankPos?: { status: string; batchNo: string; pavoCard: number; lafposCard: number; diff: number } }).bankPos;
+      expect(bank).toMatchObject({ status: 'ok', batchNo: '000278', pavoCard: eod.grandTotalKurus! / 100, lafposCard: eod.dayCardKurus! / 100, diff: 0 });
     });
 
     it('yeniden açılıp kapanan gün için cihaz gün sonu kendiliğinden ikinci kez alınmaz; ilk batch saklı kalır, elle alınan ikincisi yalnız sonraki kart ödemeleriyle kıyaslanır', async () => {

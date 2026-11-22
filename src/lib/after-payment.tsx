@@ -5,7 +5,7 @@ import type { BootstrapDTO, CompKind, OrderDTO } from '@shared/types';
 import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { onLive, useLive } from '@/lib/live';
-import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, printNow, StoreCopyReceipt } from '@/lib/print';
+import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, StoreCopyReceipt, ZReceipt } from '@/lib/print';
 import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '@/lib/store-copies';
 
 /** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
@@ -170,7 +170,14 @@ export function useBankEodSlip(boot: BootstrapDTO) {
       busy = true;
       try {
         const { slip } = await post<{ slip: BankEodSlip | null }>('/okc/eod/slip', {});
-        if (slip) await printNow(<BankEodReceipt boot={ref.current} slip={slip} />);
+        // Kayıt için iki kâğıt: önce LafPOS Z'si, sonra banka gün sonu ve kıyası (Pavo kendi slibini ayrıca basar)
+        if (slip) {
+          const b = ref.current;
+          await printEach([
+            ...(slip.z ? [<ZReceipt key="z" boot={b} date={slip.z.date} zNo={slip.z.zNo} s={slip.z.summary} closedAt={slip.z.closedAt} />] : []),
+            <BankEodReceipt key="b" boot={b} slip={slip} />,
+          ]);
+        }
       } catch {
         // Sessiz: cihazın kendi slibi var, gün sonu sonucu Yönetim › Yazarkasa POS'ta
       } finally {
