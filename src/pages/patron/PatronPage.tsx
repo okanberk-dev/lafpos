@@ -4,6 +4,7 @@ import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
+import { type PatronStats, todayStats, topCompare } from '@shared/today-stats';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
@@ -20,6 +21,7 @@ import { hourBars } from '@/lib/period';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
+import { CompareCard, CumulativeCard, Delta, PeriodCard } from './TodayStats';
 
 export interface PatronData {
   now: number;
@@ -45,6 +47,8 @@ export interface PatronData {
   voided: number;
   online: { orders: number; amount: number };
   top: { key: string; name: string; size: string; qty: number; revenue: number; margin: number | null }[];
+  /** "Bugün" kıyaslarının girdisi (shared/today-stats.ts); eski sunucu ve uzaktan demo özeti göndermez */
+  stats?: PatronStats;
   /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir (eskiyse uyarı) */
   costsAt?: number | null;
   openChecks: { id: string; no: number; place: string; total: number; paid: number; openedAt: number; waiter: string | null; billPrinted: boolean }[];
@@ -185,6 +189,10 @@ export default function PatronPage() {
   // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış sabahın değil, günün sonunda; gün uzadıysa ertesi
   // sabahın satışı gecenin ardından
   const visibleHours = hourBars(d);
+  // Kıyaslar özetin anıyla (veri o saattedir): gün sürerken o günlerin aynı dakikasına kadar
+  const st = d.stats ? todayStats(d, d.stats, d.now) : null;
+  // En çok satanlar: yeni sunucuda ilk 5 ve geçen haftanın aynı günü; eski sunucuda kıyassız
+  const tops: ((typeof d.top)[number] & { prev?: { qty: number; revenue: number } | null; change?: number | null })[] = st ? topCompare(d.top, d.stats!, st.cutoffMin, st.compares[1]!.value != null) : d.top;
   const charted = visibleHours.some((h) => h.value || h.compare);
   // Geçen haftanın aynı günü satışsızsa kıyas çizgisi, açıklaması ve tablo sütunu yok (eksende düz çizgi kalın bir
   // taban gibi okunuyordu)
@@ -327,12 +335,16 @@ export default function PatronPage() {
                 <div className="mt-5 text-[13px] text-white/90">Bugünkü ciro · KDV dahil</div>
                 <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(40px,15cqi)] font-bold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
                 <div className="mt-5 flex items-center justify-between gap-3 text-[13px] text-white/90">
-                  <span className="tabular">{d.orders > 0 ? `${d.orders} adisyon · ortalama ${tlShort(d.avgCheck)}` : 'Henüz kapanan adisyon yok'}</span>
+                  <span className="tabular">{d.orders > 0 ? <Pairs parts={[`${d.orders} adisyon`, `ortalama ${tlShort(d.avgCheck)}`, !!st?.guests && `masada ${st.guests} kişi`]} /> : 'Henüz kapanan adisyon yok'}</span>
                   <span className="tabular shrink-0">{d.dayOpen && boot.day ? `Z ${boot.day.zNo}` : 'Gün kapalı'}</span>
                 </div>
               </div>
             </div>
-            {/* Geçen haftayla kıyas (panonun haftalık gelir kartı): fark, değişim rozeti ve günün ciro eğrisi */}
+            {/* Kıyas: dün, geçen hafta ve geçen ay aynı gün (yeni sunucu); eski sunucuda geçen haftayla tek kart (fark, değişim
+                rozeti ve günün ciro eğrisi) */}
+            {st ? (
+              <CompareCard s={st} today={d.date} now={d.now} />
+            ) : (
             <div className={cn(PANEL, 'flex items-end justify-between gap-3 p-5')}>
               <div className="min-w-0">
                 <div className="text-[13px] font-medium text-muted">Geçen hafta bu saate göre</div>
@@ -349,6 +361,7 @@ export default function PatronPage() {
                 <Spark values={spark} />
               </div>
             </div>
+            )}
           </section>
 
           <Card
@@ -459,6 +472,14 @@ export default function PatronPage() {
             )}
           </div>
         </div>
+
+        {/* Gün boyu birikimli ciro; hafta ve ay başından bugüne ve gün sonu tahmini */}
+        {st && (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
+            <CumulativeCard s={st} now={d.now} />
+            <PeriodCard s={st} today={d.date} />
+          </div>
+        )}
 
         {/* Alt blok (panonun ödeme geçmişi ve sağ sütunu): açık adisyonlar tablosu; dikkat isteyenler ve en çok satanlar */}
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.3fr)_minmax(0,0.95fr)] xl:items-start">
@@ -577,14 +598,14 @@ export default function PatronPage() {
               )}
             </Card>
 
-            <Card divided={false} title="En çok satanlar" subtitle={d.top.length ? 'Bugün, ciro sırasıyla' : undefined}>
+            <Card divided={false} title="En çok satanlar" subtitle={d.top.length ? (st ? `Bugünün ilk 5'i; geçen hafta aynı gün${st.mode === 'live' ? ', aynı saate kadar' : ''}` : 'Bugün, ciro sırasıyla') : undefined}>
               {d.top.length === 0 ? (
                 <EmptyState compact title="Sıralama ilk satışla başlar">
                   İlk adisyon kapanınca en çok satanlar burada sıralanır
                 </EmptyState>
               ) : (
                 <ol className={cn(ROWS, 'pt-1')}>
-                  {d.top.map((p, i) => {
+                  {tops.map((p, i) => {
                     const size = sizeName(p.size);
                     return (
                       <li key={p.key} className="flex items-center gap-3 px-5 py-2.5 text-sm">
@@ -600,6 +621,12 @@ export default function PatronPage() {
                           </span>
                           <span className="block text-xs text-muted">
                             {p.qty} adet
+                            {p.prev !== undefined && (
+                              <>
+                                {' · '}
+                                <span className="whitespace-nowrap">{p.prev ? `geçen hafta ${p.prev.qty} adet` : 'geçen hafta veri yok'}</span>
+                              </>
+                            )}
                             {showCost && (
                               <>
                                 {' · '}
@@ -609,7 +636,10 @@ export default function PatronPage() {
                             )}
                           </span>
                         </span>
-                        <span className="tabular shrink-0 font-semibold">{tl(p.revenue)}</span>
+                        <span className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="tabular font-semibold">{tl(p.revenue)}</span>
+                          {p.prev && (p.prev.revenue > 0 ? <Delta size="sm" value={p.change ?? null} base={p.prev.revenue} /> : <span className="text-xs text-muted">geçen hafta yoktu</span>)}
+                        </span>
                       </li>
                     );
                   })}
