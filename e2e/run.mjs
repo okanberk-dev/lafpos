@@ -118,6 +118,20 @@ const ROUTES = {
     }),
     pending,
     '/siparisler',
+    // Kapanan: arama, gün seçici; ilk adisyonun dökümü (varsa)
+    state('/siparisler', 'kapanan', async (page) => {
+      await page.getByRole('tab', { name: /^Kapanan/ }).click({ timeout: 5000 });
+      await page.getByRole('searchbox', { name: 'Kapanan adisyonlarda ara' }).waitFor({ timeout: 5000 });
+    }),
+    state('/siparisler', 'kapanan-detay', async (page) => {
+      await page.getByRole('tab', { name: /^Kapanan/ }).click({ timeout: 5000 });
+      await page.getByRole('searchbox', { name: 'Kapanan adisyonlarda ara' }).waitFor({ timeout: 5000 });
+      const card = page.locator('[data-order-card]').first();
+      if (await card.isVisible().catch(() => false)) {
+        await card.click({ timeout: 5000 });
+        await page.getByRole('button', { name: 'Hesabı yeniden yazdır', exact: true }).waitFor({ timeout: 5000 });
+      }
+    }),
     '/mutfak',
     // Tükenen ürünler › Seçenekler (yulaf sütü bitti); telefon ve tablette araçlar "Diğer" penceresinde
     state('/mutfak', 'tukenen-secenekler', async (page) => {
@@ -127,6 +141,7 @@ const ROUTES = {
       await page.getByRole('dialog', { name: 'Tükenen ürünler' }).getByRole('tab', { name: /Seçenekler/ }).click({ timeout: 5000 });
     }),
     state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
+    state('/mutfak', 'gecmis', (page) => page.getByRole('tab', { name: /^Geçmiş/ }).click({ timeout: 5000 })),
     barLight,
     '/cagri',
     '/musteri-ekrani',
@@ -217,6 +232,10 @@ const ROUTES = {
     // Bahçe: yuvarlak masalar
     state('/masalar', 'bahce', (page) => page.getByRole('tab', { name: /^Bahçe/ }).click({ timeout: 5000 })),
     '/siparisler',
+    state('/siparisler', 'kapanan', async (page) => {
+      await page.getByRole('tab', { name: /^Kapanan/ }).click({ timeout: 5000 });
+      await page.getByRole('searchbox', { name: 'Kapanan adisyonlarda ara' }).waitFor({ timeout: 5000 });
+    }),
     '/mutfak',
     '@s1',
   ],
@@ -231,7 +250,7 @@ const ROUTES = {
     pending,
     '/cihaz',
   ],
-  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })), barLight],
+  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })), state('/mutfak', 'gecmis', (page) => page.getByRole('tab', { name: /^Geçmiş/ }).click({ timeout: 5000 })), barLight],
 };
 
 /** Kendiliğinden başka adrese geçen ekranlar: "/satis" boş tezgâh satışını açıp adisyona geçer */

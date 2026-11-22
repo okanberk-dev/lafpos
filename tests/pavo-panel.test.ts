@@ -72,6 +72,7 @@ describe('yönetimden cihaz bilgileri (ayarlar dosyası yok)', () => {
     // Ortamda Pavo yok: bilgiler yalnız yönetimden gelir
     delete process.env.PAVO_URL;
     delete process.env.PAVO_SERIAL;
+    delete process.env.PAVO_FINGERPRINT;
     h = await startApp();
   });
   afterAll(async () => {
@@ -103,6 +104,12 @@ describe('yönetimden cihaz bilgileri (ayarlar dosyası yok)', () => {
     await h.ok('patron', 'POST', '/okc/pair');
     const test = await h.ok<{ paired: boolean }>('patron', 'POST', '/okc/test');
     expect(test.paired).toBe(true);
+    // İlk eşleştirme kuruluma özel kimlik üretir ve saklar; eşleştirme ve sonraki istekler onunla gider
+    const fp = (await h.ok<{ pavo: { fingerprint: string; fingerprintSource: string } }>('patron', 'GET', '/okc/status')).pavo;
+    expect(fp.fingerprint).toMatch(/^LafPOS-[A-Z2-9]{6}$/);
+    expect(fp.fingerprintSource).toBe('kurulum');
+    const handles = device.requests.filter((r) => r.path !== '/Ping').map((r) => (r.body.TransactionHandle as { Fingerprint: string }).Fingerprint);
+    expect(new Set(handles)).toEqual(new Set([fp.fingerprint]));
     // Aynı bilgileri yeniden kaydetmek eşleştirmeyi bozmaz
     expect((await h.ok<Status>('patron', 'PUT', '/okc/pavo', { address: device.url, serial: device.serial })).pavo.paired).toBe(true);
     const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=20');
@@ -127,8 +134,12 @@ describe('yönetimden cihaz bilgileri (ayarlar dosyası yok)', () => {
   it('başka cihaza geçince eşleştirme sıfırlanır; yeni cihaz eşleşince satışlar ona gider', async () => {
     const s = await h.ok<Status>('patron', 'PUT', '/okc/pavo', { address: other.url, serial: other.serial });
     expect(s.pavo).toMatchObject({ url: other.url, serial: other.serial, paired: false });
+    const before = (await h.ok<{ pavo: { fingerprint: string } }>('patron', 'GET', '/okc/status')).pavo.fingerprint;
     await h.ok('patron', 'POST', '/okc/pair');
     expect(other.requests.some((r) => r.path === '/Pairing')).toBe(true);
+    // Kimlik kalıcı: yeni cihazla eşleştirmede de aynısı gider
+    const pairing = other.requests.find((r) => r.path === '/Pairing')!;
+    expect((pairing.body.TransactionHandle as { Fingerprint: string }).Fingerprint).toBe(before);
     expect((await h.ok<{ paired: boolean }>('patron', 'POST', '/okc/test')).paired).toBe(true);
   });
 });

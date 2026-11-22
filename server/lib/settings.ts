@@ -14,6 +14,10 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   receiptFooter: 'Bizi tercih ettiğiniz için teşekkürler\nlaffogato.net',
   // Fişte müşteri adı varsayılan kapalı: kişisel veri fişe ancak patron açınca yazılır
   receiptCustomerName: false,
+  // Ödemeden sonra fiş yazıcısından kısa işyeri nüshası (kalem dökümü yok); müşteriye bilgi fişi yalnız yazarkasasız
+  // kurulumda ve ayar açılınca (mali fişi yazarkasa basar)
+  receiptStoreCopy: true,
+  receiptInfoSlip: false,
   serviceRate: 0,
   autoLockMinutes: 0,
   keepAwake: true,
@@ -88,6 +92,13 @@ export interface PrivateSettings {
    */
   okcPavoAutoEod: boolean;
   /**
+   * Ödemeyi alınca cihaza gönder (kasada ödeme): ödeme penceresinde "Ödemeyi al" sepeti kendiliğinden cihaza yollar,
+   * ayrı "Yazarkasaya gönder" adımı olmaz. Kapalıysa bugünkü akış (docs/04-YAZARKASA.md §4.1). null: varsayılan,
+   * gerçek cihazda (Token, Pavo) açık, eğitim cihazında kapalı (deneme modunda nakit satış eğitim cihazını beklemesin;
+   * yönetimden açılabilir). Etkin değer `okcAutoOn`
+   */
+  okcAuto: boolean | null;
+  /**
    * Pavo cihazının adresi ve seri numarası, Yönetim › Yazarkasa POS'tan girilir (`PUT /api/okc/pavo`). null: ayarlar
    * dosyasındaki PAVO_URL ve PAVO_SERIAL (eski kurulumlar). Gizli değer değildir: cihaz yerel ağda, kimliği eşleştirme
    * ve sertifika izidir (docs/04-YAZARKASA.md §8.1)
@@ -136,6 +147,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   okcPavoAutoEod: true,
+  okcAuto: null,
   pavoDevice: null,
   receiptPrinter: null,
   rolePermissions: {},
@@ -165,6 +177,11 @@ export function getSettings(): AllSettings {
  * eğitim simülatöründe. Bu modda kapanan gün eğitim günüdür (`business_days.trainingDay`); lafmaliyet'e hiç gitmez,
  * kurulum modu sonradan kapansa da. docs/03-ENTEGRASYON.md §4.3
  */
+/** "Ödemeyi alınca cihaza gönder"in etkin değeri: elle seçilmediyse gerçek cihazda açık, eğitim cihazında kapalı */
+export function okcAutoOn(s: Pick<AllSettings, 'okcAuto' | 'okcProvider'> = getSettings()): boolean {
+  return s.okcAuto ?? s.okcProvider !== 'simulator';
+}
+
 export function trainingMode(s: Pick<AllSettings, 'demoMode' | 'okcProvider'> = getSettings()): boolean {
   return s.demoMode || s.okcProvider === 'simulator';
 }

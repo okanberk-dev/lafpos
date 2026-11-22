@@ -101,6 +101,38 @@ de açar.
 | Cihazda | Sepet ekrana kendiliğinden düşer | Kasiyer listeden seçer |
 | Ne zaman | Tek kasa | Birden çok POS cihazı, masaya giden el terminali |
 
+### 4.1 Tek dokunuş: "Ödemeyi al" cihaza gönderir (Kasım 2026)
+
+Yönetim › Yazarkasa POS › **Ödemeyi alınca cihaza gönder** (`okcAuto`; yalnız kasada ödemede görünür). Varsayılan
+gerçek cihazda (Pavo, Token) açık, eğitim cihazında kapalı: deneme modunda nakit satış eğitim cihazını beklemez;
+elle açılır ya da kapatılır, seçilen değer bağlantı değişse de kalır (`okcAutoOn`). Açıkken ödeme penceresinde ayrı "Yazarkasaya gönder" düğmesi yoktur: kasiyer türü seçip **Ödemeyi al**'a
+basınca hesap (ya da seçilen kalemler) aynı uçla (`POST /api/okc/orders/:id/send`) cihaza gider, pencere "Cihazda ödeme
+bekleniyor" der. Ödeme türü cihazda seçilir: Pavo'ya ödeme bilgisi gönderilmez (§8.2, belgede yok), Token sepetinin
+ödeme alanı (`paymentItems`) da sahada denenmediği için kullanılmaz. Cihaz ödeyince
+ödeme bugünkü sonuç yoluyla (`applyResult`, `okc.paid`) yazılır, pencere sonuç ekranını (nakitte para üstü) gösterir.
+
+| Durum | Ne olur |
+|---|---|
+| Tamamı nakit, kart (Token ve eğitim cihazında yemek kartı da) | Sepet cihaza gider |
+| Kalem seç | Seçilen kalemler cihaza gider |
+| Kısmi tutar, bahşiş, paylaşımlı hesap (pay), açık hesap, havale, LafPOS'ta alınmış ödeme varken bütün hesap | Bugünkü gibi LafPOS'a yazılır; düğmenin yanında nedeni bir cümle (`shared/odeme-fisi.ts` › `deviceRoute`) |
+| Cihaz reddetti, cihazda vazgeçildi, cihaza ulaşılamadı | Sade neden ve **Yeniden dene**; adisyon açık kalır, ödeme yazılmaz |
+| Yanıt alınamadı (`okc_unknown`) | Sepet bekleyen kalır, sonucu sorgulanır (§7) |
+| Çift dokunuş, yeniden deneme | Tek sepet: süren istek düğmeyi kilitler; bekleyen sepet varken sunucu ikincisini yazmaz (`okc_pending`, pencere bunu hata saymaz) |
+
+Online ödenmiş sipariş cihaza gitmez ve tahsil edilmez; ikram, ödenmez ve zayi ödeme penceresinin ciro dışı kapanışıyla
+bugünkü gibi. Ayar kapalıysa ya da bağlantı masada ödemedeyse pencere bugünkü gibidir. Testler:
+`tests/yazarkasa-tek-dokunus.test.ts`, `tests/yazarkasa-tek-dokunus-pavo.test.ts`; e2e akışı eğitim cihazıyla.
+
+**Ödeme sonrası fişler.** Müşterinin fişini (mali belge) cihaz basar. Başarılı ödemeden sonra fiş yazıcısından kısa
+**işyeri nüshası** çıkar (adisyon no, masa ya da tür, tarih-saat, adisyon toplamı, ödeme türleri, yazarkasa fiş ve Z
+no'su varsa, kasiyer; kalem dökümü yok; `StoreCopyReceipt`, `src/lib/print.tsx`). Yazarkasasız kurulumda isteğe bağlı
+**müşteriye bilgi fişi** ("mali değeri yoktur") de basılır. Ayarlar Yönetim › Ayarlar ve yedek › Fiş yazıcısı kartında:
+"Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`, varsayılan açık), "Müşteriye bilgi fişi" (`receiptInfoSlip`,
+varsayılan kapalı). Her ödeme için tam bir kez ve yalnız ödemeyi alan ekranda (cihaz ödemesinde sepeti gönderen
+ekran); yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir fiş yazıcısı bildirdiyse
+(`integrations.receiptPrinter`); yoksa sessizce atlanır.
+
 ## 5. Sepet nasıl hesaplanır (`basket.ts`)
 
 - Tutarlar kuruş; `taxPercent` oran × 100, `quantity` adet × 1000, kısım KDV oranından.
@@ -205,7 +237,15 @@ sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
    |---|---|
    | Yönetimden (`pavoDevice` ayarı) | Cihazın adresi ve seri no'su; varsa geçerli olan budur |
    | `PAVO_URL`, `PAVO_SERIAL` | Eski kurulumların ayar dosyası satırları; yönetimden girilmediyse kullanılır ("Kaynak: Ayarlar dosyası") |
-   | `PAVO_FINGERPRINT` | İsteğe bağlı (varsayılan `LafPOS`); eşleştirmede cihaza kaydedilir, her istekte aynısı gider |
+   | `PAVO_FINGERPRINT` | İsteğe bağlı; tanımlıysa her şeyden önce o gider (aşağıda "Program kimliği") |
+
+   **Program kimliği** (Pavo'nun `Fingerprint` alanı, eşleştirmede cihaza kaydedilir, her istekte aynısı gider):
+   kuruluma özel ve kalıcıdır. İlk eşleştirmede üretilir ve saklanır (`sync_state` `pavo.fingerprint`): `LafPOS-` ve 6
+   harf-rakam (ör. `LafPOS-K7Q2XM`; biçim en çok 32 karakter, harf, rakam ve tire). Geriye uyum: kimlik saklanmadan
+   eşleştirilmiş eski kurulum `LafPOS` ile devam eder (ilk okunuşta saklanır; yeniden eşleştirme gerekmez).
+   Cihaz değişince (adres ya da seri no) eşleştirme sıfırlanır ama kimlik aynı kalır. Kimlik Yönetim › Yazarkasa POS ›
+   Pavo kartında salt okunur görünür. Cihaz başka programla eşleşmişse (73/74) "Son hata" kutusunda doğrudan **Yeniden
+   eşleştir** düğmesi çıkar. Testler: `tests/pavo-kimlik.test.ts`, `tests/pavo-panel.test.ts`.
 
    Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Cihazı ağda
    ara" ve "Bağlantıyı dene" hangisinin açık olduğunu söyler.
@@ -295,8 +335,10 @@ hiç bağlı olmasa da gün kapalı kalır.
   409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal say" yoluna düşmez).
 - **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
   okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
-  sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). Cihaz bu soruya yanıt
-  vermezse (bağlantı, zaman aşımı) gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden
+  sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). "Özet vermedi" yalnız uç
+  yoksa (HTTP 404, 405, 501) ya da başarılı yanıtın gövdesi boşsa (2xx) sayılır (`eodCopyUnavailable`); cihazın iç
+  hatası (HTTP 500, 503...) kopya yok sayılmaz. Cihaz bu soruya yanıt vermezse (bağlantı, zaman aşımı) ya da iç hata
+  verirse gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden
   denenebilir. Ardından "sürüyor" kaydı yazılır (`running`, yönetimde "Sürüyor"); süreç gün sonu sürerken kapanırsa
   açılışta (`startJobs` › `recoverDeviceEod`) `unknown` olur ve alarm düşer.
 - **Ne zaman atlanır** (bilgi kaydı `okc.eod`, sonuç `skipped`): Pavo bilgileri eksik, kurulum (eğitim) modu, cihaz

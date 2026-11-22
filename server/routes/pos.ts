@@ -7,10 +7,13 @@ import { db, schema, type Tx, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, can, needDirect, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
+import { CLOSED_PAGE_DEFAULT, CLOSED_PAGE_MAX, HISTORY_QUERY_MAX, KITCHEN_HISTORY_MAX } from '@shared/history';
+import { isCalendarDate } from '@shared/time';
 import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets, ordersAwaitingHand } from '../services/floor';
+import { closedOrderDetail, closedOrders, kitchenHistory } from '../services/history';
 import { setOptionSoldOut } from '../services/menu';
 import * as orders from '../services/orders';
 import { linkRoom, startRoom, stopRoom } from '../services/rooms';
@@ -388,12 +391,51 @@ posRoutes.post('/orders/:id/room/link', async (c) => {
 
 // ─── Bar / mutfak ekranı ─────────────────────────────────────────────────────
 
+/** Geçmiş aramasının metni (bar geçmişi, kapanan adisyonlar): kısa ve sınırlı */
+const historyQuery = z.string().trim().max(HISTORY_QUERY_MAX).optional();
+
+/**
+ * `history=1` bar geçmişi: açık günün hazırlanan ve teslim edilen fişleri, en yeni üstte, en çok 100 (`limit`);
+ * `q` günün bütün fişlerinde arar (no, masa, ürün). Geri alma `POST /kitchen/status` ile (yetki ve denetim orada)
+ */
 posRoutes.get('/kitchen', (c) => {
-  const q = query(c, z.object({ station: z.string().optional(), history: z.enum(['0', '1']).optional(), ready: z.enum(['0', '1']).optional() }));
+  const q = query(
+    c,
+    z.object({
+      station: z.string().optional(),
+      history: z.enum(['0', '1']).optional(),
+      ready: z.enum(['0', '1']).optional(),
+      q: historyQuery,
+      limit: z.coerce.number().int().min(1).max(KITCHEN_HISTORY_MAX).default(KITCHEN_HISTORY_MAX),
+    }),
+  );
   const actor = actorFrom(c);
   if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
-  return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1', ready: q.ready === '1' }));
+  if (q.history === '1') return c.json(kitchenHistory(db, { stationId: q.station || null, q: q.q, limit: q.limit }));
+  return c.json(kitchenTickets(db, { stationId: q.station || null, ready: q.ready === '1' }));
 });
+
+// ─── Kapanan adisyonlar (Siparişler › Kapanan) ───────────────────────────────
+
+/**
+ * Kapanan adisyonlar: sayfalı (`limit` en çok 100, `before` imleci), aramalı (`q`: no, masa, müşteri, ürün). `date`
+ * verilmezse bugün; başka gün rapor yetkisi ister (`rapor.gor`). Kör kasada ödeme türleri gelmez
+ */
+posRoutes.get('/history/orders', (c) => {
+  const q = query(
+    c,
+    z.object({
+      date: z.string().refine(isCalendarDate).optional(),
+      q: historyQuery,
+      limit: z.coerce.number().int().min(1).max(CLOSED_PAGE_MAX).default(CLOSED_PAGE_DEFAULT),
+      before: z.string().regex(/^\d{1,16}_[A-Za-z0-9]{1,40}$/).optional(),
+    }),
+  );
+  return c.json(closedOrders(db, c.get('user'), q));
+});
+
+/** Kapanan adisyonun ayrıntısı: kalemler, ödemeler (kör kasada gizli) ve yazarkasa fişi; önceki gün rapor yetkisi ister */
+posRoutes.get('/history/orders/:id', (c) => c.json(closedOrderDetail(db, c.get('user'), c.req.param('id'))));
 
 
 posRoutes.post('/kitchen/status', async (c) => {
