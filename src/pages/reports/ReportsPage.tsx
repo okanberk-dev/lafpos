@@ -678,7 +678,7 @@ interface ProductsData {
   total: number;
   /** Ürüne ait olmayan servis ücreti; ürün cirosu + servis = toplam ciro */
   service: number;
-  products: { key: string; name: string; size: string; category: string; qty: number; revenue: number; share: number; avgPrice: number; complimentary: number; voided: number; cost: number | null; margin: number | null }[];
+  products: { key: string; name: string; size: string; category: string; qty: number; revenue: number; share: number; avgPrice: number; complimentary: number; voided: number; cost: number | null; margin: number | null; costPartial?: boolean }[];
   categories: { name: string; qty: number; revenue: number; share: number }[];
   /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir */
   costsAt?: number | null;
@@ -758,7 +758,15 @@ function ProductsReport({
             hideBelow: 'lg',
             className: 'whitespace-nowrap',
             // Sözcük rakamın yerine yazılmaz: maliyeti olmayan ya da hiç satılmayan (hepsi ikram) üründe —
-            cell: (p) => (p.margin == null || !p.qty ? <span className="text-muted" title={p.margin == null ? 'Reçete maliyeti girilmemiş' : undefined}>—</span> : tl(p.margin)),
+            // Bir ekin (şurup, shot, süt) maliyeti bilinmiyorsa kâr o ek 0 sayılarak hesaplanır: işaretli
+            cell: (p) =>
+              p.margin == null || !p.qty ? (
+                <span className="text-muted" title={p.margin == null ? 'Reçete maliyeti girilmemiş' : undefined}>—</span>
+              ) : p.costPartial ? (
+                <span title="Bir ekin maliyeti girilmemiş; o ek 0 sayıldı">{tl(p.margin)}*</span>
+              ) : (
+                tl(p.margin)
+              ),
           };
           const columns: Column<ProductRow>[] = [
             { key: 'sira', header: '#', width: '3rem', cell: (p) => <span className="text-muted">{rank.get(p.key)}</span> },

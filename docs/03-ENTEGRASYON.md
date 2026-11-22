@@ -18,7 +18,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
 | Masa, adisyon, ödeme, gün sonu, personel PIN'leri | LafPOS | |
-| Online sipariş (uygulama, web, masa QR) | laffogato | bar ekranında gösterilir, aşaması geri yazılır, tahsil edilmez |
+| Online sipariş (uygulama, web, masa QR) | laffogato (şubeli; §2 "Şube") | kasanın şubesinin siparişleri bar ekranında gösterilir, aşaması geri yazılır, tahsil edilmez; başka şubenin siparişi gelmez |
 | Karaoke rezervasyonu (gün, saat, ödeme) | laffogato (`/karaoke` ve uygulama) | bugünkü liste salt okunur (§2.4); oda yerel rezervasyona verilmez, sayaç rezervasyona bağlanır |
 | Sadakat damgası | laffogato (uygulama) | LafPOS'un yerel damga kartı varsayılan kapalı (`stampCategoryKeys: []`), site bağlantısı kuruluyken hiç açılmaz |
 
@@ -35,6 +35,29 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 `LAFFOGATO_URL=https://laffogato.net` kalır ve bağlantı açık kalır; açılış sırasına kadar satır silinir ya da başına
 `#` konur (`docs/05-KASA-BILGISAYARI.md` "Güncelleme").
 
+### Şube (22 Kasım 2026; laffogato #279)
+
+Site şubelidir: sipariş, masa kodu (`cafe_tables`), masa çağrısı ve Satışta bilgisi bir şubenindir (masa siparişi ve
+çağrısı masanın şubesi; gel-al, kurye, kargo ve karaoke Tuzla'nın). LafPOS'un anahtarı sitenin `LAFPOS_BRANCHES`'teki
+şubeler adına konuşur (varsayılan `marina`; laffogato `docs/LAFPOS.md` "Şube"). LafPOS her imzalı istekte kendi şubesini
+söyler (`siteBranch()` = Yönetim › Ayarlar › Şube kimliği `branchId`, varsayılan `marina`; `server/sync/laffogato-link.ts`):
+
+- GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke`.
+  Sürüm sinyali (`/api/pos/orders/version`) şubesizdir, sorgu almaz.
+- POST / PUT gövdesinde `"branch": "<id>"`: aşama, çağrıya "Gördüm", Satışta yazımı (giden kutusundaki de, gönderim
+  anındaki şubeyle) ve masa kodları.
+- **Yanıtın şubesi:** `GET /api/panel/orders` ve `GET /api/panel/menu` yanıtındaki `branch` kasanın şubesi değilse liste
+  okunmaz: siparişler için çekim 502 `site_branch` olur, hiçbir sipariş yazılmaz ya da kapanmaz; panel menüsünde
+  Satışta bilgisine dokunulmaz (fiyat ve ürünler herkese açık listeden uygulanır, eşitleme uyarı yazar). Alanı
+  göndermeyen eski site bugünkü gibi okunur.
+- **Başka şubenin kaydı** (site 409 `wrong_branch`): aşama yazımında yeniden denenmez, sipariş bu kasanın ekranından
+  kalkar (`extStage = 'gone'`, `extOutcome = 'other'`, "Online (sitede ödendi)" toplamına girmez, denetim
+  `online.gone`), kullanıcıya 409 `wrong_branch`. Çağrıya "Gördüm"de kart düşer (sitede yok gibi; denetim metni
+  "çağrı başka şubenin"). Masa kodlarında liste park edilir; Entegrasyon "bir kod sitede başka şubenin masası" der,
+  düzeltme sitenin panelinde (Masalar › masa › Düzenle › Şube).
+- Karaoke odası Tuzla'dadır: başka şube adına site boş liste (`complete: true`) verir.
+- Fiyat her şube için tektir ve sitenindir; LafPOS yazamaz.
+
 ### 2.1 Herkese açık menü
 
 `GET {LAFFOGATO_URL}/api/mobile/v1/menu` · `If-None-Match: <son ETag>` · anahtar gerekmez.
@@ -45,12 +68,22 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 - 304 gelirse değişiklik yok. 200 gelirse fark hesaplanır.
 - **Sıklık:** açık iş günü varken 15 dakikada bir otomatik (ayarla kapatılabilir). Açık gün yokken (gece) hiç; gün
   açılınca (ya da yeniden açılınca) bir kez. LafPOS siteye kendi Satışta yazımını yaptıktan (Tükendi, Satışa aç,
-  porsiyon) 5 saniye sonra bir kez: site o an zaten uyanık. Ayrıca "Siteyle eşitle" düğmesi. **Sitede fiyat ya da
-  Satışta değişince** (sitenin menü formu ya da lafmaliyet panelinin yazımı) 20 saniyelik sipariş sürüm sinyalindeki
-  `menu` işareti değişir; LafPOS 1 saniye sonra ETag'siz eşitler (eski site işareti göndermez: 15 dakikalık yoklama).
+  porsiyon) 5 saniye sonra bir kez: site o an zaten uyanık; bekleyen bir eşitleme varsa ya da son 20 saniyede
+  eşitlendiyse bu eşitleme kurulmaz (işaret eşitlemesi onu kapsar). Ayrıca "Siteyle eşitle" düğmesi. **Sitede fiyat
+  ya da Satışta değişince** (sitenin menü formu ya da lafmaliyet panelinin yazımı) 20 saniyelik sipariş sürüm
+  sinyalindeki `menu` işareti değişir; LafPOS gün açıkken 1 saniye sonra ETag'siz eşitler, **işaret eşitlemeleri arası
+  en az 60 saniye**: art arda düzenlemeler (lafmaliyet'ten 30 fiyat) sonda tek eşitlemede toplanır (`server/jobs.ts`
+  `MARKER_SYNC_MIN_MS`). **Gece** (açık gün yokken) işaret değişse de istek gitmez; gün açılınca bir kez ETag'siz.
+  Sitenin her yayını (deploy) `version`, `karaoke` ve `menu` işaretlerinin üçünü birden yeniler (laffogato işaret
+  anahtarı `VERCEL_DEPLOYMENT_ID` içerir): gün açıkken bir eşitleme, gece hiçbir şey. Eski site işareti göndermez:
+  15 dakikalık yoklama.
 - **Fiyatın taze kaynağı imzalı panel listesidir** (anahtar varsa, `GET /api/panel/menu`; `withPanelPrices`): CDN'deki
-  herkese açık menü 5 dakikaya kadar bayat olabilir, kasa eski fiyattan satmasın. Panel alınamazsa herkese açık menünün
-  fiyatı.
+  herkese açık menü 2 dakikaya kadar bayat olabilir, kasa eski fiyattan satmasın. Herkese açık listede olmayan bağlı
+  ürünün (sitede Tükendi, ya da yeniden açıldı ama CDN henüz eski) fiyatı da panelden yazılır; önizleme bunu "fiyat" ve
+  "boy" diye gösterir. Panel alınamazsa herkese açık menünün fiyatı.
+- **CDN bayatlığı:** panelde satışta olan bağlı ürün herkese açık listede yoksa liste CDN'de eskidir (`cdnStale`):
+  eşitleme ETag'i yazmaz ve 2 dakika sonra (s-maxage + swr) **bir kez** ETag'siz yeniden eşitler, ad, KDV ve görsel de
+  taze listeden gelsin. Yine bayatsa 15 dakikalık yoklama bekler (döngü yok).
 - **Sessiz bayatlama uyarısı** (`menuStaleError`): gün açıkken, bağlantı ve otomatik eşitleme açıkken menü 40 dakikadır
   (iki yoklama ve pay; gün açılışından önce sayılmaz) başarıyla kontrol edilmediyse ve kayıtlı hata yoksa
   `GET /api/sync/status` bunu menünün hatası olarak verir: Entegrasyon "Hata" der, yönetim çubuğu sayar. Yoklama hiç
@@ -123,12 +156,12 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
-| `GET /api/panel/menu` | Satışta bilgisinin taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince ve elle |
-| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
+| `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok) ve elle |
+| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; veritabanına gitmez |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
-| `POST /api/panel/calls/ack {id, actor}` | masa çağrısına "Gördüm" (aşağıda "Masa çağrıları") | kullanıcı işlemi |
+| `POST /api/panel/calls/ack {id, actor, branch}` | masa çağrısına "Gördüm" (aşağıda "Masa çağrıları") | kullanıcı işlemi |
 | `GET /api/panel/karaoke?from=<gün>&to=<gün>` | bugünün karaoke rezervasyonları: oda kutusu, masa planı, oda ücreti (§2.4) | `karaoke` işareti değişince, gün açıkken en sık 5 dk'da bir; oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn) |
 
 `actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
@@ -163,6 +196,17 @@ Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta değişen sipa
 giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri
 alınır; sonraki çekme geçerlidir.
 
+**Sözleşme eklemeleri (21 Kasım 2026; LafPOS hazır, laffogato'da açık iş):** `GET /api/panel/orders` yanıtına üç
+alan eklenir. Hepsi isteğe bağlıdır; göndermeyen site bugünkü gibi okunur.
+
+1. `orders[].paidAtTill: boolean` — kasada ödendi. Site, siparişin `payment_transactions`'ında `manual:nakit` ya da
+   `manual:kart` varsa `true` yazar (sitenin `paidAtTill(paymentsFor(order))` kuralı; `havale` ve `diger` `false`;
+   laffogato `docs/PANEL-SALES.md` "paidAtTill"). Bkz. aşağıda "Kasada ödenen".
+2. `orders[].lines[].index: number` — satırın `orders.items` içindeki konumu. `set_order_item_status` yerinde yazdığı
+   için sabittir; iptal edilen satır listeden çıkar, konumu değişmez. Bkz. "Kalem iptali".
+3. `closed: [{ id, outcome }]` — son 48 saatte akıştan çıkan kafe siparişleri, `outcome`: `completed`, `cancelled` ya
+   da `refunded`. Okunamayan satır atlanır. Bkz. "Kapanış".
+
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda
 "Online (sitede ödendi)" olarak görünür: gün açıksa açık güne, değilse ödeme anının iş gününe (05:00 kuralı)
@@ -194,12 +238,34 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
      Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, kayıt kalır ve 6 saatte bir yeniden denenir (kod
      üretimi ve Yönetim › Entegrasyon'daki "Şimdi yeniden gönder" (`POST /api/admin/tables/qr/sync`) hemen dener);
      400 / 403 / 409 / 413 / 422 park edilir; 503 ve ağ hatası artan beklemeyle (en çok 6 saat) yeniden denenir.
-- **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS hiçbir
-  siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı" diye kapanır (`extStage = 'gone'`:
-  sitede tamamlandı, iptal edildi ya da süresi geçti): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim
-  kaydına yazılır. Yerelde kapanmış ama sitede hâlâ açık görünen sipariş yeniden açılır. LafPOS'ta son aşamaya
-  getirilen sipariş `extStage = 'done'` kapanır.
-- **Aşama:** site 409 (`stale`, sipariş bu arada değişti) ya da 404 (`not_found`, "Sipariş sitede bulunamadı")
+- **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS
+  `closed`'da adı geçenler dışında hiçbir siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı"
+  diye kapanır (`extStage = 'gone'`): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim kaydına yazılır.
+  Neden kalktığını `closed` söyler (`orders.extOutcome`; denetim metni "sitede iptal edildi" gibi); `closed`
+  göndermeyen site için "sitede tamamlandı, iptal edildi ya da süresi geçti". Sonucu sonradan gelen kapanmış siparişe
+  de yazılır. **Sitede iptal ya da iade edilen** (`cancelled`, `refunded`) ve kasada ödenen (`till`) sipariş "Online
+  (sitede ödendi)" toplamına (Z, Raporlar, Uzaktan özet; `onlineCounted`) girmez: site ve lafmaliyet'in online kanalı
+  onu saymaz. Sonucu bilinmeyen sayılır. Yerelde kapanmış ama sitede hâlâ açık görünen sipariş yeniden açılır (sonucu
+  silinir). LafPOS'ta son aşamaya getirilen sipariş `extStage = 'done'` kapanır.
+- **Kasada ödenen** (`paidAtTill: true`; uygulama siparişinde kart düştü, müşteri kasada ödedi, personel sitede
+  "Ödendi olarak işaretle"): parası ve mali fişi kasanındır, site onu `counter` sayıp online cirodan ve tüketim
+  satırlarından çıkarır. LafPOS onu **yazmaz**: "sitede ödendi" kaydı açılmaz, bara fiş düşmez, toplama girmez; tek fiş
+  ve tek satış personelin çaldığı adisyondur (§8 personel yordamı). Cihazlara bir kez uyarı düşer (`orders` ›
+  `online.till`, "Online sipariş #N kasada ödendi; adisyon olarak çalın"; ses ve bildirim) ve denetim kaydına uyarı
+  (`online.paid_at_till`); görülen kimlik 48 saat saklanır (`sync_state` `laffogato.paidAtTill`), uyarı tekrar etmez.
+  Önceden "sitede ödendi" yazılmış sipariş (alan sonradan geldi) kapanır (`extOutcome = 'till'`), hazırlanmamış
+  kalemleri bar ekranında iptal görünür. Faz 2 L5 aynı alanla siparişi site fiyatlarıyla açık adisyona çevirebilir.
+- **Kalem iptali** (sitede `changeItemStatus`, paid/preparing siparişte satır "İptal"): site satırı listeden çıkarır,
+  tutar değişmez. LafPOS kalemleri her çekimde uzlaştırır: satırın konumu (`lines[].index`, LafPOS'ta
+  `order_items.extLine`) listede yoksa kalem iptal olur (`voidReason` "Sitede iptal edildi", bar ekranında 10 dakika
+  "iptal" görünür, denetim `online.line_cancelled`); servis edilmiş kaleme dokunulmaz. Sitede "Bekliyor"a geri alınan
+  satır kalemi geri açar (`online.line_restored`), LafPOS'ta hiç olmayan satır eklenir. Konum gelmeyen (eski) sitede
+  satırlar içeriğiyle (ürün, boy, seçenek metni, not, adet) sayılarak eşlenir; aynı iki satırdan hangisinin iptal
+  edildiği ayırt edilemez, birinin iptali yeter. Konumu yazılmamış eski kalem, site konum göndermeye başlayınca içeriği
+  tutan satırın konumunu alır. Tutar ve `extTotal` değişmez (para sitede). Siparişin bütün satırları iptal edilirse
+  sipariş listeden düşer ("Kapanış").
+- **Aşama:** site 409 `wrong_branch` dönerse sipariş başka şubenindir, yeniden denenmez (§2 "Şube"). 409 (`stale`,
+  sipariş bu arada değişti) ya da 404 (`not_found`, "Sipariş sitede bulunamadı")
   dönerse liste yeniden çekilir.
 - **Bar istasyonu** (21 Kasım 2026): kalem, sitenin `menuItemId`'sine bağlı LafPOS ürününün ya da kategorisinin
   istasyonuna düşer. Ürün LafPOS'ta yoksa (menü henüz eşitlenmedi, sitede yeni açılan kalem) ya da ürünün ve
@@ -224,9 +290,9 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   15 dakikası dolan çağrı liste yenilenmeden de düşer. Yeni çağrı `tables` › `site.call.new` yayar ("Masa 4 · Su
   istiyor"; yalnız masa ve sebep), cihazlarda çalar (§2.5) ve masa planında masanın kartında mor zil rozeti çıkar.
   **"Gördüm"** (`POST /api/sync/calls/:id/ack`; `siparis.al` ya da `mutfak.ekran`) çağrıyı sitede yanıtlar (imzalı
-  `POST /api/panel/calls/ack {id, actor}`, gövde tam bu iki alan, `actor` kullanıcının adı en çok 80 karakter; site
+  `POST /api/panel/calls/ack {id, actor, branch}` (`branch` 22 Kasım 2026, §2 "Şube"), `actor` kullanıcının adı en çok 80 karakter; site
   `lafpos:<ad>` yazar), sonra yerelde düşürür, denetim kaydına yazar (`table.call_ack`) ve `site.call.done` yayar:
-  bütün cihazlarda susar. Site 404 derse (çağrı sitede yok) yine düşer; siteye ulaşılamazsa ya da site başka bir kod
+  bütün cihazlarda susar. Site 404 (çağrı sitede yok) ya da 409 `wrong_branch` (başka şubenin) derse yine düşer; siteye ulaşılamazsa ya da site başka bir kod
   dönerse 502 `site_call`, çağrı açık kalır, yeniden denenir. LafPOS'ta yanıtlanan çağrı, yanıttan önce istenmiş bir
   listede gelse de geri gelmez; daha yeni bir listeden önce istenmiş (ağda gecikmiş) liste yok sayılır. Bilgisayarın
   saati geri alınırsa (Windows saat eşitlemesi) saklanan an ileride kalır: liste yine işlenir, an bugünün saatine döner
@@ -289,7 +355,8 @@ Rezervasyonu yalnız site yazar, taşır, iptal eder; LafPOS hiçbir şey yazmaz
 aldığıyla aynı, laffogato `docs/LAFPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
 kuralı, `from = to`); rezervasyon en geç 24:00'te biter, gece yarısını aşmaz. Site LafPOS'un anahtarına yalnız dünden
 yarına (İstanbul) açar; daha geniş pencere 403. Hiç istek gitmez: `.env`'de `LAFFOGATO_URL` ya da
-`LAFFOGATO_SYNC_SECRET` yoksa ya da planda oda türünde (`kind: 'oda'`) etkin masa yoksa.
+`LAFFOGATO_SYNC_SECRET` yoksa ya da planda oda türünde (`kind: 'oda'`) etkin masa yoksa. Oda Tuzla'nındır: başka şube
+adına site boş liste verir (§2 "Şube").
 
 ```json
 { "now": "…", "from": "2026-10-27", "to": "2026-10-27", "complete": true,
@@ -456,7 +523,10 @@ KARAOKE ODASI;3;3.000,00
   üründe önemlidir; bağsız satır adını korur. Aynı adı taşıyan iki yerel ürün tek satırda toplanır (ModPOS'taki
   gibi). Yönetim, başka bir ürünün ya da boyun adını taşıyacak `posName`'i 409 `pos_name_taken` ile reddeder.
 - İkram ve iptal satırları listeye girmez (ciro değil); online ödenmiş siparişler girmez.
-- Karaoke gibi `isService` ürünler aynı listede çıkar; lafmaliyet bunları HİZMET olarak eşler.
+- Karaoke gibi `isService` ürünler aynı listede çıkar; lafmaliyet bunları HİZMET olarak eşler. Paket platformunun
+  teslimat ya da ambalaj ücreti (`PLATFORM ÜCRETİ`, gizli ürün; oda sayacı karışmasın diye ürünü hizmet işaretsiz)
+  gün sonu paketinde `isService: true` gider: mal maliyeti yazılmaz, net hizmet KDV'siyle hesaplanır. Ürün eşlemede
+  başka ürüne bağlanmış ücret o ürünün adıyla normal satırdır.
 - Masa servis ücreti `SERVİS ÜCRETİ` adıyla ayrı hizmet satırıdır (adet: servis ücretli adisyon sayısı).
   Satırların toplamı günün Z toplamına (`z_total`) eşittir.
 
@@ -605,6 +675,11 @@ GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
 
 `costMinor`: reçeteden birim maliyet, kuruş, KDV hariç. LafPOS bunu yalnız `rapor.maliyet` yetkisi olanlara
 gösterir (patron panelinde ve Raporlar › Ürünler'de brüt kâr, Yönetim › Ürünler'de marj). Başka alan gitmez.
+Kâr ve marj **KDV hariç** fiyattan hesaplanır (`shared/money.ts` `netOfKdv`, `netMarginPct`): Yönetim › Ürünler'deki
+"KDV hariç marj" M / tek boy fiyatından (maliyet M'nin; iki boylu üründe "(M)"). Raporlar'ın brüt kârı eklerin
+(şurup `mnu-0080`, ekstra shot `mnu-0081`, alternatif süt `mnu-0082`) reçete maliyetini de sayar: gün sonunun kuralıyla
+(`addonsOf`, `addonSiteIds`), ekin M maliyeti × kalem adedi × ek adedi, ana ürünün satırına; maliyeti bilinmeyen ek 0
+sayılır ve satır "maliyet eksik" işaretlenir (`costPartial`, tabloda `*`).
 Maliyetin son çekim tarihi ve çekim hatası da yalnız bu yetkiye gider: `GET /api/sync/status` (Entegrasyon, Genel
 bakış, menü sayacı; giriş yapan herkes okur) `costsAt` ve `costsError`'u başkasına göndermez, Entegrasyon'daki
 maliyet bölümü ve "Maliyetleri çek" (`senkron.yonet` **ve** `rapor.maliyet`) yalnız ona görünür.
@@ -708,10 +783,10 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 
 | İş | Sıklık | Neon'a etkisi |
 | --- | --- | --- |
-| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; elle | CDN ıskasında okuma (uyanma) |
-| İmzalı menü okuma | senkronda (herkese açık menü değişince) ve elle | küçük okuma |
+| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; `menu` işareti değişince gün açıkken en sık 60 sn, sonda tek eşitleme, gece yok (gün açılınca bir kez ETag'siz); CDN bayatsa 2 dk sonra bir kez; elle | CDN ıskasında okuma (uyanma) |
+| İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle | küçük okuma |
 | Sipariş sürüm sinyali | gün açıkken 20 sn, gece en sık 3 dk; hiç iş günü yokken hiç; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | yok (veri önbelleği, veritabanına gitmez) |
-| Online sipariş okuma (masa çağrıları dahil) | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
+| Online sipariş okuma (masa çağrıları dahil; kasanın şubesinin, §2 "Şube") | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
 | Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
 | Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk ("Online siparişleri çek" kapalıyken de); oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
 | Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
@@ -734,7 +809,9 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Birleşti | lafpos#25 (L4) | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
 | Birleşti | laffogato#268 | Panel siparişinde `tableCode`; imzalı `PUT /api/panel/tables` (LafPOS anahtarı; §2.3) |
 | Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
-| Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı) |
+| Birleşti | laffogato#279 + lafpos | Site şubeli; LafPOS her imzalı istekte şubesini söyler, başka şubenin listesini ve kaydını yazmaz (§2 "Şube") |
+| Açık | laffogato | Panel siparişinde `paidAtTill`, `lines[].index` ve yanıtta `closed` (§2.3 "Sözleşme eklemeleri"); LafPOS hazır, alan gelmezse bugünkü davranış |
+| Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
 ## 7. Yazarkasa POS (ÖKC) bağlantısı
@@ -764,6 +841,9 @@ lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
      `LAFPOS_SYNC_SECRET`'ı (`server/env-config.ts`). Kurulum modundayken bunlar güvenlidir: gün gitmez (§4.3),
      yalnız maliyet okuma çalışır (gün sonunda ve "Maliyetleri çek"; yazmayan imzalı GET). İsteğe bağlı LafPOS Uzaktan: `LAFPOS_CLOUD_URL`,
      `LAFPOS_CLOUD_SECRET`.
+   - **Şube:** site şubelidir (§2 "Şube"); Marina kasasının Şube kimliği `marina` kalır (sitenin `LAFPOS_BRANCHES`
+     varsayılanı da `marina`). Anahtar girilince kasa yalnız Marina'nın siparişlerini, çağrılarını ve Satışta'sını
+     okur ve yazar; Tuzla'nınkine dokunmaz.
    - Site satırları (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`) bu adımda **girilmez**, 2. adımın başında girilir:
      girildiği andan itibaren LafPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı
      değiştirir, kurulum modunda da. `scripts/vercel/baglanti-kur.sh` anahtarları üretip üç projeye yazar ve kafeye
@@ -811,7 +891,9 @@ lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
 
 **Personel yordamı** (kod değil): uygulama / web siparişi kasada nakit ya da kartla ödenirse sitede "Ödendi"
 işaretlenir ve LafPOS'ta normal adisyon olarak çalınır, bugün ModPOS'ta olduğu gibi (site onu `counter` sayıp online
-cirodan ve tüketim satırlarından çıkarır, çift sayım olmaz; otomatik aktarım Faz 2).
+cirodan ve tüketim satırlarından çıkarır, çift sayım olmaz; otomatik aktarım Faz 2). Site `paidAtTill` gönderince
+LafPOS o siparişi "sitede ödendi" diye yazmaz ve bara düşürmez, yalnız "#N kasada ödendi; adisyon olarak çalın" uyarısı
+verir: bara tek fiş, Z'ye tek satış gider (§2.3 "Kasada ödenen").
 
 **Geri almak:** lafmaliyet'te geçiş gününü boşaltmak her şeyi ModPOS'a döndürür, hiçbir kayıt silinmez. LafPOS
 `.env`'deki satırları silmek (ya da başına `#`) bağlantıyı kapatır; LafPOS yeniden başlayınca dışarıya istek gitmez.

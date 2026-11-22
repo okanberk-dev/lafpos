@@ -502,6 +502,12 @@ export const orders = sqliteTable(
     extLabel: text('ext_label'),
     extPaid: bool('ext_paid').notNull().default(false),
     extTotal: integer('ext_total'),
+    /**
+     * Sitenin listesinden kalkan siparişin sonucu (`closed`; docs/03-ENTEGRASYON.md §2.3 "Kapanış"): iptal ve iade
+     * edilen, kasada ödenen (`till`) ya da başka şubenin çıkan (`other`) online sipariş "Online (sitede ödendi)"
+     * toplamına girmez. Boş: bilinmiyor
+     */
+    extOutcome: text('ext_outcome').$type<'completed' | 'cancelled' | 'refunded' | 'till' | 'other'>(),
     scheduledFor: text('scheduled_for'),
     deliveryName: text('delivery_name'),
     deliveryPhone: text('delivery_phone'),
@@ -599,6 +605,8 @@ export const orderItems = sqliteTable(
     isService: bool('is_service').notNull().default(false),
     /** Site kimliği (mnu-0011): lafmaliyet eşlemesi için */
     extProductId: text('ext_product_id'),
+    /** Online siparişte satırın sitedeki konumu (`lines[].index`): sitede iptal edilen satır bununla bulunur (§2.3 "Kalem iptali") */
+    extLine: integer('ext_line'),
     posName: text('pos_name'),
     createdBy: text('created_by'),
     createdAt: integer('created_at').notNull(),
