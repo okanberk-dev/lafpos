@@ -351,6 +351,12 @@ describe('Uzaktan yönetim: kasa', () => {
       ['Spanish Latte', 5000, false],
     ]);
     expect(db.select().from(schema.productOptionGroups).where(and(eq(schema.productOptionGroups.productId, latte.id), eq(schema.productOptionGroups.groupId, g.id))).get()).toBeTruthy();
+    // urun.ekle: Meyveli Cup, kategori ve gruplarla; ürün ekranda açılır
+    const [yeni] = await uygula(komut('urun.ekle', { ad: 'Meyveli Cup', kategori: latte.categoryId, fiyat: 25000, kdv: 10, gruplar: [g.id] }));
+    expect(yeni).toMatchObject({ durum: 'uygulandi', ozet: 'Ürün ekle: Meyveli Cup (250 ₺)' });
+    const cup = db.select().from(schema.products).where(eq(schema.products.name, 'Meyveli Cup')).get()!;
+    expect(cup).toMatchObject({ price: 25000, kdvRate: 10, active: true, categoryId: latte.categoryId });
+    expect(db.select().from(schema.productOptionGroups).where(and(eq(schema.productOptionGroups.productId, cup.id), eq(schema.productOptionGroups.groupId, g.id))).get()).toBeTruthy();
     await uygula(komut('urun.gorunum', { id: latte.id, gorunur: true }));
     expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()!.hidden).toBe(false);
     // Doğrulama: fiyat kuruş tam sayı, tek varsayılan

@@ -32,6 +32,7 @@ import {
   type UyeRolu,
   uyeYapabilir,
   type SecenekGrubu,
+  type UrunEkle,
   type UrunGorunum,
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, type Role, ROLES, rolePermissions } from '@shared/permissions';
@@ -279,6 +280,10 @@ function istekOf(tur: KomutTuru, veri: KomutVerisi, pin: string | null): Istek {
     case 'urun.gorunum': {
       const v = veri as UrunGorunum;
       return { method: 'PATCH', yol: `/api/admin/products/${id(v)}`, govde: { hidden: !v.gorunur } };
+    }
+    case 'urun.ekle': {
+      const v = veri as UrunEkle;
+      return { method: 'POST', yol: '/api/admin/products', govde: { categoryId: v.kategori, name: v.ad, price: v.fiyat, kdvRate: v.kdv, groupIds: v.gruplar } };
     }
     case 'secenek.grubu': {
       const v = veri as SecenekGrubu;
