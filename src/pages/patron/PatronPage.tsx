@@ -447,6 +447,7 @@ export default function PatronPage() {
                   today={d.date}
                   now={d.now}
                   fresh={ago ?? stamp}
+                  stack
                   chart={<CompareBars today={d.netSales} items={kiyas.compares.map((c) => ({ key: c.key, label: COMPARE_SHORT[c.key], value: c.value ? c.value.netSales : null }))} />}
                 />
                 <PaymentGaugeCard payments={d.payments} />

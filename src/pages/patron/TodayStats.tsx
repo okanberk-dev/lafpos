@@ -74,7 +74,8 @@ export function Delta({ value, size = 'md' }: { value: number; size?: 'sm' | 'md
       )}
     >
       {!flat && <Arrow aria-hidden="true" className="size-3 stroke-[2.25]" />}
-      {changeText(value)}
+      {/* Yön okta: "+" işareti yazılmaz (karolardaki hapla aynı) */}
+      {changeText(value).replace('+', '')}
       <span className="sr-only">{flat ? ' değişmedi' : up ? ' arttı' : ' azaldı'}</span>
     </span>
   );
@@ -85,12 +86,21 @@ export const Faint = ({ children }: { children: ReactNode }) => <span className=
 
 /**
  * Liste satırı: solda soluk etiket, sağda değer (tutar, hap, not). `detail` verilirse satır dokunulunca açılır
- * (ayrıntı satırın altında; kart sade kalır, bilgi kaybolmaz)
+ * (ayrıntı satırın altında; kart sade kalır, bilgi kaybolmaz). `stack`: etiket üstte, değer altında (dar kart)
  */
-export function Row({ label, sub, children, detail }: { label: ReactNode; sub?: ReactNode; children: ReactNode; detail?: ReactNode }) {
+export function Row({ label, sub, children, detail, stack }: { label: ReactNode; sub?: ReactNode; children: ReactNode; detail?: ReactNode; stack?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const body = (
+  // Dar kartta (patron panelinin kıyas kartı) etiket üstte, değer altında: "Geçen hafta bugün" üç satıra bölünmez
+  const body = stack ? (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] leading-5 text-muted">{label}</span>
+        <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{children}</span>
+      </span>
+      {detail && <ChevronDown aria-hidden="true" className={cn('size-4 shrink-0 text-muted transition-transform duration-200', open && 'rotate-180')} />}
+    </>
+  ) : (
     <>
       <span className="min-w-0">
         <span className="block text-[15px] leading-5 text-muted">{label}</span>
@@ -154,7 +164,7 @@ function missing(c: Compare, today: string) {
  * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce"); `chart`: satırların üstündeki mini
  * grafik (patron panelinde kıyas yalnız bu kartta)
  */
-export function CompareGroup({ compares, mode, today, now, fresh, chart, className }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string }) {
+export function CompareGroup({ compares, mode, today, now, fresh, chart, className, stack }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string; stack?: boolean }) {
   const title = mode === 'live' ? `Kıyas · ${fmtTime(now)} itibarıyla` : mode === 'closed' ? 'Kıyas · gün sonu' : 'Kıyas · gün açılmadı';
   return (
     <Group title={title} label="Kıyas" meta={fresh} flush className={className}>
@@ -175,6 +185,7 @@ export function CompareGroup({ compares, mode, today, now, fresh, chart, classNa
         return (
           <Row
             key={c.key}
+            stack={stack}
             label={c.label}
             detail={
               <>
