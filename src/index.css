@@ -1297,11 +1297,10 @@ html[class~='dark'] {
   }
 
   /*
-   * Patron paneli (PatronPage; sahibin örneği: telefonun gruplanmış listesi). Üç sütun yığını: A bugünün cirosu, kıyas,
-   * hafta ve ay; B gün boyu grafik, gün içi satırlar, ödeme türleri; C açık adisyonlar, dikkat isteyenler, en çok
-   * satanlar. Telefonda ve dik tablette tek sütun, sıra `--o` ile (ciro, kıyas, grafik, gün içi, ödemeler, hafta ve ay,
-   * sonra C); yatay tablette ve dizüstünde (1024+) A ve B yan yana, C altında iki sütun; geniş ekranda (1440+) üç sütun.
-   * Satır (etiket, tutar, hap) dar sütunda kırılmasın diye iki sütun 1024'ten önce açılmaz
+   * Patron paneli (PatronPage; LafPOS Keel düzeni, DESIGN.md §0). İki sütun yığını ve altında üçüncüsü: A bugünün
+   * cirosu ve karolar, gün boyu grafiği, dönem kıyası; B mini kıyas kartı ve ödeme türleri (yan yana), Kıyas, gün içi;
+   * C açık adisyonlar, en çok satanlar, dikkat isteyenler. Telefonda ve dik tablette tek sütun, sıra `--o` ile (ciro,
+   * mini kartlar, kıyas, dönem, grafik, gün içi, sonra C); 1024+ A geniş, B dar; C altında iki, 1440+ üç sütun
    */
   .lp-patron {
     display: grid;
@@ -1318,7 +1317,7 @@ html[class~='dark'] {
   }
   @media (min-width: 64rem) {
     .lp-patron {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
     }
     .lp-patron-col {
       display: flex;
@@ -1337,13 +1336,8 @@ html[class~='dark'] {
     }
   }
   @media (min-width: 90rem) {
-    .lp-patron {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
-    }
     .lp-patron-col[data-col='c'] {
-      display: flex;
-      grid-column: auto;
-      align-items: stretch;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
