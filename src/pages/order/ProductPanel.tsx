@@ -45,6 +45,9 @@ function isOpaque(img: HTMLImageElement): boolean {
   }
 }
 
+/** Kartın görsel adresi: kasada sunucunun küçük kopyası, demoda sitenin küçültme ucu */
+const thumbUrl = (p: ProductDTO) => (!p.image ? null : DEMO ? demoProductImage(p.image) : `/media/products/${p.id}?v=${imageVersion(p.image)}`);
+
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -98,7 +101,8 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
   }, [q, current, visible, favorites]);
   // Listede görselli ürün varsa bütün kartlar görsel alanıyla çizilir: satırlar aynı boyda kalır. Görseller siteden
   // gelir: site bağlantısı kurulmamışken (LAFFOGATO_URL) sunucu onları indirmez, kartlar görselsiz çizilir
-  const withImages = boot.settings.productImages && !!boot.integrations.laffogatoUrl && list.some((p) => p.image);
+  const imagesOn = boot.settings.productImages && !!boot.integrations.laffogatoUrl;
+  const withImages = imagesOn && list.some((p) => p.image);
 
   // Arama sürerken kategoriye dokunmak o kategoriyi gösterir: arama temizlenir (yoksa ızgara arama sonucunda kalır, dokunuş
   // boşa gider)
@@ -159,23 +163,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
             'lp-enter lp-tiles scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1 md:px-1 md:pb-2 xl:pt-3.5',
           )}
         >
-          {!q.trim() && topProducts.length > 0 && (
-            <section aria-label="En çok satanlar" className="col-span-full">
-              <h3 className="mb-1.5 px-1 text-[13px] font-semibold text-muted">En çok satanlar</h3>
-              <div className="flex flex-wrap gap-2">
-                {topProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => (p.optionGroupIds?.length ? onCustomize(p, 'M') : onQuickAdd(p, 'M'))}
-                    className="min-h-12 max-w-full truncate rounded-full bg-[var(--k-well-2)] px-4 text-sm font-medium text-ink transition-colors hover:bg-hover active:bg-press"
-                  >
-                    {p.shortName || p.name}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          {!q.trim() && topProducts.length > 0 && <TopSellers products={topProducts} images={imagesOn} onPick={(p) => (p.optionGroupIds?.length ? onCustomize(p, 'M') : onQuickAdd(p, 'M'))} />}
           {list.map((p) => (
             <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
@@ -216,6 +204,57 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
 }
 
 /**
+ * En çok satanlar (son 7 gün): yatay kaydırmalı ince şerit. Her öğe sıra rozeti, küçük görsel (yoksa baş harfler),
+ * iri ad ve fiyat; dokunma alanı 56 px. Sığmayan öğeler şeritte kayar, sağ kenar solarak devamı belli olur
+ */
+function TopSellers({ products, images, onPick }: { products: ProductDTO[]; images: boolean; onPick: (p: ProductDTO) => void }) {
+  return (
+    <section aria-label="En çok satanlar" className="col-span-full min-w-0">
+      <h3 className="mb-1.5 px-1 text-[13px] font-semibold text-muted">En çok satanlar</h3>
+      <ol className="scroll-thin -mx-1 flex snap-x snap-proximity scroll-px-1 gap-2 overflow-x-auto px-1 pb-1.5 [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]">
+        {products.map((p, i) => (
+          <li key={p.id} className="shrink-0 snap-start">
+            <TopSeller p={p} rank={i + 1} image={images} onClick={() => onPick(p)} />
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function TopSeller({ p, rank, image, onClick }: { p: ProductDTO; rank: number; image: boolean; onClick: () => void }) {
+  const [broken, setBroken] = useState(false);
+  const label = p.shortName?.trim() || p.name;
+  const src = image && !broken ? thumbUrl(p) : null;
+  return (
+    <button
+      type="button"
+      disabled={!p.active}
+      onClick={onClick}
+      aria-label={`${rank}. ${label}, ${tlShort(p.price)}`}
+      className="flex min-h-14 w-[196px] items-center gap-2.5 rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-surface py-1.5 pl-1.5 pr-3 text-left transition-colors duration-150 hover:border-[var(--admin-border-strong)] hover:bg-hover focus-visible:-outline-offset-2 active:bg-press disabled:opacity-50"
+    >
+      <span aria-hidden="true" className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-[0.5rem] bg-surface-2">
+        {src ? (
+          <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} className="absolute inset-0 m-auto max-h-full max-w-full" />
+        ) : (
+          <span className="text-[13px] font-semibold text-muted">{initials(label)}</span>
+        )}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          <span aria-hidden="true" className="tabular shrink-0 text-[11px] font-semibold text-[var(--admin-primary)]">
+            {rank}
+          </span>
+          <span className="truncate text-[14.5px] font-semibold leading-tight tracking-[-0.01em] text-ink">{label}</span>
+        </span>
+        <span className="tabular pl-[calc(1ch+0.375rem)] text-[12.5px] font-medium text-muted">{tlShort(p.price)}</span>
+      </span>
+    </button>
+  );
+}
+
+/**
  * Kategori satırı (yönetimin alt menüsüyle tek bileşen, operatör 20 Kas 2026: "componentleri bir yap, farklı olmasın"):
  * `.lp-menu-item`: tek renk ikon (adından eşlenir, yoksa etiket), ad, sağda ürün sayısı; üstüne gelince çok açık gri,
  * seçili açık nane zeminde yeşil ve kalın. Geniş ekranda alt menü kartında alt alta, darda yatay sekme şeridinde
@@ -241,7 +280,7 @@ function CategoryItem({ active, count, name, favorite, strip, onClick }: { activ
 
 /**
  * Ürün kartı: dokununca eklenir (iki boyluda boy düğmeleri; zorunlu seçimi olan iki boylu ürün seçenek penceresiyle). Görselli düzende üstte sitedeki ürün fotoğrafı
- * (dekupaj, gri sahnede), görseli olmayan üründe adın baş harfleri. Seçenekli üründe köşede seçenek düğmesi;
+ * (kırpılmadan sığar, yumuşak gri sahnede), görseli olmayan üründe adın baş harfleri. Seçenekli üründe köşede seçenek düğmesi;
  * durum (tükendi, son porsiyon) küçük rozet.
  */
 function ProductTile({
@@ -257,7 +296,7 @@ function ProductTile({
 }) {
   const boot = useBoot();
   const [broken, setBroken] = useState(false);
-  // Dekupaj (saydam köşe) gri sahnede ortada durur; fotoğraf sahneyi doldurur
+  // Fotoğraf (saydam köşesi yok) yuvarlatılır; dekupaj (saydam köşe) sahnede çerçevesiz durur
   const [photo, setPhoto] = useState(false);
   const soldOut = !p.active;
   // Açık gruplardan (asksOptions ve needsChoice ile aynı kaynak): tek grubu kapatılmış ürün hızlı eklenir, simgesi çıkmaz
@@ -270,7 +309,7 @@ function ProductTile({
   // (etkinlik ücreti, özel pasta) fiyat girilsin diye hep pencereyle
   const ask = asksOptions(boot, p) || (!twoSizes && p.price <= 0);
   const addSize = (size: Size) => (ask ? onCustomize(p, size) : onQuickAdd(p, size));
-  const src = !p.image || broken ? null : DEMO ? demoProductImage(p.image) : `/media/products/${p.id}?v=${imageVersion(p.image)}`;
+  const src = broken ? null : thumbUrl(p);
   // Görseli olmayan üründe baş harfler kategori renginin açık tonunda (kart ızgarada kategorisiyle tanınır)
   const hue = boot.categories.find((c) => c.id === p.categoryId)?.color;
 
@@ -280,7 +319,7 @@ function ProductTile({
         // Sade karo (operatör 20 Kas 2026: "satış kısmını minimalist, temiz"): beyaz, saç teli çerçeve, köşe --r-tile;
         // gölge, kalkma ve süs şerit yok. Üstüne gelince çerçeve bir ton koyu, basılan parça hafif gri
         'group relative flex flex-col overflow-hidden rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-surface transition-colors duration-150 hover:border-[var(--admin-border-strong)]',
-        withImage ? 'min-h-[176px]' : 'min-h-[92px]',
+        withImage ? 'min-h-[192px]' : 'min-h-[92px]',
         soldOut && 'opacity-50',
       )}
     >
@@ -294,7 +333,10 @@ function ProductTile({
         {withImage && (
           <span
             aria-hidden="true"
-            className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-[0.5rem] bg-surface-2"
+            // Sabit yükseklikte yumuşak sahne; görsel hiç kırpılmadan sığar (site fotoğrafları kare: geniş alanda
+            // object-cover onları şeride kesip aşırı yakın gösteriyordu). Fotoğraf yuvarlak köşeli kare olarak ortada,
+            // dekupaj sahnenin üstünde serbest durur; görseli olmayan üründe aynı alanda baş harfler
+            className="relative mx-1.5 mt-1.5 grid h-[104px] place-items-center overflow-hidden rounded-[0.5rem] bg-surface-2 p-1.5"
             style={!src && hue ? { background: `color-mix(in oklab, ${hue} 12%, var(--surface-2))` } : undefined}
           >
             {src ? (
@@ -307,7 +349,9 @@ function ProductTile({
                 onError={() => setBroken(true)}
                 onLoad={(e) => setPhoto(isOpaque(e.currentTarget))}
                 // Görsel sabit: süs yakınlaşma yok; basılı durumu kartın kendi zemini verir
-                className={photo ? 'size-full object-cover' : 'h-[80px] w-full object-contain'}
+                // Mutlak konum + kenar boşluğu sınırları: görsel kendi oranını korur, sahnenin içinde ortalanır (ızgara hücresinde
+                // max-h-full çözülmüyor, görsel taşıp kırpılıyordu)
+                className={cn('absolute inset-1.5 m-auto max-h-[calc(100%-0.75rem)] max-w-[calc(100%-0.75rem)]', photo && 'rounded-[0.4rem] shadow-[0_1px_2px_rgb(15_35_28/0.12)]')}
               />
             ) : (
               <span className="text-xl font-semibold tracking-tight text-[var(--admin-border-field)]/80" style={hue ? { color: `color-mix(in oklab, ${hue} 55%, var(--surface-2))` } : undefined}>
