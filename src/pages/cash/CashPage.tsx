@@ -24,6 +24,7 @@ import { Illustration } from '@/components/Illustration';
 import { CashCount, signedTL } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
+import { DayCloseGuide } from './DayCloseGuide';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
 const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-sm:whitespace-normal max-sm:leading-tight max-[400px]:[&>svg]:hidden';
@@ -592,6 +593,8 @@ export default function CashPage() {
         }
       >
         <div className="space-y-4 p-5">
+          {/* Ekibin her akşam aynı sırayla yaptığı adımlar (sahibin istediği gün sonu rehberi) */}
+          <DayCloseGuide />
           {counted && <CashCount summary={summary} value={count} onChange={setCount} />}
           <Field label="Not">
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ör. kart slipinde 1 işlem eksik" />
