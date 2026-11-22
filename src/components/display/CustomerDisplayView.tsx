@@ -30,7 +30,8 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   gece: {
     '--d-bg': '#050302',
     // Gece (uygulamanın koyu temasıyla aynı nötr palet): siyah zeminde krema dalgaları, ortada ev yeşili hale
-    '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(10 133 96 / 0.26), transparent 72%)',
+    // LafPOS Keel (22 Kas 2026): desen yok; yalnız üstte hafif nane hale
+    '--d-glow': 'radial-gradient(55% 45% at 50% 0%, rgb(79 220 134 / 0.12), transparent 70%)',
     '--d-surface': '#1e1c1b',
     '--d-chip': '#2b2928',
     '--d-line': '#2e2c2b',
@@ -40,31 +41,37 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
     '--d-accent': '#34d399',
     '--d-letters': '#fbf6f1',
     '--d-bean': '#e8c877',
-    '--d-panel': 'radial-gradient(130% 90% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)',
-    '--d-panel-text': '#fbf6f1',
-    '--d-panel-soft': 'rgb(251 246 241 / 0.86)',
-    '--d-rule': 'linear-gradient(to right, #34d399 0 33.33%, #f5f5f7 33.33% 66.66%, #ff7b72 66.66% 100%)',
+    // Tutar paneli Keel'in ters kartı: gecede açık kart, mürekkep yazı; nane vurgu
+    '--d-panel': '#fbfaf9',
+    '--d-panel-text': '#171a26',
+    '--d-panel-soft': '#5b5f6c',
+    '--d-mint': '#4fdc86',
+    '--d-on-mint': '#0b3d22',
+    '--d-rule': '#4fdc86',
     '--d-card-shadow': 'none',
     '--d-qr-ink': '#211c18',
     '--d-qr-shadow': '0 10px 30px rgb(0 0 0 / 0.18)',
   },
   porselen: {
-    '--d-bg': '#f4f1ec',
-    '--d-glow': 'var(--waves-dark) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(29 109 86 / 0.1), transparent 72%)',
+    // LafPOS Keel açık: soğuk gri zemin, kenarsız beyaz kart, mürekkep yazı; tutar paneli mürekkep (ters) kart
+    '--d-bg': '#eceef1',
+    '--d-glow': 'radial-gradient(55% 45% at 50% 0%, rgb(79 220 134 / 0.14), transparent 70%)',
     '--d-surface': '#ffffff',
-    '--d-chip': '#f0ebe5',
-    '--d-line': '#e7e1d8',
-    '--d-text': '#17130f',
-    '--d-soft': '#4b433c',
-    '--d-mute': '#665d55',
-    '--d-accent': '#1d6d56',
-    '--d-letters': '#211c18',
+    '--d-chip': '#e9ebef',
+    '--d-line': '#e3e5ea',
+    '--d-text': '#171a26',
+    '--d-soft': '#3b3f4c',
+    '--d-mute': '#5f6371',
+    '--d-accent': '#4fdc86',
+    '--d-letters': '#171a26',
     '--d-bean': '#b08a2e',
-    '--d-panel': 'radial-gradient(130% 90% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)',
-    '--d-panel-text': '#fbf6f1',
-    '--d-panel-soft': 'rgb(251 246 241 / 0.86)',
-    '--d-rule': 'linear-gradient(to right, #1d6d56 0 33.33%, #e0d8cd 33.33% 66.66%, #9d2543 66.66% 100%)',
-    '--d-card-shadow': '0 1px 2px rgb(59 42 30 / 0.04), 0 6px 16px rgb(59 42 30 / 0.05)',
+    '--d-panel': '#171a26',
+    '--d-panel-text': '#ffffff',
+    '--d-panel-soft': '#a9adba',
+    '--d-mint': '#4fdc86',
+    '--d-on-mint': '#0b3d22',
+    '--d-rule': '#4fdc86',
+    '--d-card-shadow': '0 1px 2px rgb(23 26 38 / 0.04), 0 12px 30px -18px rgb(23 26 38 / 0.18)',
     '--d-qr-ink': '#211c18',
     '--d-qr-shadow': '0 10px 30px rgb(59 42 30 / 0.12)',
   },
@@ -83,6 +90,8 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
     '--d-panel': '#fbf8f4',
     '--d-panel-text': '#211c18',
     '--d-panel-soft': '#564d46',
+    '--d-mint': '#e8c877',
+    '--d-on-mint': '#2e2113',
     '--d-rule': 'linear-gradient(to right, #d3e2d9 0 33.33%, #fbf8f4 33.33% 66.66%, #f6e9ec 66.66% 100%)',
     '--d-card-shadow': 'none',
     '--d-qr-ink': '#211c18',
@@ -149,7 +158,7 @@ export function CustomerDisplayView({
   }, [lineCount]);
 
   const mark = (cls: string) => <LafMark className={cn('text-[var(--d-letters)]', cls)} bean="var(--d-bean)" title={businessName} />;
-  const rule = <span aria-hidden="true" className="mx-auto block h-1 w-12 rounded-full" style={{ background: 'var(--d-rule)' }} />;
+  const rule = <span aria-hidden="true" className="mx-auto block h-1.5 w-14 rounded-full" style={{ background: 'var(--d-rule)' }} />;
   const qrCard = qr ? (
     <div className="flex max-w-full items-center gap-4 rounded-3xl bg-white p-3 pr-5 text-[var(--d-qr-ink)] shadow-[var(--d-qr-shadow)]">
       <QrCode value={qr} label={config.qrLabel || 'Karekod'} className="size-24 border-0 @3xl:size-28 [@container(height<36rem)]:size-20!" />
@@ -167,10 +176,10 @@ export function CustomerDisplayView({
         // Yatay kapta liste ve tutar yan yana; dikeyde liste kalan boyu alıp kayar, tutar paneli kendi boyunda altta
         // (yatay telefonda ve 8" tablette panel ikiye bölünüp tutarı kesmez)
         <div className="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4 p-3 @3xl:p-6 [@container(orientation:landscape)]:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] [@container(orientation:landscape)]:grid-rows-1">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-[var(--d-line)] bg-[var(--d-surface)] shadow-[var(--d-card-shadow)]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-[var(--d-surface)] shadow-[var(--d-card-shadow)]">
             <header className="flex items-center gap-3 border-b border-[var(--d-line)] px-5 py-4 @3xl:px-6">
               {mark('h-7 shrink-0 @[100rem]:h-9')}
-              <h1 className="font-headline text-xl font-bold @3xl:text-2xl @[100rem]:text-3xl">Siparişiniz</h1>
+              <h1 className="font-headline text-xl font-semibold tracking-[-0.02em] @3xl:text-2xl @[100rem]:text-3xl">Siparişiniz</h1>
               <span className="flex-1" />
               <span className="truncate rounded-full bg-[var(--d-chip)] px-3 py-1 text-sm font-medium text-[var(--d-soft)] @[100rem]:px-4 @[100rem]:text-lg">{state.label}</span>
             </header>
@@ -181,21 +190,23 @@ export function CustomerDisplayView({
             >
               {state.lines.map((l, i) => (
                 <li key={`${l.name}-${i}`} className="flex items-start gap-4 px-5 py-4 @3xl:px-6 @[100rem]:py-5">
-                  <span className="tabular grid min-w-11 place-items-center rounded-xl bg-[var(--d-chip)] px-2 py-1.5 font-headline text-xl font-bold @[100rem]:min-w-14 @[100rem]:text-2xl">{l.qty}</span>
+                  <span className="tabular grid h-10 min-w-10 place-items-center rounded-full bg-[var(--d-chip)] px-2 font-headline text-lg font-semibold @[100rem]:h-12 @[100rem]:min-w-12 @[100rem]:text-xl">{l.qty}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-lg font-semibold leading-snug @3xl:text-xl @[100rem]:text-2xl">
+                    <span className="block text-lg font-medium leading-snug tracking-[-0.01em] @3xl:text-xl @[100rem]:text-2xl">
                       {l.name}
                       {l.size && <span className="ml-2 text-base font-medium text-[var(--d-mute)] @[100rem]:text-lg">{l.size}</span>}
                     </span>
                     {config.showOptions && l.options && <span className="mt-0.5 block text-sm text-[var(--d-mute)] @3xl:text-base @[100rem]:text-lg">{l.options}</span>}
                   </span>
-                  <span className="tabular whitespace-nowrap font-headline text-lg font-bold @3xl:text-xl @[100rem]:text-2xl">{l.total ? tl(l.total) : 'İkram'}</span>
+                  <span className="tabular whitespace-nowrap font-headline text-lg font-semibold @3xl:text-xl @[100rem]:text-2xl">{l.total ? tl(l.total) : 'İkram'}</span>
                 </li>
               ))}
             </ul>
           </section>
           {/* Panel kendi kabı: tutar onun genişliğine göre, iç yazılar geniş panelde (büyük ekran, dikey tablet) bir boy büyük */}
-          <section className="@container flex flex-col gap-5 overflow-hidden rounded-3xl p-6 text-[var(--d-panel-text)] @3xl:p-8" style={{ background: 'var(--d-panel)' }}>
+          <section className="@container relative isolate flex flex-col gap-5 overflow-hidden rounded-[28px] p-6 text-[var(--d-panel-text)] @3xl:p-8" style={{ background: 'var(--d-panel)' }}>
+            {/* Keel'in koyu kartındaki derinlik: sağ üstte nane ışıltı */}
+            <span aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 -z-10 size-72 rounded-full [background:radial-gradient(closest-side,color-mix(in_oklab,var(--d-mint)_28%,transparent),transparent)]" />
             <div className="flex items-center justify-between gap-3">
               <span className="truncate text-base font-medium text-[var(--d-panel-soft)] @lg:text-xl">{businessName}</span>
               {config.showClock && <span className="tabular font-headline text-lg font-semibold text-[var(--d-panel-soft)] @lg:text-xl">{fmtTime(now)}</span>}
@@ -209,8 +220,11 @@ export function CustomerDisplayView({
               </div>
             )}
             <div>
-              <p className="text-lg text-[var(--d-panel-soft)] @lg:text-xl">{state.paid > 0 ? 'Kalan' : 'Toplam'}</p>
-              <p className="tabular whitespace-nowrap font-headline font-extrabold leading-none tracking-[-0.035em]" style={totalSize(amount)}>
+              <p className="flex items-center gap-2 text-lg text-[var(--d-panel-soft)] @lg:text-xl">
+                {state.paid > 0 ? 'Kalan' : 'Toplam'}
+                <span className="rounded-full bg-[var(--d-mint)] px-2.5 py-0.5 text-sm font-medium text-[var(--d-on-mint)] @lg:text-base">{state.lines.reduce((a, l) => a + l.qty, 0)} ürün</span>
+              </p>
+              <p className="tabular mt-1 whitespace-nowrap font-headline font-medium leading-none tracking-[-0.045em]" style={totalSize(amount)}>
                 {/* LafPOS Keel: tutar iri, kuruş soluk */}
                 {amount.slice(0, -3)}
                 <span className="opacity-50">{amount.slice(-3)}</span>
@@ -235,17 +249,17 @@ export function CustomerDisplayView({
             <div className="w-full min-w-0">
               {state.kind === 'thanks' ? (
                 <>
-                  <span className="mx-auto grid size-20 place-items-center rounded-full bg-[var(--d-accent)] text-[var(--d-bg)] @3xl:size-24 [@container(height<36rem)]:size-14!">
+                  <span className="mx-auto grid size-20 place-items-center rounded-full bg-[var(--d-mint,var(--d-accent))] text-[var(--d-on-mint,var(--d-bg))] @3xl:size-24 [@container(height<36rem)]:size-14!">
                     <Check aria-hidden="true" className="size-10 stroke-[2.5] @3xl:size-12 [@container(height<36rem)]:size-7!" />
                   </span>
-                  <h1 className="mt-8 font-headline text-[clamp(2.25rem,6cqw,4.5rem)] font-extrabold leading-[1.05] tracking-[-0.035em] [@container(height<36rem)]:mt-4!">{thanks}</h1>
+                  <h1 className="mt-8 font-headline text-[clamp(2.25rem,6cqw,4.5rem)] font-semibold leading-[1.05] tracking-[-0.04em] [@container(height<36rem)]:mt-4!">{thanks}</h1>
                   <p className="tabular mt-4 font-headline text-xl font-medium text-[var(--d-soft)] @3xl:text-[26px] [@container(height<36rem)]:mt-2!">{tl(state.total)}</p>
                   {state.call && <CallNumber call={state.call} />}
                 </>
               ) : (
                 <>
                   {mark('mx-auto h-20 @3xl:h-28 [@container(height<36rem)]:h-14!')}
-                  <h1 className="mt-8 font-headline text-[clamp(2.5rem,7cqw,5.25rem)] font-extrabold leading-[1.02] tracking-[-0.035em] [@container(height<36rem)]:mt-4! [@container(height<36rem)]:text-[clamp(2.25rem,5cqw,3.5rem)]!">{welcome}</h1>
+                  <h1 className="mt-8 font-headline text-[clamp(2.5rem,7cqw,5.25rem)] font-semibold leading-[1.02] tracking-[-0.045em] [@container(height<36rem)]:mt-4! [@container(height<36rem)]:text-[clamp(2.25rem,5cqw,3.5rem)]!">{welcome}</h1>
                   <div className="mt-5 [@container(height<36rem)]:mt-3!">{rule}</div>
                   {config.welcomeSubtitle.trim() && (
                     <p className="mx-auto mt-5 max-w-[32ch] text-pretty text-xl font-light text-[var(--d-soft)] @3xl:text-2xl [@container(height<36rem)]:mt-3! [@container(height<36rem)]:text-lg!">{config.welcomeSubtitle}</p>
@@ -260,7 +274,7 @@ export function CustomerDisplayView({
               {messages.length > 0 ? (
                 <p
                   key={shown}
-                  className="animate-fade max-w-full text-pretty rounded-3xl border border-[var(--d-line)] bg-[var(--d-surface)] px-5 py-3 text-base font-medium text-[var(--d-soft)] shadow-[var(--d-card-shadow)] backdrop-blur-sm @3xl:text-lg [@container(orientation:landscape)]:rounded-full [@container(orientation:portrait)]:text-center [@container(height<36rem)]:rounded-3xl! [@container(height<36rem)]:text-base!"
+                  className="animate-fade max-w-full text-pretty rounded-full bg-[var(--d-surface)] px-5 py-3 text-base font-medium text-[var(--d-soft)] shadow-[var(--d-card-shadow)] backdrop-blur-sm @3xl:text-lg [@container(orientation:landscape)]:rounded-full [@container(orientation:portrait)]:text-center [@container(height<36rem)]:rounded-3xl! [@container(height<36rem)]:text-base!"
                 >
                   {messages[shown]}
                 </p>
@@ -295,11 +309,11 @@ function CallNumber({ call }: { call: string }) {
   // Uzun kimlik ("Masa WWWWWW"): çağrı ekranındaki gibi ekranla küçülen yazı ve kırılan kelime (390 px'te taşmasın)
   const long = shown.length > 5;
   return (
-    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-3xl border border-[var(--d-line)] bg-[var(--d-surface)] px-8 py-5 shadow-[var(--d-card-shadow)] @max-[40rem]:min-w-0 @max-[40rem]:px-5 [@container(height<36rem)]:mt-4! [@container(height<36rem)]:py-3!">
+    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-[28px] bg-[var(--d-surface)] px-8 py-5 shadow-[var(--d-card-shadow)] @max-[40rem]:min-w-0 @max-[40rem]:px-5 [@container(height<36rem)]:mt-4! [@container(height<36rem)]:py-3!">
       <p className="text-lg font-medium text-[var(--d-mute)] [@container(height<36rem)]:text-base!">{no ? 'Numaranız' : 'Siparişiniz'}</p>
       <p
         className={cn(
-          'tabular font-headline font-extrabold leading-[1.05] tracking-tight [overflow-wrap:anywhere]',
+          'tabular font-headline font-semibold leading-[1.05] tracking-[-0.04em] [overflow-wrap:anywhere]',
           long ? 'text-[clamp(2.25rem,9cqw,5rem)] [@container(height<36rem)]:text-[clamp(2rem,6cqw,3.5rem)]!' : 'text-7xl @3xl:text-8xl [@container(height<36rem)]:text-6xl!',
         )}
       >

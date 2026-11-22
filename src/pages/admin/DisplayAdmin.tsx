@@ -16,8 +16,8 @@ import { toast } from '@/lib/toast';
 import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
 const THEMES: Record<CustomerDisplayTheme, { label: string; hint: string; swatch: string; ink: string }> = {
-  gece: { label: 'Gece', hint: 'Loş salonda göz almaz', swatch: 'radial-gradient(70% 70% at 50% 40%, #0a8560 0%, #050302 75%)', ink: '#fbf6f1' },
-  porselen: { label: 'Porselen', hint: 'Gün ışığında, sitenin zemini', swatch: '#f4f1ec', ink: '#17130f' },
+  gece: { label: 'Gece', hint: 'Loş salonda göz almaz; tutar açık kartta', swatch: 'radial-gradient(60% 50% at 50% 0%, rgb(79 220 134 / 0.28), #050302 75%)', ink: '#fbfaf9' },
+  porselen: { label: 'Açık (Keel)', hint: 'Gün ışığında; tutar mürekkep kartta', swatch: '#eceef1', ink: '#171a26' },
   yesil: { label: 'Ev yeşili', hint: 'Marka yüzeyi, krem yazı', swatch: 'radial-gradient(130% 95% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)', ink: '#fbf6f1' },
 };
 
@@ -193,7 +193,7 @@ export default function DisplayAdmin() {
         </div>
 
         <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
-          <Card title="Görünüm" subtitle="Tema ekranın bütününü değiştirir; tutar paneli her temada markanın yüzeyidir">
+          <Card title="Görünüm" subtitle="Tema ekranın bütününü değiştirir; tutar her temada ayrı, büyük bir kartta">
             {/* Tema karosu: üstte temanın örneği, altta adı ve radyo işareti (seçili ev yeşili dairede tik, öteki boş halka);
                 telefonda üç iri karo alt alta iki ekran boyu tutmasın diye yatay satır, örnek solda */}
             <div role="radiogroup" aria-label="Tema" className="grid gap-2 sm:grid-cols-3 sm:gap-3">
