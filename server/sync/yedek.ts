@@ -48,6 +48,19 @@ export function sealBackup(db: Buffer, secret: string): Buffer {
   return Buffer.concat([magic(), salt, iv, cipher.getAuthTag(), body]);
 }
 
+/**
+ * sealBackup'ın eşzamansız sıkıştıranı (yükleme): yüz MB'lık veritabanının gzip'i olay döngüsünü saniyelerce kilitlemez,
+ * servis sırasında tabletlerin istekleri beklemez (denetim bulgu 26). Şifreleme aynı
+ */
+export async function sealBackupAsync(db: Buffer, secret: string): Promise<Buffer> {
+  const gz = await new Promise<Buffer>((ok, fail) => zlib.gzip(db, { level: 6 }, (err, out) => (err ? fail(err) : ok(Buffer.from(out)))));
+  const salt = nodeCrypto.randomBytes(16);
+  const iv = nodeCrypto.randomBytes(12);
+  const cipher = nodeCrypto.createCipheriv('aes-256-gcm', keyFor(secret, salt), iv);
+  const body = Buffer.concat([cipher.update(gz), cipher.final()]);
+  return Buffer.concat([magic(), salt, iv, cipher.getAuthTag(), body]);
+}
+
 /** Şifreyi çözer ve SQLite olduğunu doğrular; anahtar yanlışsa ya da dosya bozuksa Türkçe hata */
 export function openBackup(buf: Buffer, secret: string): Buffer {
   if (buf.length < 48 || !buf.subarray(0, 4).equals(magic())) throw new Error('Yedek dosyası tanınmadı');
@@ -77,7 +90,7 @@ async function cloud<T>(path: string, body: unknown): Promise<T> {
 export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
   if (!cloudEnabled()) throw new Error('LafPOS Uzaktan kurulu değil');
   try {
-    const sealed = sealBackup(readFileSync(file), env.cloudSecret);
+    const sealed = await sealBackupAsync(readFileSync(file), env.cloudSecret);
     const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });
     const res = await fetch(url, { method: 'PUT', body: new Uint8Array(sealed), headers: { 'content-type': 'application/octet-stream' }, signal: AbortSignal.timeout(10 * 60_000) });
     if (!res.ok) throw new Error(`Yedek yüklenemedi (${res.status})`);

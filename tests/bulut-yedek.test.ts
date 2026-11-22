@@ -66,6 +66,16 @@ describe('bulut yedeği', () => {
     expect(() => openBackup(sealBackup(Buffer.from('SQLite değil'), SECRET), SECRET)).toThrow(/veritabanı çıkmadı/);
   });
 
+  it('yüklemenin şifrelemesi olay döngüsünü kilitlemeden sıkıştırır; aynı biçimde açılır (bulgu 26)', async () => {
+    const { sealBackupAsync, openBackup } = await import('../server/sync/yedek');
+    const db = Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(4096, 1)]);
+    let ticks = 0;
+    const tick = setInterval(() => ticks++, 0);
+    const sealed = await sealBackupAsync(db, SECRET);
+    clearInterval(tick);
+    expect(openBackup(sealed, SECRET).equals(db)).toBe(true);
+  });
+
   it('bulut uçları yalnız imzalı; ad dükkânın klasöründe; başka klasörden indirilemez', async () => {
     const { POST } = await import('../api/uzaktan');
     const call = (path: string, body: object, signed = true, shop = 'abc123') => {
