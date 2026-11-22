@@ -53,25 +53,25 @@
 
 | Rol | Açık | Koyu |
 |---|---|---|
-| Zemin (üst çubuk ve sahne tek) | `#F1F4F2` | `#0D1110` |
-| Kart, yaprak | `#FFFFFF` | `#19201D` |
-| Kart içi hafif alan / taş (segment rayı, tuş, kuyu) | `#F7F9F8` / `#EDF1EE` | `#1E2622` / `#26302B` |
-| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#868F8A` (kartta 3.3:1) | `#2A332F` / `#36413C` / `#212925` / `#78837D` |
-| Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | `#F1F5F3` / `#C9D2CD` / `#9AA6A0` |
-| Ana eylem ve seçim (eylem dolgusu, `--admin-ink-fill`) | ev yeşili `#0A6E52`, üstünde `#FFFFFF` (6.2:1) | zümrüt `#34D399`, üstünde `#052E1F` |
-| Ok halkası (ana düğmenin sağı) | açık nane `#D8F6E8`, ok `#075A43` | `#064E3B`, ok `#D1FAE5` |
-| Marka rayı | `linear-gradient(180deg, #0B6449 → #095A42 → #074A37)`; yazı `#FFFFFF`, ikinci `#E3F2EA`, soluk `#B9E3CF` (en açık durakta 5.1:1); seçili karo `#FFFFFF` üstünde `#0A6E52` | `#0F3D2F → #09261D`; seçili karo `#E6F6EE` üstünde `#0A5C44` |
-| Seçili sekme (açık nane) | `#DDF5EA` üstünde `#0A6E52` (5.4:1) | `#0F3327` üstünde `#34D399` |
+| Zemin (üst çubuk ve sahne tek) | `#F1F4F2` | şarap gecesi `#150B0E` |
+| Kart, yaprak | `#FFFFFF` | `#231318` (yüzen yüzey `#2E1A1F`) |
+| Kart içi hafif alan / taş (segment rayı, tuş, kuyu) | `#F7F9F8` / `#EDF1EE` | `#2A171D` / `#341D24` |
+| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#868F8A` (kartta 3.3:1) | `#3D2329` / `#4E2F36` / `#2E1A1F` / `#94767C` (kuyuda 3.8:1) |
+| Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | sıcak krem `#F5EDE3` / `#DDCCC2` / `#B49E99` (kuyuda 13.4 / 6.2:1) |
+| Ana eylem ve seçim (eylem dolgusu, `--admin-ink-fill`) | ev yeşili `#0A6E52`, üstünde `#FFFFFF` (6.2:1) | derin İtalyan yeşili `#0F7D47`, üstünde krem `#FBF6EF` (4.8:1) |
+| Ok halkası (ana düğmenin sağı) | açık nane `#D8F6E8`, ok `#075A43` | açık nane `#E3F4E8`, ok `#0A6B3C` |
+| Marka rayı | `linear-gradient(180deg, #0B6449 → #095A42 → #074A37)`; yazı `#FFFFFF`, ikinci `#E3F2EA`, soluk `#B9E3CF` (en açık durakta 5.1:1); seçili karo `#FFFFFF` üstünde `#0A6E52` | İtalyan yeşili `#0E5A36 → #0B4A2C → #083B23` (beyaz 8.3:1); seçili karo krem `#F5EDE3` üstünde `#0B6B3E`, ikon karosu `#D6ECDC` |
+| Seçili sekme (açık nane) | `#DDF5EA` üstünde `#0A6E52` (5.4:1) | `#12301F` üstünde `#4CCB85` |
 | Marka ciro kartı | `linear-gradient(135deg, #0B7556 → #0A6E52 → #075A43)` ve sağ üstte hafif ışık, beyaz yazı | aynı |
-| Derin yeşil (bağlantı, olumlu, odak halkası) | `#0A6E52`, yumuşak `#DDF5EA` | `#34D399`, yumuşak `#0F3327` |
+| Derin yeşil (bağlantı, olumlu, odak halkası) | `#0A6E52`, yumuşak `#DDF5EA` | İtalyan yeşili `#4CCB85` (zeminde 9.4:1), yumuşak `#12301F`; odak halkası bir ton açık `#86E3AB` |
 | Dolu masa | yeşil degrade `#0E7A5A → #086348 → #05432F`, beyaz yazı | aynı |
-| Zamanı daralan (ahududu) | `#C8175D` zemin `#FCE4EE` | `#FF7EB6` zemin `#3D1528` |
-| Mavi (hazırlanıyor, bilgi) | `#2459E0` zemin `#E6EEFF` | `#8FB0FF` zemin `#172548` |
-| Mor (online sipariş) | `#6D28D9` zemin `#F1EAFF` | `#C4B5FD` zemin `#261D45` |
-| Turuncu (uyarı, gecikme) / kırmızı (hata, iptal) | `#B45309` / `#C81E1E` | `#FBBF24` / `#FCA5A5` |
-| Grafik | vurgulu sütun ev yeşili `#0A6E52`, öteki sütunlar açık nane `#BFE8D4`, değer hapı ev yeşili üstünde beyaz | `#34D399` / `#1F4A3A` |
+| Zamanı daralan (ahududu) | `#C8175D` zemin `#FCE4EE` | `#FF8CC0` zemin `#46162E` |
+| Mavi (hazırlanıyor, bilgi) | `#2459E0` zemin `#E6EEFF` | `#93B4FF` zemin `#1A2347` |
+| Mor (online sipariş) | `#6D28D9` zemin `#F1EAFF` | `#C9B8FF` zemin `#2B1D47` |
+| Turuncu (uyarı, gecikme) / kırmızı (hata, iptal) | `#B45309` / `#C81E1E` | kehribar `#F5B83D` / parlak mercan `#FF8A7A` zemin `#4A1714` |
+| Grafik | vurgulu sütun ev yeşili `#0A6E52`, öteki sütunlar açık nane `#BFE8D4`, değer hapı ev yeşili üstünde beyaz | `#4CCB85` / `#2F4A38` |
 | Pirinç (ödül) | dolgu `#F2C94C` üstünde `#2E2113`, metin `#765923` | dolgu aynı, metin `#F2C94C` |
-| Bant (Araçlar, bildirim) | `#0B100E` + yeşil hâle | `#060908` |
+| Bant (Araçlar, bildirim) | `#0B100E` + yeşil hâle | `#0E0609` |
 | Marka karosu (uygulama ikonu) | `radial-gradient(#23876A → #1D6D56 → #0C3B2D)`, krem `#FBF6F1`, pirinç `#E8C877` | aynı |
 
 - **Panonun rengi ev yeşili:** panonun mavisi (ray, seçili sekme, ana düğme, segment, değer hapı, grafik) LafPOS'ta ev
@@ -81,6 +81,25 @@
   adları iki temada doğru tonu verir: `text-signal-ink`, `bg-signal-soft`, `text-blue-ink`, `bg-warning-soft`... Ham
   ölçekler (`danger-600`, `success-600`...) koyuda değişmez; yalnız beyaz yazılı dolu yüzeyde kalır, `tests/ui-rules.test.ts`
   izinli listeyle tutar.
+- **Koyu tema: bordo gece** (sahibin isteği, 22 Kasım 2026: "koyu bordo tonlarda, İtalya renklerine uyumlu"). L'Affogato
+  İtalyan kafesi: zemin siyaha yakın şarap (ton 340-345°, kırmızıya kaçmaz), üstünde krem metin ve İtalyan yeşili eylem;
+  bayrağın üç rengi (yeşil `#009246`, krem, kırmızı) gecede böyle okunur. Kurallar:
+  - **Ton merdiveni:** zemin `--admin-bg` `#150B0E` → kart `--admin-surface` `#231318` → kart içi alan `--admin-surface-2`
+    `#2A171D` → kuyu `--admin-panel` `#341D24`; yüzen yüzey `--surface-raised` `#2E1A1F`. Gölge yok, katmanı ton farkı ve
+    sıcak saç teli (`--admin-border` `#3D2329`) ayırır.
+  - **Metin** saf beyaz değil, sıcak krem: `--admin-text` `#F5EDE3`, `--admin-text-soft` `#DDCCC2`, `--admin-text-mute`
+    `#B49E99` (en açık yüzeyde de 4.5:1 üstü).
+  - **Yeşil iki rolde:** bağlantı, seçim ve grafik açık İtalyan yeşili `--admin-primary` `#4CCB85`; ana eylem dolgusu
+    (Öde, Kaydet, Tezgâh satışı) derin İtalyan yeşili `--admin-ink-fill` `#0F7D47` üstünde krem. Marka rayı ve dolu masa
+    yeşil degradede kalır; bordo üstünde yeşil kimliği taşır.
+  - **Durum renkleri bordodan ayrılır:** tehlike parlak mercan `--admin-danger-ink` `#FF8A7A` (bordo zeminle karışmaz,
+    "alarm" yalnız gerçek hatada), başarı nane-turkuaz `--admin-success` `#4DD9C0` (eylem yeşilinden 20° ayrı), uyarı
+    kehribar `#F5B83D`, bilgi soğuk mavi `--admin-info` `#7DD3FC`, zamanı daralan ahududu `#FF8CC0`.
+  - Bileşen sabit renk yazmaz; her şey `.dark` belirteçlerinden. Müşteri ekranının "gece" paleti aynı değerlerde, ayracı
+    üç renk (yeşil, krem, kırmızı). Bar ekranı, çağrı ekranı, Uzaktan ve Merkez aynı belirteçleri okur.
+  - Ölçü `tests/koyu-tema.test.ts`: her metin ve durum rengi her yüzeyde 4.5:1, rozet yazısı kendi zemininde 4.5:1, eylem
+    dolgusu, alan kenarı ve odak halkası her yüzeyde 3:1; bordonun tonu, yeşilin bayrağa yakınlığı ve durum renklerinin
+    ayrılığı da denetlenir. Açık tema değişmez.
 - **Odak halkası** 2 px ev yeşili, 2 px dışarıda; rayda beyaz, bantta açık yeşil. Alan odakta ev yeşili kenar ve 3 px
   açık nane hâle.
 
@@ -92,7 +111,8 @@
   `rounded-lg/xl/2xl/3xl`'i 8/10/14/18. Segment, adet seçici ve iz hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
   `.surface-soft` müşteri ekranının yönetimdeki önizlemesinde aynı merdiveni çizer.
 - **Gölge** ev yeşilinin gecesi (`#0F231C`): zeminde yüzen kart `--shadow-card` (1 px ve 28 px yumuşak), yaprak
-  `--shadow-leaf`, açılan ve yüzen parça (pencere, menü) `--shadow-pop`. Koyuda kart gölgesiz, ayrımı ton ve saç teli yapar.
+  `--shadow-leaf`, açılan ve yüzen parça (pencere, menü) `--shadow-pop`. Koyuda kart gölgesiz, ayrımı bordo ton merdiveni
+  ve sıcak saç teli yapar.
 - **Boşluk:** 4'ün katları; kabuk payı 12, kartlar arası 16, kart iç payı 20, sahnede başlık satırıyla yaprak arası 16.
 - **Hareket:** üzerine gelme 160 ms, durum 280 ms, açılış 620-1000 ms; hep `--ease-out` (0.16, 1, 0.3, 1). Basılı ölçek
   0.97; kart üstüne gelince 2 px kalkar; ok halkası üstüne gelince ve odakta 45° döner.
@@ -315,7 +335,7 @@ görünüm"de 32). Kurumsal 6 px yüzey (4 Kasım 2026) kalktı: yönetim ve rap
 
 ### LafPOS'un eklemeleri (Innex ve Area Board kitine göre)
 
-1. **Koyu tema:** aynı roller koyu değerlerle (sıcak gece), her çift AA'da test ediliyor.
+1. **Koyu tema:** aynı roller bordo gece değerleriyle (§2 "Koyu tema: bordo gece"), her çift AA'da test ediliyor.
 2. **⌘K komut paleti** (Innex §1.2 önerisi): ekranlara, yönetim bölümlerine, ürünlere ve personele atlar;
    "Yerel ürün ekle", "Personel ekle", tema, kilit gibi eylemler. Türkçe harfleri katlayarak arar
    ("cay" Çay'ı, "sut" Süt'ü bulur). Kasa ekranlarında da çalışır (Ctrl K ya da sol menüdeki büyüteç).
