@@ -36,7 +36,8 @@ export interface Install {
   lastSeen: number | null;
   surum: string | null;
   build: number | null;
-  guncelleme: { durum: string; mesaj: string; yeni: { surum: string; build: number } | null } | null;
+  /** `secim`: kasadaki seçim (Şimdi / Gün sonunda); null: yeni kasa, seçim yapılmadı; alan yoksa eski kasa */
+  guncelleme: { durum: string; mesaj: string; yeni: { surum: string; build: number } | null; secim?: 'simdi' | 'gunsonu' | null } | null;
   gunAcik: boolean | null;
   lisans: LicenseRecord;
   mod: 'elle' | 'otomatik';
@@ -143,6 +144,16 @@ export function targetFor(i: Pick<Install, 'mod' | 'hedef' | 'build' | 'kesinHed
 }
 
 /** Panelin gördüğü satır: anahtar yok; lisans ve güncelleme durumu sade adıyla */
+/**
+ * Panelin durum etiketi (sahibin dört durumu: güncel, bekliyor, gün sonunda kurulacak, hata). Bekleyen sürümde kasadaki
+ * seçim ayırır: seçim yoksa kasada soruluyor; eski kasa (`secim` alanı yok) eski etiketle
+ */
+export function updateStatusLabel(g: NonNullable<Install['guncelleme']>): string {
+  if (g.durum === 'guncel') return 'Güncel';
+  if (g.durum === 'bekliyor' && g.secim !== undefined) return g.secim === 'gunsonu' ? 'Gün sonunda kurulacak' : g.secim === 'simdi' ? 'Şimdi kuruluyor' : 'Kasada seçim bekliyor';
+  return updateLabel(g.durum);
+}
+
 export function installView(i: Install, release: Release | null, now: number) {
   // Kasanın son görülmesi onay anıdır: çevrimdışı kasada satış kapanmaz, panel de bunu gösterir (shared/lisans.ts)
   const lic = licenseState(i.lisans, { installedAt: i.createdAt, now, confirmedAt: i.lastSeen });
@@ -156,7 +167,7 @@ export function installView(i: Install, release: Release | null, now: number) {
     lastSeen: i.lastSeen,
     online: i.lastSeen != null && now - i.lastSeen < ONLINE_MS,
     gunAcik: i.gunAcik,
-    guncelleme: i.guncelleme ? { durum: String(i.guncelleme.durum), mesaj: String(i.guncelleme.mesaj ?? ''), yeni: i.guncelleme.yeni ?? null, etiket: updateLabel(i.guncelleme.durum) } : null,
+    guncelleme: i.guncelleme ? { durum: String(i.guncelleme.durum), mesaj: String(i.guncelleme.mesaj ?? ''), yeni: i.guncelleme.yeni ?? null, secim: i.guncelleme.secim ?? null, etiket: updateStatusLabel(i.guncelleme) } : null,
     lisans: { ...i.lisans, ...lic },
     mod: i.mod,
     hedef: i.hedef,
@@ -298,7 +309,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       kesinHedef: body.kesinHedef === true,
       guncelleme:
         g && typeof g === 'object'
-          ? { durum, mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null }
+          ? { durum, mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null, ...('secim' in g ? { secim: g.secim === 'simdi' || g.secim === 'gunsonu' ? (g.secim as 'simdi' | 'gunsonu') : null } : {}) }
           : inst.guncelleme,
     };
     // Nabız yalnız kendi alanlarını yazar (tek komut): panelin aynı anda verdiği lisans ya da hedef ezilmez

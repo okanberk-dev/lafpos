@@ -4,6 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { env } from './env';
 import { type AppEnv, authMiddleware, clientKey } from './lib/auth';
+import { activityMiddleware, busyNow } from './lib/mesgul';
 import { constraintError, HttpError } from './lib/http';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
@@ -46,6 +47,8 @@ export function createApp() {
     c.header('cache-control', 'no-store');
   });
   app.use('/api/*', authMiddleware);
+  // Satış/ödeme yazmaları sayılır: güncelleme satış sürerken kurulmaz (lib/mesgul.ts)
+  app.use('/api/*', activityMiddleware);
 
   // Derleme numarası: güncelleyici yeni sürümün gerçekten açıldığını buradan anlar (guncelle.mjs)
   app.get('/api/health', (c) => c.json({ ok: true, time: Date.now(), build: installedVersion().build }));
@@ -54,7 +57,8 @@ export function createApp() {
   app.get('/api/kasa/guncelleme-durumu', (c) => {
     if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
     // Merkez'in hedefi: güncelleyici yalnız bu derlemeye kadar kurar (Merkez kapalıysa kanalın son sürümü)
-    return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget() });
+    // `mesgul`: satış ya da ödeme sürüyor; güncelleyici gün açıkken (Şimdi güncelle) kurmadan önce bunu bekler
+    return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget(), mesgul: busyNow() });
   });
 
   // Kasa kısayolunun yazıcı betiği (app\kasa-yazici.ps1, oturumdaki kullanıcı): bilgisayardaki yazıcıları bildirir, yanıtta

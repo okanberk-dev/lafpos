@@ -104,3 +104,16 @@ export function isLoopback(addr: string | undefined | null): boolean {
   if (!addr) return false;
   return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
 }
+
+/**
+ * Kasadaki seçim (bekleyen yeni sürüm için): "Şimdi güncelle" ya da "Gün sonunda güncelle". Derlemeye bağlıdır: yeni bir
+ * sürüm gelince seçim yeniden sorulur. Sync state `guncelleme.secim`
+ */
+export type UpdateChoice = 'simdi' | 'gunsonu';
+export interface UpdateChoiceRecord {
+  build: number;
+  secim: UpdateChoice;
+  at: number;
+  by: string;
+}
+export const UPDATE_CHOICE_KEY = 'guncelleme.secim';

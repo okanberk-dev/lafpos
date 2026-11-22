@@ -32,8 +32,8 @@ describe('güncelleyicinin soruları', () => {
     for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
       const r = await fromAddr(addr, '/kasa/guncelleme-durumu');
       expect(r.status).toBe(200);
-      // Yalnız açık gün ve Merkez'in hedefi (Merkez kapalı: hedef yok); başka bir şey dönmez
-      expect(await r.json()).toEqual({ dayOpen: expect.any(Boolean), merkez: { enabled: false, hedef: null } });
+      // Yalnız açık gün, Merkez'in hedefi (Merkez kapalı: hedef yok) ve satış/ödeme sürüyor mu; başka bir şey dönmez
+      expect(await r.json()).toEqual({ dayOpen: expect.any(Boolean), merkez: { enabled: false, hedef: null }, mesgul: expect.any(Boolean) });
     }
     for (const addr of ['192.168.1.20', '100.101.7.9', null]) expect((await fromAddr(addr, '/kasa/guncelleme-durumu')).status).toBe(403);
   });
@@ -104,5 +104,51 @@ describe('Ayarlar ve yedek › Şimdi güncelle', () => {
     expect(await h.call('mudur', 'POST', '/admin/guncelleme', { simdi: true })).toMatchObject({ status: 403, json: { code: 'patron_only' } });
     const r = await h.ok<{ request: { simdi: boolean }; dayOpen: boolean }>('patron', 'POST', '/admin/guncelleme', { simdi: true });
     expect(r).toMatchObject({ dayOpen: true, request: { simdi: true } });
+  });
+});
+
+describe('Kasadaki güncelleme teklifi: Şimdi güncelle / Gün sonunda güncelle', () => {
+  const dir = () => join(process.env.LAFPOS_DATA_DIR!, 'guncelleme');
+  const file = () => join(dir(), 'istek.json');
+  const ready = () => {
+    mkdirSync(dir(), { recursive: true });
+    writeFileSync(join(dir(), 'durum.json'), JSON.stringify({ durum: 'bekliyor', mesaj: 'Yeni sürüm hazır', yeni: { surum: '0.2.1', build: 1795200000 } }));
+    if (existsSync(file())) rmSync(file());
+  };
+  afterAll(() => {
+    delete process.env.LAFPOS_STDIN_CONTROL;
+  });
+
+  it('kasayı yöneten görür; garson göremez. Gün sonunda: seçim saklanır, istek dosyası yazılmaz', async () => {
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    ready();
+    expect((await h.call('garson', 'GET', '/admin/guncelleme/teklif')).status).toBe(403);
+    const offer = await h.ok<{ yeni: { build: number }; secim: string | null; canRequest: boolean }>('kasa', 'GET', '/admin/guncelleme/teklif');
+    expect(offer).toMatchObject({ yeni: { build: 1795200000 }, secim: null, canRequest: true });
+    const after = await h.ok<{ secim: string }>('kasa', 'POST', '/admin/guncelleme/secim', { secim: 'gunsonu' });
+    expect(after.secim).toBe('gunsonu');
+    expect(existsSync(file())).toBe(false);
+    // Yeni bir sürüm gelince seçim yeniden sorulur
+    writeFileSync(join(dir(), 'durum.json'), JSON.stringify({ durum: 'bekliyor', mesaj: 'Yeni sürüm hazır', yeni: { surum: '0.2.2', build: 1795300000 } }));
+    expect((await h.ok<{ secim: string | null }>('kasa', 'GET', '/admin/guncelleme/teklif')).secim).toBeNull();
+  });
+
+  it('Şimdi: satış ya da ödeme sürerken reddedilir (409 busy); kasa boşken gün açıkken de hemen kurma isteği yazılır', async () => {
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    ready();
+    const { resetActivity, QUIET_MS } = await import('../server/lib/mesgul');
+    const s = await h.ok<{ dayOpen: boolean }>('patron', 'GET', '/admin/guncelleme');
+    if (!s.dayOpen) await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    // Az önce bir satış yazması oldu: kasa meşgul
+    await h.call('kasa', 'POST', '/orders', {});
+    expect(QUIET_MS).toBeGreaterThan(0);
+    expect(await h.call('kasa', 'POST', '/admin/guncelleme/secim', { secim: 'simdi' })).toMatchObject({ status: 409, json: { code: 'busy' } });
+    expect(existsSync(file())).toBe(false);
+    resetActivity();
+    const ok = await h.ok<{ secim: string }>('kasa', 'POST', '/admin/guncelleme/secim', { secim: 'simdi' });
+    expect(ok.secim).toBe('simdi');
+    expect(JSON.parse(readFileSync(file(), 'utf8'))).toMatchObject({ simdi: true });
+    const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=5');
+    expect(audit.some((a) => a.action === 'guncelleme' && a.message.includes('şimdi kurulacak'))).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useDeviceCopies } from '@/lib/after-payment';
 import { useBoot } from '@/lib/boot';
+import { useBuildWatch } from '@/lib/buildWatch';
 import { useOutbox } from '@/lib/outbox';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
@@ -24,6 +25,7 @@ import { InternetBadge } from './InternetBadge';
 import { LafTile } from './LafMark';
 import { LicenseStrip } from './LicenseStrip';
 import { PlatformInbox } from './PlatformInbox';
+import { UpdateOffer } from './UpdateOffer';
 import { RemoteShopPicker } from './RemoteShopPicker';
 import { SiteInbox } from './SiteInbox';
 import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
@@ -114,6 +116,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     setMoreOpen(false);
     setMenuOpen(false);
   }, [location.pathname, setMenuOpen]);
+  // Kasa yeni sürümle yeniden açılınca ekran kendiliğinden yenilenir ve kaldığı yerden devam eder
+  useBuildWatch(!REMOTE && !DEMO);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   // Kasaya ulaşamayan gönderimler kasa dönünce kendiliğinden gider (hangi ekranda olunursa olsun)
@@ -601,6 +605,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         </nav>
       )}
 
+      {/* Kasada yeni sürüm teklifi: Şimdi güncelle / Gün sonunda güncelle (uzaktan görünümde ve demoda yok) */}
+      {!REMOTE && !DEMO && <UpdateOffer />}
       <ToolsDrawer
         open={toolsOpen}
         onClose={closeTools}
