@@ -5,7 +5,8 @@
  * Ortam: LAFPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32), LAFPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
  * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
- * isteğe bağlı YEMEKSEPETI_REMOTE_ID (yalnız bu restoranın siparişleri). Getir aktarıcısı (`/api/getir/*`):
+ * isteğe bağlı YEMEKSEPETI_<ŞUBE>_REMOTE_ID (ve eski öneksiz YEMEKSEPETI_REMOTE_ID; yalnız bu restoranların
+ * siparişleri). Getir aktarıcısı (`/api/getir/*`):
  * GETIR_WEBHOOK_SECRET (bizim ürettiğimiz, Getir'e x-api-key olarak verilen anahtar, en az 16, öteki anahtarlardan
  * ayrı), isteğe bağlı GETIR_RESTAURANT_ID.
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
@@ -21,7 +22,7 @@ import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
-import { CLOUD_KEYS } from '../shared/baglanti.js';
+import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 
 const SNAPSHOT_KEY = 'lafpos:snapshot';
 const TOKEN_HOURS = 12;
@@ -398,16 +399,24 @@ const once = <T>(f: () => Promise<T>) => {
 // ─── Platform anahtarları (#75 İş 2) ─────────────────────────────────────────
 
 /**
- * Sahip Trendyol ve Yemeksepeti değerlerini bir kez bu projenin ortamına girer (Production, Sensitive); kasa onları
- * `GET /api/uzaktan/anahtarlar` ile kafe anahtarıyla imzalı çeker (açılışta ve 10 dakikada bir). Yanıt yalnız dolu
+ * Sahip Trendyol ve Yemeksepeti değerlerini bir kez bu projenin ortamına şube adıyla girer (TRENDYOL_TUZLA_API_KEY;
+ * Production, Sensitive); kasa kendi şubesininkileri `GET /api/uzaktan/anahtarlar?sube=` ile kafe anahtarıyla imzalı çeker (açılışta ve 10 dakikada bir). Yanıt yalnız dolu
  * olanları taşır; değerler Redis'e, özete ve günlüğe girmez. Yanlış imza 401, her yanıt `cache-control: no-store`
  */
 export async function platformKeys(req: Request, url: URL): Promise<Response> {
   if (secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
   if (req.method !== 'GET') return fail(405, 'Yalnız GET', 'method_not_allowed');
   if (!verifyPush(secret(), req, url, '')) return fail(401, 'İmza geçersiz', 'bad_signature');
+  // Şubeye göre: kasa kendi şubesini imzalı sorguda gönderir (?sube=marina); yalnız <PLATFORM>_<ŞUBE>_<ALAN> okunur,
+  // öneksiz eski adlar kimseye gitmez, şubesiz (eski) istemci boş alır. Yanıtta adlar kasanın bildiği öneksiz biçimde
+  const sube = subeEtiketi(url.searchParams.get('sube'));
   const anahtarlar: Record<string, string> = {};
-  for (const key of CLOUD_KEYS) if (env(key)) anahtarlar[key] = env(key);
+  if (sube) {
+    for (const key of CLOUD_KEYS) {
+      const v = env(subeKeyName(key, sube));
+      if (v) anahtarlar[key] = v;
+    }
+  }
   return json({ anahtarlar });
 }
 
@@ -557,9 +566,24 @@ export function verifyMiddlewareJwt(secret: string, authorization: string | null
   return sameText(createHmac(alg, secret).update(`${h}.${p}`).digest('base64url'), s);
 }
 
+/**
+ * Aktarıcının kabul ettiği restoranlar: öneksiz eski `YEMEKSEPETI_REMOTE_ID` ve her şubenin
+ * `YEMEKSEPETI_<ŞUBE>_REMOTE_ID`'si (platform anahtarları şubeye göre; sahip `YEMEKSEPETI_MARINA_REMOTE_ID` girer). Boşlar
+ * atılır; hiçbiri yoksa süzgeç yok (her remoteId kabul). Gelen kutusu şubeler arasında ortak (docs/KALANLAR.md)
+ */
+export function yemeksepetiRemoteIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const [name, value] of Object.entries(process.env)) {
+    if (name !== 'YEMEKSEPETI_REMOTE_ID' && !/^YEMEKSEPETI_[A-Z0-9]{1,32}_REMOTE_ID$/.test(name)) continue;
+    const id = (value ?? '').trim();
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
 async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
   const pluginSecret = env('YEMEKSEPETI_PLUGIN_SECRET');
-  const wantRemote = env('YEMEKSEPETI_REMOTE_ID');
+  const wantRemote = yemeksepetiRemoteIds();
   const now = Date.now();
   // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (LAFPOS_CLOUD_SECRET)
   const inbox = await inboxRoutes(req, url, path, 'yemeksepeti', [YS_STATUS_KEY, YS_INBOX_KEY]);
@@ -570,7 +594,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
   const order = /^yemeksepeti\/order\/([^/]+)$/.exec(path);
   if (order && req.method === 'POST') {
     const remoteId = decodeURIComponent(order[1]!);
-    if (wantRemote && remoteId !== wantRemote) return json({ reason: 'MENU_ACCOUNT_SETTINGS', message: 'Unknown remoteId' }, 400);
+    if (wantRemote.size && !wantRemote.has(remoteId)) return json({ reason: 'MENU_ACCOUNT_SETTINGS', message: 'Unknown remoteId' }, 400);
     const body = await req.text();
     if (body.length > INBOX_ORDER_MAX_BYTES) return json({ reason: 'TECHNICAL_PROBLEM', message: 'payload-limit-exceeded' }, 400);
     let dh: { token?: unknown };
@@ -591,7 +615,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     const remoteId = decodeURIComponent(status[1]!);
     const remoteOrderId = decodeURIComponent(status[2]!);
     if (remoteOrderId.length > INBOX_TOKEN_MAX) return fail(400, 'remoteOrderId', 'bad_body');
-    if (wantRemote && remoteId !== wantRemote) return fail(404, 'Unknown remoteId', 'not_found');
+    if (wantRemote.size && !wantRemote.has(remoteId)) return fail(404, 'Unknown remoteId', 'not_found');
     const text = await req.text();
     if (text.length > INBOX_STATUS_MAX_BYTES) return fail(400, 'payload-limit-exceeded', 'bad_body');
     let dh: { status?: unknown; message?: unknown };
