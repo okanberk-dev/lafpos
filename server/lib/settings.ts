@@ -266,6 +266,8 @@ const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';
  *   personel dökülen ürünü ödenmez diye kapatır, zayi raporu eksik kalırdı.
  * - `indirim-ogrenci-calisan`: sahibin kararı (21 Kasım 2026): indirim nedenleri yalnız Öğrenci ve Çalışan, ikisi de %15
  *   (`discountPresetPct`). Kayıtlı eski liste bir kez yenisiyle değişir.
+ * - `fis-iki-nusha`: sahibin isteği (22 Kasım 2026): ödemeden sonra fiş yazıcısından iki ayrı kâğıt kendiliğinden çıkar
+ *   (müşteri nüshası ve işyeri nüshası); eski kurulumda kayıtlı kapalı ayar bir kez açılır.
  * Patron sonradan yeniden yazarsa dokunulmaz.
  */
 export function upgradeStoredSettings() {
@@ -283,6 +285,13 @@ export function upgradeStoredSettings() {
     tx((t) => {
       updateSettings({ discountReasons: PUBLIC_DEFAULTS.discountReasons, discountPresetPct: PUBLIC_DEFAULTS.discountPresetPct }, t);
       done.add('indirim-ogrenci-calisan');
+      setSyncState(SETTINGS_UPGRADES_KEY, [...done]);
+    });
+  }
+  if (!done.has('fis-iki-nusha')) {
+    tx((t) => {
+      updateSettings({ receiptStoreCopy: true, receiptInfoSlip: true }, t);
+      done.add('fis-iki-nusha');
       setSyncState(SETTINGS_UPGRADES_KEY, [...done]);
     });
   }

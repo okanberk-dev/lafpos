@@ -49,6 +49,17 @@ export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Pr
   );
 }
 
+/**
+ * Birkaç fişi ayrı yazdırma işleri olarak basar: termal yazıcı her işin sonunda kâğıdı keser (aynı işteki sayfa sonu
+ * sürücüye göre kesilmez, iki nüsha tek uzun fiş çıkardı; saha, 22 Kas 2026). İşler sırayla, arada kısa bekleme
+ */
+export async function printEach(parts: ReactNode[]): Promise<void> {
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 400));
+    await printNow(parts[i]);
+  }
+}
+
 export function PrintHost() {
   const content = usePrint((s) => s.content);
   const sheet = usePrint((s) => s.sheet);
