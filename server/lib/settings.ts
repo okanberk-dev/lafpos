@@ -50,7 +50,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   barEnabled: true,
   // Müşteri ekranı: gece teması, sitenin tescilli sloganı; duyuru ve karekod patron girene kadar yok
   customerDisplay: {
-    theme: 'gece',
+    theme: 'porselen',
     welcomeTitle: 'Hoş geldiniz',
     welcomeSubtitle: 'Drink it. Eat the cup.',
     thanksTitle: 'Teşekkürler, afiyet olsun',

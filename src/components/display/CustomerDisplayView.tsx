@@ -9,7 +9,8 @@ import { cn } from '@/lib/cn';
 
 /** Sunucunun varsayılanıyla aynı (server/lib/settings.ts): ayar gelmeden ya da eski sunucuda ekran yine çizilir */
 export const DISPLAY_DEFAULTS: CustomerDisplaySettings = {
-  theme: 'gece',
+  // Varsayılan açık tema (LafPOS Keel; sahip, 22 Kas 2026)
+  theme: 'porselen',
   welcomeTitle: 'Hoş geldiniz',
   welcomeSubtitle: 'Drink it. Eat the cup.',
   thanksTitle: 'Teşekkürler, afiyet olsun',
@@ -208,7 +209,7 @@ export function CustomerDisplayView({
             {/* Keel'in koyu kartındaki derinlik: sağ üstte nane ışıltı */}
             <span aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 -z-10 size-72 rounded-full [background:radial-gradient(closest-side,color-mix(in_oklab,var(--d-mint)_28%,transparent),transparent)]" />
             <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-base font-medium text-[var(--d-panel-soft)] @lg:text-xl">{businessName}</span>
+              <LafMark className="h-8 shrink-0 text-[var(--d-panel-text)] @lg:h-10" bean="var(--d-mint, var(--d-bean))" title={businessName} />
               {config.showClock && <span className="tabular font-headline text-lg font-semibold text-[var(--d-panel-soft)] @lg:text-xl">{fmtTime(now)}</span>}
             </div>
             <div className="flex-1" />
@@ -240,7 +241,8 @@ export function CustomerDisplayView({
       ) : (
         <div className="relative flex h-full flex-col">
           <div className="flex items-center justify-between gap-4 px-6 pt-5 @3xl:px-10 @3xl:pt-8 [@container(height<36rem)]:px-6! [@container(height<36rem)]:pt-3!">
-            <span className="truncate text-base font-medium text-[var(--d-mute)] @3xl:text-lg">{businessName}</span>
+            {/* Sol üstte düz ad yerine L'Af logosu (sitenin logosu, depoda SVG; iki renk: harfler temanın yazısı, çekirdek vurgu) */}
+            {mark('h-8 shrink-0 @3xl:h-10')}
             {config.showClock && <span className="tabular font-headline text-xl font-semibold text-[var(--d-soft)] @3xl:text-2xl">{fmtTime(now)}</span>}
           </div>
           {/* Izgara öğesi içeriğin en geniş kelimesine göre büyümesin: uzun masa no telefonda taşmasın. Alçak kapta
