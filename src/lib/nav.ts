@@ -39,7 +39,7 @@ export const POS_NAV: NavItem[] = [
   { to: '/musteriler', label: 'Müşteriler', title: 'Müşteriler', icon: Users, perms: ['cari.yonet'], keywords: 'açık hesap cari veresiye tahsilat damga' },
   { to: '/rezervasyon', label: 'Rezerv.', title: 'Rezervasyonlar', icon: CalendarClock, perms: ['rezervasyon.yonet'] },
   { to: '/raporlar', label: 'Raporlar', title: 'Raporlar', icon: BarChart3, perms: ['rapor.gor'] },
-  { to: '/patron', label: 'Patron', title: 'Patron paneli', icon: Gauge, perms: ['patron.panel'], primary: true },
+  { to: '/patron', label: 'Patron', title: 'Patron Paneli', icon: Gauge, perms: ['patron.panel'], primary: true },
   { to: '/yonetim', label: 'Yönetim', title: 'Yönetim paneli', icon: Settings, perms: ['menu.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
 ];
 

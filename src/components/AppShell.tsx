@@ -260,8 +260,14 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Ad düğmenin etiketinde
   const avatar = (size: keyof typeof AVATAR) => <Avatar name={me.name} color={me.color} className={AVATAR[size]} />;
   // Alt sekme: ikon hapın içinde; etkin sekme yan menüyle aynı açık nane hapta yeşil ikonla ve kalın yazıyla
-  const tab = (on: boolean) => cn('group flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', on ? 'font-semibold text-ink' : 'font-medium text-muted');
-  const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]' : 'group-active:bg-press');
+  // Telefonun alt menüsü (yüzen dok): her sekme 56 px yüksek, yuvarlak karo; etkin sekmenin bütün karosu açık nane, ikonu
+  // ve adı yeşil (yan menünün seçimi). Dokununca hafifçe içe basar (hareket azaltmada yok)
+  const tab = (on: boolean) =>
+    cn(
+      'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[1.125rem] text-[11px] leading-4 transition-[background-color,color,transform] duration-150 active:scale-[0.96] motion-reduce:active:scale-100',
+      on ? 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]' : 'font-medium text-muted active:bg-press',
+    );
+  const tabPill = (_on: boolean) => 'grid h-7 place-items-center';
   // Menünün başlığı kişi: adı ve rolü (tek şubeli kasada işletmenin adı bilgi taşımaz)
   const roleLabel = ROLE_LABELS[me.role];
   const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : (roleLabel !== me.name ? roleLabel : undefined);
@@ -327,9 +333,13 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       {/* Telefon: üst şerit (adisyon, bar ve yönetimde yok: onların kendi şeridi var) */}
       {!fullBleed && (
         // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
-        <header className="flex items-center gap-0.5 bg-bg pb-1 pl-3 pr-1.5 pt-[max(0.25rem,env(safe-area-inset-top))] md:hidden">
-          <LafTile size="sm" />
-          <span className="ml-2.5 min-w-0 flex-1 truncate font-headline text-[17px] font-bold tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
+        <header className="flex min-h-16 items-center gap-0.5 bg-bg pb-1.5 pl-3 pr-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
+          <LafTile size="md" />
+          {/* İki satır: üstte uygulamanın adı (küçük, soluk), altında ekranın adı */}
+          <span className="ml-3 flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[11px] font-medium leading-4 tracking-[0.01em] text-muted">Cafe POS Yönetim Paneli</span>
+            <span className="truncate font-headline text-[18px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
+          </span>
           <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-press">
             <Search className="size-5" />
           </button>
@@ -532,9 +542,15 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           </main>
         </div>
       </div>
-      {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme açık nane hapta (yan menünün seçimi) */}
+      {/*
+       * Telefon: alt menü, zeminin üstünde yüzen yuvarlak dok (kenarlarda zemin görünür); ev çubuğu payı dokun altında.
+       * Akışın içinde durur: içeriğin üstüne binmez, son kart dokun arkasında kalmaz
+       */}
       {showTabs && (
-        <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
+        <nav
+          aria-label="Ekranlar"
+          className="mx-2.5 mb-[max(0.5rem,env(safe-area-inset-bottom))] mt-1.5 flex shrink-0 gap-0.5 rounded-[1.5rem] border border-line bg-surface p-1 shadow-[0_12px_32px_-16px_rgb(16_24_20/0.4)] md:hidden dark:shadow-none"
+        >
           {tabs.map((n) => (
             <NavLink key={n.to} to={n.to} aria-label={navAriaLabel(n)} className={({ isActive }) => tab(on(n.to, isActive))}>
               {({ isActive }) => (
