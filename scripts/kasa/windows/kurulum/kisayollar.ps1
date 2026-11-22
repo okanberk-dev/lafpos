@@ -7,7 +7,9 @@ param([Parameter(Mandatory = $true)][string]$Liste)
 $ErrorActionPreference = 'Stop'
 $hata = 0
 try {
-  $items = @(Get-Content -LiteralPath $Liste -Raw -Encoding UTF8 | ConvertFrom-Json)
+  # PowerShell 5.1'de ConvertFrom-Json diziyi tek nesne olarak verir: ForEach-Object diziyi ogelerine acar
+  $parsed = ConvertFrom-Json (Get-Content -LiteralPath $Liste -Raw -Encoding UTF8)
+  $items = @($parsed | ForEach-Object { $_ })
   $sh = New-Object -ComObject WScript.Shell
 } catch {
   Write-Output ('HATA liste: ' + $_.Exception.Message)
