@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { db } from '../db/client';
+import { db, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, requirePermission } from '../lib/auth';
-import { body, conflict } from '../lib/http';
+import { Effects } from '../lib/effects';
+import { body, conflict, HttpError } from '../lib/http';
 import { getSettings, updateSettings } from '../lib/settings';
 import {
   cancelDeviceBasket,
@@ -46,18 +47,46 @@ okcRoutes.put('/settings', async (c) => {
       auto: z.boolean().nullable().optional(),
     }),
   );
+  const user = c.get('user');
+  const prev = getSettings();
   // Pavo yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
   const mode = input.provider === 'pavo' ? 'anlik' : input.mode;
-  if (input.mode === 'liste' && (input.provider ?? getSettings().okcProvider) === 'pavo') throw conflict('Pavo yalnız kasada ödemeyle çalışır', 'okc_mode');
-  updateSettings({
-    ...(input.provider ? { okcProvider: input.provider } : {}),
-    ...(mode ? { okcMode: mode } : {}),
-    ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
-    ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
-    ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
-    ...(input.auto !== undefined ? { okcAuto: input.auto } : {}),
+  if (input.mode === 'liste' && (input.provider ?? prev.okcProvider) === 'pavo') throw conflict('Pavo yalnız kasada ödemeyle çalışır', 'okc_mode');
+  const providerChanged = !!input.provider && input.provider !== prev.okcProvider;
+  const modeChanged = !!mode && mode !== prev.okcMode;
+  // Sağlayıcı ve mod mali sonucu değiştirir (fiş kesilir mi, gün eğitim günü mü): yalnız patron, eski → yeni kayıtla
+  if ((providerChanged || modeChanged) && user.role !== 'patron') throw new HttpError(403, 'Yazarkasa sağlayıcısını ve modunu yalnız patron değiştirir', 'patron_only');
+  // Gerçek kullanım başladıktan sonra eğitim cihazına geçilmez: o gün eğitim günü sayılır, fişsiz kapanır
+  if (providerChanged && input.provider === 'simulator' && prev.liveSince != null) throw new HttpError(422, 'Gerçek kullanım başladı: eğitim cihazına geçilmez. Cihaz arızalıysa Kapalı’yı seçin', 'live');
+  const fx = new Effects();
+  tx((t) => {
+    updateSettings(
+      {
+        ...(input.provider ? { okcProvider: input.provider } : {}),
+        ...(mode ? { okcMode: mode } : {}),
+        ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
+        ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
+        ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
+        ...(input.auto !== undefined ? { okcAuto: input.auto } : {}),
+      },
+      t,
+    );
+    if (providerChanged || modeChanged) {
+      const parts = [providerChanged ? `sağlayıcı ${prev.okcProvider} → ${input.provider}` : null, modeChanged ? `mod ${prev.okcMode} → ${mode}` : null].filter(Boolean);
+      fx.audit(t, {
+        userId: user.id,
+        action: 'okc.settings',
+        severity: 'uyari',
+        entity: 'settings',
+        entityId: 'okc',
+        message: `${user.name} yazarkasa ayarını değiştirdi: ${parts.join(', ')}`,
+        data: { from: { provider: prev.okcProvider, mode: prev.okcMode }, to: { provider: input.provider ?? prev.okcProvider, mode: mode ?? prev.okcMode } },
+      });
+    }
   });
-  return c.json(okcStatus(c.get('user')));
+  fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
+  fx.flush();
+  return c.json(okcStatus(user));
 });
 
 /**

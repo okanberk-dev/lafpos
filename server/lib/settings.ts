@@ -186,6 +186,14 @@ export function trainingMode(s: Pick<AllSettings, 'demoMode' | 'okcProvider'> = 
   return s.demoMode || s.okcProvider === 'simulator';
 }
 
+/**
+ * Kapanan gün eğitim günü mü: kurulum modunda ya da eğitim cihazındayken, ama gerçek kullanım başladıktan
+ * (`liveSince`) sonra asla. Canlıdan sonra kapanan gün lafmaliyet'e gider; ayar sonradan eğitim cihazına çekilse de
+ */
+export function trainingDayNow(s: Pick<AllSettings, 'demoMode' | 'okcProvider' | 'liveSince'> = getSettings()): boolean {
+  return s.liveSince == null && trainingMode(s);
+}
+
 export function getPublicSettings(): PublicSettings {
   const all = getSettings();
   const out = {} as Record<string, unknown>;

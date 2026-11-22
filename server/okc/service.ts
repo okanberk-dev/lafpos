@@ -497,7 +497,10 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
         });
         return out;
       });
-      fx.emit({ topic: 'okc', kind: 'okc.paid', orderId: r.orderId, message: res.closed ? 'Yazarkasada ödendi, adisyon kapandı' : 'Yazarkasada ödendi' });
+      // Cihazın gerçek ödemeleri olayla gider: sonuç ekranı para üstünü LafPOS'taki seçimden değil bundan hesaplar
+      const methods = new Map(db.select({ id: schema.paymentMethods.id, kind: schema.paymentMethods.kind, name: schema.paymentMethods.name }).from(schema.paymentMethods).all().map((m) => [m.id, m]));
+      const paid = payments.map((p) => ({ kind: methods.get(p.methodId)?.kind ?? 'diger', name: methods.get(p.methodId)?.name ?? 'Yazarkasa', amount: p.amount }));
+      fx.emit({ topic: 'okc', kind: 'okc.paid', orderId: r.orderId, message: res.closed ? 'Yazarkasada ödendi, adisyon kapandı' : 'Yazarkasada ödendi', paid });
       fx.flush();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
