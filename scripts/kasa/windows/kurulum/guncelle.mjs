@@ -1,6 +1,6 @@
 // LafPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır; ayar ve anahtar
 // gerekmez. Güncelleme kanalı Vercel'deki lafpos projesidir (kanal.mjs her main derlemesinde yazar): sırayla
-// MANIFEST_URLS'teki surum.json, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 30 dk'da
+// MANIFEST_URLS'teki surum.json, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 3 dk'da
 // bir (ETag: değişmeyen kanal gövde göndermez). Yeni derleme (`build`, HEAD commit'inin zamanı) varsa uygulama yükünü
 // (lafpos-app-<build>.zip) aynı adresten indirir, boyunu ve SHA-256'sını doğrular; Node ya da better-sqlite3 değiştiyse
 // onları açık kaynaklarından (nodejs.org, WiseLibs'in GitHub sürümü) indirip manifestteki özetle doğrular.
@@ -41,7 +41,12 @@ export function channelUrls(vars) {
   return list.length ? list : MANIFEST_URLS;
 }
 export const FIRST_CHECK_MS = 2 * 60_000;
-export const CHECK_EVERY_MS = 30 * 60_000;
+/**
+ * Kanal denetimi 3 dakikada bir (sahip: güncelleme anlığa yakın gelsin, 22 Kas 2026). surum.json Vercel'in statik
+ * dosyası: Redis ya da işlev çağrısı harcamaz; günde ~480 küçük istek. Kurulum yine Merkez'in hedefiyle ve gün
+ * kapalıyken (ya da kasada "Şimdi güncelle"yle); nabız 5 dakikada bir kalır (Upstash komut sınırı)
+ */
+export const CHECK_EVERY_MS = 3 * 60_000;
 /** Kurulum hazırken gün açıksa sunucuya (yalnız bu bilgisayardan) bu aralıkla yeniden sorulur */
 export const DAY_POLL_MS = 5 * 60_000;
 /** Yeni sürümün açılıp /api/health'te yeni derlemeyi söylemesi için süre */

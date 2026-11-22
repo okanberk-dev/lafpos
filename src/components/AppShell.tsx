@@ -6,7 +6,7 @@ import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useDeviceCopies } from '@/lib/after-payment';
 import { useBoot } from '@/lib/boot';
-import { useBuildWatch } from '@/lib/buildWatch';
+import { useBuildWatch, useRemoteBuildWatch } from '@/lib/buildWatch';
 import { useOutbox } from '@/lib/outbox';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
@@ -118,6 +118,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   }, [location.pathname, setMenuOpen]);
   // Kasa yeni sürümle yeniden açılınca ekran kendiliğinden yenilenir ve kaldığı yerden devam eder
   useBuildWatch(!REMOTE && !DEMO);
+  // Uzaktan: ekrana dönünce sitedeki son yayına bakılır, yeniyse yenilenir
+  useRemoteBuildWatch(REMOTE && !DEMO);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   // Kasaya ulaşamayan gönderimler kasa dönünce kendiliğinden gider (hangi ekranda olunursa olsun)
