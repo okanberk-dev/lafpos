@@ -182,6 +182,18 @@ export async function overflowReport(page) {
       return `${el.tagName.toLowerCase()}${id}${cls} "${(el.textContent ?? '').trim().slice(0, 30)}"`;
     };
     const bad = [];
+    // Sol menü (ray): içindeki hiçbir öğe rayın kutusundan taşmaz (sahibin bildirdiği üst üste binme, 22 Kas 2026)
+    const rail = document.querySelector('nav.lp-rail');
+    if (rail && rail.offsetParent) {
+      const rr = rail.getBoundingClientRect();
+      for (const el of rail.querySelectorAll('a, button, [role="status"]')) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        // Kayan ekran listesinin içindekiler dikeyde listeyle kırpılır; yatayda ve dipte (foot) taşma hata
+        const inList = !!el.closest('.lp-rail-list');
+        if (r.right > rr.right + 1 || r.left < rr.left - 1 || (!inList && (r.bottom > rr.bottom + 1 || r.top < rr.top - 1))) bad.push({ el, text: `rayda taşan ${describe(el)}`, right: Math.round(r.right), left: Math.round(r.left) });
+      }
+    }
     for (const el of document.querySelectorAll('body *')) {
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
