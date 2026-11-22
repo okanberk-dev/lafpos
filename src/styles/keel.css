@@ -1,0 +1,85 @@
+/*
+ * LafPOS Keel belirteçleri (DESIGN.md §0; 22 Kasım 2026). Ortak belirteç dosyası: web paneli (LafPOS Uzaktan), telefon
+ * görünümü ve kasa aynı değerleri buradan alır. Kaynak görsel dil: Behance "Keel: Fintech SaaS Dashboard" (soğuk açık
+ * gri zemin, kenarsız beyaz kartlar, lacivert-siyah mürekkep, nane yeşili vurgu, iri ince rakam ve soluk kuruş).
+ * Marka bizim: Keel'in nanesi yerine L'Affogato'nun ev yeşili ana eylemde, nane yalnız grafik vurgusu ve artış hapında.
+ *
+ * Kural: bileşene sabit renk, köşe ya da gölge yazılmaz; önce buradaki `--k-*` belirteci (ya da onu kullanan
+ * `--admin-*` / Tailwind adı) kullanılır. Yeni bir ihtiyaç çıkarsa önce DESIGN.md §0 ve bu dosya güncellenir.
+ * Kontrast eşikleri tests/keel-tokens.test.ts'te sabit (metin ≥ 4.5:1, arayüz öğesi ≥ 3:1)
+ */
+:root {
+  /* Yüzeyler: zemin, kart, kart içi kuyu (karo), basılı/vurgulu kuyu */
+  --k-canvas: #eceef1;
+  --k-surface: #ffffff;
+  --k-well: #f4f5f7;
+  --k-well-2: #e9ebef;
+  /* Mürekkep: başlık ve rakam, gövde, ikincil (etiket), soluk (kuruş, ek; yalnız süs ve iri yazı) */
+  --k-ink: #171a26;
+  --k-ink-2: #3b3f4c;
+  --k-mute: #666a78;
+  --k-faint: #a2a6b2;
+  /* Ayraç ve alan kenarı (kart kenarsızdır; ayraç yalnız satır arası ve alan) */
+  --k-line: #e3e5ea;
+  --k-line-strong: #c9ccd4;
+  /* Seçili durum (sekme, segment, alt menü): mürekkep dolgu, üstünde beyaz */
+  --k-select: #171a26;
+  --k-on-select: #ffffff;
+  /* Vurgu: nane (grafik tepesi, artış hapı, canlı nokta) ve yumuşak zemini; üstündeki yazı koyu yeşil */
+  --k-mint: #4fdc86;
+  --k-mint-soft: #dbf7e5;
+  --k-mint-ink: #0b5a34;
+  /* Düşüş ve hata hapı, uyarı hapı, bilgi hapı */
+  --k-neg-soft: #ffe2df;
+  --k-neg-ink: #b3261e;
+  --k-warn-soft: #fdefc8;
+  --k-warn-ink: #7a4b00;
+  --k-info-soft: #e1ebff;
+  --k-info-ink: #1d47b8;
+  /* Grafik: bağlam çubuğu (gri), vurgulu aralık (nane), değer hapı */
+  --k-chart-bar: #c9ccd4;
+  --k-chart-hi: #17a35c;
+  /* Köşeler: kart 20, karo 14, denetim 12, hap */
+  --k-r-card: 1.25rem;
+  --k-r-tile: 0.875rem;
+  --k-r-control: 0.75rem;
+  --k-r-pill: 999px;
+  /* Boşluk ritmi (4'ün katları): kart içi 20, kartlar arası 12, satır içi 12 */
+  --k-pad-card: 1.25rem;
+  --k-gap: 0.75rem;
+  /* Rakam: kahraman, KPI, satır; ağırlık 500, sıkı aralık. Etiket 13 px */
+  --k-num-hero: 500 clamp(2.75rem, 12cqi, 4.5rem) / 1 var(--font-headline);
+  --k-num-kpi: 600 1.75rem/2.25rem var(--font-headline);
+  --k-label: 400 0.8125rem/1.25rem var(--font-sans);
+  --k-track-num: -0.035em;
+  /* Gölge: kart gölgesizdir (ton farkı); yüzen yüzey (menü, pencere, alt dok) tek yumuşak gölge */
+  --k-shadow-float: 0 16px 40px -18px rgb(23 26 38 / 0.28);
+}
+
+/* Gece: aynı adlar, sıcak siyah zemin ve koyu gri katmanlar (DESIGN.md "Koyu tema: gece") */
+.dark {
+  --k-canvas: #050302;
+  --k-surface: #1e1c1b;
+  --k-well: #262423;
+  --k-well-2: #2e2c2b;
+  --k-ink: #fbfaf9;
+  --k-ink-2: #d7d4d1;
+  --k-mute: #a3a09d;
+  --k-faint: #6f6c69;
+  --k-line: #2e2c2b;
+  --k-line-strong: #434140;
+  --k-select: #fbfaf9;
+  --k-on-select: #171a26;
+  --k-mint: #4ade80;
+  --k-mint-soft: #12301c;
+  --k-mint-ink: #86efac;
+  --k-neg-soft: #3d1a1b;
+  --k-neg-ink: #ff8a80;
+  --k-warn-soft: #33250b;
+  --k-warn-ink: #f7c768;
+  --k-info-soft: #1b2733;
+  --k-info-ink: #bce1ff;
+  --k-chart-bar: #44413f;
+  --k-chart-hi: #bce1ff;
+  --k-shadow-float: 0 16px 40px -18px rgb(0 0 0 / 0.7);
+}

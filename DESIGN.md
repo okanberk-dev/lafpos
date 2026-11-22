@@ -16,6 +16,71 @@
 > Önceki "LafPOS Sahne" (17-18 Kasım 2026, gnbsite'ın Area Board kiti: sahne, yaprak, mürekkep ana eylem, Poppins ve
 > Gabarito) bunun yerine geçti; ok halkası, tek açılış anı ve bantlar ondan kaldı.
 
+## 0. LafPOS Keel: güncel dil (22 Kasım 2026)
+
+> Sahibin isteği: _"sayfayı ekran ekran incele: renk, tipografi, boşluk, köşe yarıçapı, kart yapısı, grafik stili, mobil
+> yerleşim, durum renkleri … bundan sonraki her ekleme bu sisteme uysun"_. Kaynak: Behance "Keel: Fintech SaaS
+> Dashboard UX/UI Case Study" (yalnız görsel dil; marka adı, logo, illüstrasyon ve metin alınmadı). Bu bölüm
+> aşağıdaki bölümlerle çelişirse **bu bölüm geçerlidir**; ayrıntılar (kabuk, kasa ekranları, bileşen ölçüleri) aşağıda
+> durur. Belirteçler `src/styles/keel.css`'te (`--k-*`), eşikler `tests/keel-tokens.test.ts`'te. Kontrol listesi:
+> `.claude/skills/lafpos-design/SKILL.md`. Uymayan bir ihtiyaç çıkarsa önce bu bölüm ve belirteç dosyası güncellenir.
+
+### İlkeler
+
+1. **Tek rakam konuşur.** Her ekranda bir kahraman rakam (bugünün cirosu, adisyon toplamı); gerisi onu açıklar. Rakam iri
+   ve 500-600 ağırlıkta, sıkı aralıklı; kuruş ve ek bilgi soluk. Etiket küçük (13 px) ve soluk.
+2. **Kart kenarsız ve gölgesizdir.** Soğuk açık gri zeminde beyaz kart, köşe 20; ayrım ton farkıyla. Kart içinde kart
+   yok: iç gruplama kuyu (karo, köşe 14, `--k-well`). Gölge yalnız yüzen yüzeyde (menü, pencere, telefonun alt doku).
+3. **Mürekkep seçer, yeşil yaptırır.** Seçili durum (sekme, segment, alt menü) lacivert-siyah mürekkep dolgu ve beyaz
+   yazı. Ana eylem (Öde, Kaydet, Bara gönder) L'Affogato'nun ev yeşili; ekranda tek ana eylem. Marka rayı ev yeşili kalır.
+4. **Renk yalnız anlam taşır.** Artış nane, düşüş kırmızı, uyarı kehribar, bilgi mavi; hepsi yumuşak zeminli hap, yanında
+   ok ya da işaret. Süs için renk kullanılmaz.
+5. **Grafik sade.** Izgara yok ya da çok soluk; gri bağlam çubukları, vurgulanan aralık nane; değer küçük hapta; eksen
+   12 px soluk.
+6. **Önce telefon.** Tek sütun, yatay kaydırma yok, hedef en az 44 px, alt menü yüzen dok, ek seçenekler alttan açılan
+   pencere. Bilgisayarda aynı kartlar iki ve üç sütuna dizilir.
+7. **Kasa hızı dokunulmazdır.** Satış akışına ek dokunuş, bekleme ya da küçük hedef getiren hiçbir süs yapılmaz.
+
+### Belirteçler (`src/styles/keel.css`)
+
+| Rol | Açık | Gece | Not |
+| --- | --- | --- | --- |
+| Zemin `--k-canvas` | `#eceef1` | `#050302` | Soğuk açık gri; gecede sıcak siyah |
+| Kart `--k-surface` | `#ffffff` | `#1e1c1b` | Kenarsız, gölgesiz |
+| Kuyu `--k-well` / `--k-well-2` | `#f4f5f7` / `#e9ebef` | `#262423` / `#2e2c2b` | Kart içi karo, basılı durum |
+| Mürekkep `--k-ink` / `--k-ink-2` | `#171a26` / `#3b3f4c` | `#fbfaf9` / `#d7d4d1` | Başlık ve rakam / gövde |
+| İkincil `--k-mute` | `#666a78` | `#a3a09d` | Etiket; kartta ve kuyuda ≥ 4.5:1 |
+| Soluk `--k-faint` | `#a2a6b2` | `#6f6c69` | Kuruş, ek; yalnız iri yazı ve süs |
+| Ayraç `--k-line` | `#e3e5ea` | `#2e2c2b` | Satır arası, alan kenarı |
+| Seçili `--k-select` / `--k-on-select` | `#171a26` / `#ffffff` | `#fbfaf9` / `#171a26` | Sekme, segment, alt menü |
+| Nane `--k-mint` / `-soft` / `-ink` | `#4fdc86` / `#dbf7e5` / `#0b5a34` | `#4ade80` / `#12301c` / `#86efac` | Artış hapı, grafik vurgusu |
+| Düşüş `--k-neg-soft` / `-ink` | `#ffe2df` / `#b3261e` | `#3d1a1b` / `#ff8a80` | Düşüş ve hata hapı |
+| Uyarı, bilgi | `--k-warn-*`, `--k-info-*` | aynı adlar | Yumuşak zeminli hap |
+| Köşe | kart 20 · karo 14 · denetim 12 · hap | aynı | `--k-r-card/tile/control/pill` |
+| Boşluk | kart içi 20 · kartlar arası 12 | aynı | 4'ün katları |
+| Rakam | kahraman 44-72 px / 500 · KPI 28 px / 600 | aynı | `--k-num-hero`, `--k-num-kpi`; aralık −0,035 em |
+
+Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki §2'de; yazı ailesi Inter (pakette, çevrimdışı).
+
+### Bileşen kuralları
+
+- **Kart:** `bg-surface`, köşe `--k-r-card`, iç boşluk 20; başlık 14 px yarı kalın solda, sağda küçük meta ya da segment.
+  Başlığın altında içerik; alt eylemler kartın dibinde tek satır.
+- **KPI karosu:** kuyu (`--k-well`, köşe 14); üstte 13 px etiket, altında 28 px rakam; köşesinde isteğe bağlı değişim hapı.
+- **Düğme:** ana eylem ev yeşili dolgu (tek); ikincil beyaz/kuyu zeminde mürekkep yazı; yıkıcı eylem kırmızı yazı, onayla.
+  Yükseklik 44 (telefon ve dokunmatik), köşe 12. Simge + kısa fiil.
+- **Sekme ve segment:** hap rayı; seçili hap mürekkep dolgu, beyaz yazı; ötekiler düz yazı. Seçili yazı kalınlaşınca
+  genişlik değişmez (`data-text`).
+- **Alan (input):** etiket üstte, 44 px, köşe 12, kenar `--k-line-strong`; odakta halka; hata alanın altında kısa metin.
+- **Tablo ve liste:** satır ≥ 52 px, ince ayraç, sayılar sağda ve `tabular`; telefonda sütunlar satır kartına iner.
+- **Hap ve rozet:** tam yuvarlak, 24 px, 13 px yazı; yumuşak zemin + koyu yazı; yönü ok ya da işaret söyler.
+- **Grafik:** yığılmış ya da ince çubuk; gri bağlam, nane vurgu; değer hapı; ızgara yok. Dağılım için yatay yığılmış çubuk
+  ve altında tutar + yüzde satırları (patron panelinin Ödeme türleri kartı).
+- **Boş durum:** tek cümle ve sıradaki adım; sıfır yerine "veri yok" / "satış yok".
+- **Uyarı:** yumuşak zeminli şerit ya da kart satırı; ikon + kısa metin + tek eylem. Dikkat isteyenler listenin sonunda.
+- **Pencere:** bilgisayarda ortada kart (köşe 20); telefonda alttan açılan pencere (üst köşeler 28, tutamaç).
+- **Mobil:** üst şeritte marka karosu ve ekranın adı; altta yüzen dok (etkin sekme mürekkep dolgu); içerik tek sütun.
+
 ## 1. İlkeler
 
 1. **Zemin, kart, ray:** üst çubuk ve içerik tek açık gri zeminde (`--admin-bg` = `--admin-stage`); içerik beyaz kartlarda
