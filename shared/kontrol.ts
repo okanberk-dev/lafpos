@@ -20,7 +20,7 @@ import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-m
 export const KONTROL_SURUM = 1;
 
 /** Kasanın kabul ettiği komutlar (beyaz liste). Kasa bu listenin dışındaki hiçbir şeyi uygulamaz */
-export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu'] as const;
+export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle'] as const;
 export type KomutTuru = (typeof KOMUT_TURLERI)[number];
 
 export const KOMUT_ETIKET: Record<KomutTuru, string> = {
@@ -33,6 +33,7 @@ export const KOMUT_ETIKET: Record<KomutTuru, string> = {
   'ayar.servis': 'Servis modu',
   'urun.gorunum': 'Ürün kasada göster / gizle',
   'secenek.grubu': 'Seçenek grubu ekleme',
+  'urun.ekle': 'Ürün ekleme',
 };
 
 /**
@@ -96,6 +97,14 @@ export interface UrunGorunum {
   id: string;
   gorunur: boolean;
 }
+/** Yeni ürün (kasada, yerel): kategori kasadaki kimlik, fiyat kuruş, KDV 0/10/20; seçenek grupları kasadaki kimlikler */
+export interface UrunEkle {
+  ad: string;
+  kategori: string;
+  fiyat: number;
+  kdv: number;
+  gruplar: string[];
+}
 /** Yeni seçenek grubu (tek seçim) ve bağlanacağı ürünler: "Latte çeşidi: Klasik, Spanish +₺50…". Fiyat kuruş */
 export interface SecenekGrubu {
   ad: string;
@@ -114,6 +123,7 @@ export interface KomutVerileri {
   'ayar.servis': AyarServis;
   'urun.gorunum': UrunGorunum;
   'secenek.grubu': SecenekGrubu;
+  'urun.ekle': UrunEkle;
 }
 export type KomutVerisi = KomutVerileri[KomutTuru];
 
@@ -407,6 +417,15 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
       if (!Array.isArray(veri.urunler) || veri.urunler.length > 200 || veri.urunler.some((u) => typeof u !== 'string' || !ID_RE.test(u))) return { ok: false, hata: 'Ürünler anlaşılamadı' };
       return { ok: true, tur: t, veri: { ad: name, zorunlu: veri.zorunlu, ogeler, urunler: [...new Set(veri.urunler as string[])] } };
     }
+    case 'urun.ekle': {
+      const name = ad(veri.ad);
+      if (name.length < 1 || name.length > 80) return { ok: false, hata: 'Ürün adı 1-80 karakter olmalı' };
+      if (typeof veri.kategori !== 'string' || !ID_RE.test(veri.kategori)) return { ok: false, hata: 'Kategori anlaşılamadı' };
+      if (!Number.isInteger(veri.fiyat) || (veri.fiyat as number) < 0 || (veri.fiyat as number) > 10_000_000) return { ok: false, hata: 'Fiyat kuruş olarak tam sayı olmalı' };
+      if (![0, 10, 20].includes(veri.kdv as number)) return { ok: false, hata: 'KDV 0, 10 ya da 20 olmalı' };
+      if (!Array.isArray(veri.gruplar) || veri.gruplar.length > 20 || veri.gruplar.some((g) => typeof g !== 'string' || !ID_RE.test(g))) return { ok: false, hata: 'Seçenek grupları anlaşılamadı' };
+      return { ok: true, tur: t, veri: { ad: name, kategori: veri.kategori, fiyat: veri.fiyat as number, kdv: veri.kdv as number, gruplar: [...new Set(veri.gruplar as string[])] } };
+    }
   }
 }
 
@@ -483,6 +502,10 @@ export function komutOzeti<T extends KomutTuru>(tur: T, veri: KomutVerileri[T], 
     case 'urun.gorunum': {
       const v = veri as UrunGorunum;
       return `${v.gorunur ? 'Kasada göster' : 'Kasada gizle'}: ${adlar.urun?.[v.id] ?? 'ürün'}`;
+    }
+    case 'urun.ekle': {
+      const v = veri as UrunEkle;
+      return `Ürün ekle: ${v.ad} (${(v.fiyat / 100).toLocaleString('tr-TR')} ₺)`;
     }
     case 'secenek.grubu': {
       const v = veri as SecenekGrubu;
