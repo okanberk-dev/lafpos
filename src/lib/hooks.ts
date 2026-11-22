@@ -24,7 +24,8 @@ export function useMediaQuery(query: string): boolean {
 
 /** Birincil giriş fare mi (tıklama), dokunmatik değil mi; anlık değer (çizimde değil, olayda okunur) */
 export function isFinePointer(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
+  // Dokunmatik ekranlı kasa bilgisayarı fare de taşısa dokunmatik sayılır (main.tsx `data-touch`)
+  return typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches && !('touch' in document.documentElement.dataset);
 }
 
 /**
@@ -32,7 +33,8 @@ export function isFinePointer(): boolean {
  * tablette odaklanmaz, ekran klavyesi alt sayfayı örtmez (kasiyer önce okur, sonra dokunur)
  */
 export function useFinePointer(): boolean {
-  return useMediaQuery('(pointer: fine)');
+  const fine = useMediaQuery('(pointer: fine)');
+  return fine && !(typeof document !== 'undefined' && 'touch' in document.documentElement.dataset);
 }
 
 /**

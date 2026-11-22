@@ -273,6 +273,7 @@ async function sweep(server, api, seed, browser) {
   for (const viewport of viewports) {
     for (const role of roles) {
       if (viewport.startsWith('koyu') && role !== 'patron') continue;
+      if (viewport === 'dokunmatik-pc' && role !== 'kasa' && role !== 'garson') continue;
       const token = role === 'giris' ? null : api.tokens[role];
       const { context, page, problems } = await openContext(browser, viewport, token);
       // Kayma denetimi (sahibin isteği, 22 Kas 2026): tablette ve bilgisayarda marka rayı (sol menü) ve ekranlarının

@@ -22,6 +22,8 @@ export const VIEWPORTS = {
   telefon: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   tablet: { viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   bilgisayar: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
+  /** Dokunmatik ekranlı kasa bilgisayarı (fare de bağlı: birincil giriş fare, ama dokunmatik): kasa ve garson ekranları, 44 px */
+  'dokunmatik-pc': { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1, hasTouch: true },
   /** Koyu tema (sistem ayarı): yalnız patronun ekranları taranır */
   koyu: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'dark' },
   /** Koyu tema telefonda (patronun en sık baktığı yer): yalnız patronun ekranları */
