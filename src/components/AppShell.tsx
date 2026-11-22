@@ -374,7 +374,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           </button>
         </header>
       )}
-      <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
+      <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)] md:pb-[max(var(--shell-gap),env(safe-area-inset-bottom))]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}
         <nav aria-label="Ekranlar" className="lp-rail">
           {/* Marka karosu rayın başında (her ekranda aynı yerde; ana ekrana götürür) */}
@@ -403,27 +403,30 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                 <span className="flex justify-center empty:hidden">
                   <InternetBadge compact />
                 </span>
-                <div className="flex items-center gap-1">
+                {/* Satır rayın içinde kalır: durum yazısı sığmazsa kısalır; uzaktan görünümde arama düğmesi yok (yazı uzun; Ctrl K açar) */}
+                <div className="flex min-w-0 items-center gap-1">
                   {canKasa && !REMOTE ? (
                     <NavLink
                       to="/kasa"
                       title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`}
                       aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`}
-                      className="lp-rail-item min-h-11 flex-1 flex-row gap-1.5 px-1"
+                      className="lp-rail-item min-h-11 min-w-0 flex-1 flex-row gap-1.5 px-1"
                     >
                       {healthDot}
-                      <span className="tabular text-xs">{live === 'kopuk' ? 'Koptu' : boot.day ? fmtTime(now) : 'Kapalı'}</span>
+                      <span className="tabular min-w-0 truncate text-xs">{live === 'kopuk' ? 'Koptu' : boot.day ? fmtTime(now) : 'Kapalı'}</span>
                     </NavLink>
                   ) : (
-                    <span role="status" title={liveLabel} className="lp-rail-item min-h-11 flex-1 cursor-default flex-row gap-1.5 px-1">
+                    <span role="status" title={liveLabel} className="lp-rail-item min-h-11 min-w-0 flex-1 cursor-default flex-row gap-1.5 px-1">
                       {healthDot}
-                      <span className="tabular text-xs">{REMOTE ? 'Uzaktan' : live === 'kopuk' ? 'Koptu' : fmtTime(now)}</span>
+                      <span className="tabular min-w-0 truncate text-xs">{REMOTE ? 'Uzaktan' : live === 'kopuk' ? 'Koptu' : fmtTime(now)}</span>
                       <span className="sr-only">, {liveLabel}</span>
                     </span>
                   )}
-                  <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden size-9 min-h-0 shrink-0 p-0 lg:flex pointer-coarse:hidden">
-                    <Search aria-hidden="true" className="size-[18px]" />
-                  </button>
+                  {!REMOTE && (
+                    <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden size-9 min-h-0 shrink-0 p-0 lg:flex pointer-coarse:hidden">
+                      <Search aria-hidden="true" className="size-[18px]" />
+                    </button>
+                  )}
                 </div>
               </>
             )}
