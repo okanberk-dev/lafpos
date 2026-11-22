@@ -6,7 +6,7 @@ import { env } from '../env';
 import { ulid } from '../lib/ids';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
-import { requireSiteLinked, siteSigned, unknownSiteListVersion } from './laffogato-link';
+import { requireSiteLinked, siteBranch, siteSigned, unknownSiteListVersion, wrongSiteBranch } from './laffogato-link';
 import { SITE_GROUP_KEYS, siteGroupsFor } from './option-profile';
 
 /**
@@ -112,13 +112,19 @@ export type PanelMenu = Map<string, { isActive: boolean; priceMinor: number; pri
  */
 export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   if (!siteSigned()) return null;
-  const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/menu`));
+  // Satışta bilgisi bu kasanın şubesinin (`?branch=`, §2.3 "Şube")
+  const url = new URL(`${env.laffogatoUrl}/api/panel/menu`);
+  url.searchParams.set('branch', siteBranch());
+  const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', url);
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
-  const body = json as { version?: unknown; items?: unknown } | null;
+  const body = json as { version?: unknown; branch?: unknown; items?: unknown } | null;
   const items = body?.items;
   if (!body || !Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
   const version = unknownSiteListVersion(body);
   if (version !== null) throw new Error(`Panel menüsü tanınmayan biçimde (sürüm ${version})`);
+  // Başka şubenin Satışta'sı bu kasaya yazılmaz (alanı göndermeyen eski site tanınır)
+  const other = wrongSiteBranch(body.branch);
+  if (other) throw new Error(`Panel menüsü başka şubenin (${other}); bu kasanın şubesi ${siteBranch()}`);
   return new Map(
     (items as { id?: unknown; isActive?: unknown; priceMinor: number; priceMinorL: number }[])
       .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')
@@ -186,10 +192,27 @@ function siteItems(menu: SiteMenu): SiteMenuItem[] {
 export function withPanelPrices<T extends { id: string; priceMinor: number; priceLargeMinor?: number | null }>(items: T[], panel: PanelMenu | null): T[] {
   if (!panel) return items;
   return items.map((i) => {
-    const p = panel.get(i.id);
-    if (!p || !Number.isInteger(p.priceMinor) || p.priceMinor <= 0 || !Number.isInteger(p.priceMinorL) || p.priceMinorL < 0) return i;
-    return { ...i, priceMinor: p.priceMinor, priceLargeMinor: p.priceMinorL > 0 ? p.priceMinorL : null };
+    const p = panelPrice(panel, i.id);
+    return p ? { ...i, priceMinor: p.price, priceLargeMinor: p.priceL } : i;
   });
+}
+
+/** Kalemin paneldeki geçerli fiyatı (`withPanelPrices` kuralı): M / tek boy ve L (`null` tek boy); geçersizse null */
+export function panelPrice(panel: PanelMenu | null, id: string): { price: number; priceL: number | null } | null {
+  const p = panel?.get(id);
+  if (!p || !Number.isInteger(p.priceMinor) || p.priceMinor <= 0 || !Number.isInteger(p.priceMinorL) || p.priceMinorL < 0) return null;
+  return { price: p.priceMinor, priceL: p.priceMinorL > 0 ? p.priceMinorL : null };
+}
+
+/**
+ * CDN'deki herkese açık liste bayat mı: panelde satışta olan bağlı kalem herkese açık listede yok (liste yalnız satıştaki
+ * kalemleri verir; sitede yeniden açılan ürün CDN'de 2 dakikaya kadar görünmez). Eşitleme ETag'i yazmaz, kısa süre
+ * sonra bir kez ETag'siz yeniden eşitlenir: ad, KDV ve görsel de taze listeden gelsin (docs/03-ENTEGRASYON.md §2.1)
+ */
+export function cdnStale(local: { extId: string | null }[], menu: SiteMenu, panel: PanelMenu | null): boolean {
+  if (!panel) return false;
+  const listed = new Set(siteItems(menu).map((i) => i.id));
+  return local.some((p) => !!p.extId && !listed.has(p.extId) && panel.get(p.extId)?.isActive === true);
 }
 
 export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu | AvailabilityRule | null = null): MenuPreview {
@@ -225,7 +248,15 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu |
     }
   }
   for (const p of local) {
-    if (seen.has(p.extId!) || !decides(rule, p.extId!)) continue;
+    if (seen.has(p.extId!)) continue;
+    // Herkese açık listede yok (Tükendi ya da CDN bayat) ama panelde fiyatı var: fiyat yine panelden (yeniden açılan ürün
+    // eski fiyattan satılmasın)
+    const pp = panelPrice(panel, p.extId!);
+    if (pp && pp.price !== p.price) changes.push({ kind: 'fiyat', productId: p.id, extId: p.extId!, name: p.name, detail: `${tl(p.price)} → ${tl(pp.price)}` });
+    if (pp && (p.priceL ?? null) !== pp.priceL) {
+      changes.push({ kind: 'boy', productId: p.id, extId: p.extId!, name: p.name, detail: `L: ${p.priceL ? tl(p.priceL) : 'yok'} → ${pp.priceL ? tl(pp.priceL) : 'yok'}` });
+    }
+    if (!decides(rule, p.extId!)) continue;
     const active = shouldBeActive(p, false, panel, lastSync);
     if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: p.extId!, name: p.name, detail: 'Sitede yeniden satışta' });
     if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: p.extId!, name: p.name, detail: panel?.has(p.extId!) ? 'Sitede Tükendi' : 'Sitede satışta değil' });
@@ -370,14 +401,21 @@ export function applyMenu(
     }
   });
 
-  // Herkese açık listede olmayan bağlı ürünler: panel "açık" diyorsa (CDN bayat) kapanmaz
+  // Herkese açık listede olmayan bağlı ürünler: panel "açık" diyorsa (CDN bayat) kapanmaz. Panelde geçerli fiyatı varsa
+  // fiyat ondan: sitede Tükendi'yken değişen fiyat, ürün yeniden açılınca (liste CDN'de henüz eski) kasaya gelir
   const local = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
   for (const p of local) {
-    if (seen.has(p.extId!) || !decides(rule, p.extId!)) continue;
+    if (seen.has(p.extId!)) continue;
+    const pp = panelPrice(panel, p.extId!);
+    const price = pp && (pp.price !== p.price || pp.priceL !== (p.priceL ?? null)) ? { price: pp.price, priceL: pp.priceL } : null;
+    if (!decides(rule, p.extId!)) {
+      if (price) t.update(schema.products).set({ ...price, updatedAt: now }).where(eq(schema.products.id, p.id)).run();
+      continue;
+    }
     const active = shouldBeActive(p, false, panel, lastSync);
     const soldOutBy = soldOutByAfterSync(p, active);
-    if (active === p.active && soldOutBy === p.soldOutBy) continue;
-    t.update(schema.products).set({ active, soldOutBy, updatedAt: now }).where(eq(schema.products.id, p.id)).run();
+    if (active === p.active && soldOutBy === p.soldOutBy && !price) continue;
+    t.update(schema.products).set({ active, soldOutBy, ...(price ?? {}), updatedAt: now }).where(eq(schema.products.id, p.id)).run();
     if (p.active && !active) deactivated++;
     if (!p.active && active) reactivated++;
   }

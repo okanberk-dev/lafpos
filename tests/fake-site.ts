@@ -32,9 +32,11 @@ export interface PanelOrderFixture {
   scheduledFor: string;
   note: string;
   paidAt: string;
-  lines: { menuItemId: string; name: string; size: 'M' | 'L' | 'single'; detail: string; note: string; qty: number }[];
+  lines: { menuItemId: string; name: string; size: 'M' | 'L' | 'single'; detail: string; note: string; qty: number; index?: number }[];
   totalMinor: number;
   path: string;
+  /** Kasada ödendi (sözleşmeye sonradan eklenen alan; sitenin bugünkü fikstürü göndermez) */
+  paidAtTill?: boolean;
 }
 
 export interface SiteMenuFixture {
@@ -111,6 +113,19 @@ export interface FakeSite {
   menu: SiteMenuFixture;
   /** İmzalı panel menüsünde Satışta bilgisi: kimlik → isActive (fikstürde hepsi true) */
   panelActive: Map<string, boolean>;
+  /** İmzalı panel menüsünde fiyat: kimlik → fiyat (yoksa fikstürdeki) */
+  panelPrices: Map<string, { priceMinor: number; priceMinorL: number }>;
+  /** Sipariş listesinin `closed` alanı (akıştan çıkan siparişin sonucu); null: alan gönderilmez (bugünkü site) */
+  closedOrders: { id: string; outcome: string }[] | null;
+  /**
+   * Sitenin yanıtlarda söylediği şube (`branch`, laffogato #279): null ise isteğin `?branch=`'i (şubeli site), undefined
+   * ise alan hiç gönderilmez (eski site). Bir değer verilirse site her zaman o şubeyi söyler (yanlış şube denemesi)
+   */
+  answerBranch: string | null | undefined;
+  /** Aşama ve çağrı yanıtında 409 geldiğinde hata: `stale` (sitenin bugünkü) ya da `wrong_branch` (başka şubenin) */
+  conflictError: 'stale' | 'wrong_branch';
+  /** İmzalı GET'lerin sorgusu: "GET /api/panel/orders?branch=marina" gibi */
+  queries: string[];
   orders: { complete: boolean; orders: PanelOrderFixture[] };
   /** Sipariş listesinin `calls` alanı (açık masa çağrıları); null: alan hiç gönderilmez (eski site) */
   tableCalls: PanelCallFixture[] | null;
@@ -142,8 +157,8 @@ export interface FakeSite {
   stageStatus: number[];
   /** Gelen istekler: "GET /api/panel/orders" gibi */
   calls: string[];
-  menuPosts: { id: string; isActive?: boolean; actor: string }[];
-  stagePosts: { id: string; action: string; from: string; actor: string }[];
+  menuPosts: { id: string; isActive?: boolean; actor: string; branch?: string }[];
+  stagePosts: { id: string; action: string; from: string; actor: string; branch?: string }[];
   count: (call: string) => number;
 }
 
@@ -160,6 +175,11 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     close: async () => undefined,
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
+    panelPrices: new Map(),
+    closedOrders: null,
+    answerBranch: undefined,
+    conflictError: 'stale',
+    queries: [],
     orders: (({ complete, orders }) => ({ complete, orders }))(siteOrdersFixture()),
     tableCalls: [],
     callAckStatus: [],
@@ -209,6 +229,10 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     const ts = Number(req.headers['x-laf-timestamp']);
     const expected = `v1=${sign(secret, { timestamp: ts, method: req.method ?? 'GET', url, body: raw })}`;
     if (req.headers['x-laf-signature'] !== expected) return send(401, { error: 'unauthorized' });
+    if (req.method === 'GET') site.queries.push(`${call}${url.search}`);
+    // Yanıttaki şube: eski site göndermez, şubeli site isteğinkini (yoksa LafPOS'un varsayılanı marina) söyler
+    const branchField = () =>
+      site.answerBranch === undefined ? {} : { branch: site.answerBranch ?? url.searchParams.get('branch') ?? 'marina' };
 
     if (call === 'GET /api/pos/orders/version')
       return send(200, { version: site.version, ...(site.karaokeMarker === null ? {} : { karaoke: site.karaokeMarker }), ...(site.menuMarker === null ? {} : { menu: site.menuMarker }) });
@@ -232,6 +256,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
         complete: site.orders.complete,
         orders: site.orders.orders,
         ...(site.tableCalls === null ? {} : { calls: site.tableCalls }),
+        ...(site.closedOrders === null ? {} : { closed: site.closedOrders }),
+        ...branchField(),
       });
     }
     if (call === 'POST /api/panel/calls/ack') {
@@ -242,7 +268,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       } catch {
         return send(400, { error: 'invalid', field: 'body' });
       }
-      const extra = Object.keys(ack).find((k) => k !== 'id' && k !== 'actor');
+      // `branch` isteğe bağlı (laffogato #279)
+      const extra = Object.keys(ack).find((k) => k !== 'id' && k !== 'actor' && k !== 'branch');
       if (extra) return send(400, { error: 'invalid', field: extra });
       if (typeof ack.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(ack.id)) return send(400, { error: 'invalid', field: 'id' });
       const actor = typeof ack.actor === 'string' ? ack.actor.trim() : '';
@@ -251,7 +278,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       const known = !!site.tableCalls?.some((c) => c.id === ack.id) || site.callAcks.some((a) => a.id === ack.id);
       site.callAcks.push({ id: ack.id, actor });
       const code = site.callAckStatus.shift();
-      if (code && code !== 200) return send(code, { error: code === 404 ? 'not_found' : 'unavailable' });
+      if (code && code !== 200) return send(code, { error: code === 404 ? 'not_found' : code === 409 ? site.conflictError : 'unavailable' });
       if (!known && !code) return send(404, { error: 'not_found' });
       // Yanıtlanan çağrı açık listeden düşer
       if (site.tableCalls) site.tableCalls = site.tableCalls.filter((c) => c.id !== ack.id);
@@ -262,7 +289,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       site.stagePosts.push(change);
       const code = site.stageStatus.shift() ?? 200;
       if (code === 404) return send(404, { error: 'not_found' });
-      if (code === 409) return send(409, { error: 'stale', order: null });
+      if (code === 409) return send(409, { error: site.conflictError, order: null });
       if (code !== 200) return send(code, { error: 'unavailable' });
       const order = site.orders.orders.find((o) => o.id === change.id) ?? null;
       return send(200, { order: order && change.action === 'preparing' ? { ...order, stage: 'preparing' } : null });
@@ -273,7 +300,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       if (site.panelMenuGate) await site.panelMenuGate;
       const code = site.panelMenuStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { ...panelMenu, version: site.panelMenuVersion, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive })) });
+      return send(200, { ...panelMenu, ...branchField(), version: site.panelMenuVersion, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive, ...(site.panelPrices.get(i.id) ?? {}) })) });
     }
     if (call === 'POST /api/panel/menu') {
       const change = JSON.parse(raw) as FakeSite['menuPosts'][number];
