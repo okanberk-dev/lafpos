@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HIZLI_NABIZ_MS, HIZLI_SURE_MS, type NabizKontrol } from '@shared/kontrol';
+import { GECMIS_KEY, type HistoryDay } from '@shared/gecmis';
 import { type LicenseRecord, type LicenseView, licenseState, normalizeBranchCode, salesAllowed } from '@shared/lisans';
 import { REMOTE_SHOP } from '@shared/remote-reports';
 import { db, tx } from '../db/client';
@@ -133,6 +134,22 @@ export const merkezSyncState = () => ({ enabled: merkezEnabled(), lastOk, lastEr
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
 /** Nabzın yanıtı → saklanan kayıt (beklenmeyen alan düşer; lisans okunamazsa eski kayıt kalır) */
+/** Merkez'den gelen geçmiş ciro (LafPOS öncesi günler): kasa kendi patron panelinin kıyaslarına katar (reports.ts) */
+export function takeHistory(json: unknown) {
+  if (!isRecord(json) || !('gecmis' in json)) return;
+  const g = json.gecmis;
+  // Silindi: boş kayıt (anı 0; Merkez'de kayıt yokken yeniden gönderilmez)
+  if (g === null) {
+    setSyncState(GECMIS_KEY, { at: 0, gunler: [] });
+    return;
+  }
+  if (!isRecord(g) || !Number.isInteger(g.at) || !Array.isArray(g.gunler)) return;
+  const ok = (d: unknown): d is HistoryDay =>
+    isRecord(d) && typeof d.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && Number.isInteger(d.ciro) && Number.isInteger(d.adisyon) && Array.isArray(d.closes) && Array.isArray(d.pay);
+  const gunler = g.gunler.filter(ok).slice(0, 800);
+  setSyncState(GECMIS_KEY, { at: g.at as number, gunler });
+}
+
 export function parseBeat(json: unknown, now: number): MerkezLast | null {
   if (!isRecord(json) || json.ok !== true || !isRecord(json.lisans)) return null;
   const l = json.lisans;
@@ -290,6 +307,8 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
       istekAlindi: getSyncState<number>(HANDLED_REQUEST),
       // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın
       kesinHedef: true,
+      // Elimizdeki geçmiş cironun anı (Merkez yalnız değiştiyse gönderir; shared/gecmis.ts)
+      gecmisAt: getSyncState<{ at: number }>(GECMIS_KEY)?.at ?? 0,
       // Uzaktan yönetim: özetin parmak izi, gerekince özet ve sonuçlar (eski bulut alanı görmez)
       ...(kontrol ? { kontrol: kontrol.giden } : {}),
     };
@@ -305,6 +324,7 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
     // Dükkân adı ya da şube kodu değişti: ekranlar bootstrap'ı yeniden okusun (fiş başlığı)
     if ((prev?.ad ?? null) !== parsed.ad || (prev?.kod ?? null) !== parsed.kod) new Effects().emit({ topic: 'settings', kind: 'merkez', message: 'Şube bilgisi değişti' }).flush();
     takeRemoteUpdate(parsed.guncelleIstek, now);
+    takeHistory(res.json);
     again = await kontrolSonrasi(kontrol, res.json, now);
   } catch (e) {
     lastError = e instanceof Error ? e.message : String(e);
