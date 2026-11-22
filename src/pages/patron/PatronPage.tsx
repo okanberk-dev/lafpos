@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, BarChart3, ChevronRight, RotateCcw } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, BarChart3, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react';
 import { type CSSProperties, Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -291,11 +291,18 @@ export default function PatronPage() {
               <p className="tabular mt-3 text-sm leading-5 text-muted">
                 <Pairs parts={['KDV dahil', d.orders > 0 ? `${d.orders} adisyon` : 'henüz kapanan adisyon yok', d.orders > 0 && `ortalama ${tlShort(d.avgCheck)}`]} />
               </p>
-              <p className="tabular mt-1 flex items-center gap-2 text-sm leading-5 text-ink-2">
+              <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5 text-ink-2">
                 {dot}
                 <span>
                   <Pairs parts={liveText} />
                 </span>
+                {attention.length === 0 && (
+                  <span className="inline-flex items-center gap-1 text-muted lg:hidden">
+                    <span aria-hidden="true">·</span>
+                    <CheckCircle2 aria-hidden="true" className="size-3.5 text-[var(--admin-primary)]" />
+                    Bugün uyarı yok
+                  </span>
+                )}
               </p>
             </section>
 
@@ -481,9 +488,11 @@ export default function PatronPage() {
               )}
             </Group>
 
+            {/* Telefonda (tek sütun) uyarı varsa cironun hemen altında; yoksa kart kalkar, cironun altında "Bugün uyarı yok" */}
             <Group
               title="Dikkat isteyenler"
-              style={order(9)}
+              style={order(attention.length > 0 ? 1 : 9)}
+              className={attention.length === 0 ? 'max-lg:hidden' : undefined}
               meta={
                 attention.length > 0 && (
                   <span className={cn('tabular inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-2 text-[13px] font-medium', attention.some((a) => a.alarm) ? 'bg-danger-soft text-danger-ink' : 'bg-warning-soft text-warning-ink')}>
