@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Koyu tema "bordo gece" (sahibin isteği, 22 Kas 2026: "koyu bordo tonlarda, İtalya renklerine uyumlu"). Değerler
+ * Koyu tema "gece" (sahibin isteği, 22 Kas 2026: bordo yerine nötr, telefonun koyu gruplanmış listesi gibi). Değerler
  * src/index.css'in `.dark` bloğundan okunur; kontrast WCAG 2.2 göreli parlaklık formülüyle: okunan metin her yüzeyde
  * en az 4.5:1, kenar, ikon, odak halkası ve eylem dolgusu (arayüz öğesi) 3:1. Test düşerse değeri düzelt, eşiği gevşetme.
  */
@@ -76,36 +76,50 @@ const BADGES: [string, string][] = [
   ['menu-active-ink', 'menu-active-bg'],
 ];
 
-describe('koyu tema: bordo gece', () => {
-  it('zemin siyaha yakın şarap (kırmızıya kaçmaz), yüzeyler katman katman açılır', () => {
+/** Doygunluk: en parlak ve en soluk kanalın farkı (0 gri, 1 saf renk) */
+const chroma = (hex: string) => {
+  const c = channels(hex);
+  return Math.max(...c) - Math.min(...c);
+};
+
+describe('koyu tema: gece', () => {
+  it('nötr zemin: doygunluk çok düşük, zemin siyah, yüzeyler katman katman açılır', () => {
     const steps = ['admin-bg', 'admin-surface', 'admin-surface-2', 'admin-panel'].map(get);
-    for (const c of steps) {
-      const h = hue(c);
-      // Bordo: kırmızının mora yakın yanı (330-355°), saf kırmızı (0-15°) değil
-      expect(h > 330 && h < 355, `${c} tonu ${h.toFixed(0)}°`).toBe(true);
-      const [r, g, b] = channels(c);
-      expect(Math.max(r, g, b) - Math.min(r, g, b), `${c} doygunluğu`).toBeLessThan(0.1);
-    }
-    expect(luminance(get('admin-bg'))).toBeLessThan(0.01);
-    // Her basamak bir öncekinden açık: kart gölgesiz, tonla ayrılır
-    for (let i = 1; i < steps.length; i++) expect(luminance(steps[i]), `${steps[i]} > ${steps[i - 1]}`).toBeGreaterThan(luminance(steps[i - 1]) * 1.15);
+    // Renksiz gri: kanallar arası fark en çok 3/255 (bordo, yeşil ya da mavi tonu yok)
+    for (const n of ['admin-bg', 'admin-stage', 'admin-surface', 'admin-surface-2', 'admin-panel', 'surface-raised', 'admin-border', 'admin-border-strong', 'admin-divider', 'admin-border-field', 'band', 'band-2', 'band-line'])
+      expect(chroma(get(n)), `${n} doygunluğu`).toBeLessThanOrEqual(0.012);
+    expect(luminance(get('admin-bg'))).toBeLessThan(0.002);
+    // Her basamak bir öncekinden açık: kart kenarsız ve gölgesiz, tonla ayrılır
+    for (let i = 1; i < steps.length; i++) expect(luminance(steps[i]!), `${steps[i]} > ${steps[i - 1]}`).toBeGreaterThan(luminance(steps[i - 1]!) * 1.15);
+    expect(luminance(get('surface-raised'))).toBeGreaterThan(luminance(get('admin-panel')));
     expect(get('shadow-card')).toBe('none');
+    // Zemindeki kart (pano, bar ekranı) kenarsız: siyah zeminden yalnız tonla ayrılır
+    expect(css).toMatch(/\.dark :is\(\.lp-bare, \.lp-float\) \{\s*--card-line: transparent;/);
+    expect(contrast(get('admin-surface'), get('admin-bg')), 'kart zeminde seçilir').toBeGreaterThan(1.15);
   });
 
-  it('metin sıcak krem (saf beyaz değil)', () => {
-    const [r, g, b] = channels(get('admin-text'));
+  it('metin kırık beyaz ve nötr; ikincil ve soluk gri', () => {
     expect(get('admin-text')).not.toBe('#ffffff');
-    expect(r).toBeGreaterThan(b);
-    expect(r).toBeGreaterThanOrEqual(g);
+    expect(luminance(get('admin-text'))).toBeGreaterThan(0.85);
+    for (const n of ['admin-text', 'admin-text-soft', 'admin-text-mute', 'band-text', 'band-muted']) expect(chroma(get(n)), `${n} doygunluğu`).toBeLessThanOrEqual(0.03);
+    expect(luminance(get('admin-text'))).toBeGreaterThan(luminance(get('admin-text-soft')));
+    expect(luminance(get('admin-text-soft'))).toBeGreaterThan(luminance(get('admin-text-mute')));
   });
 
   it('gövde ve durum metni her yüzeyde en az 4.5:1', () => {
     for (const t of TEXTS) for (const s of SURFACES) expect(contrast(get(t), get(s)), `${t} / ${s}`).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('rozet ve etiket yazısı kendi zemininde 4.5:1; krem metin yumuşak zeminlerde de okunur', () => {
+  it('rozet ve etiket yazısı kendi zemininde 4.5:1; beyaz metin yumuşak zeminlerde de okunur', () => {
     for (const [fg, bg] of BADGES) expect(contrast(get(fg), get(bg)), `${fg} / ${bg}`).toBeGreaterThanOrEqual(4.5);
     for (const [, bg] of BADGES) expect(contrast(get('admin-text'), get(bg)), `admin-text / ${bg}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('hap zeminleri yumuşak: koyu ve renkli (kartın grisinden ayrılır), yazıyla yarışmaz', () => {
+    for (const n of ['admin-success-soft', 'admin-danger-soft', 'admin-warning-soft', 'admin-info-soft', 'admin-primary-soft', 'admin-blue-soft', 'admin-signal-soft', 'admin-accent-soft']) {
+      expect(luminance(get(n)), `${n} koyu`).toBeLessThan(0.03);
+      expect(chroma(get(n)), `${n} renkli`).toBeGreaterThan(0.06);
+    }
   });
 
   it('eylem dolguları: yazısı 4.5:1, dolgu yüzeyde 3:1; ok halkası seçilir', () => {
@@ -131,46 +145,67 @@ describe('koyu tema: bordo gece', () => {
     expect(contrast(get('focus'), get('admin-ink-fill')), 'odak / ana eylem').toBeGreaterThanOrEqual(3);
   });
 
-  it('marka rayı İtalyan yeşili: yazı ve seçili karo okunur', () => {
+  it('marka kimliği ev yeşili: ray ve ana eylem açık temanın yeşiliyle aynı tonda, bordo yok', () => {
     for (const t of ['rail-text', 'rail-soft', 'rail-mute']) expect(contrast(get(t), get('rail')), `${t} / ray`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-bg')), 'seçili karo').toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-icon')), 'seçili karonun ikonu').toBeGreaterThanOrEqual(3);
-    expect(hueGap(get('rail'), '#009246'), 'ray bayrağın yeşili').toBeLessThan(12);
-    expect(hueGap(get('admin-ink-fill'), '#009246'), 'ana eylem bayrağın yeşili').toBeLessThan(12);
+    const house = light['admin-primary']!;
+    expect(hueGap(get('rail'), house), 'ray ev yeşili').toBeLessThan(12);
+    expect(hueGap(get('admin-ink-fill'), house), 'ana eylem ev yeşili').toBeLessThan(12);
+    expect(hueGap(get('admin-primary'), house), 'bağlantı ve seçim ev yeşili').toBeLessThan(12);
+    // Bordo (ton 330-355°, doygun) hiçbir koyu belirteçte yok; ahududu sinyal ve gül (parlak pembe) bordo değildir
+    for (const [name, value] of Object.entries(dark)) {
+      for (const hex of value.match(/#[0-9a-f]{6}\b/gi) ?? []) {
+        const wine = hue(hex) > 330 && hue(hex) < 355 && chroma(hex) > 0.05 && luminance(hex) < 0.08;
+        if (wine) expect(['admin-signal-soft', 'admin-hue-rose-soft', 'admin-signal-line', 'admin-rose-line'], `--${name}: ${hex} bordo`).toContain(name);
+      }
+    }
   });
 
-  it('durum renkleri birbirinden ve bordodan ayrılır: tehlike parlak mercan, başarı eylem yeşilinden ayrı, bilgi soğuk', () => {
-    const danger = get('admin-danger-ink');
-    // Tehlike zeminden ve bordodan çok daha parlak ve kırmızının turuncuya yakın yanında
-    expect(luminance(danger)).toBeGreaterThan(luminance(get('admin-panel')) * 10);
-    expect(hue(danger) < 20 || hue(danger) > 355, `tehlike tonu ${hue(danger).toFixed(0)}°`).toBe(true);
-    expect(hueGap(danger, get('admin-bg')), 'tehlike ile zemin').toBeGreaterThan(15);
-    // Tehlike zemini yüzeyden belirgin (rozet kart içinde kaybolmaz)
-    expect(hueGap(get('admin-danger-soft'), get('admin-surface')), 'tehlike zemini ile kart').toBeGreaterThan(10);
-    expect(hueGap(get('admin-success'), get('admin-primary')), 'başarı ile eylem yeşili').toBeGreaterThanOrEqual(20);
+  it('durum renkleri anlam taşır: artış yeşil, düşüş mercan, uyarı kehribar, bilgi mavi', () => {
+    const up = hue(get('admin-success'));
+    expect(up > 120 && up < 160, `başarı yeşil ${up.toFixed(0)}°`).toBe(true);
+    const danger = hue(get('admin-danger-ink'));
+    expect(danger < 15 || danger > 355, `tehlike mercan ${danger.toFixed(0)}°`).toBe(true);
+    // Mercan saf kırmızıdan yumuşak: kanalların en soluğu da açık
+    expect(Math.min(...channels(get('admin-danger-ink')))).toBeGreaterThan(0.35);
+    expect(hueGap(get('admin-danger-soft'), get('admin-success-soft')), 'düşüş ve artış zemini ayrı').toBeGreaterThan(90);
     const amber = hue(get('admin-warning'));
     expect(amber > 30 && amber < 50, `uyarı kehribar ${amber.toFixed(0)}°`).toBe(true);
     const info = hue(get('admin-info'));
-    expect(info > 180 && info < 240, `bilgi soğuk ${info.toFixed(0)}°`).toBe(true);
+    expect(info > 180 && info < 240, `bilgi mavi ${info.toFixed(0)}°`).toBe(true);
   });
 
-  it('tarayıcı çubuğu koyu zeminle aynı; müşteri ekranının gece paleti aynı bordo', () => {
+  it('tarayıcı çubuğu koyu zeminle aynı; müşteri ekranının gece paleti aynı nötr', () => {
     expect(readFileSync(join(root, 'src/lib/theme.ts'), 'utf8')).toContain(`dark ? '${get('admin-bg')}'`);
     const display = readFileSync(join(root, 'src/components/display/CustomerDisplayView.tsx'), 'utf8');
     const gece = display.slice(display.indexOf('  gece: {'), display.indexOf('  porselen: {'));
     for (const [k, t] of [
       ['d-bg', 'admin-bg'],
       ['d-surface', 'admin-surface'],
+      ['d-chip', 'admin-panel'],
+      ['d-line', 'admin-border'],
       ['d-text', 'admin-text'],
+      ['d-soft', 'admin-text-soft'],
       ['d-mute', 'admin-text-mute'],
       ['d-accent', 'admin-primary'],
-    ]) expect(gece, k).toContain(`'--${k}': '${get(t)}'`);
+    ] as const) expect(gece, k).toContain(`'--${k}': '${get(t)}'`);
   });
 
-  it('açık tema değişmedi (bordo yalnız gecede)', () => {
+  it('bar ekranının "Hepsi hazır"ı gecede ana eylem belirtecinde (ham yeşil ölçek değil)', () => {
+    const button = readFileSync(join(root, 'src/components/ui/Button.tsx'), 'utf8');
+    const success = button.slice(button.indexOf('  success:'), button.indexOf('  // Pirinç dolgu'));
+    expect(success).toContain('dark:bg-[var(--admin-ink-fill)]');
+    expect(success).toContain('dark:text-[var(--admin-on-ink)]');
+    expect(success).not.toMatch(/dark:[\w:-]*bg-success-\d/);
+  });
+
+  it('açık tema değişmedi (gece yalnız koyu temada)', () => {
     expect(light['admin-bg']).toBe('#f1f4f2');
     expect(light['admin-surface']).toBe('#ffffff');
     expect(light['admin-primary']).toBe('#0a6e52');
     expect(light['admin-text']).toBe('#0f1513');
+    expect(light['admin-ink-fill']).toBe('#0a6e52');
+    expect(light['rail']).toBe('#0b6449');
   });
 });

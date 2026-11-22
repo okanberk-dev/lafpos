@@ -26,15 +26,15 @@ function walk(dir: string): string[] {
 }
 
 describe('mesai kaldırıldı', () => {
-  it('patron panelinin iskeleti dört karo ve sayfayla aynı ızgara kuralı: mesai karosu gitti, yüklenince kaymaz', () => {
+  it('patron panelinin iskeleti sayfayla aynı ızgara kuralı (.lp-patron): mesai karosu gitti, yüklenince kaymaz', () => {
     const page = readFileSync(join(root, 'src/pages/patron/PatronPage.tsx'), 'utf8');
     const skeleton = page.slice(page.indexOf('if (data.isPending)'), page.indexOf('// Rakamlar alınamadıysa'));
-    expect(skeleton).toContain('<div className={topGrid(false)}>');
-    expect(skeleton).toContain('<div className={tileGrid(false)}>');
-    expect(skeleton).toContain('{[0, 1, 2, 3].map((i) => (');
+    expect(skeleton).toContain('<div className="lp-patron">');
+    expect(skeleton.match(/className="lp-patron-col/g)).toHaveLength(3);
     expect(skeleton).not.toContain('xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]');
-    expect(page).toContain('<div className={topGrid(wideTiles)}>');
-    expect(page).toContain('<div className={tileGrid(wideTiles)}>{tiles}</div>');
+    const body = page.slice(page.indexOf('// Rakamlar alınamadıysa'));
+    expect(body).toContain('<div className="lp-patron">');
+    expect(body.match(/className="lp-patron-col" data-col="[abc]"/g)).toHaveLength(3);
   });
 
   it('uçlar yok: oturumsuz basış oturum ister, oturumla çizelge ve giriş-çıkış 404', async () => {

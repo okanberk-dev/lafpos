@@ -75,7 +75,7 @@ async function sweep(base, browser) {
   let pages = 0;
   for (const viewport of Object.keys(VIEWPORTS)) {
     for (const [role, routes] of Object.entries(SWEEP)) {
-      if (viewport === 'koyu' && role !== 'patron') continue;
+      if (viewport.startsWith('koyu') && role !== 'patron') continue;
       const { context, page, problems } = await openDemo(browser, viewport, role);
       await page.goto(`${base}/demo/`, { waitUntil: 'domcontentloaded' });
       await ready(page);

@@ -121,8 +121,15 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   - Upstash bütçesi değişmez: kasa girdiyi patron özetine koyar (`stats`: kıyas günlerinin kapanış dakikaları, hafta ve
     ay için geçmiş günlerin toplamı, en çok satanların geçen haftaki kapanışları; birkaç KB). Girdi saatten bağımsızdır,
     yalnız satışla değişir; "aynı saate kadar" kesimini ekran özetin anıyla yapar. Yeni Redis okuması ya da yoklama
-    yok, kıyas her yoklamada yeniden okunmaz (304 aynı). `stats` göndermeyen eski kasada panel eski geçen hafta kartını
-    gösterir; Uzaktan'ın demo özetinde de (kafe bağlı değil) bu eski kart görünür.
+    yok, kıyas her yoklamada yeniden okunmaz (304 aynı). `stats` göndermeyen eski kasada (güncelleme gün
+    kapanınca kurulur; o güne dek kasa eski derlemeyle iter) Uzaktan girdiyi bulutta zaten duran gün raporlarından kurar
+    (`api/uzaktan.ts` `withStats`, `shared/remote-calc.ts` `statsFromReports`; yanıtta `stats.src: "rapor"`): kıyas
+    günlerinin kapanış dakikaları gün raporunun `closes`'undan (yoksa saatlik kırılım, o da yoksa gün sonu toplamı ve
+    satırda "gün sonu" notu), hafta ve ay toplamı geçmiş günlerin raporundan. Yeni yoklama yok: okuma yalnız özetin zaten
+    okunduğu yanıtta (sürüm değişti) yapılır ve işlev örneğinin belleğinde yarım saat tutulur (dükkân başına yarım saatte
+    en çok bir okuma, ~65 anahtar, iki MGET; `tests/uzaktan-kota.test.ts` "eski kasa"). Kasa güncellenince bu yol
+    kendiliğinden kapanır. Gün raporu da yoksa (kafe bağlı değil, demo özeti) kart özetin iki rakamıyla çizilir: dünün gün
+    sonu toplamı ve geçen haftanın bu saati (`summaryCompares`).
 - **Raporlar:** kasa her iş gününün rapor özetini ayrıca iter (`server/sync/cloud-reports.ts`,
   `POST /api/uzaktan/rapor`): ciro ve döküm, ödeme türleri, satış türleri, KDV, ürün ürün satış (maliyetsiz), saatlik
   dağılım, Z numaraları, iptal, ikram, ödenmez, zayi, indirim, personel satışı ve kapanışların dakikası (bugünü

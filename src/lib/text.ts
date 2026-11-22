@@ -33,3 +33,15 @@ export function telHref(p: string): string {
   const d = trDigits(p);
   return d ? `tel:+90${d}` : `tel:${p.trim()}`;
 }
+
+const buildFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+/**
+ * Kurulu derleme: sürüm adı ("0.2.0") derlemeler arasında değişmez, hangi derlemenin kurulu olduğunu derleme numarası
+ * söyler (commit'in unix zamanı, kasa nabızda gönderir: scripts/kasa/windows/kurulum/kanal.mjs). Tarihiyle yazılır:
+ * "Sürüm 0.2.0 · 21 Kas 19:42 derlemesi"; numara bilinmiyorsa (çok eski kasa) yalnız sürüm
+ */
+export function buildLabel(surum: string | null, build: number | null): string {
+  const built = build != null && build > 1_500_000_000 && build < 4_000_000_000 ? `${buildFmt.format(new Date(build * 1000))} derlemesi` : build != null ? `derleme ${build}` : null;
+  if (!surum) return built ?? 'Sürüm bilinmiyor';
+  return built ? `Sürüm ${surum} · ${built}` : `Sürüm ${surum}`;
+}

@@ -15,10 +15,18 @@ import { addDays, businessDayStartMs } from './time';
 /** Kapanış dakikası (gün başından, 05:00), ciro, tutarı olan adisyon: yalnız dolu dakikalar (`closingMinutes`) */
 export type Close = [number, number, number];
 
+/**
+ * Kıyas gününün satışı hangi duyarlılıkta biliniyor: kapanış dakikasıyla (kasa ve gün raporunun `closes`'u), yalnız
+ * saat saat (`hours`; "aynı saate kadar" tamamlanan saatlerle) ya da yalnız gün sonu toplamı ("gün sonu" notuyla)
+ */
+export type StatsGrain = 'dakika' | 'saat' | 'gun';
+
 export interface StatsDay {
   /** O tarihin iş günü hâlâ açık mı */
   open: boolean;
   closes: Close[];
+  /** Yoksa dakika. Yalnız bulutun gün raporlarından kurulan girdide (shared/remote-calc.ts `statsFromReports`) */
+  grain?: 'saat' | 'gun';
 }
 
 /** Kasanın patron özetine koyduğu girdi (`PatronData.stats`); eski sunucu göndermez */
@@ -32,6 +40,23 @@ export interface PatronStats {
   daily: [string, number, number][];
   /** Geçen haftanın aynı günü, bugünün en çok satanları (`top` sırası) için: [sıra, dakika, adet, ciro] */
   topPrev: [number, number, number, number][];
+  /**
+   * Girdiyi kim kurdu. Yoksa kasa (`patronLive`). `rapor`: kasa girdiyi göndermiyor (eski derleme), LafPOS Uzaktan
+   * bulutta duran gün raporlarından kurdu (api/uzaktan.ts `withStats`)
+   */
+  src?: 'rapor';
+}
+
+/**
+ * Kıyas kartının verisi hangi yoldan geldi (ekran ve test aynı adı kullanır):
+ *  - `kasa`: kasa `stats` gönderdi (yeni derleme; kapanış dakikalarıyla, deneme günleri ayıklanmış)
+ *  - `rapor`: eski kasa `stats` göndermiyor; Uzaktan, buluttaki gün raporlarından kurdu (`statsFromReports`)
+ *  - `ozet`: ikisi de yok (örnek gün, gün raporu hiç gelmemiş); özetin kendi iki rakamıyla (`summaryCompares`)
+ */
+export type StatsSource = 'kasa' | 'rapor' | 'ozet';
+export function statsSource(d: object): StatsSource {
+  const stats = (d as { stats?: PatronStats }).stats;
+  return stats ? (stats.src === 'rapor' ? 'rapor' : 'kasa') : 'ozet';
 }
 
 export interface Sales {
@@ -50,6 +75,8 @@ export interface Compare {
   value: Sales | null;
   /** O günün gün sonu toplamı (gün sürerken küçük satır) */
   full: Sales | null;
+  /** `gun`: tutar aynı saate kadar değil, gün sonu toplamı (satırda "gün sonu" notu; gün sürerken yüzde yok) */
+  grain: StatsGrain;
   /** Değişim yüzdesi (tek ondalık); kıyas sıfırsa ya da veri yoksa null */
   change: number | null;
   diff: number | null;
@@ -139,6 +166,29 @@ export const dayLabel = (date: string) => {
 };
 export const monthName = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]!;
 
+/** Kıyas satırlarının adı (sahibin örneğindeki gibi kısa): bugünle aynı haftagünü, geçen ayın aynı günü */
+export const COMPARE_LABELS: Record<Compare['key'], string> = { dun: 'Dün', hafta: 'Geçen hafta bugün', ay: 'Geçen ay bugün' };
+
+/**
+ * `ozet` yolu: `stats` yokken özetin kendi rakamlarından kıyas satırları. Dün yalnız gün sonu toplamıyla bilinir
+ * (gün sürerken yüzde yok), geçen hafta kasanın "bu saate kadar" toplamıyla; geçen ay özetin içinde yok ("veri yok").
+ * Yeni rakam üretmez: `yesterday` ve `compare.lastWeek` kasanın gönderdiği değerlerdir
+ */
+export function summaryCompares(d: TodayInput & { yesterday: Sales; compare: { lastWeek: { netSales: number; orders: number; change: number | null } } }): { mode: StatsMode; compares: Compare[] } {
+  const mode: StatsMode = d.dayOpen ? 'live' : 'closed';
+  const y: Sales = { netSales: d.yesterday.netSales, receipts: d.yesterday.receipts };
+  const w: Sales = { netSales: d.compare.lastWeek.netSales, receipts: d.compare.lastWeek.orders };
+  const closed = mode === 'closed';
+  return {
+    mode,
+    compares: [
+      { key: 'dun', label: COMPARE_LABELS.dun, date: addDays(d.date, -1), value: y, full: y, grain: 'gun', change: closed ? change(d.netSales, y.netSales) : null, diff: closed ? d.netSales - y.netSales : null },
+      { key: 'hafta', label: COMPARE_LABELS.hafta, date: addDays(d.date, -7), value: w, full: null, grain: 'dakika', change: d.compare.lastWeek.change, diff: d.netSales - w.netSales },
+      { key: 'ay', label: COMPARE_LABELS.ay, date: sameDayLastMonth(d.date), value: null, full: null, grain: 'dakika', change: null, diff: null },
+    ],
+  };
+}
+
 /**
  * Bütün kıyaslar. `mode`: gün açık ve bugünün günü ("live", aynı saate kadar), bugünün günü kapandı ("closed", tam
  * gün), bugün iş günü yok ("none": gün açılmadı; kıyas günlerinin tam günü yazılır, yüzde yok)
@@ -155,19 +205,22 @@ export function todayStats(t: TodayInput, s: PatronStats, nowMs: number) {
   };
   const cmp = (key: Compare['key'], label: string, date: string | null): Compare => {
     const { value, full } = at(date);
-    const live = mode !== 'none' && value;
+    const grain: StatsGrain = (date ? s.days[date]?.grain : undefined) ?? 'dakika';
+    // Yalnız gün sonu toplamı bilinen gün, süren günle kıyaslanmaz (yarım gün tam günle): tutar yazılır, yüzde yok
+    const live = mode !== 'none' && value && !(mode === 'live' && grain === 'gun');
     return {
       key,
       label,
       date,
       value,
       full,
+      grain,
       change: live ? change(today.netSales, value.netSales) : null,
       diff: live ? today.netSales - value.netSales : null,
     };
   };
   const lastMonth = sameDayLastMonth(t.date);
-  const compares = [cmp('dun', 'Dün', addDays(t.date, -1)), cmp('hafta', 'Geçen hafta aynı gün', addDays(t.date, -7)), cmp('ay', 'Geçen ay aynı gün', lastMonth)];
+  const compares = [cmp('dun', COMPARE_LABELS.dun, addDays(t.date, -1)), cmp('hafta', COMPARE_LABELS.hafta, addDays(t.date, -7)), cmp('ay', COMPARE_LABELS.ay, lastMonth)];
 
   // Hafta ve ay başından bugüne: geçmiş tam günler + bugün; önceki dönemin aynı günü kıyas günüyle aynı kesimle
   const daily = new Map(s.daily.map(([d, rev, n]) => [d, { netSales: rev, receipts: n }]));
@@ -249,7 +302,8 @@ export function forecast(t: TodayInput, s: PatronStats, cut: number | null): { v
   let days = 0;
   for (const back of [7, 14, 21, 28]) {
     const day = s.days[addDays(t.date, -back)];
-    if (!day) continue;
+    // Yalnız gün sonu toplamı bilinen günün saat payı yok (pay %100 çıkar, tahmini bozar)
+    if (!day || day.grain === 'gun') continue;
     const full = sumCloses(day.closes, null).netSales;
     if (full <= 0) continue;
     part += sumCloses(day.closes, cut).netSales;
@@ -301,4 +355,17 @@ export function topCompare<T extends { qty: number; revenue: number }>(top: T[],
       change: hasLastWeek ? change(p.revenue, revenue) : null,
     };
   });
+}
+
+/** Değişim hapının yazısı (Türkçe: yüzde işareti önde, ondalık virgül): artış "+%83,1", düşüş "%63,4" (yönü ok söyler), sıfır "%0" */
+export function changeText(value: number): string {
+  const n = `%${Math.abs(value).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
+  return value > 0 ? `+${n}` : n;
+}
+
+/** Verinin yaşı kısa yazıyla: "Az önce" (iki dakikaya kadar), "3 dk önce" (bir saate kadar); daha eskiyse null (ekran saati yazar) */
+export function agoText(ageMs: number): string | null {
+  if (ageMs < 120_000) return 'Az önce';
+  const min = Math.floor(ageMs / 60_000);
+  return min < 60 ? `${min} dk önce` : null;
 }

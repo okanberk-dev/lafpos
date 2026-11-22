@@ -20,7 +20,7 @@ import { yedek } from './_yedek.js';
 import { merkez, type Release } from './_merkez.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
-import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom } from '../shared/remote-calc.js';
+import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
 import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 
@@ -1158,6 +1158,8 @@ async function storeReports(body: string): Promise<Response> {
   }
   const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
   const cat = push.cat && typeof push.cat === 'object' ? push.cat : undefined;
+  // Geçmiş gün yeniden geldiyse (ilk bağlanışta 31 gün) bu örnekteki kıyas belleği eskidir
+  for (const k of statsDayCache.keys()) if (k.startsWith(`${push.shop}|`)) statsDayCache.delete(k);
   if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at, ...(cat ? { cat } : {}) }), 'EX', REPORT_KEEP_DAYS * 86400);
   return json({ ok: true, stored, skipped: push.days.length - stored, skippedDates });
 }
@@ -1203,9 +1205,44 @@ async function serveLive(req: Request, path: string, url: URL, shop: string, vs:
   if (tag && notModified(req, tag)) return new Response(null, { status: 304, headers: { etag: tag, 'cache-control': 'no-store' } });
   const snap = vs.legacy && shop === REPORT_SHOP && vs.snap ? vs.snap : await snapshot(shop);
   if (!snap && v) await redis('HDEL', VERSIONS_KEY, shop);
-  const res = serve(snap ? freshen(snap, v) : null, path, url, false);
+  const fresh = snap ? freshen(snap, v) : null;
+  const res = serve(fresh && path === 'reports/patron' ? await withStats(shop, fresh) : fresh, path, url, false);
   if (tag && res.status === 200) res.headers.set('etag', tag);
   return res;
+}
+
+/**
+ * Eski kasa (bu sürümden önceki derleme) patron özetine kıyas girdisini (`stats`) koymaz: patron panelinin Kıyas kartı,
+ * hafta ve ay toplamı boş kalmasın diye girdi burada, bulutta zaten duran gün raporlarından kurulur
+ * (shared/remote-calc.ts `statsFromReports`; ekran bunu `stats.src === 'rapor'` ile ayırır). Yeni kasanın özetine
+ * dokunulmaz. Yoklama eklemez: yalnız özetin zaten okunduğu yanıtta (sürüm değişti, 304 değil) çalışır; geçmiş günler
+ * değişmediğinden okunan günler işlev örneğinin belleğinde yarım saat tutulur (dükkân ve kasanın bugünü başına bir
+ * okuma, en çok ~65 anahtar, iki MGET). Okuma düşerse özet olduğu gibi döner: ekran özetin iki rakamıyla çizer
+ */
+const STATS_CACHE_MS = 30 * 60_000;
+/** Dükkân ve kasanın bugünü → geçmiş günlerin kıyasa giren alanları (raporun tamamı bellekte tutulmaz) */
+export const statsDayCache = new Map<string, { at: number; days: StatsDayReport[] }>();
+
+async function statsDays(shop: string, today: string): Promise<StatsDayReport[]> {
+  const key = `${shop}|${today}`;
+  const hit = statsDayCache.get(key);
+  if (hit && Date.now() - hit.at < STATS_CACHE_MS) return hit.days;
+  const raws = await mgetAll(reportStatsDates(today).all.map((d) => reportDayKey(shop, d)));
+  const days = parsed<DayRep>(raws).map((r): StatsDayReport => ({ date: r.date, n: r.n, closed: r.closed, s: { rev: r.s.rev, receipts: r.s.receipts }, closes: r.closes, hours: r.hours }));
+  for (const k of statsDayCache.keys()) if (k.startsWith(`${shop}|`)) statsDayCache.delete(k);
+  statsDayCache.set(key, { at: Date.now(), days });
+  return days;
+}
+
+async function withStats(shop: string, snap: Snapshot): Promise<Snapshot> {
+  const patron = snap.patron as Partial<StatsPatron> & { stats?: unknown };
+  if (!patron || typeof patron !== 'object' || patron.stats || typeof patron.date !== 'string' || !isCalendarDate(patron.date)) return snap;
+  try {
+    const stats = statsFromReports(patron as StatsPatron, await statsDays(shop, patron.date));
+    return { ...snap, patron: { ...snap.patron, stats } };
+  } catch {
+    return snap;
+  }
 }
 
 /** Dükkân seçicinin listesi: veri gönderen dükkânlar, Merkez'deki adlarıyla (anahtar ya da kimlik bilgisi dönmez) */

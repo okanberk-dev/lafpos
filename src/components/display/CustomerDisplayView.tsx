@@ -28,22 +28,22 @@ export const DISPLAY_DEFAULTS: CustomerDisplaySettings = {
  */
 const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   gece: {
-    '--d-bg': '#150b0e',
-    // Bordo gece (uygulamanın koyu temasıyla aynı): şarap zeminde krema dalgaları, ortada İtalyan yeşili hale
-    '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(15 125 71 / 0.3), transparent 72%)',
-    '--d-surface': '#231318',
-    '--d-chip': '#341d24',
-    '--d-line': '#3d2329',
-    '--d-text': '#f5ede3',
-    '--d-soft': '#ddccc2',
-    '--d-mute': '#b49e99',
-    '--d-accent': '#4ccb85',
+    '--d-bg': '#000000',
+    // Gece (uygulamanın koyu temasıyla aynı nötr palet): siyah zeminde krema dalgaları, ortada ev yeşili hale
+    '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(10 133 96 / 0.26), transparent 72%)',
+    '--d-surface': '#1c1c1e',
+    '--d-chip': '#2a2a2c',
+    '--d-line': '#38383a',
+    '--d-text': '#f5f5f7',
+    '--d-soft': '#d1d1d6',
+    '--d-mute': '#9e9ea4',
+    '--d-accent': '#34d399',
     '--d-letters': '#fbf6f1',
     '--d-bean': '#e8c877',
     '--d-panel': 'radial-gradient(130% 90% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)',
     '--d-panel-text': '#fbf6f1',
     '--d-panel-soft': 'rgb(251 246 241 / 0.86)',
-    '--d-rule': 'linear-gradient(to right, #3fbf7a 0 33.33%, #f5ede3 33.33% 66.66%, #e2525c 66.66% 100%)',
+    '--d-rule': 'linear-gradient(to right, #34d399 0 33.33%, #f5f5f7 33.33% 66.66%, #ff7b72 66.66% 100%)',
     '--d-card-shadow': 'none',
     '--d-qr-ink': '#211c18',
     '--d-qr-shadow': '0 10px 30px rgb(0 0 0 / 0.18)',

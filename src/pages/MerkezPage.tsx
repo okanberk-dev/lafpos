@@ -11,6 +11,7 @@ import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
 import { disablePush, enablePush, pushState, type PushState } from '@/lib/push';
 import { cn } from '@/lib/cn';
+import { buildLabel } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -209,15 +210,15 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
         <input type="checkbox" checked={selected} disabled={readOnly} onChange={onToggle} aria-label={`${row.ad || 'Adsız dükkân'} seç`} className="size-5 accent-[var(--admin-primary)] pointer-fine:size-4" />
       </label>
       <button type="button" onClick={onOpen} disabled={readOnly} className="flex min-h-[64px] min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5 py-3 pr-5 text-left disabled:cursor-default">
-        <span className="min-w-0 flex-[1_1_12rem]">
+        <span className="min-w-0 flex-[1_1_12rem] max-sm:basis-full">
           <span className="flex items-center gap-2">
             <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', row.online ? 'bg-[var(--admin-primary)]' : 'bg-[var(--admin-border-strong,#c3cbc6)]')} />
             <span className="truncate font-semibold">{row.ad || 'Adsız dükkân'}</span>
             {row.kod && <span className="shrink-0 text-[13px] font-medium text-muted">{row.kod}</span>}
           </span>
-          <span className="mt-0.5 block text-[13px] text-muted">
-            {row.surum ? `Sürüm ${row.surum}` : 'Sürüm bilinmiyor'} · {row.online ? 'çevrimiçi' : row.lastSeen ? `son görülme ${fmtDateTime(row.lastSeen)}` : 'hiç bağlanmadı'}
-          </span>
+          {/* Kurulu derleme ve bağlantı ayrı satırlarda: telefonda cümle ortasından kırılmaz */}
+          <span className="mt-0.5 block text-[13px] leading-5 text-muted">{buildLabel(row.surum, row.build)}</span>
+          <span className="block text-[13px] leading-5 text-muted">{row.online ? (row.gunAcik == null ? 'Çevrimiçi' : row.gunAcik ? 'Çevrimiçi · gün açık' : 'Çevrimiçi · gün kapalı') : row.lastSeen ? `Son görülme ${fmtDateTime(row.lastSeen)}` : 'Hiç bağlanmadı'}</span>
         </span>
         <span className="flex flex-wrap items-center gap-1.5">
           {row.bekleyen && <Badge tone="info">Güncelleme gönderilmedi</Badge>}

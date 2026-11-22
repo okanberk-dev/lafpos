@@ -1,27 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronRight, CreditCard, Receipt, RotateCcw } from 'lucide-react';
-import { Fragment, type ReactNode, useEffect, useState } from 'react';
+import { AlertOctagon, AlertTriangle, BarChart3, ChevronRight, RotateCcw } from 'lucide-react';
+import { type CSSProperties, Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
-import { type PatronStats, todayStats, topCompare } from '@shared/today-stats';
-import { BarList, ColumnChart } from '@/components/charts';
+import { agoText, dayLabel, type PatronStats, statsSource, summaryCompares, todayStats, topCompare } from '@shared/today-stats';
+import { ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Field';
-import { Badge, Card, EmptyState, ErrorState, Notice, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
+import { ErrorState, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { useTick } from '@/lib/hooks';
+import { useMediaQuery, useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
-import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
-import { CompareCard, CumulativeCard, Delta, PeriodCard } from './TodayStats';
+import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs } from './TodayStats';
 
 export interface PatronData {
   now: number;
@@ -72,17 +70,16 @@ export interface PatronData {
 /** Dikkat isteyenlerde ilk bakışta en çok bu kadar satır; gerisi "Tümünü göster"le aynı kartta açılır */
 const ATTENTION_ROWS = 4;
 
-/** Satır listesi ayracı (DESIGN: satır ayracı, kart çizgisinden bir ton açık) */
-const ROWS = 'divide-y divide-[var(--admin-divider)]';
-
-/** Pano yaprağının iç payı: kart gölgesi kaydırma kabında kesilmesin diye kenardan biraz içeride */
+/** Pano yaprağının iç payı: telefonda kart kenara yakın, geniş ekranda biraz içeride */
 const PAD = 'px-1 pb-8 pt-1 md:px-2 md:pt-2';
-/** Pano kartı (ui/misc Card'ın kabı, başlıksız): köşe 18, zeminde kenarsız ve yumuşak gölgeli */
-const PANEL = 'min-w-0 rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
+/** Telefonda tek sütunun sırası (`.lp-patron`, index.css): sütun yığınları açılır, kartlar bu sırayla dizilir */
+const order = (o: number) => ({ '--o': o }) as CSSProperties;
+/** Gruplanmış liste kartının iskeleti (yüklenirken aynı köşe) */
+const BONE = 'rounded-[var(--r-group)]';
 
 /**
- * Ayraçlı meta satırı: satır ayraçta kırılır, etiket tutarından ayrılmaz ("açıkta" bir satırda, "₺2.410,00"
- * ötekinde kalmaz). Boş ya da false parça düşer.
+ * Ayraçlı meta satırı: satır ayraçta kırılır, etiket tutarından ayrılmaz ("ortalama" bir satırda, "₺81" ötekinde
+ * kalmaz). Boş ya da false parça düşer.
  */
 function Pairs({ parts }: { parts: (string | false | null | undefined)[] }) {
   const kept = parts.filter((p): p is string => !!p);
@@ -99,37 +96,28 @@ function Pairs({ parts }: { parts: (string | false | null | undefined)[] }) {
 }
 
 /**
- * Değişim yüzdesi (kitin rozeti; yön ok ve gizli yazıyla, renk tek başına değil). Hesaplanamıyorsa nedeni: kıyas
- * günü satış yoksa "satış yoktu" (rakam yanında, "veri yok" eksik kayıt ya da arıza gibi okunuyordu). Sıfır
- * değişim yeşil artış değil, "değişmedi"
+ * Bugünün cirosu (sahibin örneği): ekranın en büyük öğesi, kartsız, zeminde. ₺ işareti soluk, rakam mürekkep; kuruş
+ * varsa küçük ve soluk. Boy kabın enine ve rakamın uzunluğuna göre: "₺357" telefonun yarısını doldurur, "₺12.450,50" da
+ * taşmaz (rakam başına ~0,64 em, nokta ~0,3 em)
  */
-function Change({ value, base }: { value: number | null; base: number }) {
-  if (value == null)
-    return (
-      <span className="whitespace-nowrap text-xs text-muted" title="Yüzde hesaplanamaz">
-        {base === 0 ? 'satış yoktu' : 'kıyas yok'}
-      </span>
-    );
-  if (value === 0) return <Badge>değişmedi</Badge>;
-  const up = value > 0;
-  const Arrow = up ? ArrowUpRight : ArrowDownRight;
+function HeroAmount({ k }: { k: number }) {
+  const [, int = '0', frac = ''] = /^\D*([\d.]+)(,\d+)?$/.exec(tl(k)) ?? [];
+  const cents = k % 100 !== 0;
+  const dots = int.split('.').length - 1;
+  const units = 0.64 * (int.length - dots + 1) + 0.3 * dots + (cents ? 0.85 : 0);
   return (
-    <Badge tone={up ? 'success' : 'danger'} className="tabular gap-0.5 font-semibold">
-      <Arrow aria-hidden="true" className="size-3" />%{Math.abs(value).toLocaleString('tr-TR')}
-      <span className="sr-only">{up ? ' arttı' : ' azaldı'}</span>
-    </Badge>
+    <p className="tabular whitespace-nowrap font-headline font-bold leading-none tracking-[-0.04em] text-ink" style={{ fontSize: `min(5.5rem, calc(100cqi / ${units.toFixed(2)}))` }}>
+      <span className="sr-only">Bugünkü ciro {tl(k)}</span>
+      <span aria-hidden="true">
+        <span className="text-muted">₺</span>
+        {int}
+        {cents && <span className="text-[0.5em] font-semibold tracking-[-0.02em] text-muted">{frac}</span>}
+      </span>
+    </p>
   );
 }
 
-/**
- * Pano yerleşimi (20 Kasım 2026, operatör: panonun ölçüleri; .lp-board, index.css). Geniş ekranda (xl) üstte karolar
- * (dünkü ciro, açık adisyon, indirim ve ikram, iptal, online) tek sıra kart; altında üç sütun: solda marka ciro kartı ve
- * geçen haftayla kıyas, ortada saat saat grafik, sağda ödeme türleri. Tablette karolar, sonra ciro ve grafik yan yana,
- * ödeme türleri tam en. Telefonda önce ciro kartı (patronun ilk baktığı rakam), sonra karolar, grafik ve ödemeler. İskelet
- * ve sayfa aynı kuraldan çizer, yüklenince kaymaz.
- */
-const topGrid = (wide: boolean) => cn('lp-board', wide && 'lp-board-wide');
-const tileGrid = (wide: boolean) => cn('grid grid-cols-2 gap-4 [grid-area:tiles] [&>:last-child:nth-child(odd)]:max-md:col-span-2', wide ? 'md:grid-cols-5' : 'md:grid-cols-4');
+type ChartView = 'birikimli' | 'saatlik' | 'tablo';
 
 export default function PatronPage() {
   const can = useCan();
@@ -139,7 +127,9 @@ export default function PatronPage() {
   const me = useAuth((s) => s.me)!;
   const sizeLabels = boot.settings.sizeLabels;
   const now = useTick(30_000);
-  const [table, setTable] = useState(false);
+  // Telefonda başlık satırı yok (ekranın adı kabuğun şeridinde): tarih ve Z sahnenin alt satırında yalnız geniş ekranda
+  const wide = useMediaQuery('(min-width: 48rem)');
+  const [view, setView] = useState<ChartView | null>(null);
   const [allAttention, setAllAttention] = useState(false);
   // Uzakta gün açıkken 15 sn, kapalıyken 60 sn; değişmeyen özet 304 (src/lib/remote.ts)
   const poll = (dayOpen: boolean | undefined) => (REMOTE ? remotePollMs(dayOpen) : 60_000);
@@ -155,22 +145,28 @@ export default function PatronPage() {
     [qc],
   );
 
-  // İlk yükleme: sayfanın biçiminde iskelet (başlık, büyük ciro kartı ve dört karo), spinner değil. Izgara içerikle aynı
-  // kuraldan (topGrid, tileGrid): online siparişli günün beşinci karosu veriyle gelir; kurulumun çoğunda (site bağlı değil
-  // ya da günün ilk online siparişi gelmedi) dört karo kalır, sayfa yüklenince kaymaz
+  // İlk yükleme: sayfanın biçiminde iskelet (iri ciro, kıyas kartı, grafik ve listeler), spinner değil. Izgara içerikle
+  // aynı kuraldan (.lp-patron): sayfa yüklenince kaymaz
   if (data.isPending) {
     return (
-      <Stage name="Patron paneli" sub="Canlı rakamlar yükleniyor…" leafLabel="Patron paneli" float>
+      <Stage name="Patron paneli" sub={wide ? 'Canlı rakamlar yükleniyor…' : undefined} leafLabel="Patron paneli" float>
         <div role="status" aria-label="Canlı rakamlar yükleniyor…" className={PAD}>
-          <div className={topGrid(false)}>
-            <div className={tileGrid(false)}>
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-[118px] rounded-[var(--r-card)]" />
-              ))}
+          <div className="lp-patron">
+            <div className="lp-patron-col" data-col="a">
+              <div className="px-5 pb-1 pt-3" style={order(1)}>
+                <Skeleton className="h-[72px] w-3/5 rounded-2xl" />
+                <Skeleton className="mt-4 h-4 w-4/5" />
+              </div>
+              <Skeleton className={cn(BONE, 'h-[212px]')} />
             </div>
-            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:ciro]" />
-            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:chart]" />
-            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:pay] max-xl:hidden" />
+            <div className="lp-patron-col" data-col="b">
+              <Skeleton className={cn(BONE, 'h-[330px]')} />
+              <Skeleton className={cn(BONE, 'h-[212px]')} />
+            </div>
+            <div className="lp-patron-col max-lg:hidden" data-col="c">
+              <Skeleton className={cn(BONE, 'h-[160px]')} />
+              <Skeleton className={cn(BONE, 'h-[160px]')} />
+            </div>
           </div>
         </div>
       </Stage>
@@ -189,22 +185,36 @@ export default function PatronPage() {
   // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış sabahın değil, günün sonunda; gün uzadıysa ertesi
   // sabahın satışı gecenin ardından
   const visibleHours = hourBars(d);
-  // Kıyaslar özetin anıyla (veri o saattedir): gün sürerken o günlerin aynı dakikasına kadar
+  /**
+   * Kıyasın yolu (shared/today-stats.ts `StatsSource`): `kasa` kasa girdiyi gönderdi; `rapor` eski kasa göndermedi,
+   * LafPOS Uzaktan bulutta duran gün raporlarından kurdu (api/uzaktan.ts `withStats`); `ozet` ikisi de yok, kart özetin
+   * iki rakamıyla (dünün gün sonu, geçen haftanın bu saati) çizilir. Kıyas özetin anıyla (veri o saattedir)
+   */
+  const source = statsSource(d);
   const st = d.stats ? todayStats(d, d.stats, d.now) : null;
-  // En çok satanlar: yeni sunucuda ilk 5 ve geçen haftanın aynı günü; eski sunucuda kıyassız
-  const tops: ((typeof d.top)[number] & { prev?: { qty: number; revenue: number } | null; change?: number | null })[] = st ? topCompare(d.top, d.stats!, st.cutoffMin, st.compares[1]!.value != null) : d.top;
+  const kiyas = st ?? summaryCompares(d);
+  // En çok satanların geçen haftası yalnız kasanın girdisinde (ürünün kapanış dakikaları gün raporunda yok)
+  const tops: ((typeof d.top)[number] & { prev?: { qty: number; revenue: number } | null; change?: number | null })[] =
+    st && source === 'kasa' ? topCompare(d.top, d.stats!, st.cutoffMin, st.compares[1]!.value != null) : d.top.slice(0, 5);
   const charted = visibleHours.some((h) => h.value || h.compare);
   // Geçen haftanın aynı günü satışsızsa kıyas çizgisi, açıklaması ve tablo sütunu yok (eksende düz çizgi kalın bir
   // taban gibi okunuyordu)
   const hasLastWeek = visibleHours.some((h) => h.compare);
+  const chartView: ChartView = view === 'birikimli' && !st ? 'saatlik' : (view ?? (st ? 'birikimli' : 'saatlik'));
 
   // "Canlı" yalnız rakamlar tazeyken: yenileme düşerse son veri kalır ama saat verinin saatidir, nokta amber
   // Uzakta ayrıca kafenin kendisi: gün açıkken son itme 10 dakikadan eskiyse kafeden veri gelmiyor
-  const cafeSilent = REMOTE && remoteFreshness(Math.max(now, Date.now()), d.now, d.dayOpen) === 'stale';
+  const clockNow = Math.max(now, Date.now());
+  const cafeSilent = REMOTE && remoteFreshness(clockNow, d.now, d.dayOpen) === 'stale';
   const stale = data.isError || cafeSilent || now - data.dataUpdatedAt > 3 * poll(d.dayOpen);
-  const statusText = REMOTE
-    ? joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', `son güncelleme ${fmtClock(d.now)}`, cafeSilent ? 'kafeden veri gelmiyor' : data.isError ? 'yenilenemedi' : d.dayOpen && 'canlı'])
-    : joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', stale ? `son güncelleme ${fmtTime(d.now)}` : `${fmtTime(d.now)} itibarıyla`, stale ? data.isError && 'yenilenemedi' : 'canlı']);
+  // Canlılık: "Az önce", "3 dk önce"; eskiyse ya da gün kapalıysa verinin saati
+  const ago = stale || !d.dayOpen ? null : agoText(Math.max(0, clockNow - d.now));
+  const stamp = REMOTE ? fmtClock(d.now) : fmtTime(d.now);
+  const liveText = stale
+    ? [`son güncelleme ${stamp}`, cafeSilent ? 'kafeden veri gelmiyor' : data.isError && 'yenilenemedi']
+    : d.dayOpen
+      ? ['Gün açık', ago ? ago.toLocaleLowerCase('tr-TR') : `son güncelleme ${stamp}`]
+      : ['Gün kapalı', dayLabel(d.date), `son güncelleme ${stamp}`];
   // Durumu nokta ve yazı birlikte anlatır; sürekli nabız yok
   const dot = <span aria-hidden="true" className={cn('inline-block size-2 shrink-0 rounded-full', stale ? 'bg-[var(--admin-warning)]' : d.dayOpen ? 'bg-[var(--admin-success)]' : 'bg-muted')} />;
   // Hata durumundaki (ErrorState) yeniden denemeyle aynı düğme
@@ -214,40 +224,13 @@ export default function PatronPage() {
     </Button>
   );
 
-  // İndirim ve ikram karosunun dökümü: değeri oluşturan yalnız sıfırdan büyük kalemler (ikram ödenmez ve zayi dışı;
-  // Raporlar'daki lossParts'la aynı kural ve kısa tutar, iptal ayrı karoda)
+  // İndirim ve ikram satırının dökümü: değeri oluşturan yalnız sıfırdan büyük kalemler (ikram ödenmez ve zayi dışı;
+  // Raporlar'daki lossParts'la aynı kural ve kısa tutar, iptal ayrı satırda)
   const odenmez = d.odenmez ?? 0;
   const zayi = d.zayi ?? 0;
   const ikram = Math.max(0, d.complimentary - odenmez - zayi);
-  const lossParts = [d.discounts > 0 && `indirim ${tlShort(d.discounts)}`, ikram > 0 && `ikram ${tlShort(ikram)}`, odenmez > 0 && `ödenmez ${tlShort(odenmez)}`, zayi > 0 && `zayi ${tlShort(zayi)}`]
-    .filter((p): p is string => !!p)
-    .map((p, i) => (i === 0 ? p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1) : p));
-
-  // Karolar: sayıları ızgarayı seçer (tek kalan son karo satırı doldurur, boşluk kalmaz)
-  const tiles = [
-    <Stat key="dun" label="Dünkü ciro" value={tl(d.yesterday.netSales)} hint={`${d.yesterday.receipts} adisyon`} />,
-    // "Açık hesap" kasada müşterinin cari hesabıdır (ödeme türü, Müşteriler); burada ödenmemiş adisyonlar
-    <Stat key="acik" label="Açık adisyon" value={String(d.open.count)} hint={d.open.count ? `Tahsil edilecek ${tl(d.open.total)}` : 'Bekleyen tahsilat yok'} />,
-    <Stat key="indirim" label="İndirim ve ikram" value={tl(d.discounts + d.complimentary)} hint={lossParts.length ? <Pairs parts={lossParts} /> : undefined} />,
-    <Stat key="iptal" label="İptal" value={tl(d.voided)} />,
-    d.online.orders > 0 && (
-      <Stat
-        key="online"
-        label={
-          // Online (siteden gelen) sipariş her ekranda mor
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-violet-ink" />
-            Online sipariş
-          </span>
-        }
-        value={tl(d.online.amount)}
-        hint={`${d.online.orders} sipariş · sitede ödendi`}
-      />
-    ),
-  ].filter(Boolean);
-  // Beş karo iki sütunda üç satır olur ve ciro kartını uzatırdı: geniş ekranda karolar üç sütun, iki satır; tek kalan
-  // son karo iki sütun kaplar (2 + 3 ya da 3 + 1 + 2), ızgarada boş hücre kalmaz
-  const wideTiles = tiles.length >= 5;
+  const lossParts = [d.discounts > 0 && `indirim ${tlShort(d.discounts)}`, ikram > 0 && `ikram ${tlShort(ikram)}`, odenmez > 0 && `ödenmez ${tlShort(odenmez)}`, zayi > 0 && `zayi ${tlShort(zayi)}`].filter((p): p is string => !!p);
+  const loss = d.discounts + d.complimentary;
 
   // Dikkat isteyenler tek listede: önce günün anomalileri, sonra uyarılar (en yeni üstte). Adisyonu olan satır
   // adisyona, olmayan denetim kaydına götürür (uzaktan görünümde yönetim yok: satır düz kalır)
@@ -262,30 +245,18 @@ export default function PatronPage() {
   const staleCosts = can('rapor.maliyet') ? staleCostsText(d.costsAt, d.now) : null;
   const sizeName = (size: string) => (size === 'M' || size === 'L' ? (sizeLabels?.[size] ?? size) : null);
 
-  // Selamlama (panonun "Welcome back, Alex"ı): günün saatine göre, ad ev yeşilinde
+  // Selamlama (tablet ve bilgisayarda başlık satırı): günün saatine göre, ad ev yeşilinde
   const hourNow = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(d.now));
   const greeting = hourNow < 5 ? 'İyi geceler' : hourNow < 11 ? 'Günaydın' : hourNow < 17 ? 'İyi günler' : hourNow < 22 ? 'İyi akşamlar' : 'İyi geceler';
   const firstName = me.name.trim().split(/\s+/)[0] ?? me.name;
   const paid = d.payments.reduce((a, p) => a + p.amount, 0);
-  // Geçen haftaya göre fark (panonun "Haftalık gelir +3.945" kartı): bu saate kadar ciro farkı ve yüzdesi
-  const diff = d.netSales - d.compare.lastWeek.netSales;
-  // Ciro eğrisi (kıyas kartındaki küçük çizgi): bugünün saat saat birikimi
-  const spark = visibleHours.reduce<number[]>((acc, h) => [...acc, (acc.at(-1) ?? 0) + h.value], []);
   const peak = visibleHours.reduce((best, h, i) => (h.value > (visibleHours[best]?.value ?? 0) ? i : best), 0);
   const canKasa = !REMOTE && (['kasa.gun', 'kasa.hareket', 'odeme.al', 'rapor.gor'] as const).some((p) => can(p));
   const canReports = !REMOTE && can('rapor.gor');
 
-  // Tarih (panonun tarih aralığı düğmesi): yalnız bilgi, dokunulmaz
-  const dateChip = (
-    <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--card-line)] bg-surface px-3.5 text-sm font-medium text-ink-2 shadow-[var(--card-shadow)] max-sm:hidden">
-      <CalendarDays aria-hidden="true" className="size-4 text-muted" />
-      <span className="tabular">{fmtDateLong(d.date)}</span>
-    </span>
-  );
-
   return (
-    // Pano: başlık satırında selamlama (ad ev yeşilinde), canlılık ve tarih; zeminde yüzen kartlar: karolar, marka ciro
-    // kartı ve kıyas, saat saat grafik, ödeme türleri, açık adisyonlar, dikkat isteyenler ve en çok satanlar
+    // Gruplanmış liste (sahibin örneği): en üstte bugünün cirosu iri rakamla, altında Kıyas kartı; sonra aynı dilde
+    // grafik, gün içi satırlar, ödeme türleri, hafta ve ay, açık adisyonlar, dikkat isteyenler ve en çok satanlar
     <Stage
       name={
         <>
@@ -293,18 +264,8 @@ export default function PatronPage() {
           <span className="sr-only"> · Patron paneli</span>
         </>
       }
-      sub={
-        <span className="inline-flex items-center gap-2">
-          {dot}
-          {statusText}
-        </span>
-      }
-      actions={
-        <>
-          {retry}
-          {dateChip}
-        </>
-      }
+      sub={wide ? <span className="tabular">{d.dayOpen && boot.day ? `${fmtDateLong(d.date)} · Z ${boot.day.zNo}` : fmtDateLong(d.date)}</span> : undefined}
+      actions={retry}
       leafLabel="Patron paneli"
       float
     >
@@ -315,95 +276,72 @@ export default function PatronPage() {
             o saattekidir; satış kafede sürer, bağlantı gelince kendiliğinden tazelenir
           </Notice>
         )}
-        {REMOTE && !d.dayOpen && d.lastClose && <DayCloseCard c={d.lastClose} />}
-        <div className={topGrid(wideTiles)}>
-          {/* Karolar: tek sıra kart (telefonda iki sütun) */}
-          <div className={tileGrid(wideTiles)}>{tiles}</div>
+        <div className="lp-patron">
+          <div className="lp-patron-col" data-col="a">
+            <section aria-label="Bugünkü ciro" className="@container px-5 pb-1 pt-3 md:pt-1" style={order(1)}>
+              <HeroAmount k={d.netSales} />
+              <p className="tabular mt-3 text-sm leading-5 text-muted">
+                <Pairs parts={['KDV dahil', d.orders > 0 ? `${d.orders} adisyon` : 'henüz kapanan adisyon yok', d.orders > 0 && `ortalama ${tlShort(d.avgCheck)}`]} />
+              </p>
+              <p className="tabular mt-1 flex items-center gap-2 text-sm leading-5 text-ink-2">
+                {dot}
+                <span>
+                  <Pairs parts={liveText} />
+                </span>
+              </p>
+            </section>
 
-          {/* Marka ciro kartı: zeminde tek başına ev yeşili degrade, beyaz iri rakam (kart içinde kart yok; başlığı kartın
-              kendisi söyler) */}
-          <section aria-label="Bugünkü ciro" className="flex flex-col gap-4 [grid-area:ciro]">
-            <div>
-              <div className="@container relative overflow-hidden rounded-[var(--r-card)] bg-[image:var(--brand-card)] p-6 text-white shadow-[0_18px_36px_-20px_rgb(6_74_54/0.75)]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-headline text-lg font-bold italic tracking-[-0.02em]">L’Affogato</span>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90">
-                    <span aria-hidden="true" className={cn('size-1.5 rounded-full', stale ? 'bg-[#ffe39a]' : 'bg-[#7ff0c0]')} />
-                    {stale ? 'Son güncelleme' : 'Canlı'}
-                  </span>
-                </div>
-                <div className="mt-5 text-[13px] text-white/90">Bugünkü ciro · KDV dahil</div>
-                <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(40px,15cqi)] font-bold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
-                <div className="mt-5 flex items-center justify-between gap-3 text-[13px] text-white/90">
-                  <span className="tabular">{d.orders > 0 ? <Pairs parts={[`${d.orders} adisyon`, `ortalama ${tlShort(d.avgCheck)}`, !!st?.guests && `masada ${st.guests} kişi`]} /> : 'Henüz kapanan adisyon yok'}</span>
-                  <span className="tabular shrink-0">{d.dayOpen && boot.day ? `Z ${boot.day.zNo}` : 'Gün kapalı'}</span>
-                </div>
-              </div>
+            <div style={order(2)}>
+              <CompareGroup compares={kiyas.compares} mode={kiyas.mode} today={d.date} now={d.now} fresh={ago ?? stamp} />
             </div>
-            {/* Kıyas: dün, geçen hafta ve geçen ay aynı gün (yeni sunucu); eski sunucuda geçen haftayla tek kart (fark, değişim
-                rozeti ve günün ciro eğrisi) */}
-            {st ? (
-              <CompareCard s={st} today={d.date} now={d.now} />
-            ) : (
-            <div className={cn(PANEL, 'flex items-end justify-between gap-3 p-5')}>
-              <div className="min-w-0">
-                <div className="text-[13px] font-medium text-muted">Geçen hafta bu saate göre</div>
-                <div className="tabular mt-2 whitespace-nowrap font-headline text-[26px] font-bold leading-none tracking-[-0.035em]">
-                  {diff > 0 ? '+' : diff < 0 ? '−' : ''}
-                  {tl(Math.abs(diff))}
-                </div>
-                <div className="mt-1.5 text-xs text-muted">
-                  <Pairs parts={[`geçen hafta ${tlShort(d.compare.lastWeek.netSales)}`, `4 hafta önce ${tlShort(d.compare.fourWeeks.netSales)}`]} />
-                </div>
+
+            {REMOTE && !d.dayOpen && d.lastClose && (
+              <div style={order(3)}>
+                <DayCloseGroup c={d.lastClose} />
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-2">
-                <Change value={d.compare.lastWeek.change} base={d.compare.lastWeek.netSales} />
-                <Spark values={spark} />
-              </div>
-            </div>
             )}
-          </section>
 
-          <Card
-            divided={false}
-            title={
-              <span className="flex items-center gap-2.5">
-                <IconChip>
-                  <BarChart3 />
-                </IconChip>
-                Bugün saat saat
-              </span>
-            }
-            className="flex flex-col [grid-area:chart]"
-            actions={
-              charted && (
-                <Segmented
-                  size="sm"
-                  label="Görünüm"
-                  value={table ? 'tablo' : 'grafik'}
-                  onChange={(v) => setTable(v === 'tablo')}
-                  options={[
-                    { value: 'grafik', label: 'Grafik' },
-                    { value: 'tablo', label: 'Tablo' },
-                  ]}
-                />
-              )
-            }
-          >
-            <div className="flex-1 px-5 pb-5 pt-3">
-              {table && charted ? (
-                <table className="tabular w-full text-sm">
+            {st && (
+              <div style={order(7)}>
+                <PeriodGroup s={st} today={d.date} />
+              </div>
+            )}
+          </div>
+
+          <div className="lp-patron-col" data-col="b">
+            <Group
+              title="Gün boyu"
+              label="Gün boyu ciro"
+              flush
+              style={order(4)}
+              meta={
+                (charted || st) && (
+                  <ViewTabs
+                    label="Görünüm"
+                    value={chartView}
+                    onChange={setView}
+                    options={[...(st ? [{ value: 'birikimli' as const, label: 'Birikimli' }] : []), { value: 'saatlik' as const, label: 'Saatlik' }, ...(charted ? [{ value: 'tablo' as const, label: 'Tablo' }] : [])]}
+                  />
+                )
+              }
+            >
+              {chartView === 'birikimli' && st ? (
+                <div className="pt-2">
+                  <CumulativeChart s={st} />
+                </div>
+              ) : chartView === 'tablo' && charted ? (
+                <table className="tabular mb-3 mt-1 w-full text-sm">
                   <caption className="sr-only">Bugünün saatlik cirosu{hasLastWeek ? ', geçen haftanın aynı günüyle' : ''}</caption>
                   <thead className="text-xs text-muted">
                     <tr>
-                      <th scope="col" className="py-1 text-left font-medium">
+                      <th scope="col" className="py-1.5 text-left font-medium">
                         Saat
                       </th>
-                      <th scope="col" className="py-1 text-right font-medium">
+                      <th scope="col" className="py-1.5 text-right font-medium">
                         Bugün
                       </th>
                       {hasLastWeek && (
-                        <th scope="col" className="py-1 text-right font-medium">
+                        <th scope="col" className="py-1.5 text-right font-medium">
                           Geçen hafta
                         </th>
                       )}
@@ -414,217 +352,213 @@ export default function PatronPage() {
                       .filter((h) => h.value || h.compare)
                       .map((h) => (
                         <tr key={h.key} className="border-t border-[var(--admin-divider)]">
-                          <td className="py-1.5">{h.title}</td>
-                          <td className="py-1.5 text-right font-semibold">{tl(h.value)}</td>
-                          {hasLastWeek && <td className="py-1.5 text-right text-muted">{tl(h.compare ?? 0)}</td>}
+                          <td className="py-2 text-muted">{h.title}</td>
+                          <td className="py-2 text-right font-semibold">{tl(h.value)}</td>
+                          {hasLastWeek && <td className="py-2 text-right text-muted">{tl(h.compare ?? 0)}</td>}
                         </tr>
                       ))}
                   </tbody>
                 </table>
               ) : (
-                <ColumnChart
-                  data={visibleHours}
-                  format={tl}
-                  pillFormat={tlShort}
-                  highlight={peak}
-                  height={292}
-                  seriesLabel="Bugün"
-                  compareLabel={hasLastWeek ? 'Geçen hafta aynı gün' : undefined}
-                  ariaLabel={hasLastWeek ? 'Bugünün saatlik cirosu, geçen haftayla' : 'Bugünün saatlik cirosu'}
-                  emptyLabel="Bugün henüz satış yok"
-                />
+                <div className="pb-3 pt-2">
+                  <ColumnChart
+                    data={visibleHours}
+                    format={tl}
+                    pillFormat={tlShort}
+                    highlight={peak}
+                    height={240}
+                    seriesLabel="Bugün"
+                    compareLabel={hasLastWeek ? 'Geçen hafta bugün' : undefined}
+                    ariaLabel={hasLastWeek ? 'Bugünün saatlik cirosu, geçen haftayla' : 'Bugünün saatlik cirosu'}
+                    emptyLabel="Bugün henüz satış yok"
+                  />
+                </div>
               )}
-            </div>
-          </Card>
+            </Group>
 
-          {/* Ödeme türleri (panonun bakiye kartı): ortada toplam tahsilat, dökümü ve kasaya, raporlara geçiş */}
-          <div className={cn(PANEL, 'flex flex-col p-5 [grid-area:pay]')}>
-            <PanelHead title="Ödeme türleri" sub="Bugün alınan ödemeler" icon={<CreditCard />} />
-            {d.payments.length ? (
-              <>
-                <div className="mt-4 text-center">
-                  <div className="text-[13px] text-muted">Toplam tahsilat</div>
-                  <div className="tabular mt-1 font-headline text-[32px] font-bold leading-none tracking-[-0.035em]">{tl(paid)}</div>
-                </div>
-                <div className="mt-5 rounded-[var(--r-tile)] bg-surface-2 p-4">
-                  <BarList items={d.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')}` }))} format={tl} />
-                </div>
-              </>
-            ) : (
-              // Satışsız günün çizimi grafikte; burada kısa not
-              <EmptyState compact className="flex-1" title="Bugün henüz ödeme alınmadı">
-                Adisyonlar kapandıkça ödeme türleri burada toplanır
-              </EmptyState>
-            )}
-            {(canKasa || canReports) && (
-              <div className="mt-auto grid grid-cols-2 gap-3 pt-5">
-                {canKasa && (
-                  <Button variant="primary" block onClick={() => navigate('/kasa')} className={cn(!canReports && 'col-span-2')}>
-                    Kasa
-                  </Button>
-                )}
-                {canReports && (
-                  <Button variant="soft" block icon={<BarChart3 className="size-4" />} onClick={() => navigate('/raporlar')} className={cn(!canKasa && 'col-span-2')}>
-                    Raporlar
-                  </Button>
-                )}
-              </div>
-            )}
+            <Group title="Gün içi" style={order(5)}>
+              {/* "Açık hesap" kasada müşterinin cari hesabıdır (ödeme türü, Müşteriler); burada ödenmemiş adisyonlar */}
+              <Row label="Açık adisyon" sub={d.open.count > 0 ? `${d.open.count} adisyon, tahsil edilecek` : undefined}>
+                {d.open.count > 0 ? <Amount k={d.open.total} /> : <Faint>yok</Faint>}
+              </Row>
+              <Row label="İndirim ve ikram" sub={lossParts.length ? <Pairs parts={lossParts} /> : undefined}>
+                {loss > 0 ? <Amount k={loss} /> : <Faint>yok</Faint>}
+              </Row>
+              <Row label="İptal">{d.voided > 0 ? <Amount k={d.voided} /> : <Faint>yok</Faint>}</Row>
+              {d.online.orders > 0 && (
+                <Row
+                  label={
+                    // Online (siteden gelen) sipariş her ekranda mor
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-violet-ink" />
+                      Online sipariş
+                    </span>
+                  }
+                  sub={`${d.online.orders} sipariş, sitede ödendi`}
+                >
+                  <Amount k={d.online.amount} />
+                </Row>
+              )}
+              {!!st?.guests && (
+                <Row label="Masada">
+                  <span className="tabular text-[15px] font-semibold text-ink">{st.guests} kişi</span>
+                </Row>
+              )}
+            </Group>
+
+            <Group
+              title="Ödeme türleri"
+              meta={paid > 0 && <span>toplam {tlShort(paid)}</span>}
+              style={order(6)}
+              footer={
+                (canKasa || canReports) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {canKasa && (
+                      <Button variant="primary" block onClick={() => navigate('/kasa')} className={cn(!canReports && 'col-span-2')}>
+                        Kasa
+                      </Button>
+                    )}
+                    {canReports && (
+                      <Button variant="soft" block icon={<BarChart3 className="size-4" />} onClick={() => navigate('/raporlar')} className={cn(!canKasa && 'col-span-2')}>
+                        Raporlar
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            >
+              {d.payments.length ? (
+                d.payments.map((p) => (
+                  <Row key={p.name} label={p.name} sub={`${p.count} işlem`}>
+                    <span className="tabular text-xs text-muted">%{p.share.toLocaleString('tr-TR')}</span>
+                    <Amount k={p.amount} />
+                  </Row>
+                ))
+              ) : (
+                <QuietRow>Bugün henüz ödeme alınmadı</QuietRow>
+              )}
+            </Group>
           </div>
-        </div>
 
-        {/* Gün boyu birikimli ciro; hafta ve ay başından bugüne ve gün sonu tahmini */}
-        {st && (
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
-            <CumulativeCard s={st} now={d.now} />
-            <PeriodCard s={st} today={d.date} />
-          </div>
-        )}
+          <div className="lp-patron-col" data-col="c">
+            <Group title="Açık adisyonlar" meta={d.openChecks.length > 0 && d.openChecks.length} style={order(8)}>
+              {d.openChecks.length === 0 ? (
+                <QuietRow>Şu an açık adisyon yok</QuietRow>
+              ) : (
+                d.openChecks.map((o) => {
+                  const state = o.billPrinted ? { text: 'Hesap istendi', cls: 'text-signal-ink' } : o.paid > 0 ? { text: 'Kısmen ödendi', cls: 'text-rose-ink' } : { text: 'Açık', cls: 'text-muted' };
+                  return (
+                    <li key={o.id}>
+                      <button type="button" onClick={() => navigate(`/adisyon/${o.id}`)} className={ROW_BUTTON}>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[15px] font-medium leading-5 text-ink">
+                            {o.place} <span className="font-normal text-muted">#{o.no}</span>
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs leading-4 text-muted">
+                            {o.waiter ?? 'Garson yok'} · {fmtAgo(o.openedAt, now)}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="text-right">
+                            <Amount k={o.total - o.paid} />
+                            <span className={cn('mt-0.5 block text-xs leading-4', state.cls)}>{state.text}</span>
+                          </span>
+                          <ChevronRight aria-hidden="true" className="size-4 text-muted" />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </Group>
 
-        {/* Alt blok (panonun ödeme geçmişi ve sağ sütunu): açık adisyonlar tablosu; dikkat isteyenler ve en çok satanlar */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.3fr)_minmax(0,0.95fr)] xl:items-start">
-          <Card divided={false} title="Açık adisyonlar" subtitle="Ödenene kadar burada; dokununca adisyon açılır" actions={d.openChecks.length > 0 && <Badge>{d.openChecks.length}</Badge>} className="overflow-hidden">
-            {d.openChecks.length === 0 ? (
-              <EmptyState compact art="fis" title="Şu an açık adisyon yok">
-                Açılan adisyonlar ödenene kadar burada görünür
-              </EmptyState>
-            ) : (
-              <div className="px-3 pb-3 pt-2">
-                {/* Sütun başlıkları (panonun tablosu): yer, açılış, durum, kalan; telefonda satır kartı */}
-                <div aria-hidden="true" className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_1rem] gap-3 px-3 pb-2 text-xs font-medium text-muted max-md:hidden">
-                  <span>Yer</span>
-                  <span>Açıldı</span>
-                  <span>Durum</span>
-                  <span className="text-right">Kalan</span>
-                  <span />
-                </div>
-                <ul className="space-y-1.5">
-                  {d.openChecks.map((o) => {
-                    const state = o.billPrinted ? { text: 'Hesap istendi', cls: 'text-signal-ink', dot: 'bg-[var(--admin-signal)]' } : o.paid > 0 ? { text: 'Kısmen ödendi', cls: 'text-rose-ink', dot: 'bg-[var(--admin-hue-rose)]' } : { text: 'Açık', cls: 'text-success-ink', dot: 'bg-[var(--admin-success)]' };
-                    return (
-                      <li key={o.id}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/adisyon/${o.id}`)}
-                          className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto_1rem] items-center gap-3 rounded-[var(--r-tile)] bg-surface-2 px-3 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-[var(--hover-solid)] focus-visible:-outline-offset-2 active:bg-press md:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_1rem]"
-                        >
-                          <span className="flex min-w-0 items-center gap-3 max-md:contents">
-                            <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]">
-                              <Receipt className="size-[18px]" />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate font-semibold">
-                                {o.place} <span className="font-normal text-muted">#{o.no}</span>
-                              </span>
-                              <span className="block truncate text-xs text-muted">
-                                {o.waiter ?? 'Garson yok'}
-                                <span className="md:hidden"> · {fmtAgo(o.openedAt, now)}</span>
-                              </span>
-                            </span>
-                          </span>
-                          <span className="tabular text-ink-2 max-md:hidden">{fmtTime(o.openedAt)}</span>
-                          <span className={cn('inline-flex items-center gap-1.5 text-[13px] font-medium max-md:hidden', state.cls)}>
-                            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', state.dot)} />
-                            {state.text}
-                          </span>
-                          <span className="tabular text-right font-semibold">
-                            {tl(o.total - o.paid)}
-                            <span className="block text-xs font-normal text-muted md:hidden">{state.text}</span>
-                          </span>
-                          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </Card>
-
-          <div className="flex min-w-0 flex-col gap-4">
-            <Card
-              divided={false}
+            <Group
               title="Dikkat isteyenler"
-              actions={attention.length > 0 && <Badge tone={attention.some((a) => a.alarm) ? 'danger' : 'warning'}>{attention.length}</Badge>}
-              // Satırın üzerine gelme zemini kartın yuvarlak köşesinden taşmasın
-              className="overflow-hidden"
+              style={order(9)}
+              meta={
+                attention.length > 0 && (
+                  <span className={cn('tabular inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-2 text-[13px] font-medium', attention.some((a) => a.alarm) ? 'bg-danger-soft text-danger-ink' : 'bg-warning-soft text-warning-ink')}>
+                    {attention.length}
+                  </span>
+                )
+              }
+              footer={
+                shownAttention.length < attention.length && (
+                  <button
+                    type="button"
+                    onClick={() => setAllAttention(true)}
+                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center rounded-[var(--r-tile)] px-2 text-left text-sm font-medium text-[var(--admin-primary)] transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
+                  >
+                    Tümünü göster ({attention.length})
+                  </button>
+                )
+              }
             >
               {attention.length === 0 ? (
-                <EmptyState compact art="favori" title="Her şey yolunda">
-                  İptal, ikram ve kasa farkı uyarıları burada görünür
-                </EmptyState>
+                <QuietRow>Bugün uyarı yok</QuietRow>
               ) : (
-                <>
-                  <ul className={cn(ROWS, 'pt-1')}>
-                    {shownAttention.map((a) => {
-                      const to = a.to;
-                      const body = (
-                        <>
-                          {a.alarm ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-ink" />}
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium [overflow-wrap:anywhere]">
-                              <span className="sr-only">{a.alarm ? 'Alarm: ' : 'Uyarı: '}</span>
-                              {a.title}
-                            </span>
-                            <span className="block text-xs text-muted [overflow-wrap:anywhere]">{a.meta}</span>
+                shownAttention.map((a) => {
+                  const to = a.to;
+                  const body = (
+                    <>
+                      <span className="flex min-w-0 items-start gap-3">
+                        {a.alarm ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-ink" />}
+                        <span className="min-w-0">
+                          <span className="block text-[15px] font-medium leading-5 text-ink [overflow-wrap:anywhere]">
+                            <span className="sr-only">{a.alarm ? 'Alarm: ' : 'Uyarı: '}</span>
+                            {a.title}
                           </span>
-                        </>
-                      );
-                      const row = 'flex min-h-11 w-full items-start gap-3 px-5 py-3 text-left text-sm';
-                      return (
-                        <li key={a.key}>
-                          {to ? (
-                            <button type="button" onClick={() => navigate(to)} className={cn(row, 'transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press')}>
-                              {body}
-                              <ChevronRight aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
-                            </button>
-                          ) : (
-                            <div className={row}>{body}</div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {shownAttention.length < attention.length && (
-                    <button
-                      type="button"
-                      onClick={() => setAllAttention(true)}
-                      className="flex min-h-11 w-full items-center gap-1 border-t border-[var(--admin-divider)] px-5 text-left text-[13px] font-medium text-[var(--admin-primary)] transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
-                    >
-                      Tümünü göster ({attention.length})
-                    </button>
-                  )}
-                </>
+                          <span className="mt-0.5 block text-xs leading-4 text-muted [overflow-wrap:anywhere]">{a.meta}</span>
+                        </span>
+                      </span>
+                      {to && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />}
+                    </>
+                  );
+                  return (
+                    <li key={a.key}>
+                      {to ? (
+                        <button type="button" onClick={() => navigate(to)} className={ROW_BUTTON}>
+                          {body}
+                        </button>
+                      ) : (
+                        <div className={ROW_STATIC}>{body}</div>
+                      )}
+                    </li>
+                  );
+                })
               )}
-            </Card>
+            </Group>
 
-            <Card divided={false} title="En çok satanlar" subtitle={d.top.length ? (st ? `Bugünün ilk 5'i; geçen hafta aynı gün${st.mode === 'live' ? ', aynı saate kadar' : ''}` : 'Bugün, ciro sırasıyla') : undefined}>
-              {d.top.length === 0 ? (
-                <EmptyState compact title="Sıralama ilk satışla başlar">
-                  İlk adisyon kapanınca en çok satanlar burada sıralanır
-                </EmptyState>
+            <Group
+              title="En çok satanlar"
+              style={order(10)}
+              meta={tops.length > 0 && (st && source === 'kasa' ? `geçen hafta bugüne göre` : 'ciro sırasıyla')}
+              footer={staleCosts && <p className="text-xs font-medium text-warning-ink">{staleCosts}</p>}
+            >
+              {tops.length === 0 ? (
+                <QuietRow>Sıralama ilk satışla başlar</QuietRow>
               ) : (
-                <ol className={cn(ROWS, 'pt-1')}>
-                  {tops.map((p, i) => {
-                    const size = sizeName(p.size);
-                    return (
-                      <li key={p.key} className="flex items-center gap-3 px-5 py-2.5 text-sm">
-                        <span aria-hidden="true" className={cn('tabular grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold', i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]')}>
+                tops.map((p, i) => {
+                  const size = sizeName(p.size);
+                  return (
+                    <li key={p.key} className={ROW_STATIC}>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span aria-hidden="true" className="tabular w-4 shrink-0 text-center text-sm text-muted">
                           {i + 1}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-center">
-                            <span className="truncate font-medium" title={p.name}>
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-center text-[15px] leading-5">
+                            <span className="truncate font-medium text-ink" title={p.name}>
                               {p.name}
                             </span>
                             {size && <SizeTag>{size}</SizeTag>}
                           </span>
-                          <span className="block text-xs text-muted">
+                          <span className="mt-0.5 block text-xs leading-4 text-muted">
                             {p.qty} adet
                             {p.prev !== undefined && (
                               <>
                                 {' · '}
-                                <span className="whitespace-nowrap">{p.prev ? `geçen hafta ${p.prev.qty} adet` : 'geçen hafta veri yok'}</span>
+                                <span className="whitespace-nowrap">{!p.prev ? 'geçen hafta veri yok' : p.prev.qty > 0 ? `geçen hafta ${p.prev.qty}` : 'geçen hafta yok'}</span>
                               </>
                             )}
                             {showCost && (
@@ -636,17 +570,16 @@ export default function PatronPage() {
                             )}
                           </span>
                         </span>
-                        <span className="flex shrink-0 flex-col items-end gap-1">
-                          <span className="tabular font-semibold">{tl(p.revenue)}</span>
-                          {p.prev && (p.prev.revenue > 0 ? <Delta size="sm" value={p.change ?? null} base={p.prev.revenue} /> : <span className="text-xs text-muted">geçen hafta yoktu</span>)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <Amount k={p.revenue} />
+                        {p.prev && p.prev.revenue > 0 && p.change != null && <Delta size="sm" value={p.change} />}
+                      </span>
+                    </li>
+                  );
+                })
               )}
-              {staleCosts && <p className="border-t border-[var(--admin-divider)] px-5 py-3 text-xs font-medium text-warning-ink">{staleCosts}</p>}
-            </Card>
+            </Group>
           </div>
         </div>
       </div>
@@ -654,84 +587,35 @@ export default function PatronPage() {
   );
 }
 
-/** Pano kartının başlığı: başlık ve alt satır solda, sağda yumuşak tonlu dairede ikon (panonun hedef ikonu) */
 /**
- * Gün sonu kartı (uzaktan, gün kapalıyken): Z, ciro, adisyon, ödemeler ve kasa farkı (fark: sayılan eksi beklenen; eksi
+ * Gün sonu (uzaktan, gün kapalıyken): Z toplamı, adisyon, ödemeler ve kasa farkı (fark: sayılan eksi beklenen; eksi
  * kasada eksik). Kasa rakamları yalnız kör kasa kapalıysa gelir
  */
-function DayCloseCard({ c }: { c: NonNullable<PatronData['lastClose']> }) {
+function DayCloseGroup({ c }: { c: NonNullable<PatronData['lastClose']> }) {
   const diff = c.cash?.diff;
   return (
-    <section aria-label="Son gün sonu" className={cn(PANEL, 'mb-3 p-5')}>
-      <PanelHead title={`Gün sonu · Z ${c.zNo}`} sub={`${fmtDateLong(c.date)} · ${fmtTime(c.closedAt)}`} icon={<Receipt />} />
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <div>
-          <div className="text-[13px] text-muted">Z toplamı (ciro, KDV dahil)</div>
-          <div className="tabular mt-1 font-headline text-[26px] font-bold leading-none tracking-[-0.035em]">{tl(c.netSales)}</div>
-          <div className="mt-1.5 text-xs text-muted">{c.receipts} adisyon</div>
-        </div>
-        <div className="sm:col-span-2">
-          {c.payments.length ? (
-            <BarList items={c.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `${p.count} işlem` }))} format={tl} />
-          ) : (
-            <p className="text-sm text-muted">Ödeme alınmadı</p>
-          )}
-        </div>
-      </div>
-      {c.cash && (
-        <p className="mt-4 border-t border-[var(--admin-divider)] pt-3 text-sm">
-          {c.cash.counted == null ? (
-            <>Kasa sayılmadan kapandı · beklenen nakit {tl(c.cash.expected)}</>
-          ) : (
-            <>
-              Kasa farkı{' '}
-              <span className={cn('tabular font-semibold', diff ? (diff < 0 ? 'text-danger-ink' : 'text-warning-ink') : 'text-success-ink')}>
-                {!diff ? 'yok' : `${tl(Math.abs(diff))} ${diff < 0 ? 'eksik' : 'fazla'}`}
-              </span>
-              <span className="text-muted"> · sayılan {tl(c.cash.counted)}, beklenen {tl(c.cash.expected)}</span>
-            </>
-          )}
-        </p>
+    <Group title={`Gün sonu · Z ${c.zNo}`} label="Son gün sonu" meta={`${fmtDateLong(c.date)} · ${fmtTime(c.closedAt)}`}>
+      <Row label="Z toplamı" sub={`KDV dahil · ${c.receipts} adisyon`}>
+        <Amount k={c.netSales} />
+      </Row>
+      {c.payments.length ? (
+        c.payments.map((p) => (
+          <Row key={p.name} label={p.name} sub={`${p.count} işlem`}>
+            <Amount k={p.amount} />
+          </Row>
+        ))
+      ) : (
+        <QuietRow>Ödeme alınmadı</QuietRow>
       )}
-    </section>
-  );
-}
-
-function PanelHead({ title, sub, icon }: { title: string; sub?: string; icon: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h3 className="text-base font-semibold leading-6 tracking-[-0.015em]">{title}</h3>
-        {sub && <p className="text-[13px] text-muted">{sub}</p>}
-      </div>
-      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-[18px]">
-        {icon}
-      </span>
-    </div>
-  );
-}
-
-/** Kart başlığındaki küçük ikon karosu (panonun takvim karosu) */
-function IconChip({ children }: { children: ReactNode }) {
-  return (
-    <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-4">
-      {children}
-    </span>
-  );
-}
-
-/** Küçük ciro eğrisi (panonun dalga çizgisi): süs, değerler kartta yazılı */
-function Spark({ values }: { values: number[] }) {
-  const w = 96;
-  const h = 32;
-  const max = Math.max(1, ...values);
-  if (values.length < 2 || !values.some((v) => v > 0)) return null;
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 3 - (v / max) * (h - 6)] as const);
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  return (
-    <svg aria-hidden="true" width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
-      <path d={`${line} L${w},${h} L0,${h} Z`} fill="var(--admin-primary-soft)" />
-      <path d={line} fill="none" stroke="var(--chart-accent)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+      {c.cash && (
+        <Row label="Kasa farkı" sub={c.cash.counted == null ? `Sayılmadan kapandı · beklenen nakit ${tl(c.cash.expected)}` : `sayılan ${tl(c.cash.counted)}, beklenen ${tl(c.cash.expected)}`}>
+          {c.cash.counted == null ? (
+            <Faint>sayılmadı</Faint>
+          ) : (
+            <span className={cn('tabular whitespace-nowrap text-[15px] font-semibold', diff ? (diff < 0 ? 'text-danger-ink' : 'text-warning-ink') : 'text-success-ink')}>{!diff ? 'yok' : `${tlShort(Math.abs(diff))} ${diff < 0 ? 'eksik' : 'fazla'}`}</span>
+          )}
+        </Row>
+      )}
+    </Group>
   );
 }

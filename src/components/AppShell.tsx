@@ -398,14 +398,18 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       {!REMOTE && <SiteInbox />}
       {/*
        * Deneme modu (yeni kurulum; patron Yönetim › Ayarlar ve yedek'ten bitirir): her ekranda sakin, ince bir şerit.
+       * Gecede renkli zemin siyah sahnede parlar: şerit nötr yüzeyde, bilgi rengi yalnız küçük noktada.
        * Tarayıcı demosunda yok (demo şeridi zaten var)
        */}
       {!DEMO && boot.integrations.deneme && (
         <div
           role="note"
-          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border dark:border-[var(--admin-border)] dark:bg-surface dark:text-ink-2"
         >
-          <span>Deneme modu: yapılan satışlar gerçek sayılmaz</span>
+          <span className="inline-flex items-center gap-2">
+            <span aria-hidden="true" className="hidden size-1.5 shrink-0 rounded-full bg-[var(--admin-info)] dark:inline-block" />
+            Deneme modu: yapılan satışlar gerçek sayılmaz
+          </span>
           {/* Çıkış patronun: yedek alınır, deneme kayıtları silinir, PIN'le onaylanır (Ayarlar ve yedek'teki kartla aynı pencere) */}
           {me.role === 'patron' && (
             <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>

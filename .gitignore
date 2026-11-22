@@ -11,3 +11,4 @@ data/
 coverage/
 *.log
 e2e/out/
+.ekran/

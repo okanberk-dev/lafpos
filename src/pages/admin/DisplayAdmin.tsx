@@ -16,7 +16,7 @@ import { toast } from '@/lib/toast';
 import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
 const THEMES: Record<CustomerDisplayTheme, { label: string; hint: string; swatch: string; ink: string }> = {
-  gece: { label: 'Gece', hint: 'Loş salonda göz almaz', swatch: 'radial-gradient(70% 70% at 50% 40%, #0f7d47 0%, #150b0e 75%)', ink: '#fbf6f1' },
+  gece: { label: 'Gece', hint: 'Loş salonda göz almaz', swatch: 'radial-gradient(70% 70% at 50% 40%, #0a8560 0%, #000000 75%)', ink: '#fbf6f1' },
   porselen: { label: 'Porselen', hint: 'Gün ışığında, sitenin zemini', swatch: '#f4f1ec', ink: '#17130f' },
   yesil: { label: 'Ev yeşili', hint: 'Marka yüzeyi, krem yazı', swatch: 'radial-gradient(130% 95% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)', ink: '#fbf6f1' },
 };

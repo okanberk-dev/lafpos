@@ -25,6 +25,8 @@ const saved: Record<string, string | undefined> = {};
 /** Gerçekçi özet: uzaktan demosunun örnek günü (~90 KB) */
 const BASE = JSON.parse(readFileSync(join(__dirname, '../api/demo-ozet.json'), 'utf8')) as { at: number; bootstrap: Record<string, unknown>; patron: Record<string, unknown>; orders: Record<string, unknown> };
 
+const api = () => import('../api/uzaktan');
+
 beforeAll(() => {
   for (const k of ENV) saved[k] = process.env[k];
   for (const k of ENV) delete process.env[k];
@@ -39,16 +41,22 @@ afterAll(() => {
   vi.unstubAllGlobals();
   for (const k of ENV) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
 });
-beforeEach(() => {
+beforeEach(async () => {
   store.clear();
   log.length = 0;
+  (await api()).statsDayCache.clear();
 });
 
-const api = () => import('../api/uzaktan');
 
-/** Kasanın `at` anındaki özeti; `sales` patron panelinin cirosu (içerik değişikliği) */
-function snap(at: number, sales = 100_000) {
-  return { ...BASE, at, bootstrap: { ...BASE.bootstrap, serverTime: at }, patron: { ...BASE.patron, now: at, netSales: sales } };
+/** Yeni kasanın patron özetindeki kıyas girdisi (shared/today-stats.ts); eski kasa göndermez */
+const STATS = { v: 1, guests: 0, days: {}, daily: [], topPrev: [] };
+
+/**
+ * Kasanın `at` anındaki özeti; `sales` patron panelinin cirosu (içerik değişikliği). `old`: kıyas girdisi göndermeyen
+ * eski kasa (Uzaktan girdiyi gün raporlarından kurar: tests/today-stats-rapor.test.ts)
+ */
+function snap(at: number, sales = 100_000, old = false) {
+  return { ...BASE, at, bootstrap: { ...BASE.bootstrap, serverTime: at }, patron: { ...BASE.patron, now: at, netSales: sales, ...(old ? {} : { stats: STATS }) } };
 }
 
 async function push(s: object, shop?: string) {
@@ -226,9 +234,9 @@ describe('uzaktan ekran: bir saat açık', () => {
    * nabzı iter (içerik aynı). Yoğun saat: her dakika satış (içerik değişir). Önceki sürümün sayıları (10 sn yoklama,
    * istek başına üç komut ve bütün özet) PR'daki tabloda; burada bugünkü bütçe
    */
-  async function hour(changeEveryMs: number | null) {
+  async function hour(changeEveryMs: number | null, old = false) {
     const T = BASE.at;
-    await push(snap(T));
+    await push(snap(T, 100_000, old));
     const token = await login();
     let tag: string | null = null;
     let sales = 100_000;
@@ -243,7 +251,7 @@ describe('uzaktan ekran: bir saat açık', () => {
       if (beat || change) {
         log.length = 0;
         if (change) sales += 1_000;
-        await push(snap(at, sales));
+        await push(snap(at, sales, old));
         kasa.push(...log);
         requests++;
       }
@@ -267,6 +275,12 @@ describe('uzaktan ekran: bir saat açık', () => {
   it('yoğun saat (her dakika satış): 300 + 180 komut', async () => {
     const h = await hour(60_000);
     expect(h).toMatchObject({ requests: 240 + 60, viewer: 300, kasa: 180, total: 480, full: 60 });
+  });
+
+  it('eski kasa (kıyas girdisi göndermez): yoklama aynı, saatte bir örnekte en çok iki ek okuma (gün raporları, yarım saat bellekte)', async () => {
+    const h = await hour(60_000, true);
+    // Sınamada saat ilerlemez: bellek bir kez dolar (+1 MGET). Gerçekte yarım saatte bir yenilenir
+    expect(h).toMatchObject({ requests: 240 + 60, viewer: 301, kasa: 180, full: 60 });
   });
 });
 

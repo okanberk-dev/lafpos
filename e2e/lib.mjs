@@ -24,6 +24,8 @@ export const VIEWPORTS = {
   bilgisayar: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
   /** Koyu tema (sistem ayarı): yalnız patronun ekranları taranır */
   koyu: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'dark' },
+  /** Koyu tema telefonda (patronun en sık baktığı yer): yalnız patronun ekranları */
+  'koyu-telefon': { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'dark' },
 };
 
 export async function freePort() {
