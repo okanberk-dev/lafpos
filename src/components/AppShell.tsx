@@ -29,6 +29,7 @@ import { SiteInbox } from './SiteInbox';
 import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
+import { useUzaktanErisim } from '@/lib/kontrol';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsClaim, TopTabsSlot } from './shellSlots';
 import { Button } from './ui/Button';
@@ -135,7 +136,9 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const tablesInUse = useTablesInUse(mode);
   // Bar ekranı ayardan kapalıysa Bar menüde yok (Yönetim › Ayarlar › "Bar ekranı ve Bara gönder")
   const bar = useBarEnabled();
-  const items = remoteNav(visibleNav(can, mode, { tablesInUse, bar }));
+  // Uzakta Merkez yalnız panelin sahibine, Uzaktan yönetim parolasız görünümde hiç (kasada etkisiz)
+  const erisim = useUzaktanErisim();
+  const items = remoteNav(visibleNav(can, mode, { tablesInUse, bar }), REMOTE, erisim);
   const { tabs, more } = phoneTabs(items);
   const isAt = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
   // Menüde olmayan ekranın menüdeki yeri (navAlias): adisyon açıkken geldiği ekran (Masalar, Tezgâh satışı ya da

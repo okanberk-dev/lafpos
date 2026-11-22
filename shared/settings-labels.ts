@@ -47,6 +47,7 @@ export const SETTING_LABEL: Record<string, string> = {
   barEnabled: 'Bar ekranı ve Bara gönder',
   zNoStart: 'İlk Z numarası',
   customerDisplay: 'Müşteri ekranı',
+  remoteControl: 'Uzaktan yönetim',
 };
 
 /** Ayarın Türkçe adı; adı yazılmamış ayar kod adıyla (yalnız haritanın kendi anahtarları: "toString" ad sayılmaz) */

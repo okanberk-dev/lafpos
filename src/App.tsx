@@ -9,7 +9,7 @@ import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
-import { DOWNLOAD_PATH, MERKEZ_PATH } from './lib/download';
+import { DOWNLOAD_PATH, KONTROL_PATH, MERKEZ_PATH } from './lib/download';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from './lib/remote';
@@ -35,6 +35,7 @@ const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
 const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
 const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const MerkezPage = lazy(() => import('./pages/MerkezPage'));
+const KontrolPage = lazy(() => import('./pages/kontrol/KontrolPage'));
 const StandaloneDownloadPage = lazy(() => import('./pages/DownloadPage').then((m) => ({ default: m.StandaloneDownloadPage })));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
@@ -143,6 +144,7 @@ function Authed() {
           {/* Siteden kurulum: yalnız LafPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
           {REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}
           {REMOTE && <Route path={MERKEZ_PATH} element={<MerkezPage />} />}
+          {REMOTE && <Route path={KONTROL_PATH} element={<KontrolPage />} />}
           {/* Bölümlerden birini açabilen girer (patron paneli Denetim kaydına, raporcu Genel bakışa); bölümün izni AdminPage'de */}
           <Route path="/yonetim/*" element={<Guard perm={ADMIN_ROUTE_PERMS}><AdminPage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />

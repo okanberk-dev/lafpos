@@ -1,4 +1,4 @@
-import { Building2, Download } from 'lucide-react';
+import { Building2, Download, MonitorCog } from 'lucide-react';
 import type { NavItem } from './nav';
 
 /**
@@ -30,6 +30,20 @@ export const MERKEZ_NAV: NavItem = {
   icon: Building2,
   perms: [],
   keywords: 'merkez dükkan şube lisans güncelleme gönder',
+};
+
+/**
+ * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): kasanın personeli, PIN'leri, rol yetkileri, Tükendi'si ve servis modu;
+ * yalnız Uzaktan'da, oturumla. Raya sığan kısa ad "Yönetim" (Uzaktan'da kasanın Yönetim paneli yok), tam adı başlıkta
+ */
+export const KONTROL_PATH = '/uzaktan-yonetim';
+export const KONTROL_NAV: NavItem = {
+  to: KONTROL_PATH,
+  label: 'Yönetim',
+  title: 'Uzaktan yönetim',
+  icon: MonitorCog,
+  perms: [],
+  keywords: 'uzaktan yönetim personel pin şifre rol yetki tükendi satışa aç servis modu panel erişimi davet',
 };
 
 /** Güncelleme kanalının manifesti (kanal.mjs): yalnız sayfanın yazdığı alanlar */

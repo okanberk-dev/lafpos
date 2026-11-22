@@ -1,13 +1,16 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, WifiOff } from 'lucide-react';
 import { fmtDateTime } from '@shared/time';
-import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
+import type { BootstrapDTO, NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { NotifyCard } from '@/components/admin/NotifyCard';
 import { QrCode } from '@/components/QrCode';
+import { Toggle } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
-import { errorMessage, get, post } from '@/lib/api';
-import { useCan } from '@/lib/auth';
+import { errorMessage, get, post, put } from '@/lib/api';
+import { useAuth, useCan } from '@/lib/auth';
+import { useBoot } from '@/lib/boot';
+import { REMOTE } from '@/lib/remote';
 import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
@@ -47,6 +50,80 @@ const TAILSCALE_STEPS = [
   'Telefonunuza Tailscale uygulamasını kurun, aynı hesapla girin',
   'Bu sayfa kendini yeniler; uzaktan adres ve karekodu burada çıkar',
 ];
+
+/** Denetim kaydının satırı (yalnız kartın okuduğu alanlar) */
+interface AuditRow {
+  id: number;
+  at: number;
+  userId: string | null;
+  action: string;
+  message: string;
+}
+
+/** Uzaktan yapılan ya da reddedilen işlem: kimlik `uzaktan`, kontrol kaydı ya da "Uzaktan (e-posta)" adıyla yazılmış */
+const isRemoteAudit = (a: AuditRow) => a.userId === 'uzaktan' || a.action.startsWith('uzaktan.') || a.message.startsWith('Uzaktan (');
+
+/**
+ * Uzaktan yönetim anahtarı (docs/UZAKTAN-YONETIM.md): LafPOS Uzaktan'dan gelen personel, PIN, rol, Tükendi ve servis modu
+ * işlemleri. Yalnız patron değiştirir (sunucuda da patrona özel ayar); kapalıyken kasa uzaktan gelen her işlemi reddeder.
+ * Altında son uzaktan işlem (denetim kaydından, son iki hafta)
+ */
+function RemoteControlCard() {
+  const qc = useQueryClient();
+  const boot = useBoot();
+  const patron = useAuth((st) => st.me?.role === 'patron');
+  const on = boot.settings.remoteControl !== false;
+  const recent = useQuery({
+    queryKey: ['admin', 'audit', 'uzaktan'],
+    // Sunucu yalnız uzaktan kayıtlarını süzer: yoğun kafede genel kaydın ilk satırları başka işlemlerle dolar
+    queryFn: () => get<AuditRow[]>(`/admin/audit?uzaktan=1&limit=1&from=${Date.now() - 14 * 86_400_000}`),
+    staleTime: 60_000,
+  });
+  const last = recent.data?.find(isRemoteAudit);
+  const change = useMutation({
+    mutationFn: (next: boolean) => put('/admin/settings', { remoteControl: next }),
+    onSuccess: (_d, next) => {
+      qc.setQueryData<BootstrapDTO>(['bootstrap'], (d) => (d ? { ...d, settings: { ...d.settings, remoteControl: next } } : d));
+      void qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      toast.ok(next ? 'Uzaktan yönetim açıldı' : 'Uzaktan yönetim kapatıldı: kasa uzaktan gelen işlemleri reddeder');
+    },
+    onError: (e) => toast.err(errorMessage(e)),
+  });
+  const checked = change.isPending && change.variables !== undefined ? change.variables : on;
+  return (
+    <Card
+      title="Uzaktan yönetim"
+      actions={
+        on ? (
+          <Badge tone="success" dot>
+            Açık
+          </Badge>
+        ) : (
+          <Badge>Kapalı</Badge>
+        )
+      }
+    >
+      <Toggle
+        block
+        checked={checked}
+        disabled={!patron || change.isPending}
+        onChange={(v) => change.mutate(v)}
+        label="LafPOS Uzaktan’dan personel, PIN, roller, Tükendi ve servis modu değişikliklerine izin ver"
+        hint="Kapalıyken kasa uzaktan gelen her işlemi reddeder"
+      />
+      {!patron && <p className={cn(HINT, 'mt-2')}>Yalnız patron değiştirir</p>}
+      {last && (
+        <div className="mt-4 border-t border-[var(--admin-divider)] pt-3">
+          <p className={LABEL}>
+            Son uzaktan işlem · <span className="tabular-nums">{fmtDateTime(last.at)}</span>
+          </p>
+          <p className="mt-1 line-clamp-2 text-sm text-[var(--admin-text)] [overflow-wrap:anywhere]">{last.message}</p>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /**
  * Tablet ve telefonların bağlanacağı adresler: kafenin ağı (karekodla) ve Tailscale ile dışarıdan canlı erişim.
@@ -228,6 +305,12 @@ export default function NetworkAdmin() {
             <span className="break-all">{window.location.origin}</span>
           </DefRow>
         </Card>
+        {/* Uzaktan yönetim anahtarı tam genişlikte; uzaktan görünümde yok (kasayı yalnız kasadaki patron açar ya da kapatır) */}
+        {!REMOTE && (
+          <div className="lg:col-span-2">
+            <RemoteControlCard />
+          </div>
+        )}
         {/* Uzaktan kuruluysa: telefon bildirimleri tam genişlikte (iki sütunlu ızgaranın altı); uçları senkron.yonet ister */}
         {n.cloud?.configured && can('senkron.yonet') && (
           <div className="lg:col-span-2">

@@ -14,6 +14,7 @@ import { navAllowed, navFor } from '@/lib/nav';
 import { useBarEnabled, useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { resolveDark } from '@/lib/bootDark';
+import { useUzaktanErisim } from '@/lib/kontrol';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { setBarTheme, useTheme } from '@/lib/theme';
 import { confirmLeave } from '@/lib/unsavedGuard';
@@ -63,6 +64,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const mode = useServiceMode();
   const bar = useBarEnabled();
   const remoteSignOut = useRemoteSignOut();
+  const erisim = useUzaktanErisim();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -90,7 +92,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
     // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da); uzaktan görünümde yalnız oradaki ekranlar
-    for (const n of remoteNav(navFor(mode, { tablesInUse: true, bar }))) {
+    for (const n of remoteNav(navFor(mode, { tablesInUse: true, bar }), REMOTE, erisim)) {
       if (n.to === '/yonetim' || !navAllowed(n, can)) continue;
       out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, keywords: n.keywords, run: go(n.to) });
     }
@@ -148,7 +150,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode, bar, onBar, barDark, remoteSignOut]);
+  }, [boot.products, users.data, theme, mode, bar, onBar, barDark, remoteSignOut, erisim]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());

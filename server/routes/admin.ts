@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, like, lte, or, sql } from 'drizzle-orm';
 import { setSetupHidden, setupSteps } from '../services/kurulum';
 import { cloudBackupState, listCloudBackups, restartForRestore, stageRestore, underBekci, uploadBackup } from '../sync/yedek';
 import { cloudEnabled } from '../sync/cloud';
@@ -1003,6 +1003,8 @@ const settingsShape = patchOf(
       showClock: z.boolean(),
       showOptions: z.boolean(),
     }),
+    // Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): yalnız patron değiştirir (PATRON_SETTINGS)
+    remoteControl: z.boolean(),
   }),
 );
 
@@ -1016,8 +1018,11 @@ function sameSetting(a: unknown, b: unknown): boolean {
   return canonical(a) === canonical(b);
 }
 
-/** Yalnız patronun değiştirebildiği ayarlar (mali ve defter sonucu) */
-const PATRON_SETTINGS = ['branchId', 'zNoStart', 'autoDayEnd', 'demoMode'] as const;
+/**
+ * Yalnız patronun değiştirebildiği ayarlar: mali ve defter sonucu, bir de uzaktan yönetim (kasayı internetten yönetmeye
+ * izin verir; personel ve PIN değiştirir)
+ */
+const PATRON_SETTINGS = ['branchId', 'zNoStart', 'autoDayEnd', 'demoMode', 'remoteControl'] as const;
 
 adminRoutes.put('/settings', async (c) => {
   const user = c.get('user');
@@ -1122,12 +1127,15 @@ adminRoutes.get('/audit', (c) => {
       to: z.coerce.number().optional(),
       severity: z.enum(['info', 'uyari', 'alarm', 'tum']).default('tum'),
       limit: z.coerce.number().int().min(1).max(1000).default(200),
+      // Yalnız uzaktan yönetimin kayıtları (Ağ ve uzaktan erişim › Uzaktan yönetim kartının "son uzaktan işlem"i)
+      uzaktan: z.enum(['1']).optional(),
     }),
   );
   const conds = [];
   if (q.from) conds.push(gte(schema.auditLog.at, q.from));
   if (q.to) conds.push(lte(schema.auditLog.at, q.to));
   if (q.severity !== 'tum') conds.push(eq(schema.auditLog.severity, q.severity));
+  if (q.uzaktan) conds.push(or(eq(schema.auditLog.userId, 'uzaktan'), like(schema.auditLog.action, 'uzaktan.%'), like(schema.auditLog.message, 'Uzaktan (%')));
   const names = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const rows = db
     .select()

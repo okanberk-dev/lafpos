@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { and, eq, gt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
-import { effectivePermissions, type Permission, type Role } from '@shared/permissions';
+import { ALL_PERMISSIONS, effectivePermissions, type Permission, type Role } from '@shared/permissions';
 import type { CompPersonDTO, OrderDTO } from '@shared/types';
 import { type AuditEntry, Effects } from './effects';
 import { getSettings } from './settings';
@@ -324,9 +324,42 @@ export function resolveToken(token: string): AuthUser | null {
 /** Oturumsuz uçlar */
 const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/kasa/guncelleme-durumu', '/api/kasa/yazicilar'];
 
+/**
+ * Süreç içi isteğin kimliği (uzaktan yönetim, docs/UZAKTAN-YONETIM.md): server/sync/kontrol.ts kasanın kendi ucuna
+ * `app.fetch` ile giderken isteğin kendisini (Request nesnesi) burada kimliğiyle kaydeder; kimlik doğrulama ara katmanı
+ * isteği haritada bulursa oturum aramaz. Anahtar nesnenin kendisidir ve harita yalnız bellektedir: ağdan gelen hiçbir
+ * istek (başlık, jeton, çerez, aynı adres) bu kimliği taşıyamaz
+ */
+export const internalActors = new WeakMap<Request, AuthUser>();
+
+/**
+ * Uzaktan yönetimin iç isteğindeki kimlik, denetim kaydında "Uzaktan (e-posta)". `kim` bulutun imzaladığı üye e-postası
+ * ya da `parola` (parolalı giriş), `rol` imzalı üye rolü. Sahip patron rolüyle girer. Yönetici patron olmayan bir
+ * kimlikle (müdür rolü) girer: kasanın kendi kuralları onu da kasadaki müdür gibi tutar. Patron hesabını açamaz ve
+ * değiştiremez (admin.ts "yalnız patron"), personele PIN verme denemeleri saatte 12 ile sınırlı ve çakışma uyarı
+ * olarak kayda düşer (pinFree: patronun PIN'i taranamaz). Son patron, PIN tekilliği ve örnek PIN yasağı ikisinde de işler
+ */
+export function remoteActor(kim: string, rol: 'sahip' | 'yonetici' = 'sahip'): AuthUser {
+  const who = kim === 'parola' ? 'parolalı giriş' : kim.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) || 'bilinmeyen';
+  return {
+    id: 'uzaktan',
+    name: `Uzaktan (${who})`,
+    role: rol === 'sahip' ? 'patron' : 'mudur',
+    color: '#245c43',
+    permissions: new Set(ALL_PERMISSIONS),
+    maxDiscountPct: 100,
+    sessionId: 'uzaktan-kontrol',
+  };
+}
+
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const path = c.req.path;
   if (!path.startsWith('/api/') || PUBLIC_PATHS.includes(path) || path.startsWith('/api/public/')) return next();
+  const internal = internalActors.get(c.req.raw);
+  if (internal) {
+    c.set('user', internal);
+    return next();
+  }
   const header = c.req.header('authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const user = token ? resolveToken(token) : null;

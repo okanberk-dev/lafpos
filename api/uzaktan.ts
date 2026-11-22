@@ -9,6 +9,8 @@
  * siparişleri). Getir aktarıcısı (`/api/getir/*`):
  * GETIR_WEBHOOK_SECRET (bizim ürettiğimiz, Getir'e x-api-key olarak verilen anahtar, en az 16, öteki anahtarlardan
  * ayrı), isteğe bağlı GETIR_RESTAURANT_ID.
+ * Uzaktan yönetim (`/api/kontrol/*`, api/_kontrol.ts; docs/UZAKTAN-YONETIM.md): sahip ve panele eklediği yönetici
+ * kasaya değişiklik gönderir; komut kuyruğa girer, kasa Merkez nabzıyla alır. Görünümün geri kalanı salt okunurdur.
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
@@ -18,6 +20,7 @@ import { join } from 'node:path';
 import { bildirim, broadcast } from './_bildirim.js';
 import { yedek } from './_yedek.js';
 import { merkez, type Release } from './_merkez.js';
+import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
@@ -111,18 +114,24 @@ export function tokenValid(key: string, token: string, nowMs = Date.now()): bool
 
 /** Üye oturumu 30 gün: patron telefonda her gün yeniden parola yazmaz; parola değişince hepsi düşer */
 const MEMBER_DAYS = 30;
-const normalizeEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
+const normalizeEmail = normalizeEposta;
 /**
- * Üye olabilecek e-postalar (LAFPOS_UYE_EPOSTA, virgülle). Tanımlıysa "Üye girişi" e-posta ve parolayla çalışır ve
- * gerçek veri yalnız üyeye açılır. Parola ortam değişkeninde durmaz: üye ilk girişte kendisi belirler, Redis'te
- * yalnız özeti (scrypt) saklanır. İlk girişte davet kodu (LAFPOS_UYE_DAVET, en az 8) istenir: e-postayı bilen
- * başkası üyeliği sahipten önce açamaz. Kod tanımlı değilse üyelik açılmaz.
+ * Sahip e-postaları (LAFPOS_UYE_EPOSTA, virgülle). Tanımlıysa "Üye girişi" e-posta ve parolayla çalışır ve gerçek veri
+ * yalnız üyeye açılır. Parola ortam değişkeninde durmaz: üye ilk girişte kendisi belirler, Redis'te yalnız özeti
+ * (scrypt) saklanır. İlk girişte davet kodu (LAFPOS_UYE_DAVET, en az 8) istenir: e-postayı bilen başkası üyeliği
+ * sahipten önce açamaz. Kod tanımlı değilse üyelik açılmaz.
+ *
+ * Sahip panelden başkalarını da ekler (Uzaktan yönetim › Panel erişimi, api/_kontrol.ts): yönetici ya da yalnız görür.
+ * Eklenen kişi ilk girişte kendisine verilen kişisel davet kodunu yazar; rolü üye kaydında durur. Ortamdaki e-posta
+ * her zaman sahiptir, panelden değişmez.
  */
-export const memberEmails = () => [...new Set(env('LAFPOS_UYE_EPOSTA').split(',').map(normalizeEmail).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
-const memberKey = (email: string) => `lafpos:uye:${email}`;
+export const memberEmails = () => [...new Set(env('LAFPOS_UYE_EPOSTA').split(',').map(normalizeEmail).filter((e) => EPOSTA_RE.test(e)))];
+const memberKey = uyeKey;
 const inviteCode = () => env('LAFPOS_UYE_DAVET');
 /** Davet kodu büyük-küçük harf, boşluk ve tireye bakmadan karşılaştırılır (telefonda elle yazılır) */
-const normalizeInvite = (v: unknown) => String(v ?? '').toUpperCase().replace(/[\s-]+/g, '');
+const normalizeInvite = normalizeDavet;
+/** Davet yokken karşılaştırılan sahte özet: davetli olmayan e-postada da aynı karşılaştırma yapılır */
+const NO_INVITE = davetOzeti('davet-yok');
 
 export function hashPassword(password: string, salt: Buffer = randomBytes(16)): string {
   return `s1$${salt.toString('base64url')}$${scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 }).toString('base64url')}`;
@@ -172,22 +181,32 @@ async function redis(...cmd: (string | number)[]): Promise<unknown> {
   return out.result;
 }
 
-interface Member {
-  /** Parolanın özeti (hashPassword) */
-  h: string;
-  at: number;
-}
+/** Üye kaydı: parolanın özeti (hashPassword), açılış anı; `rol` yalnız panelden davet edilende (api/_kontrol.ts) */
+type Member = UyeKaydi;
 
-/** Üye kaydı; oturum denetiminde bir dakika bellekte tutulur (sayfa 10 sn'de bir yenilenir, her istekte Redis'e gidilmez) */
+/**
+ * Üye kaydı; oturum denetiminde bir dakika bellekte tutulur (sayfa 10 sn'de bir yenilenir, her istekte Redis'e gidilmez).
+ * Panelden kaldırılan ya da rolü değişen üye önbellekten hemen düşer (bu örnekte; öteki örneklerde en geç bir dakikada)
+ */
 const memberCache = new Map<string, { at: number; value: Member | null }>();
 async function member(email: string, fresh = false): Promise<Member | null> {
   const hit = memberCache.get(email);
   if (!fresh && hit && Date.now() - hit.at < 60_000) return hit.value;
   const raw = (await redis('GET', memberKey(email))) as string | null;
-  const value = raw ? (JSON.parse(raw) as Member) : null;
+  let value: Member | null = null;
+  try {
+    value = raw ? (JSON.parse(raw) as Member) : null;
+  } catch {
+    value = null;
+  }
+  // Uydurma jetonlardaki rastgele e-postalar belleği şişirmesin
+  if (memberCache.size >= 1000) memberCache.clear();
   memberCache.set(email, { at: Date.now(), value });
   return value;
 }
+
+/** Üyenin rolü: ortamdaki e-posta sahip; panelden eklenenin rolü kaydında; ikisi de değilse üye değil (null) */
+const memberRole = (email: string, record: Member | null, members: string[]) => (!record ? null : members.includes(email) ? ('sahip' as const) : davetRolu(record.rol));
 
 /** Üyeliklerden biri açılmış mı (kurulum durumu): bütün üye kayıtları tek MGET'te, önbellek tazelenir */
 async function anyMember(emails: string[]): Promise<boolean> {
@@ -1484,18 +1503,30 @@ async function handle(req: Request): Promise<Response> {
   const login = loginPost ? ((await req.json().catch(() => ({}))) as { eposta?: unknown; parola?: unknown; davet?: unknown }) : null;
   // Üyelik açıkken üyenin girişi ve oturumu demoya düşmez (kafe bağlanmadan da girer: İndir sayfası için)
   const memberRequest = memberMode && (path === 'uzaktan/uye' || !!login?.eposta || memberTokenEmail(auth) != null);
-  /** Gerçek oturum (üye ya da parolalı giriş): Merkez paneli ve bildirim aboneliği. Parolasız görünümde hiç */
-  const admin = async () => {
+  /**
+   * Gerçek oturum ve rolü: üye jetonu (ortamdaki sahip ya da panelden eklenen yönetici, izleyici) ya da parolalı giriş
+   * (sahip). Parolasız görünümde hiç. İstekte bir kez çözülür (üye kaydı zaten bir dakika bellekte)
+   */
+  const session = once(async (): Promise<KontrolOturumu | null> => {
+    if (secret().length < 32) return null;
+    if (!memberMode) return passwordRequired() && tokenValid(secret(), auth) ? { eposta: null, rol: 'sahip' } : null;
+    const email = memberTokenEmail(auth);
+    if (!email || !EPOSTA_RE.test(email)) return null;
+    const record = await member(email);
+    const rol = memberRole(email, record, members);
+    return rol && record && memberTokenValid(secret(), auth, record.h) ? { eposta: email, rol } : null;
+  });
+  /** Sahibin oturumu: Merkez paneli ve bildirim aboneliği. Parolasız görünümde ve panele eklenen üyede hiç */
+  const admin = async () => (await session())?.rol === 'sahip';
+  /**
+   * Geçerli ama sahip olmayan oturum (parolasız görünüm, panele eklenen yönetici ya da izleyici): Merkez ve bildirim
+   * uçları 403 der, oturum düşmez
+   */
+  const viewerSession = async () => {
     if (secret().length < 32) return false;
-    if (memberMode) {
-      const email = memberTokenEmail(auth);
-      const record = email && members.includes(email) ? await member(email) : null;
-      return !!record && memberTokenValid(secret(), auth, record.h);
-    }
-    return passwordRequired() && tokenValid(secret(), auth);
+    if (memberMode) return ((await session())?.rol ?? 'sahip') !== 'sahip';
+    return !passwordRequired() && tokenValid(secret(), auth);
   };
-  /** Geçerli ama yönetici olmayan oturum (parolasız görünüm): Merkez ve bildirim uçları 403 der, oturum düşmez */
-  const viewerSession = async () => secret().length >= 32 && !memberMode && !passwordRequired() && tokenValid(secret(), auth);
   const bildirimDeps = { redis, admin, viewer: viewerSession, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
   // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
   if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
@@ -1515,6 +1546,21 @@ async function handle(req: Request): Promise<Response> {
       demo,
       fetchRelease: () => latestRelease(url.origin),
       notify: (n) => broadcast(bildirimDeps, n).then(() => undefined),
+    });
+  }
+  // Uzaktan yönetim (api/_kontrol.ts): panel uçları gerçek oturumla ve üyenin rolüyle; salt okunur kapısından önce.
+  // Kafe bağlanmadan demo jetonuyla örnek gün (işlem yok). Dükkân görünümünkü: başlık ya da en son veri gönderen
+  if (path.startsWith('kontrol/')) {
+    const demo = !memberRequest && demoAllowed() && tokenValid(demoKey(), auth) && !(await realData(versions));
+    return kontrol(req, url, path, {
+      redis,
+      oturum: session,
+      gorunum: viewerSession,
+      demo,
+      dukkan: async () => shopHeader(req) ?? viewShop(req, await versions()),
+      secret: secret(),
+      sahipler: members,
+      uyeDegisti: (email) => memberCache.delete(email),
     });
   }
   // Gerçek oturumun jetonu (kafe anahtarıyla imzalı) demoya düşmez: kafe bağlıyken verilmiştir, kapı Redis'e sormaz
@@ -1564,30 +1610,44 @@ async function handle(req: Request): Promise<Response> {
     const password = String(login.parola ?? '');
     if (!email || !password) return fail(400, 'E-posta ve parolayı girin', 'bad_body');
     if (path === 'uzaktan/uye') {
-      const invite = normalizeInvite(inviteCode());
-      if (invite.length < 8) return fail(503, 'Üyelik davet kodu tanımlı değil (LAFPOS_UYE_DAVET)', 'not_configured');
-      const given = createHash('sha256').update(normalizeInvite(login.davet)).digest('hex');
-      // E-posta ve kod birlikte denetlenir: yanıt hangisinin yanlış olduğunu söylemez
-      if (!sameText(given, createHash('sha256').update(invite).digest('hex')) || !members.includes(email)) return fail(403, 'E-posta ya da davet kodu yanlış', 'not_allowed');
+      // Kişisel davet her yolda okunur (sahipte de): yanıt süresi e-postanın ortamda olup olmadığını söylemez
+      const personal = davetGecerli(await redis('GET', davetKey(email)), Date.now());
+      const given = davetOzeti(login.davet);
+      let rol: Member['rol'] = undefined;
+      if (members.includes(email)) {
+        // Ortamdaki sahip: ortak davet kodu (LAFPOS_UYE_DAVET)
+        const invite = normalizeInvite(inviteCode());
+        if (invite.length < 8) return fail(503, 'Üyelik davet kodu tanımlı değil (LAFPOS_UYE_DAVET)', 'not_configured');
+        // E-posta ve kod birlikte denetlenir: yanıt hangisinin yanlış olduğunu söylemez
+        if (!sameText(given, davetOzeti(invite))) return fail(403, 'E-posta ya da davet kodu yanlış', 'not_allowed');
+      } else {
+        // Panelden eklenen: kişisel kod (7 gün), sabit zamanlı; davet yoksa sahte özetle aynı karşılaştırma yapılır
+        if (!(sameText(given, personal?.kod ?? NO_INVITE) && personal)) {
+          // Davetsiz e-posta bugünkü yanıtı alır (üyelik kurulmamışsa 503): davetin varlığı da sızmaz
+          if (normalizeInvite(inviteCode()).length < 8) return fail(503, 'Üyelik davet kodu tanımlı değil (LAFPOS_UYE_DAVET)', 'not_configured');
+          return fail(403, 'E-posta ya da davet kodu yanlış', 'not_allowed');
+        }
+        rol = personal.rol;
+      }
       if (password.length < 10 || password.length > 200) return fail(400, 'Parola en az 10 karakter olmalı', 'weak_password');
-      const record: Member = { h: hashPassword(password), at: Date.now() };
+      const record: Member = { h: hashPassword(password), at: Date.now(), ...(rol ? { rol } : {}) };
       if ((await redis('SET', memberKey(email), JSON.stringify(record), 'NX')) !== 'OK') return fail(409, 'Bu üyelik zaten açılmış; e-posta ve parolanızla girin', 'member_exists');
       memberCache.delete(email);
-      await redis('DEL', key);
+      // Kişisel davet bir kez kullanılır (deneme sayacıyla aynı komutta silinir)
+      await redis('DEL', ...(rol ? [davetKey(email)] : []), key);
       return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
     }
     // Listede olmayan e-postada da kayıt sorulur ve her yolda tam bir parola özeti hesaplanır: yanıt süresi e-postanın
     // kayıtlı olup olmadığını söylemez
     const found = await member(email, true);
-    const record = members.includes(email) ? found : null;
+    const record = memberRole(email, found, members) ? found : null;
     if (!passwordMatches(record?.h ?? dummyHash(), password) || !record) return fail(401, 'E-posta ya da parola yanlış', 'bad_password');
     await redis('DEL', key);
     return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
   }
   if (memberMode) {
-    const email = memberTokenEmail(auth);
-    const record = email && members.includes(email) ? await member(email) : null;
-    if (!record || !memberTokenValid(secret(), auth, record.h)) return fail(401, 'Oturum kapalı. E-posta ve parolanızla yeniden girin', 'unauthorized');
+    // Sahip ya da panele eklenen üye (rolü kayıtta); kaldırılanın kaydı silinir, oturumu burada düşer
+    if (!(await session())) return fail(401, 'Oturum kapalı. E-posta ve parolanızla yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
     return viewer(req, path, url, versions);
   }

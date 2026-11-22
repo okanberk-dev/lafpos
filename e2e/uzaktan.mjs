@@ -16,8 +16,22 @@ import { overflowReport, ROOT, settle, smallTargets, VIEWPORTS } from './lib.mjs
 const OUT = join(ROOT, 'dist/uzaktan-e2e');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
-/** Uzaktan taranan ekranlar (tests/web-kurucu.test.ts İndir'in burada olduğunu denetler) */
-export const REMOTE_ROUTES = ['/patron', '/raporlar', '/merkez', '/indir'];
+/**
+ * Uzaktan taranan ekranlar (tests/web-kurucu.test.ts İndir'in, tests/kontrol-arayuz.test.ts Uzaktan yönetim'in ve
+ * sekmelerinin burada olduğunu denetler). Uzaktan yönetim'in verisi bulutun örnek yanıtı (GET kontrol/durum, kontrol/uyeler)
+ */
+export const REMOTE_ROUTES = [
+  '/patron',
+  '/raporlar',
+  '/merkez',
+  '/uzaktan-yonetim',
+  '/uzaktan-yonetim?sekme=roller',
+  '/uzaktan-yonetim?sekme=menu',
+  '/uzaktan-yonetim?sekme=kasa',
+  '/uzaktan-yonetim?sekme=erisim',
+  '/uzaktan-yonetim?sekme=gecmis',
+  '/indir',
+];
 
 /** Üyelik akışının örnek üyesi (gerçek kimse değil) ve sahte Redis'in adresi */
 const MEMBER = { email: 'uye@ornek.test', password: 'ornek-parola-2026', invite: 'ORNK-2026-DAVT' };
@@ -252,7 +266,16 @@ export async function runRemote(browser) {
             dispatchEvent(new PopStateEvent('popstate'));
           }, route);
           await settle(page);
-          if (new URL(page.url()).pathname !== route) problems.push(`yönlendirildi: ${new URL(page.url()).pathname}`);
+          const path = route.split('?')[0];
+          if (new URL(page.url()).pathname !== path) problems.push(`yönlendirildi: ${new URL(page.url()).pathname}`);
+          if (route === '/patron' && (await page.locator('a[href="/uzaktan-yonetim"]', { hasText: 'Kasayı uzaktan yönet' }).count()) !== 1) problems.push('patron panelinde Kasayı uzaktan yönet kartı yok');
+          if (path === '/uzaktan-yonetim') {
+            // Örnek görünüm: sekmeler ve işlem düğmeleri görünür ama kapalı; veri alınamadıysa hata kartı çıkar
+            if ((await page.getByRole('tab', { name: /^Ekip/ }).count()) === 0) problems.push('Uzaktan yönetim sekmeleri yok');
+            if ((await page.getByText('Uzaktan yönetim açılamadı').count()) > 0) problems.push('Uzaktan yönetim verisi alınamadı');
+            if ((await page.getByText(/^Örnek görünüm/).count()) === 0) problems.push('örnek görünüm notu yok');
+            if ((await page.locator('a[href="/uzaktan-yonetim"]').count()) === 0) problems.push('menüde Uzaktan yönetim yok');
+          }
           if (route === '/indir') {
             const link = page.locator('a[href="/guncelleme/LafPOS-Kur.cmd"]');
             if ((await link.count()) !== 1) problems.push('İndir bağlantısı yok');
@@ -261,7 +284,7 @@ export async function runRemote(browser) {
             if ((await page.locator('a[href="/indir"]').count()) === 0) problems.push('menüde İndir yok');
           }
           await check(page, viewport, problems);
-          await page.screenshot({ path: join(ROOT, 'e2e/out', `uzaktan-${viewport}-${route.slice(1)}.png`) });
+          await page.screenshot({ path: join(ROOT, 'e2e/out', `uzaktan-${viewport}-${route.slice(1).replace(/[^a-z0-9-]+/gi, '-')}.png`) });
           pages++;
           for (const p of problems) failures.push(`${where(route)}: ${p}`);
         }

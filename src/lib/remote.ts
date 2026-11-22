@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { get, setConditionalGets, setShopHeader } from './api';
-import { DOWNLOAD_NAV, DOWNLOAD_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
+import { DOWNLOAD_NAV, DOWNLOAD_PATH, KONTROL_NAV, KONTROL_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
 import type { NavItem } from './nav';
 
 /**
@@ -57,16 +57,26 @@ if (REMOTE) {
 
 export const remoteShopsQuery = { queryKey: ['uzaktan', 'dukkanlar'], queryFn: () => get<RemoteShop[]>('/uzaktan/dukkanlar'), staleTime: 5 * 60_000 };
 
-/** Uzakta görünen ekranlar; İndir (siteden kurulum) yalnız uzakta ve yalnız oturumda */
-export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', MERKEZ_PATH, DOWNLOAD_PATH];
+/** Uzakta görünen ekranlar; Merkez, Uzaktan yönetim ve İndir (siteden kurulum) yalnız uzakta ve yalnız oturumda */
+export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', MERKEZ_PATH, KONTROL_PATH, DOWNLOAD_PATH];
 
 /**
- * Uzaktan görünümün menüsü: kişinin menüsünden uzakta açılan ekranlar, sonunda İndir (yetki istemez, oturum yeter).
- * Kasada menü aynen kalır
+ * Uzaktan görünümde Merkez ve Uzaktan yönetim kime açık (src/lib/kontrol.ts useUzaktanErisim): Merkez yalnız panelin
+ * sahibine (yönetici ve izleyici 403 alır), ikisi de parolasız görünümde hiç (uçları gerçek giriş ister)
  */
-export function remoteNav(items: NavItem[], remote = REMOTE): NavItem[] {
+export interface UzaktanErisim {
+  merkez: boolean;
+  kontrol: boolean;
+}
+const HEPSI: UzaktanErisim = { merkez: true, kontrol: true };
+
+/**
+ * Uzaktan görünümün menüsü: kişinin menüsünden uzakta açılan ekranlar, sonra Merkez ve Uzaktan yönetim (kişiye açıksa),
+ * sonunda İndir (oturum yeter). Kasada menü aynen kalır
+ */
+export function remoteNav(items: NavItem[], remote = REMOTE, erisim: UzaktanErisim = HEPSI): NavItem[] {
   if (!remote) return items;
-  return [...items.filter((n) => REMOTE_PATHS.includes(n.to)), MERKEZ_NAV, DOWNLOAD_NAV];
+  return [...items.filter((n) => REMOTE_PATHS.includes(n.to)), ...(erisim.merkez ? [MERKEZ_NAV] : []), ...(erisim.kontrol ? [KONTROL_NAV] : []), DOWNLOAD_NAV];
 }
 
 /**

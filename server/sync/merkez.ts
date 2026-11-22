@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { HIZLI_NABIZ_MS, HIZLI_SURE_MS, type NabizKontrol } from '@shared/kontrol';
 import { type LicenseRecord, type LicenseView, licenseState, normalizeBranchCode, salesAllowed } from '@shared/lisans';
 import { REMOTE_SHOP } from '@shared/remote-reports';
 import { db, tx } from '../db/client';
@@ -21,6 +22,10 @@ import { underBekci } from './yedek';
  * Son yanıt saklanır: internet ya da Merkez yokken kasa son geçerli kayıtla ve kendi saatiyle çalışır. Merkez adresi
  * yoksa (LAFPOS_MERKEZ_URL ya da LAFPOS_CLOUD_URL tanımsız, ya da LAFPOS_MERKEZ_URL=0) lisans uygulanmaz ve
  * güncelleyici eskisi gibi kanalın son sürümünü izler.
+ *
+ * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md, sync/kontrol.ts) de bu nabızla gider: istekte yönetim özetinin parmak izi
+ * (gerekince özet ve sonuçlar), yanıtta komutlar. Komut uygulanınca ya da bulut özeti isteyince hemen bir nabız daha
+ * (sonuç beklemesin); komut geldikten sonra 10 dakika dakikada bir nabız, sonra yine 5 dakikada bir.
  */
 export const MERKEZ_BEAT_MS = 5 * 60_000;
 const IDENTITY = 'merkez.kimlik';
@@ -174,11 +179,85 @@ export function takeRemoteUpdate(istek: number | null | undefined, now = Date.no
   return true;
 }
 
-/** Bir nabız: gerekiyorsa önce kayıt; yanıt saklanır. Hata durumu korur (internetsiz kasa çalışır) */
-export async function merkezBeat(now = Date.now()): Promise<boolean> {
+// ─── Uzaktan yönetim nabzı ───────────────────────────────────────────────────
+
+type KontrolModulu = typeof import('./kontrol');
+
+/** Bulut son yanıtta özeti istedi: sonraki nabız özeti gönderir (nabız gitmezse istek kalır) */
+let durumIstendi = false;
+/** Son nabzın anı ve hızlı nabzın bitişi (komut gelince 10 dakika dakikada bir) */
+let sonNabiz = 0;
+let hizliBitis = 0;
+let nabizSuruyor = false;
+
+/**
+ * Nabza eklenecek yönetim kısmı. Modül yalnız Merkez açıkken tembel yüklenir (tarayıcı demosunda RSA yok, Merkez de
+ * hiç açılmaz). Özet hazırlanamazsa nabız kontrolsüz gider: lisans ve güncelleme beklemez
+ */
+async function kontrolNabzi(now: number): Promise<{ k: KontrolModulu; giden: NabizKontrol } | null> {
+  try {
+    const k = await import('./kontrol');
+    return { k, giden: k.nabizKontrol(durumIstendi, now) };
+  } catch (e) {
+    console.warn('[merkez] uzaktan yönetim özeti hazırlanamadı:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+/**
+ * Nabız gitti: iletilen özet ve sonuçlar işaretlenir, yanıttaki komutlar uygulanır (eski bulutta `kontrol` yok, bir şey
+ * olmaz). Dönüş: hemen bir nabız daha gerekiyor mu (yeni sonuç ya da bulut özeti istedi)
+ */
+async function kontrolSonrasi(kontrol: { k: KontrolModulu; giden: NabizKontrol } | null, json: unknown, now: number): Promise<boolean> {
+  if (!kontrol) return false;
+  try {
+    kontrol.k.nabizIletildi(kontrol.giden);
+    const r = await kontrol.k.kontrolYaniti(isRecord(json) ? json.kontrol : undefined, now);
+    durumIstendi = r.durumIste;
+    if (r.komut > 0) hizliBitis = now + HIZLI_SURE_MS;
+    return r.sonuc > 0 || r.durumIste;
+  } catch {
+    // Ayrıntı günlüğe yazılmaz: komutlar şifreli PIN taşır
+    console.error('[merkez] uzaktan yönetim yanıtı işlenemedi');
+    return false;
+  }
+}
+
+/**
+ * Şimdiki nabız aralığı: komut geldikten sonra HIZLI_SURE_MS boyunca dakikada bir, sonra 5 dakikada bir. Saat geri
+ * alındıysa (hızlı sürenin bitişi HIZLI_SURE_MS'ten uzakta) hızlı nabız sürmez
+ */
+export const nabizAraligi = (now = Date.now()) => (now < hizliBitis && hizliBitis - now <= HIZLI_SURE_MS ? HIZLI_NABIZ_MS : MERKEZ_BEAT_MS);
+
+/** Tik zamanlayıcının gecikmesine pay: dakikalık tik 5 dakikalık nabzı bir sonraki tike kaçırmasın */
+const TIK_PAYI_MS = 5_000;
+
+/**
+ * Dakikalık tik (startMerkez): son nabızdan beri aralık dolduysa ve önceki nabız bitmişse bir nabız. Dönüş: nabız atıldı
+ * ve başarılı oldu mu. Kasanın saati geri alındıysa (son nabız ileride görünür) nabzın zamanı gelmiş sayılır: yoksa
+ * saat son nabzı yeniden geçene dek (yanlış BIOS saatinde aylarca) hiç nabız atılmazdı
+ */
+export async function merkezTick(now = Date.now()): Promise<boolean> {
+  const gecen = now - sonNabiz;
+  if (nabizSuruyor || (gecen >= 0 && gecen < nabizAraligi(now) - TIK_PAYI_MS)) return false;
+  nabizSuruyor = true;
+  try {
+    return await merkezBeat(now);
+  } finally {
+    nabizSuruyor = false;
+  }
+}
+
+/**
+ * Bir nabız: gerekiyorsa önce kayıt; yanıt saklanır. Hata durumu korur (internetsiz kasa çalışır). `ek`: uzaktan
+ * yönetimin hemen attığı ek nabız; zincir en çok bir ek nabızdır
+ */
+export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean> {
   if (!merkezEnabled()) return false;
+  sonNabiz = now;
   const me = identity(now);
   const inst = installedVersion();
+  let again = false;
   try {
     if (!me.registered) {
       // Kayıt kafenin ortak anahtarıyla imzalı (dışarıdan kimse kurulum açamaz); kurulumun kendi anahtarı içinde
@@ -199,6 +278,7 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
     }
     const upd = readUpdateStatus();
     const url = new URL('/api/merkez/nabiz', env.merkezUrl);
+    const kontrol = await kontrolNabzi(now);
     const body = {
       surum: inst.version,
       build: inst.build,
@@ -208,6 +288,8 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
       istekAlindi: getSyncState<number>(HANDLED_REQUEST),
       // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın
       kesinHedef: true,
+      // Uzaktan yönetim: özetin parmak izi, gerekince özet ve sonuçlar (eski bulut alanı görmez)
+      ...(kontrol ? { kontrol: kontrol.giden } : {}),
     };
     const res = await signedFetch(me.key, 'POST', url, body, 8000, { 'x-laf-kurulum': me.id });
     // Kayıt Merkez'de silindiyse (Redis sıfırlandı) bir sonraki nabız yeniden kaydolur
@@ -221,15 +303,22 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
     // Dükkân adı ya da şube kodu değişti: ekranlar bootstrap'ı yeniden okusun (fiş başlığı)
     if ((prev?.ad ?? null) !== parsed.ad || (prev?.kod ?? null) !== parsed.kod) new Effects().emit({ topic: 'settings', kind: 'merkez', message: 'Şube bilgisi değişti' }).flush();
     takeRemoteUpdate(parsed.guncelleIstek, now);
-    return true;
+    again = await kontrolSonrasi(kontrol, res.json, now);
   } catch (e) {
     lastError = e instanceof Error ? e.message : String(e);
     return false;
   }
+  // Sonuçlar ve istenen özet bir sonraki nabzı beklemesin: hemen bir nabız daha (ek nabız yeni zincir başlatmaz)
+  if (again && !ek) await merkezBeat(now, true);
+  return true;
 }
 
+/**
+ * Dakikalık tik: nabız 5 dakikada bir, komut geldikten sonra 10 dakika dakikada bir (`nabizAraligi`). İlk nabız
+ * açılıştan 10 saniye sonra
+ */
 export function startMerkez(): NodeJS.Timeout[] {
   if (!merkezEnabled()) return [];
   identity();
-  return [setTimeout(() => void merkezBeat(), 10_000), setInterval(() => void merkezBeat(), MERKEZ_BEAT_MS)];
+  return [setTimeout(() => void merkezTick(), 10_000), setInterval(() => void merkezTick(), HIZLI_NABIZ_MS)];
 }
