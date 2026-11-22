@@ -444,7 +444,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               </button>
             ) : (
               <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} title={`${me.name} · ${roleLabel} · Araçlar`} className="lp-rail-item">
-                <span className="lp-rail-icon">{avatar('xs')}</span>
+                <span className="lp-rail-icon lp-rail-avatar">{avatar('xs')}</span>
                 <span aria-hidden="true" className="lp-rail-label max-w-full truncate">
                   {me.name.split(' ')[0]}
                 </span>
