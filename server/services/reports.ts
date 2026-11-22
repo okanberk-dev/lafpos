@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { odenmezByPerson } from '@shared/comp';
 import { type CrossPay, type PrepDone, prepFrom } from '@shared/remote-calc';
+import { type PatronStats, statsDates } from '@shared/today-stats';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
@@ -818,6 +819,56 @@ function salesUntil(date: string, elapsedMs: number) {
   return { netSales: orders.reduce((a, o) => a + totalsOf(o).total, 0), orders: orders.filter((o) => o.total > 0).length };
 }
 
+/**
+ * "Bugün" kıyaslarının girdisi (`shared/today-stats.ts`): kıyas günlerinin kapanış dakikaları, hafta ve ay kıyası için
+ * geçmiş tam günler ve en çok satanların geçen haftaki kapanışları. Saatten bağımsız: özet yalnız satışla değişir,
+ * "aynı saate kadar" kesimini ekran yapar. Ölçüt `summaryReport`'unki (kapanmış POS adisyonu, `totals.total`)
+ */
+function patronStats(today: string, top: { key: string }[], guests: number): PatronStats {
+  const { curves, dailyFrom, dailyTo } = statsDates(today);
+  const days: PatronStats['days'] = {};
+  for (const date of curves) {
+    const rows = db.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.date, date)).all();
+    if (rows.length) days[date] = { open: rows.some((r) => r.closedAt == null), closes: closingMinutes(date) };
+  }
+  const ds = load({ from: dailyFrom, to: dailyTo }, ORDERS_ONLY);
+  const dates = dayOf(ds);
+  const byDate = new Map<string, [string, number, number]>();
+  for (const d of ds.days) byDate.set(d.date, [d.date, 0, 0]);
+  for (const o of ds.orders) {
+    if (!isSale(o)) continue;
+    const row = byDate.get(dates.get(o.dayId)!)!;
+    row[1] += totalsOf(o).total;
+    if (o.total > 0) row[2] += 1;
+  }
+  return { v: 1, guests, days, daily: [...byDate.values()], topPrev: productCloses(addDays(today, -7), top.slice(0, 5).map((t) => t.key)) };
+}
+
+/**
+ * Bir iş gününde verilen ürünlerin (ürün raporunun anahtarı) kapanış dakikasına göre satışı: [sıra, dakika, adet,
+ * ciro]; ürün raporunun ölçütü (kapanmış adisyon, iptal ve ikram dışı kalem, indirimli kalem tutarı)
+ */
+function productCloses(date: string, keys: string[]): [number, number, number, number][] {
+  if (!keys.length) return [];
+  const ds = load({ from: date, to: date }, { payments: false });
+  const start = businessDayStartMs(date);
+  const closed = new Map(ds.orders.filter(isSale).map((o) => [o.id, o]));
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const rows = new Map<string, [number, number, number, number]>();
+  for (const i of ds.items) {
+    const o = closed.get(i.orderId);
+    if (!o || i.voided || i.complimentary) continue;
+    const idx = index.get(`${i.productId ?? i.name}|${i.size}`);
+    if (idx == null) continue;
+    const m = Math.floor(((o.closedAt ?? o.openedAt) - start) / 60_000);
+    const row = rows.get(`${idx}:${m}`) ?? [idx, m, 0, 0];
+    row[2] += i.qty;
+    row[3] += totalsOf(o).lineNet[i.id] ?? 0;
+    rows.set(`${idx}:${m}`, row);
+  }
+  return [...rows.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+
 export function patronLive(withCost: boolean) {
   const now = Date.now();
   const openDay = getOpenDay(db);
@@ -890,6 +941,7 @@ export function patronLive(withCost: boolean) {
     voided: summary.voided,
     online: summary.online,
     top: products,
+    stats: patronStats(today, products, summary.guests),
     ...(withCost ? { costsAt: costsAt() } : {}),
     openChecks,
     alerts,

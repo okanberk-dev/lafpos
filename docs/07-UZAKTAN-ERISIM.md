@@ -99,6 +99,30 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   veri 10 dakikadan eskiyse (kasa nabzı 5 dk'da bir) "Kafeden veri gelmiyor" uyarısı çıkar (`remoteFreshness`,
   `src/lib/remote.ts`). Gün kapalıyken son gün sonunun kartı: Z, ciro, adisyon, ödeme türleri ve kasa farkı (beklenen,
   sayılan; yalnız patron rolü kasa rakamlarını görüyorsa, kör kasa kuralı). Maliyet ve kâr yok.
+- **"Bugün" kıyasları (patron paneli, kafede ve Uzaktan'da aynı; 22 Kasım 2026):** ciro kartında adisyon, ortalama
+  adisyon ve masada oturan kişi; altında **Kıyas** kartı: dün, geçen hafta aynı gün ve geçen ay aynı gün (takvimde aynı
+  gün; "22 Ekim Perşembe" gibi tarih ve gün adı yazılı). Her satır tutar, adisyon, fark (₺, işaretli) ve değişim
+  (ok, işaret, yüzde; renk tek başına değil). Gün sürerken kıyas o günün **aynı saatine kadar** (gün başından, 05:00,
+  aynı dakikaya kadar kapanan adisyonlar), küçük satırda o günün gün sonu toplamı; gün kapanınca tam gün; gün henüz
+  açılmadıysa kıyas günlerinin gün sonu, yüzdesiz. O tarihte iş günü yoksa (kafe kapalıydı, LafPOS'a geçişten önce)
+  "Veri yok" yazar, ₺0 değil; geçen ayda o gün yoksa (31 Ekim → Eylül) "Eylül ayında 31 yok". Altında **Gün boyu
+  ciro** (bugün ve geçen hafta aynı gün birikimli, üst üste; dokununca ya da oklarla saatin iki değeri, ekran okuyucuya
+  tablo), **Hafta ve ay** (hafta Pazartesi'den, ay 1'inden bugüne; önceki hafta ya da ayın aynı gün sayısıyla, aynı
+  gün aynı saate kadar; geçen ayda bugünün günü yoksa önceki ayın tamamı) ve **gün sonu tahmini** (yalnız gün sürerken,
+  "tahmini" etiketli: son 4 aynı haftagününün bu saate kadarki payı Σ aynı saate kadar / Σ gün sonu; bugünkü ciro bu
+  paya bölünür; en az 2 satışlı gün ve %10 pay gerekir). En çok satanlar ilk 5 ve geçen haftanın aynı günü (aynı saate
+  kadar adet ve değişim).
+  - Hesap `shared/today-stats.ts`'te (saf; kasa ve Uzaktan aynı kod), ölçüt Raporlar › Ciro'nunki: kapanmış POS
+    adisyonu (online ödenmiş sipariş, ikram ve ödenmez dışı), adisyon tutarı olan kapanmış adisyon, İstanbul iş günü.
+    Hafta ve ay kıyası Raporlar'ın kıyas dönemiyle (`comparison`) aynı rakamı verir (`tests/patron-kiyas.test.ts`;
+    altın testler `tests/today-stats.test.ts`: eksik gün, gün aşırı kapanış, hafta ve ay sınırı, 29-31 gün farkı).
+    Bilinen tek fark: kıyas döneminin önceki bir gününde kıyas saatinden sonra kapanan adisyon (gün ertesi güne açık
+    kalıp geç kapanan) burada tam gün sayılır.
+  - Upstash bütçesi değişmez: kasa girdiyi patron özetine koyar (`stats`: kıyas günlerinin kapanış dakikaları, hafta ve
+    ay için geçmiş günlerin toplamı, en çok satanların geçen haftaki kapanışları; birkaç KB). Girdi saatten bağımsızdır,
+    yalnız satışla değişir; "aynı saate kadar" kesimini ekran özetin anıyla yapar. Yeni Redis okuması ya da yoklama
+    yok, kıyas her yoklamada yeniden okunmaz (304 aynı). `stats` göndermeyen eski kasada panel eski geçen hafta kartını
+    gösterir; Uzaktan'ın demo özetinde de (kafe bağlı değil) bu eski kart görünür.
 - **Raporlar:** kasa her iş gününün rapor özetini ayrıca iter (`server/sync/cloud-reports.ts`,
   `POST /api/uzaktan/rapor`): ciro ve döküm, ödeme türleri, satış türleri, KDV, ürün ürün satış (maliyetsiz), saatlik
   dağılım, Z numaraları, iptal, ikram, ödenmez, zayi, indirim, personel satışı ve kapanışların dakikası (bugünü
