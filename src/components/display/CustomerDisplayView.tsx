@@ -211,7 +211,9 @@ export function CustomerDisplayView({
             <div>
               <p className="text-lg text-[var(--d-panel-soft)] @lg:text-xl">{state.paid > 0 ? 'Kalan' : 'Toplam'}</p>
               <p className="tabular whitespace-nowrap font-headline font-extrabold leading-none tracking-[-0.035em]" style={totalSize(amount)}>
-                {amount}
+                {/* LafPOS Keel: tutar iri, kuruş soluk */}
+                {amount.slice(0, -3)}
+                <span className="opacity-45">{amount.slice(-3)}</span>
               </p>
             </div>
             {messages.length > 0 && (
