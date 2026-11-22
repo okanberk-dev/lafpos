@@ -87,8 +87,9 @@ function tyPkg(over: Partial<TrendyolPackage> = {}): TrendyolPackage {
     packageModificationDate: now - 30_000,
     customer: { firstName: 'A***', lastName: 'K***' },
     address: { address1: 'TGO Yemek', phone: '0850 000 00 00' },
-    lines: [{ productId: 55, name: 'Latte', price: 190, quantity: 1, modifierProducts: [{ name: 'Yulaf sütü', price: 10 }] }],
-    payment: { paymentType: 'PAY_WITH_CREDIT_CARD' },
+    // Belgedeki gibi: `price` seçenekleri içerir, birimler `items`'ta
+    lines: [{ productId: 55, name: 'Latte', price: 200, items: [{ packageItemId: `pi-${id}` }], modifierProducts: [{ name: 'Yulaf sütü', price: 10 }] }],
+    payment: { paymentType: 'PAY_WITH_CARD' },
     totalPrice: 200,
     ...over,
   };
@@ -207,7 +208,7 @@ describe('Canlı', () => {
     const row = await byExt(ext);
     expect(row).toMatchObject({ status: 'kabul', decidedBy: 'Kasa', reason: '20 dk, otomatik' });
     expect(picked(ext)).toBe(1);
-    expect(ty.bodies.picked?.at(-1)).toEqual({ preparationTime: 20 });
+    expect(ty.bodies.picked?.at(-1)).toEqual({ packageId: ext, preparationTime: 20 });
     const o = await h.ok<OrderDTO>('patron', 'GET', `/orders/${row.orderId}`);
     expect(o).toMatchObject({ type: 'paket', platform: 'trendyol', status: 'acik', total: 20000 });
     expect(o.items[0]).toMatchObject({ name: 'Latte', unitPrice: 20000 });

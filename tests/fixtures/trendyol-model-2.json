@@ -1,0 +1,218 @@
+{
+  "page": 0,
+  "size": 50,
+  "totalPages": 1,
+  "totalCount": 1,
+  "content": [
+    {
+      "id": "425adca7fe09a01dcb2db5ebc858e05cdd25cb91c31359036af54d28fe43e3a3",
+      "supplierId": 107385,
+      "storeId": 153,
+      "orderCode": "1E2",
+      "storePickupSelected": false,
+      "deliveryType": "GO",
+      "packageCreationDate": 1783520443716,
+      "packageModificationDate": 1783520443720,
+      "preparationTime": 0,
+      "orderId": "1001381323394",
+      "orderNumber": "1381323394",
+      "totalPrice": 371.5,
+      "callCenterPhone": "0212 365 34 03",
+      "customer": {
+        "id": 35018440,
+        "firstName": "Oms",
+        "lastName": "M"
+      },
+      "payment": {
+        "paymentType": "PAY_WITH_CARD",
+        "mealCard": null,
+        "onDelivery": null
+      },
+      "address": {
+        "firstName": "Oms",
+        "lastName": "Meal",
+        "company": "TGO Yemek",
+        "address1": "TGO Yemek",
+        "address2": "TGO Yemek",
+        "city": "TGO Yemek",
+        "cityCode": 34,
+        "cityId": 34,
+        "district": "TGO Yemek",
+        "districtId": 34,
+        "neighborhoodId": 34,
+        "neighborhood": "TGO Yemek",
+        "apartmentNumber": "TGO Yemek",
+        "floor": "TGO Yemek",
+        "doorNumber": "TGO Yemek",
+        "addressDescription": "TGO Yemek",
+        "postalCode": "TGO Yemek",
+        "countryCode": "TGO Yemek",
+        "latitude": "TGO Yemek",
+        "longitude": "TGO Yemek",
+        "phone": "0212 365 34 03",
+        "countryPhoneCode": null
+      },
+      "packageStatus": "Created",
+      "lines": [
+        {
+          "price": 91.0,
+          "unitSellingPrice": 91.0,
+          "items": [
+            {
+              "packageItemId": "1000008723602",
+              "lineItemId": 1000008181991,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 29073,
+          "name": "Penne Pollo Makarna Menü",
+          "description": "Penne Pollo Makarna+Patates+Salata+İçecek",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Ayran (küçük)",
+              "price": 0.0,
+              "productId": 1373581,
+              "modifierGroupId": 166392,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Patates Kızartması",
+              "price": 15.0,
+              "productId": 318424,
+              "modifierGroupId": 40824,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        },
+        {
+          "price": 159.25,
+          "unitSellingPrice": 159.25,
+          "items": [
+            {
+              "packageItemId": "1000008723603",
+              "lineItemId": 1000008181992,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 295710,
+          "name": "Kıymalı Pide",
+          "description": "Odun Ateşinde + Salata ve Ezme ile Beraber",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Salata",
+              "price": 0.0,
+              "productId": 21431,
+              "modifierGroupId": 21431,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Ezme",
+              "price": 0.0,
+              "productId": 12367,
+              "modifierGroupId": 12367,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        },
+        {
+          "price": 121.25,
+          "unitSellingPrice": 121.25,
+          "items": [
+            {
+              "packageItemId": "1000008723604",
+              "lineItemId": 1000008181993,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 132703,
+          "name": "Tavuk Döner Medium Dürüm",
+          "description": "Özel fırın lavaşa; 75 gr. tavuk döner, salatalık turşusu, patates kızartması, özel sos.",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Patates Kızartması",
+              "price": 15.0,
+              "productId": 318424,
+              "modifierGroupId": 40824,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        }
+      ],
+      "customerNote": "Servis İstiyorum",
+      "lastModifiedDate": 1783520443000,
+      "isCourierNearby": false,
+      "cancelInfo": null,
+      "eta": "15 - 36 dk",
+      "testPackage": false,
+      "pickupEtaState": "",
+      "estimatedPickupTimeMin": 0,
+      "estimatedPickupTimeMax": 0,
+      "coupon": null,
+      "promotions": null,
+      "userInformation": {
+        "appName": "Trendyol"
+      },
+      "totalDeliveryPrice": null
+    }
+  ]
+}
