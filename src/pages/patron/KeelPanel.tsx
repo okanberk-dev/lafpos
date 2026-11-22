@@ -88,47 +88,38 @@ function CardHead({ caption, value, label, pill }: { caption: string; value: Rea
 }
 
 /**
- * Mini grafikli beyaz kart: bugün (bu saate kadar) dün ve geçen haftanın aynı saatiyle. Ortadaki nane blok bugün,
- * üstünde tutar hapı; yanlardaki gri bloklar kıyas günleri. Veri yoksa blok kesik çizgili ve "veri yok"
+ * Kıyas kartının mini grafiği (Keel'in bloklu grafiği): bugün nane ve üstünde tutar hapı; dün, geçen hafta bugün ve
+ * geçen ay bugün gri bloklar. Veri yoksa blok kesik çizgili. Tutar ve yüzde hemen altındaki satırlarda yazıyla;
+ * patron panelinde kıyas yalnız bu kartta (sahip: "iki defa kıyas olmasın", 22 Kas 2026)
  */
-export function MiniCompareCard({ today, yesterday, lastWeek, change, live, className }: { today: number; yesterday: number | null; lastWeek: number | null; change: number | null; live: boolean; className?: string }) {
-  const max = Math.max(today, yesterday ?? 0, lastWeek ?? 0, 1);
+export function CompareBars({ today, items }: { today: number; items: { key: string; label: string; value: number | null }[] }) {
+  const max = Math.max(today, ...items.map((i) => i.value ?? 0), 1);
   const h = (v: number | null) => (v == null ? 14 : v <= 0 ? 4 : Math.max(10, Math.round((v / max) * 100)));
-  const side = (v: number | null, tone: string) =>
-    v == null ? <div className="w-full rounded-t-[10px] border border-b-0 border-dashed border-[var(--k-line-strong)]" style={{ height: `${h(v)}%` }} /> : <div className={cn('w-full rounded-t-[10px]', tone)} style={{ height: `${h(v)}%` }} />;
+  const cols = [...items.slice(0, 1), { key: 'bugun', label: 'Bugün', value: today as number | null }, ...items.slice(1)];
+  const grid = { gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` };
   return (
-    <section aria-label="Bugün, dün ve geçen hafta" className={cn('flex min-h-[19rem] min-w-0 flex-col rounded-[var(--r-group)] bg-surface p-5 text-ink', className)}>
-      <CardHead
-        caption={live ? 'Bugün bu saate kadar, dün ve geçen haftanın aynı saatiyle' : 'Bugün, dün ve geçen haftanın aynı günüyle'}
-        value={change == null ? '—' : `%${Math.abs(change).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`}
-        label={change == null ? (yesterday == null ? 'dün için veri yok' : 'dünle kıyas yok') : change > 0 ? 'düne göre yukarıda' : change < 0 ? 'düne göre aşağıda' : 'dünle aynı'}
-        pill={change != null && change !== 0 ? <KPill dir={change > 0 ? 'up' : 'down'}>{change > 0 ? 'artış' : 'düşüş'}</KPill> : undefined}
-      />
-      <div aria-hidden="true" className="mt-auto grid h-[112px] shrink-0 grid-cols-3 items-end gap-1.5 border-b border-[var(--k-line)] pt-4">
-        {side(yesterday, 'bg-[var(--k-well-2)]')}
-        <div className="relative w-full rounded-t-[10px]" style={{ height: `${h(today)}%`, background: 'linear-gradient(180deg, var(--k-mint) 0%, color-mix(in oklab, var(--k-mint) 18%, transparent) 100%)' }}>
-          <span className="tabular absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[var(--k-mint)] px-2 py-0.5 text-[11px] font-semibold leading-4 text-[#0b3d22]">{tlShort(today)}</span>
-        </div>
-        {side(lastWeek, 'bg-[var(--k-chart-bar)]')}
+    <div aria-hidden="true" className="pb-2 pt-6">
+      <div className="grid h-[92px] items-end gap-1.5 border-b border-[var(--k-line)]" style={grid}>
+        {cols.map((c) =>
+          c.key === 'bugun' ? (
+            <div key={c.key} className="relative w-full rounded-t-[10px]" style={{ height: `${h(today)}%`, background: 'linear-gradient(180deg, var(--k-mint) 0%, color-mix(in oklab, var(--k-mint) 18%, transparent) 100%)' }}>
+              <span className="tabular absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[var(--k-mint)] px-2 py-0.5 text-[11px] font-semibold leading-4 text-[#0b3d22]">{tlShort(today)}</span>
+            </div>
+          ) : c.value == null ? (
+            <div key={c.key} className="w-full rounded-t-[10px] border border-b-0 border-dashed border-[var(--k-line-strong)]" style={{ height: `${h(null)}%` }} />
+          ) : (
+            <div key={c.key} className="w-full rounded-t-[10px] bg-[var(--k-chart-bar)]" style={{ height: `${h(c.value)}%` }} />
+          ),
+        )}
       </div>
-      <ul className="mt-2.5 flex justify-between gap-2 text-[11.5px] leading-4 text-muted">
-        <li className="min-w-0">
-          <span className="block truncate">Dün</span>
-          <span className="tabular block truncate text-[12.5px] font-medium text-ink-2">{yesterday == null ? 'veri yok' : tlShort(yesterday)}</span>
-        </li>
-        <li className="min-w-0 shrink-0 text-center">
-          <span className="flex items-center justify-center gap-1">
-            <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-[var(--k-mint)]" />
-            Bugün
+      <div className="mt-1.5 grid gap-1.5 text-center text-[11px] leading-4 text-muted" style={grid}>
+        {cols.map((c) => (
+          <span key={c.key} className={cn('truncate', c.key === 'bugun' && 'font-medium text-ink')}>
+            {c.label}
           </span>
-          <span className="tabular block truncate text-[12.5px] font-medium text-ink">{tlShort(today)}</span>
-        </li>
-        <li className="min-w-0 shrink-0 text-right">
-          <span className="block whitespace-nowrap">Geçen hafta</span>
-          <span className="tabular block truncate text-[12.5px] font-medium text-ink-2">{lastWeek == null ? 'veri yok' : tlShort(lastWeek)}</span>
-        </li>
-      </ul>
-    </section>
+        ))}
+      </div>
+    </div>
   );
 }
 

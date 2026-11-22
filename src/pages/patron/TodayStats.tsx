@@ -150,12 +150,15 @@ function missing(c: Compare, today: string) {
 /**
  * Kıyas (sahibin örneğiyle aynı yapı): "Dün", "Geçen hafta bugün", "Geçen ay bugün"; sağda aynı saate kadarki tutar ve
  * değişim hapı. O gün satış yoksa "satış yok", veri yoksa "veri yok". Satıra dokununca tarih ve gün adı, gün sonu
- * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce")
+ * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce"); `chart`: satırların üstündeki mini
+ * grafik (patron panelinde kıyas yalnız bu kartta)
  */
-export function CompareGroup({ compares, mode, today, now, fresh }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode }) {
+export function CompareGroup({ compares, mode, today, now, fresh, chart, className }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string }) {
   const title = mode === 'live' ? `Kıyas · ${fmtTime(now)} itibarıyla` : mode === 'closed' ? 'Kıyas · gün sonu' : 'Kıyas · gün açılmadı';
   return (
-    <Group title={title} label="Kıyas" meta={fresh}>
+    <Group title={title} label="Kıyas" meta={fresh} flush className={className}>
+      {chart}
+      <ul className={ROWS}>
       {compares.map((c) => {
         const v = c.value;
         const empty = !!v && v.netSales === 0 && v.receipts === 0;
@@ -193,6 +196,7 @@ export function CompareGroup({ compares, mode, today, now, fresh }: { compares: 
           </Row>
         );
       })}
+      </ul>
     </Group>
   );
 }
