@@ -28,15 +28,15 @@ export const DISPLAY_DEFAULTS: CustomerDisplaySettings = {
  */
 const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   gece: {
-    '--d-bg': '#000000',
+    '--d-bg': '#050302',
     // Gece (uygulamanın koyu temasıyla aynı nötr palet): siyah zeminde krema dalgaları, ortada ev yeşili hale
     '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(10 133 96 / 0.26), transparent 72%)',
-    '--d-surface': '#1c1c1e',
-    '--d-chip': '#2a2a2c',
-    '--d-line': '#38383a',
-    '--d-text': '#f5f5f7',
-    '--d-soft': '#d1d1d6',
-    '--d-mute': '#9e9ea4',
+    '--d-surface': '#1e1c1b',
+    '--d-chip': '#2b2928',
+    '--d-line': '#2e2c2b',
+    '--d-text': '#fbfaf9',
+    '--d-soft': '#d7d4d1',
+    '--d-mute': '#a3a09d',
     '--d-accent': '#34d399',
     '--d-letters': '#fbf6f1',
     '--d-bean': '#e8c877',

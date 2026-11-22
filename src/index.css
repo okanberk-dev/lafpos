@@ -300,6 +300,12 @@
  * anlam taşıyan yerde: marka rayı ve ana eylem ev yeşili (açık temayla aynı kimlik), artış ve başarı yeşil, düşüş ve
  * tehlike mercan, uyarı kehribar, bilgi mavi; hepsi yumuşak koyu hap zeminiyle. Çiftler: tests/koyu-tema.test.ts
  */
+html[class~='dark'] {
+  /* Gecede kartlar finans panelindeki gibi daha yuvarlak: gruplanmış kart 24 px, kart 20 px */
+  --r-group: 1.5rem;
+  --r-card: 1.25rem;
+}
+
 .dark {
   --shadow-card: none;
   --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.5);
@@ -309,19 +315,19 @@
   --shadow-action: none;
   --rim: 0 0 0 0 transparent;
   /* Ton merdiveni (nötr, renksiz): zemin siyah, kart, kart içi alan, kuyu; yüzen yüzey (menü, bildirim) en açık */
-  --admin-bg: #000000;
-  --admin-stage: #000000;
-  --admin-surface: #1c1c1e;
-  --admin-surface-2: #232325;
-  --admin-panel: #2a2a2c;
-  --admin-border: #38383a;
-  --admin-border-strong: #48484a;
-  --admin-divider: #38383a;
-  --admin-border-field: #7c7c7f;
+  --admin-bg: #050302;
+  --admin-stage: #050302;
+  --admin-surface: #1e1c1b;
+  --admin-surface-2: #242221;
+  --admin-panel: #2b2928;
+  --admin-border: #2e2c2b;
+  --admin-border-strong: #434140;
+  --admin-divider: #2e2c2b;
+  --admin-border-field: #7c7a79;
   /* Kırık beyaz mürekkep; ikincil ve soluk nötr gri (kuyuda bile soluk 5:1) */
-  --admin-text: #f5f5f7;
-  --admin-text-soft: #d1d1d6;
-  --admin-text-mute: #9e9ea4;
+  --admin-text: #fbfaf9;
+  --admin-text-soft: #d7d4d1;
+  --admin-text-mute: #a3a09d;
   /* Ev yeşilinin gecede açılmışı: bağlantı, seçim, grafik; dolguda üstünde koyu yeşil */
   --admin-primary: #34d399;
   --laf-bean: #e8c877;
@@ -331,7 +337,7 @@
   --admin-on-primary: #04261a;
   --admin-primary-soft: #10301f;
   --admin-primary-soft-hover: #163d28;
-  --admin-neutral-soft: #2a2a2c;
+  --admin-neutral-soft: #2b2928;
   /* Ana eylem (Öde, Kaydet, Hepsi hazır): ev yeşili dolgu, üstünde beyaz (4.6:1); halka açık nane, ok derin yeşil */
   --admin-ink-fill: #0a8560;
   --admin-ink-fill-hover: #08744f;
@@ -349,12 +355,12 @@
   --admin-gold-ink: #2e2113;
   /* İmza yüzeyinin gece karşılığı nötr: gecede bordo yok */
   --admin-bordo: #e5e5ea;
-  --admin-bordo-soft: #2a2a2c;
+  --admin-bordo-soft: #2b2928;
   --admin-accent: #b39dfa;
   --admin-accent-ink: #c9b8ff;
   --admin-accent-soft: #291f45;
-  --admin-info: #6cc8ff;
-  --admin-info-soft: #0f2a3d;
+  --admin-info: #bce1ff;
+  --admin-info-soft: #1b2733;
   /* Artış ve başarı: canlı yeşil, koyu yeşilimsi hap zemini */
   --admin-success: #4ade80;
   --admin-success-soft: #12301c;
@@ -374,34 +380,34 @@
   --admin-hue-violet-soft: #291f45;
   --admin-hue-green: #34d399;
   --admin-hue-green-soft: #10301f;
-  --admin-chart-line: #34d399;
-  --chart-soft: #1f4034;
-  --chart-on-accent: #04261a;
+  --admin-chart-line: #bce1ff;
+  --chart-soft: #2b3946;
+  --chart-on-accent: #0c1a26;
   /* Marka rayı gecede de ev yeşili (açık temanın rayından bir ton derin); yazı beyaz (8:1), seçili karo beyaz üstünde yeşil */
   --rail: #0a5c44;
   --rail-bg: linear-gradient(180deg, #0a5c44 0%, #084c38 58%, #063d2d 100%);
   --rail-soft: #e3f2ea;
   --rail-mute: #b9e3cf;
-  --rail-active-bg: #f5f5f7;
+  --rail-active-bg: #fbfaf9;
   --rail-active-ink: #0a6e52;
   --rail-active-icon: #d3eee0;
   /* Kart içindeki kart (yüzey üstünde yüzey) saç teliyle ayrılır; zemindeki kart kenarsız (aşağıda .lp-float) */
   --card-line: var(--admin-border);
-  --glass: rgb(28 28 30 / 0.82);
+  --glass: rgb(30 28 27 / 0.82);
   --glass-line: rgb(255 255 255 / 0.06);
-  --frost: rgb(0 0 0 / 0.8);
+  --frost: rgb(5 3 2 / 0.8);
   --menu-rule: rgb(255 255 255 / 0.12);
-  --band: #0a0a0b;
-  --band-2: #1c1c1e;
-  --band-line: #38383a;
-  --band-text: #f5f5f7;
-  --band-muted: #a1a1a6;
+  --band: #0b0908;
+  --band-2: #1e1c1b;
+  --band-line: #2e2c2b;
+  --band-text: #fbfaf9;
+  --band-muted: #a3a09d;
   --band-accent: #34d399;
   /* Bandın ışığı gecede kısık: siyah zeminde yeşil hâle yalnız bir iz */
   --band-glow: radial-gradient(120% 90% at 18% 0%, rgb(18 184 134 / 0.16) 0%, rgb(10 110 82 / 0.07) 38%, transparent 70%);
   /* Kıyas çizgisi kartta en az 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #8e8e93;
-  --chart-grid: #2a2a2c;
+  --chart-context: #8e8a86;
+  --chart-grid: #2b2928;
   /* Durum rengi yumuşak zemine karışık: koyu zeminde seçilir, yazıyla yarışmaz */
   --admin-primary-line: #1f7a5a;
   --admin-success-line: #23703f;
@@ -413,7 +419,7 @@
   /* Karartma siyah ve yoğun, yüzen yüzey (menü, bildirim) bir ton açık */
   --scrim: rgb(0 0 0 / 0.7);
   --scrim-soft: rgb(0 0 0 / 0.5);
-  --surface-raised: #2c2c2e;
+  --surface-raised: #2e2c2b;
   --hover: rgb(255 255 255 / 0.06);
   --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
@@ -1765,6 +1771,41 @@
   .lp-drawer-row {
     animation: lp-drawer-row 600ms var(--ease-out) backwards;
   }
+  /*
+   * Telefonda çekmece (alt menünün Daha'sı ve kişinin menüsü) alttan açılan pencere: ekranın %90'ına dek, üst köşeler 28
+   * px, tutamaçlı; uygulamanın yüzeyinde (açıkta beyaz, gecede #1E1C1B), yazılar uygulamanın mürekkebinde. Arkası kararır
+   */
+  .lp-drawer-scrim {
+    background: var(--scrim);
+    animation: lp-fade-in 240ms var(--ease-out) backwards;
+  }
+  @media (max-width: 47.99rem) {
+    .lp-drawer {
+      max-height: 90dvh;
+      border-radius: 1.75rem 1.75rem 0 0;
+      --band-text: var(--admin-text);
+      --band-muted: var(--admin-text-mute);
+      --band-line: var(--admin-divider);
+      --band-2: var(--admin-panel);
+      --band-accent: var(--admin-primary);
+      --focus: var(--admin-primary);
+      background: var(--admin-surface);
+      box-shadow: 0 -24px 60px -24px rgb(0 0 0 / 0.45);
+      animation: lp-sheet-in 420ms var(--ease-out) backwards;
+    }
+    .lp-drawer::before {
+      content: '';
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: block;
+      width: 2.5rem;
+      height: 5px;
+      margin: 8px auto -4px;
+      border-radius: 999px;
+      background: var(--admin-border-strong);
+    }
+  }
 
   /* Açılışta ilk satırlar sırayla gelir (kitin .giris'i): kabın ilk 12 çocuğu 30 ms arayla */
   .lp-enter > * {
@@ -1906,6 +1947,16 @@
   }
   to {
     clip-path: inset(0 0 0 0 round 0);
+  }
+}
+@keyframes lp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes lp-sheet-in {
+  from {
+    transform: translateY(100%);
   }
 }
 @keyframes lp-drawer-row {

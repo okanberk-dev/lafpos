@@ -294,6 +294,28 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       <DrawerArrow />
     </NavLink>
   ));
+  // Telefonda (alt pencere) ekranlar üçlü karo ızgarası: ikon yuvarlak karede, altında kısa ad; etkin ekran açık nane
+  const drawerTiles = items.map((n) => {
+    const here = on(n.to, isAt(n.to));
+    return (
+      <NavLink
+        key={n.to}
+        to={n.to}
+        onClick={closeTools}
+        aria-label={navAriaLabel(n)}
+        aria-current={here ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[5.5rem] flex-col items-center justify-center gap-2 rounded-[1.125rem] px-1 text-center text-[13px] font-medium leading-4 transition-[background-color,transform] duration-150 active:scale-[0.97] motion-reduce:active:scale-100',
+          here ? 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]' : 'bg-[var(--admin-surface-2)] text-[var(--admin-text)] active:bg-press',
+        )}
+      >
+        <span aria-hidden="true" className={cn('grid size-11 place-items-center rounded-[0.875rem]', here ? 'bg-[var(--admin-surface)]' : 'bg-[var(--admin-panel)]')}>
+          <n.icon className="size-[22px]" />
+        </span>
+        <span className="max-w-full truncate">{n.label}</span>
+      </NavLink>
+    );
+  });
   const themeRow = (
     // Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi
     <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={{ animationDelay: `${120 + items.length * 35}ms` }}>
@@ -335,11 +357,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
         <header className="flex min-h-16 items-center gap-0.5 bg-bg pb-1.5 pl-3 pr-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <LafTile size="md" />
-          {/* İki satır: üstte uygulamanın adı (küçük, soluk), altında ekranın adı */}
-          <span className="ml-3 flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[11px] font-medium leading-4 tracking-[0.01em] text-muted">Cafe POS Yönetim Paneli</span>
-            <span className="truncate font-headline text-[18px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
-          </span>
+          <span className="ml-3 min-w-0 flex-1 truncate font-headline text-[19px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
           <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-press">
             <Search className="size-5" />
           </button>
@@ -594,7 +612,13 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         }
         foot={`L’Affogato · LafPOS · ${dayText}${boot.day ? ' açık' : ''} · ${fmtTime(now)}`}
       >
-        <DrawerGroup label="Ekranlar">{drawerRows}</DrawerGroup>
+        <DrawerGroup label="Ekranlar" className="max-md:hidden">
+          {drawerRows}
+        </DrawerGroup>
+        <section aria-label="Ekranlar" className="mt-4 md:hidden">
+          <h2 className="mb-2 font-sans text-xs font-medium tracking-normal text-[var(--band-muted)]">Ekranlar</h2>
+          <div className="grid grid-cols-3 gap-2">{drawerTiles}</div>
+        </section>
         <DrawerGroup label="Bu cihaz ve oturum">
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)

@@ -47,6 +47,9 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
 
   if (!open) return null;
   return createPortal(
+    <>
+      {/* Telefonda çekmece alttan açılan pencere: arkası kararır, dokununca kapanır */}
+      <div aria-hidden="true" onClick={onClose} className="lp-drawer-scrim fixed inset-0 z-[59] md:hidden" />
     <div
       ref={panel}
       role="dialog"
@@ -55,7 +58,7 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
       tabIndex={-1}
       onKeyDown={(e) => trapTab(e, panel.current)}
       style={{ '--focus': 'var(--band-accent)' } as CSSProperties}
-      className="lp-drawer fixed inset-0 z-[60] overflow-y-auto overscroll-contain text-[var(--band-text)] outline-none"
+      className="lp-drawer fixed inset-x-0 bottom-0 top-0 z-[60] max-md:top-auto overflow-y-auto overscroll-contain text-[var(--band-text)] outline-none"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1480px] flex-col px-5 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] sm:px-7">
         <header className="flex items-center justify-between gap-4 pb-2 pt-[max(1.25rem,env(safe-area-inset-top))]">
@@ -76,7 +79,8 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
         <div className="flex-1 pb-6">{children}</div>
         {foot && <footer className="border-t border-[var(--band-line)] py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-xs text-[var(--band-muted)]">{foot}</footer>}
       </div>
-    </div>,
+    </div>
+    </>,
     document.body,
   );
 }
