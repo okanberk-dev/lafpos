@@ -20,7 +20,7 @@ import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-m
 export const KONTROL_SURUM = 1;
 
 /** Kasanın kabul ettiği komutlar (beyaz liste). Kasa bu listenin dışındaki hiçbir şeyi uygulamaz */
-export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle', 'secenek.duzenle', 'gun.sonu'] as const;
+export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle', 'secenek.duzenle', 'gun.sonu', 'urun.gorsel'] as const;
 export type KomutTuru = (typeof KOMUT_TURLERI)[number];
 
 export const KOMUT_ETIKET: Record<KomutTuru, string> = {
@@ -36,6 +36,7 @@ export const KOMUT_ETIKET: Record<KomutTuru, string> = {
   'urun.ekle': 'Ürün ekleme',
   'secenek.duzenle': 'Seçenek grubuna ekleme',
   'gun.sonu': 'Gün sonu (Z)',
+  'urun.gorsel': 'Ürün görseli',
 };
 
 /**
@@ -99,6 +100,11 @@ export interface UrunGorunum {
   id: string;
   gorunur: boolean;
 }
+/** Ürünün kasadaki görseli: yalnız sitenin (https://laffogato.net) görsel adresi; null görseli kaldırır */
+export interface UrunGorsel {
+  id: string;
+  gorsel: string | null;
+}
 /** Yeni ürün (kasada, yerel): kategori kasadaki kimlik, fiyat kuruş, KDV 0/10/20; seçenek grupları kasadaki kimlikler */
 export interface UrunEkle {
   ad: string;
@@ -141,6 +147,7 @@ export interface KomutVerileri {
   'urun.ekle': UrunEkle;
   'secenek.duzenle': SecenekDuzenle;
   'gun.sonu': GunSonu;
+  'urun.gorsel': UrunGorsel;
 }
 export type KomutVerisi = KomutVerileri[KomutTuru];
 
@@ -414,6 +421,13 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
       if (typeof veri.mod !== 'string' || !(SERVICE_MODES as readonly string[]).includes(veri.mod)) return { ok: false, hata: 'Servis modu anlaşılamadı' };
       return { ok: true, tur: t, veri: { mod: veri.mod as ServiceMode } };
     }
+    case 'urun.gorsel': {
+      if (typeof veri.id !== 'string' || !ID_RE.test(veri.id)) return { ok: false, hata: 'Ürün anlaşılamadı' };
+      if (veri.gorsel !== null && (typeof veri.gorsel !== 'string' || veri.gorsel.length > 300 || !/^https:\/\/laffogato\.net\/[\w\-./?=&%]+$/.test(veri.gorsel))) {
+        return { ok: false, hata: 'Görsel yalnız laffogato.net adresinden olabilir' };
+      }
+      return { ok: true, tur: t, veri: { id: veri.id, gorsel: veri.gorsel as string | null } };
+    }
     case 'urun.gorunum': {
       if (typeof veri.id !== 'string' || !ID_RE.test(veri.id)) return { ok: false, hata: 'Ürün anlaşılamadı' };
       if (typeof veri.gorunur !== 'boolean') return { ok: false, hata: 'Görünürlük anlaşılamadı' };
@@ -537,6 +551,10 @@ export function komutOzeti<T extends KomutTuru>(tur: T, veri: KomutVerileri[T], 
     }
     case 'ayar.servis':
       return `Servis modu: ${SERVICE_MODE_LABEL[(veri as AyarServis).mod]}`;
+    case 'urun.gorsel': {
+      const v = veri as UrunGorsel;
+      return `${v.gorsel ? 'Görsel ekle' : 'Görseli kaldır'}: ${adlar.urun?.[v.id] ?? 'ürün'}`;
+    }
     case 'urun.gorunum': {
       const v = veri as UrunGorunum;
       return `${v.gorunur ? 'Kasada göster' : 'Kasada gizle'}: ${adlar.urun?.[v.id] ?? 'ürün'}`;
