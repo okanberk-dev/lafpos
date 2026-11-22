@@ -364,6 +364,24 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   `tests/guncelleme-sunucu.test.ts` (sunucunun iki ucu ve kart). Kurulum derlemesinin denemesi
   (`npm run kurulum:windows`) derleme numarasını, gün sorusunu ve durum dosyasını da sınar.
 
+### Kasada seçim: Şimdi güncelle ya da Gün sonunda güncelle
+
+Yeni sürüm indirilip gün açıkken beklediğinde kasada (gün açıp kapatan ya da ayar yetkisi olan kişiye) bir pencere çıkar
+(`src/components/UpdateOffer.tsx`, `GET/POST /api/admin/guncelleme/teklif|secim`):
+
+- **Şimdi güncelle:** LafPOS bir dakika kadar kapanıp kendiliğinden açılır. **Satış ya da ödeme sürerken kurulmaz**
+  (`server/lib/mesgul.ts`: işlenen satış/ödeme isteği, son 5 saniyedeki yazma, yazarkasada bekleyen sepet); düğme o an
+  reddedilir, güncelleyici de kurmadan hemen önce yeniden sorar ve kasa boşalana dek 5 sn'de bir bekler (en çok 15 dk,
+  sonra gün sonuna kalır). Yeniden açılınca ekranlar kendiliğinden yenilenir ve **kaldığı yerden devam eder**
+  (`src/lib/buildWatch.ts`): açık masalar ve adisyonlar veritabanında, gönderilmemiş sepet ve oturum cihazda, açık ekran
+  adreste durur. Kurulum sorun çıkarırsa eski sürüme dönülür (aşağıdaki geri dönüş) ve kasiyere söylenir.
+- **Gün sonunda güncelle:** eski davranış; gün kapatılınca (Z'den sonra) kurulur.
+
+Seçim sürüme bağlıdır (yeni sürümde yeniden sorulur) ve Merkez'e nabızla bildirilir: panelde her dükkânın durumu
+**Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı** olarak görünür. Uzaktan › Merkez ›
+**Güncellemeyi şimdi gönder** kasaya en geç 5 dakikada ulaşır ve aynı pencereyi çıkarır (gün kapalıysa hemen kurulur).
+Zorunlu test: `e2e/flows.mjs` "Şimdi güncelle: kasa yeni sürümle açılınca aynı masa ve aynı sepetle devam eder".
+
 ### İnternet yokken ve internet gelince
 
 Uçtan uca denemesi `e2e/internet.mjs` (sahte lafmaliyet ucu kapalı ve açık). İnternetin dönüşü yapılandırılmış

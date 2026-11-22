@@ -9,7 +9,7 @@ import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { installedVersion, readUpdateStatus, writeUpdateRequest } from '../lib/surum';
+import { installedVersion, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
 import { underBekci } from './yedek';
 
 /**
@@ -277,13 +277,15 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
       setSyncState(IDENTITY, { ...me, registered: true, everRegistered: true });
     }
     const upd = readUpdateStatus();
+    const choice = getSyncState<UpdateChoiceRecord>(UPDATE_CHOICE_KEY);
     const url = new URL('/api/merkez/nabiz', env.merkezUrl);
     const kontrol = await kontrolNabzi(now);
     const body = {
       surum: inst.version,
       build: inst.build,
       gunAcik: !!getOpenDay(db),
-      guncelleme: upd ? { durum: upd.durum, mesaj: upd.mesaj, yeni: upd.yeni } : null,
+      // `secim`: kasada bekleyen sürüm için yapılan seçim (Şimdi / Gün sonunda); yoksa null (panel "seçim bekliyor" der)
+      guncelleme: upd ? { durum: upd.durum, mesaj: upd.mesaj, yeni: upd.yeni, secim: upd.yeni && choice?.build === upd.yeni.build ? choice.secim : null } : null,
       // Panel "Kasa aldı" desin: işlenen son "Şimdi güncelle" isteği
       istekAlindi: getSyncState<number>(HANDLED_REQUEST),
       // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın

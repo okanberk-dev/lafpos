@@ -46,7 +46,7 @@ interface Data {
 const LICENSE_TONE: Record<LicenseState, Tone> = { aktif: 'success', deneme: 'info', uyari: 'warning', kapali: 'danger' };
 const licenseTone = (r: Row): Tone => (r.lisans.state === 'aktif' && r.lisans.soon ? 'warning' : LICENSE_TONE[r.lisans.state]);
 const licenseLabel = (r: Row) => (r.lisans.durum === 'bekliyor' && r.lisans.state === 'deneme' ? 'Onay bekliyor' : r.lisans.state === 'aktif' ? (r.lisans.soon ? 'Yakında bitiyor' : 'Aktif') : r.lisans.state === 'deneme' ? 'Deneme' : r.lisans.state === 'uyari' ? 'Uyarı' : 'Satış kapalı');
-const updateTone = (d: string | undefined): Tone => (d === 'geri-dondu' || d === 'hata' ? 'warning' : d === 'guncel' ? 'neutral' : 'info');
+const updateTone = (d: string | undefined): Tone => (d === 'geri-dondu' || d === 'hata' ? 'warning' : d === 'guncel' ? 'success' : 'info');
 
 export const merkezQuery = { queryKey: ['merkez'], queryFn: () => get<Data>('/merkez/kurulumlar'), refetchInterval: 30_000 };
 
@@ -223,7 +223,8 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
         <span className="flex flex-wrap items-center gap-1.5">
           {row.bekleyen && <Badge tone="info">Güncelleme gönderilmedi</Badge>}
           {row.istekBekliyor && <Badge tone="info">Güncelleme istendi</Badge>}
-          {row.guncelleme && row.guncelleme.durum !== 'guncel' && (
+          {/* Her dükkânın güncelleme durumu hep görünür: Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı */}
+          {row.guncelleme && (
             <Badge tone={updateTone(row.guncelleme.durum)} title={row.guncelleme.mesaj}>
               {row.guncelleme.etiket}
             </Badge>
@@ -251,14 +252,17 @@ export default function MerkezPage() {
   const rows = d?.kurulumlar ?? [];
   const waiting = rows.filter((r) => r.bekleyen);
   const send = useMutation({
-    mutationFn: (ids: string[]) => post<{ gonderilen: number }>('/merkez/gonder', { ids }),
+    // Güncellemeyi şimdi gönder: hedef kanalın son sürümü ve kasaya "hemen denetle" isteği. Kasa en geç 5 dakikada alır,
+    // indirir; gün açıksa kasada "Şimdi güncelle / Gün sonunda güncelle" sorulur, gün kapalıysa hemen kurulur
+    mutationFn: (ids: string[]) => post<{ istenen: number }>('/merkez/simdi-guncelle', { ids }),
     onSuccess: (r) => {
       setPicked(new Set());
       void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
-      toast.ok(`${r.gonderilen} dükkâna gönderildi; gün kapanınca kurulur`);
+      toast.ok(`${r.istenen} dükkâna gönderildi; kasada "Şimdi" ya da "Gün sonunda" sorulacak`);
     },
     onError: (e) => toast.err(errorMessage(e)),
   });
+  const targets = picked.size ? [...picked] : rows.length === 1 ? [rows[0]!.id] : [];
   const toggle = (id: string) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -274,9 +278,10 @@ export default function MerkezPage() {
           title="Merkez"
           subtitle="Dükkânlar, lisanslar ve güncellemeler"
           actions={
-            <Button variant="primary" ring disabled={!picked.size || readOnly} loading={send.isPending} onClick={() => send.mutate([...picked])}>
+            // Tek dükkân varken seçmeye gerek yok; birden çok dükkânda önce seçilir
+            <Button variant="primary" ring disabled={!targets.length || readOnly} loading={send.isPending} onClick={() => send.mutate(targets)}>
               <Send aria-hidden="true" className="size-4" />
-              {picked.size ? `Güncelleme gönder (${picked.size})` : 'Güncelleme gönder'}
+              {picked.size ? `Güncellemeyi şimdi gönder (${picked.size})` : 'Güncellemeyi şimdi gönder'}
             </Button>
           }
         />

@@ -57,6 +57,51 @@ export async function runFlows(ctx) {
 
   const flows = [
     [
+      // Sahibin zorunlu testi (22 Kas 2026): masada sepet açıkken "Şimdi güncelle". Kasa yeni sürümle yeniden açılınca
+      // (sağlık ucu yeni derleme numarası döner, canlı bağlantı kopup geri gelir) ekran kendiliğinden yenilenir; aynı
+      // masanın adisyonu ve gönderilmemiş sepet yerinde durur (src/lib/buildWatch.ts)
+      'Şimdi güncelle: kasa yeni sürümle açılınca aynı masa ve aynı sepetle devam eder',
+      () =>
+        withPage(
+          ctx,
+          'telefon',
+          'garson',
+          async (page) => {
+            // Kasanın yeniden açılması taklit edilir: ilk canlı akış "kasa kapanana" dek tutulur, sonra biter (bağlantı
+            // kopar); ekran yeniden bağlanınca sağlık ucu yeni derleme numarasını döner
+            let closeServer;
+            const serverUp = new Promise((r) => (closeServer = r));
+            let streams = 0;
+            await page.route('**/api/events', async (route) => {
+              streams += 1;
+              if (streams > 1) return route.continue();
+              await serverUp;
+              await route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': kasa kapandi\n\n' });
+            });
+            let checks = 0;
+            await page.route('**/api/health', (route) => {
+              checks += 1;
+              return checks === 1 ? route.continue() : route.fulfill({ json: { ok: true, time: Date.now(), build: 1795400000 } });
+            });
+            await go(ctx, page, `/adisyon/${seed.s1.id}`);
+            await page.getByPlaceholder('Ürün ara').fill(simple.name);
+            const tile = page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first();
+            await tile.click();
+            await tile.click();
+            await page.getByRole('button', { name: 'Bara gönder (2)', exact: true }).waitFor();
+            const reloaded = page.waitForEvent('load', { timeout: 40_000 });
+            closeServer();
+            await reloaded;
+            await settle(page);
+            assert(new URL(page.url()).pathname === `/adisyon/${seed.s1.id}`, `aynı masanın adisyonu açılmadı: ${page.url()}`);
+            await page.getByRole('button', { name: 'Bara gönder (2)', exact: true }).waitFor({ timeout: 8000 });
+            await page.getByText('Yeni sürüm kuruldu').first().waitFor({ timeout: 8000 });
+          },
+          // Bağlantı bilerek kesildi: o sıradaki konsol ve istek hataları beklenir
+          [/konsol:/, /istek/],
+        ),
+    ],
+    [
       'Telefonda giriş: tuş takımıyla PIN',
       () =>
         withPage(ctx, 'telefon', null, async (page) => {
@@ -1217,7 +1262,10 @@ export async function runFlows(ctx) {
   ];
 
   const results = [];
+  // Tek akışı denemek için: LAFPOS_E2E_FLOW='Şimdi güncelle' node e2e/run.mjs --only=akis
+  const wanted = process.env.LAFPOS_E2E_FLOW;
   for (const [name, fn] of flows) {
+    if (wanted && !name.includes(wanted)) continue;
     try {
       await fn();
       results.push({ name, ok: true });

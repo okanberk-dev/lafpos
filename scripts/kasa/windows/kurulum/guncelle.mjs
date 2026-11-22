@@ -167,6 +167,10 @@ export function merkezCap({ server, last, installedBuild }) {
 }
 
 /** Kurulum için an uygun mu (saf): yalnız sunucu "açık gün yok" derse */
+/** "Şimdi güncelle"de satış/ödeme bitsin diye bekleme: 5 sn'de bir sorulur, en çok 15 dakika */
+export const BUSY_POLL_MS = 5_000;
+export const BUSY_WAIT_MAX_MS = 15 * 60_000;
+
 export function installDecision(dayOpen) {
   if (dayOpen === false) return 'kur';
   return dayOpen === true ? 'gun-acik' : 'bilinmiyor';
@@ -227,6 +231,9 @@ export function nextStatus(prev, ev) {
       if (p.durum === 'kapali' || p.durum === 'indiriliyor' || p.durum === 'kuruluyor' || !prev) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Yeni sürüm birkaç dakika içinde denetlenecek' };
       return base;
     }
+    case 'mesgul':
+      // "Şimdi güncelle" istendi ama kasada satış ya da ödeme sürüyor: bitince kurulur
+      return p.yeni ? { ...p, durum: 'bekliyor', mesaj: `${p.yeni.surum} hazır; satış ya da ödeme bitince hemen kurulacak` } : p;
     case 'istek':
       // Yönetim › Ayarlar ve yedek › "Şimdi güncelle": güncelleyici isteği aldı, kanala bakıyor
       return { ...p, sonIstek: iso(ev.now), mesaj: ev.simdi ? 'Yeni sürüm denetleniyor; varsa hemen kurulacak' : 'Yeni sürüm denetleniyor' };
@@ -593,7 +600,22 @@ export function createUpdater(deps) {
       set({ type: 'hata', mesaj: 'Otomatik kurulum yalnız Windows kurulumunda yapılır', now: now() });
       return;
     }
-    const decision = manual?.force ? 'kur' : installDecision(await askDayOpen());
+    const asked = await askServer();
+    // "Şimdi güncelle" gün açıkken de kurar ama satış ya da ödeme sürerken asla: kasa boşalana dek 5 sn'de bir yeniden
+    // sorulur (en çok 15 dk; sonra istek düşer, sürüm gün sonunda kurulur). Sunucu yanıt vermiyorsa beklenmez
+    if (manual?.force && asked?.mesgul === true) {
+      manual.waitedMs = (manual.waitedMs ?? 0) + BUSY_POLL_MS;
+      if (manual.waitedMs > BUSY_WAIT_MAX_MS) {
+        manual = null;
+        set({ type: 'gun-acik' });
+        schedule('install', DAY_POLL_MS, tryInstall);
+        return;
+      }
+      set({ type: 'mesgul' });
+      schedule('install', BUSY_POLL_MS, tryInstall);
+      return;
+    }
+    const decision = manual?.force ? 'kur' : installDecision(typeof asked?.dayOpen === 'boolean' ? asked.dayOpen : null);
     if (decision !== 'kur') {
       if (decision === 'gun-acik') set({ type: 'gun-acik' });
       schedule('install', DAY_POLL_MS, tryInstall);

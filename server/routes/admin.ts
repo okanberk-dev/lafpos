@@ -13,7 +13,8 @@ import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNamed, backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clearFailures, clientKey, hashPin, isValidPin, recordFailure, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { checkFinish, denemeStatus, finishDeneme, isSamplePin, isSamplePinHash } from '../services/deneme';
-import { installedVersion, pendingUpdateRequest, readUpdateStatus, writeUpdateRequest } from '../lib/surum';
+import { installedVersion, pendingUpdateRequest, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
+import { busyNow } from '../lib/mesgul';
 import { connectionView, settingsFile, writeEnvEdits } from '../lib/ayar-dosyasi';
 import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici';
 import { checkConnValue, connField } from '@shared/baglanti';
@@ -28,7 +29,7 @@ import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
-import { getSettings, getSyncState, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
+import { getSettings, getSyncState, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, setSyncState, updateSettings } from '../lib/settings';
 import { CUSTOMER_DISPLAY_THEMES } from '@shared/types';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { settingLabel } from '@shared/settings-labels';
@@ -1186,6 +1187,58 @@ adminRoutes.post('/guncelleme', async (c) => {
   fx.emit({ topic: 'settings', kind: 'guncelleme', message: 'Güncelleme denetleniyor', byUserId: user.id });
   fx.flush();
   return c.json({ installed: installedVersion(), status: readUpdateStatus(), canRequest: true, request: pendingUpdateRequest(), dayOpen });
+});
+
+/**
+ * Kasadaki güncelleme teklifi (kabuktaki pencere; `UpdateOffer`): yeni sürüm indirilmiş ve gün açıkken bekliyorsa kasada
+ * iki seçenek sorulur: "Şimdi güncelle" (satış ve ödeme yokken hemen kurulur, LafPOS kendiliğinden yeniden açılır; açık
+ * masalar veritabanında, gönderilmemiş sepet ve oturum cihazda durur) ya da "Gün sonunda güncelle" (gün kapanınca).
+ * Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür ve seçer
+ */
+const canDecideUpdate = (user: AuthUser) => can(user, 'ayar.yonet') || can(user, 'kasa.gun');
+function updateOffer() {
+  const status = readUpdateStatus();
+  const choice = getSyncState<UpdateChoiceRecord>(UPDATE_CHOICE_KEY);
+  const yeni = status?.yeni ?? null;
+  return {
+    installed: installedVersion(),
+    durum: status?.durum ?? null,
+    mesaj: status?.mesaj ?? null,
+    yeni,
+    secim: yeni && choice?.build === yeni.build ? choice.secim : null,
+    dayOpen: !!getOpenDay(db),
+    canRequest: underBekci(),
+    mesgul: busyNow(),
+  };
+}
+
+adminRoutes.get('/guncelleme/teklif', (c) => {
+  if (!canDecideUpdate(c.get('user'))) throw new HttpError(403, 'Bu işlem için yetkiniz yok', 'forbidden');
+  return c.json(updateOffer());
+});
+
+adminRoutes.post('/guncelleme/secim', async (c) => {
+  const user = c.get('user');
+  if (!canDecideUpdate(user)) throw new HttpError(403, 'Bu işlem için yetkiniz yok', 'forbidden');
+  const input = await body(c, z.object({ secim: z.enum(['simdi', 'gunsonu']) }));
+  const offer = updateOffer();
+  if (!offer.yeni) throw new HttpError(409, 'Bekleyen yeni sürüm yok', 'no_update');
+  if (input.secim === 'simdi') {
+    if (!offer.canRequest) throw new HttpError(409, 'Elle güncelleme yalnız Windows kurulumunda yapılır; bu sunucu elle güncellenir', 'not_installed');
+    // Satış ya da ödeme sürerken asla: kasiyer işi bitirip yeniden dener (güncelleyici de kurmadan önce yeniden sorar)
+    if (offer.mesgul) throw new HttpError(409, 'Şu an satış ya da ödeme sürüyor. Bitince yeniden deneyin', 'busy');
+    writeUpdateRequest({ at: Date.now(), by: user.id, simdi: true });
+  }
+  setSyncState(UPDATE_CHOICE_KEY, { build: offer.yeni.build, secim: input.secim, at: Date.now(), by: user.name } satisfies UpdateChoiceRecord);
+  const fx = new Effects();
+  fx.audit(db, {
+    userId: user.id,
+    action: 'guncelleme',
+    message: input.secim === 'simdi' ? `Güncelleme şimdi kurulacak (${offer.yeni.surum}): LafPOS kısa süre kapanıp kendiliğinden açılır` : `Güncelleme gün sonuna bırakıldı (${offer.yeni.surum})`,
+  });
+  fx.emit({ topic: 'settings', kind: 'guncelleme', message: input.secim === 'simdi' ? 'Güncelleme kuruluyor' : 'Güncelleme gün sonunda kurulacak', byUserId: user.id });
+  fx.flush();
+  return c.json(updateOffer());
 });
 
 adminRoutes.get('/backups', (c) => {
