@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* Ortak belirteçler (LafPOS Keel; DESIGN.md §0): web paneli, telefon ve kasa aynı dosyadan */
+@import './styles/keel.css';
 
 /*
  * Yazı (pano, 20 Kasım 2026, operatör: "yazı tipini de görseldeki gibi yapabilirsin"): Inter, değişken (ağırlık ve optik
