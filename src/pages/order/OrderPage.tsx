@@ -41,6 +41,7 @@ import { confirmDialog } from '@/components/ui/Confirm';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, type BadgeTone, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
+import { printAfterComp } from '@/lib/after-payment';
 import { get, patch, post, put } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { soldOutDefault, useBoot } from '@/lib/boot';
@@ -918,8 +919,9 @@ export default function OrderPage() {
         confirmLabel={() => COMP_CONFIRM_LABEL.odenmez}
         onClose={() => setDialog(null)}
         onConfirm={async ({ person, reason }) => {
-          const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind: 'odenmez', reason, person, approverPin: pin }), COMP_DONE_TOAST.odenmez);
+          const res = await act((pin) => post<OrderDTO>(`/orders/${order.id}/comp`, { kind: 'odenmez', reason, person, approverPin: pin }), COMP_DONE_TOAST.odenmez);
           if (res) {
+            printAfterComp({ boot, order: res, kind: 'odenmez' });
             cart.clear(order.id);
             navigate(backPath);
           }
@@ -935,8 +937,9 @@ export default function OrderPage() {
           confirmLabel={COMP_CONFIRM_LABEL[kind]}
           onClose={() => setDialog(null)}
           onConfirm={async (reason) => {
-            const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
+            const res = await act((pin) => post<OrderDTO>(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
             if (res) {
+              printAfterComp({ boot, order: res, kind });
               cart.clear(order.id);
               navigate(backPath);
             }

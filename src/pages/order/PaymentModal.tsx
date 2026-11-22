@@ -14,7 +14,7 @@ import { Badge, Notice } from '@/components/ui/misc';
 import { typeOverPrefill } from '@/lib/numpad';
 import { confirmDialog, promptDialog } from '@/components/ui/Confirm';
 import { deviceResult, deviceRoute, offDeviceLabel, okcPanelAuto } from '@shared/odeme-fisi';
-import { deviceCopyHere, printAfterPayment } from '@/lib/after-payment';
+import { deviceCopyHere, printAfterComp, printAfterPayment } from '@/lib/after-payment';
 import { ApiError, errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -261,8 +261,9 @@ export function PaymentModal({
   const closeComp = async (reason: string, person?: { kind: CompPersonKind; id: string }) => {
     if (!comp) return;
     const kind = comp;
-    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, ...(person ? { person } : {}), approverPin: pin }), COMP_DONE_TOAST[kind]);
+    const res = await act((pin) => post<OrderDTO>(`/orders/${order.id}/comp`, { kind, reason, ...(person ? { person } : {}), approverPin: pin }), COMP_DONE_TOAST[kind]);
     if (!res) return;
+    printAfterComp({ boot, order: res, kind });
     setComp(null);
     onDone(true, { comp: kind });
   };

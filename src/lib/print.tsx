@@ -236,6 +236,7 @@ export function StoreCopyReceipt({
   device,
   cashier,
   at = Date.now(),
+  comp,
 }: {
   order: OrderDTO;
   boot: BootstrapDTO;
@@ -243,6 +244,8 @@ export function StoreCopyReceipt({
   device?: { receiptNo: number | null; zNo: number | null; docId?: string | null; docLabel?: string | null } | null;
   cashier: string | null;
   at?: number;
+  /** Ciro dışı kapanış (ikram, ödenmez, zayi): "ALINAN" yerine türü yazılır */
+  comp?: string | null;
 }) {
   const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
   const branch = branchLine(boot);
@@ -284,11 +287,20 @@ export function StoreCopyReceipt({
           <Row key={p.id} l={p.tip > 0 ? `${p.methodName} (bahşiş ${tlPlain(p.tip)})` : p.methodName} r={tlPlain(p.amount + p.tip)} />
         ))}
       </div>
-      <div className="rc-total">
-        <span>ALINAN</span>
-        <span className="rc-r">{tlPlain(paid)} TL</span>
-      </div>
-      {order.total - order.paid > 0 && <Row strong l="Kalan" r={`${tlPlain(order.total - order.paid)} TL`} />}
+      {comp ? (
+        <div className="rc-total">
+          <span>{comp.toLocaleUpperCase('tr-TR')}</span>
+          <span className="rc-r">0,00 TL</span>
+        </div>
+      ) : (
+        <>
+          <div className="rc-total">
+            <span>ALINAN</span>
+            <span className="rc-r">{tlPlain(paid)} TL</span>
+          </div>
+          {order.total - order.paid > 0 && <Row strong l="Kalan" r={`${tlPlain(order.total - order.paid)} TL`} />}
+        </>
+      )}
       {device && (device.receiptNo != null || device.zNo != null || device.docId) && (
         <div className="rc-block">
           {device.receiptNo != null && <Row l={`Yazarkasa ${device.docLabel ?? 'fiş'} no`} r={String(device.receiptNo)} />}
