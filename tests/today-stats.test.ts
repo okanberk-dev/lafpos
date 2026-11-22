@@ -241,6 +241,41 @@ describe('hafta ve ay başından', () => {
     expect(w.prev).toMatchObject({ netSales: 20000, receipts: 4, days: 4 });
     expect(w.change).toBe(65);
   });
+  it('son 7 gün: bugün dahil 7 gün ↔ önceki 7 gün; geçen haftanın aynı günü aynı saate kadar, ₺ fark', () => {
+    const T = '2026-11-19';
+    const s = stats({
+      days: {
+        [T]: { open: true, closes: [[60, 3000, 1]] },
+        '2026-11-12': {
+          open: false,
+          closes: [
+            [30, 2000, 1],
+            [700, 8000, 1],
+          ],
+        },
+      },
+      daily: [
+        ['2026-11-18', 10000, 2],
+        ['2026-11-14', 5000, 1],
+        ['2026-11-13', 2000, 1], // 6 gün önce: dönemin ilk günü
+        ['2026-11-12', 10000, 2], // 7 gün önce: önceki dönemin son günü, kesimli eğriden (2000) gelir
+        ['2026-11-11', 4000, 1],
+        ['2026-11-06', 2000, 1], // 13 gün önce: önceki dönemin ilk günü
+        ['2026-11-05', 77777, 7], // 14 gün önce: sayılmaz
+      ],
+    });
+    const p = todayStats({ date: T, dayOpen: true, netSales: 3000, orders: 1 }, s, at(T, 120)).periods.find((x) => x.key === 'son7')!;
+    expect(p.label).toBe('Son 7 gün');
+    expect(p.cur).toMatchObject({ netSales: 20000, receipts: 5, days: 4, from: '2026-11-13', to: T });
+    expect(p.prev).toMatchObject({ netSales: 8000, receipts: 3, days: 3, from: '2026-11-06', to: '2026-11-12' });
+    expect(p.change).toBe(150);
+    expect(p.diff).toBe(12000);
+    // Önceki dönemde hiç iş günü yoksa yüzde ve fark yok ("veri yok", sıfır değil)
+    const bos = todayStats({ date: T, dayOpen: true, netSales: 3000, orders: 1 }, stats({ days: { [T]: { open: true, closes: [[60, 3000, 1]] } } }), at(T, 120)).periods.find((x) => x.key === 'son7')!;
+    expect(bos.prev.days).toBe(0);
+    expect(bos.change).toBeNull();
+    expect(bos.diff).toBeNull();
+  });
 
   it("ayın 1'i: önceki ayın 1'i aynı saate kadar", () => {
     const T = '2026-12-01';

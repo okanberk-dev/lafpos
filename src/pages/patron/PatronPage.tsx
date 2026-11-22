@@ -20,7 +20,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
-import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs } from './TodayStats';
+import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs, GROUP, PaymentMix } from './TodayStats';
 import { UzaktanYonetimKarti } from '@/pages/kontrol/UzaktanYonetimKarti';
 
 export interface PatronData {
@@ -38,7 +38,8 @@ export interface PatronData {
   /** Gün 24 saati aştıysa ertesi günün saatleri (eski sunucu göndermez) */
   hourlyNextDay?: number[];
   hourlyLastWeekNextDay?: number[];
-  payments: { name: string; amount: number; count: number; share: number }[];
+  /** `zField`: Z raporundaki alan (cash, card, meal_card, online, other); eski özette yok (addan anlaşılır) */
+  payments: { name: string; zField?: string; amount: number; count: number; share: number }[];
   /**
    * Bugün yazarkasadan geçmeyen kart ve nakit (shared/order-calc.ts `offDeviceTotals`). Yalnız kasa rakamlarını görene
    * (kör kasa); eski sunucu ve uzaktan demo özeti göndermez: satır yazılmaz, ₺0 gösterilmez
@@ -162,11 +163,9 @@ export default function PatronPage() {
         <div role="status" aria-label="Canlı rakamlar yükleniyor…" className={PAD}>
           <div className="lp-patron">
             <div className="lp-patron-col" data-col="a">
-              <div className="px-5 pb-1 pt-3" style={order(1)}>
-                <Skeleton className="h-[72px] w-3/5 rounded-2xl" />
-                <Skeleton className="mt-4 h-4 w-4/5" />
-              </div>
               <Skeleton className={cn(BONE, 'h-[212px]')} />
+              <Skeleton className={cn(BONE, 'h-[212px]')} />
+              <Skeleton className={cn(BONE, 'h-[236px]')} />
             </div>
             <div className="lp-patron-col" data-col="b">
               <Skeleton className={cn(BONE, 'h-[330px]')} />
@@ -287,49 +286,78 @@ export default function PatronPage() {
         )}
         <div className="lp-patron">
           <div className="lp-patron-col" data-col="a">
-            <section aria-label="Bugünkü ciro" className="@container px-5 pb-1 pt-3 md:pt-1" style={order(1)}>
-              <HeroAmount k={d.netSales} />
-              <p className="tabular mt-3 text-sm leading-5 text-muted">
-                <Pairs parts={['KDV dahil', d.orders > 0 ? `${d.orders} adisyon` : 'henüz kapanan adisyon yok', d.orders > 0 && `ortalama ${tlShort(d.avgCheck)}`]} />
-              </p>
-              <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5 text-ink-2">
-                {dot}
-                <span>
-                  <Pairs parts={liveText} />
-                </span>
-                {attention.length === 0 && (
-                  <span className="inline-flex items-center gap-1 text-muted lg:hidden">
-                    <span aria-hidden="true">·</span>
-                    <CheckCircle2 aria-hidden="true" className="size-3.5 text-[var(--admin-primary)]" />
-                    Bugün uyarı yok
-                  </span>
-                )}
-              </p>
-            </section>
-
-            <div style={order(2)}>
+            <div style={order(1)}>
               <CompareGroup compares={kiyas.compares} mode={kiyas.mode} today={d.date} now={d.now} fresh={ago ?? stamp} />
             </div>
 
-            {REMOTE && !d.dayOpen && d.lastClose && (
-              <div style={order(3)}>
-                <DayCloseGroup c={d.lastClose} />
+            {st && (
+              <div style={order(2)}>
+                <PeriodGroup s={st} today={d.date} />
               </div>
             )}
 
-            {st && (
-              <div style={order(7)}>
-                <PeriodGroup s={st} today={d.date} />
+            <section aria-label="Bugünün özeti" className={cn(GROUP, '@container px-5 pb-5 pt-4')} style={order(3)}>
+              <header className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1 pb-2">
+                <h3 className="text-sm font-semibold leading-5 tracking-normal text-ink-2">Bugün</h3>
+                <p className="tabular flex items-center gap-2 text-[13px] leading-5 text-muted">
+                  {dot}
+                  <span>
+                    <Pairs parts={liveText} />
+                  </span>
+                </p>
+              </header>
+              <HeroAmount k={d.netSales} />
+              <p className="mt-2 text-[13px] leading-5 text-muted">Ciro · KDV dahil</p>
+              <dl className="mt-4 grid grid-cols-2 gap-3">
+                <div className="min-w-0 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] px-4 py-3">
+                  <dt className="text-[13px] leading-5 text-muted">Fiş sayısı</dt>
+                  <dd className="tabular mt-0.5 truncate text-[28px] font-semibold leading-9 tracking-[-0.02em] text-ink">{d.orders.toLocaleString('tr-TR')}</dd>
+                </div>
+                <div className="min-w-0 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] px-4 py-3">
+                  <dt className="text-[13px] leading-5 text-muted">Ortalama sepet</dt>
+                  <dd className="tabular mt-0.5 truncate text-[28px] font-semibold leading-9 tracking-[-0.02em] text-ink">{d.orders > 0 ? tlShort(d.avgCheck) : <span className="text-muted">—</span>}</dd>
+                </div>
+              </dl>
+            </section>
+
+            {REMOTE && !d.dayOpen && d.lastClose && (
+              <div style={order(4)}>
+                <DayCloseGroup c={d.lastClose} />
               </div>
             )}
           </div>
 
           <div className="lp-patron-col" data-col="b">
             <Group
+              title="Ödeme türleri"
+              flush
+              meta={paid > 0 && <span>toplam {tlShort(paid)}</span>}
+              style={order(5)}
+              footer={
+                (canKasa || canReports) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {canKasa && (
+                      <Button variant="primary" block onClick={() => navigate('/kasa')} className={cn(!canReports && 'col-span-2')}>
+                        Kasa
+                      </Button>
+                    )}
+                    {canReports && (
+                      <Button variant="soft" block icon={<BarChart3 className="size-4" />} onClick={() => navigate('/raporlar')} className={cn(!canKasa && 'col-span-2')}>
+                        Raporlar
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            >
+              <PaymentMix payments={d.payments} />
+            </Group>
+
+            <Group
               title="Gün boyu"
               label="Gün boyu ciro"
               flush
-              style={order(4)}
+              style={order(6)}
               meta={
                 (charted || st) && (
                   <ViewTabs
@@ -392,7 +420,7 @@ export default function PatronPage() {
               )}
             </Group>
 
-            <Group title="Gün içi" style={order(5)}>
+            <Group title="Gün içi" style={order(7)}>
               {/* "Açık hesap" kasada müşterinin cari hesabıdır (ödeme türü, Müşteriler); burada ödenmemiş adisyonlar */}
               <Row label="Açık adisyon" sub={d.open.count > 0 ? `${d.open.count} adisyon, tahsil edilecek` : undefined}>
                 {d.open.count > 0 ? <Amount k={d.open.total} /> : <Faint>yok</Faint>}
@@ -420,39 +448,6 @@ export default function PatronPage() {
                 <Row label="Masada">
                   <span className="tabular text-[15px] font-semibold text-ink">{st.guests} kişi</span>
                 </Row>
-              )}
-            </Group>
-
-            <Group
-              title="Ödeme türleri"
-              meta={paid > 0 && <span>toplam {tlShort(paid)}</span>}
-              style={order(6)}
-              footer={
-                (canKasa || canReports) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {canKasa && (
-                      <Button variant="primary" block onClick={() => navigate('/kasa')} className={cn(!canReports && 'col-span-2')}>
-                        Kasa
-                      </Button>
-                    )}
-                    {canReports && (
-                      <Button variant="soft" block icon={<BarChart3 className="size-4" />} onClick={() => navigate('/raporlar')} className={cn(!canKasa && 'col-span-2')}>
-                        Raporlar
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
-            >
-              {d.payments.length ? (
-                d.payments.map((p) => (
-                  <Row key={p.name} label={p.name} sub={`${p.count} işlem`}>
-                    <span className="tabular text-xs text-muted">%{p.share.toLocaleString('tr-TR')}</span>
-                    <Amount k={p.amount} />
-                  </Row>
-                ))
-              ) : (
-                <QuietRow>Bugün henüz ödeme alınmadı</QuietRow>
               )}
             </Group>
           </div>
@@ -489,11 +484,62 @@ export default function PatronPage() {
               )}
             </Group>
 
-            {/* Telefonda (tek sütun) uyarı varsa cironun hemen altında; yoksa kart kalkar, cironun altında "Bugün uyarı yok" */}
+            <Group
+              title="En çok satanlar"
+              style={order(9)}
+              meta={tops.length > 0 && (st && source === 'kasa' ? `geçen hafta bugüne göre` : 'ciro sırasıyla')}
+              footer={staleCosts && <p className="text-xs font-medium text-warning-ink">{staleCosts}</p>}
+            >
+              {tops.length === 0 ? (
+                <QuietRow>Sıralama ilk satışla başlar</QuietRow>
+              ) : (
+                tops.map((p, i) => {
+                  const size = sizeName(p.size);
+                  return (
+                    <li key={p.key} className={ROW_STATIC}>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span aria-hidden="true" className="tabular w-4 shrink-0 text-center text-sm text-muted">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-center text-[15px] leading-5">
+                            <span className="truncate font-medium text-ink" title={p.name}>
+                              {p.name}
+                            </span>
+                            {size && <SizeTag>{size}</SizeTag>}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-4 text-muted">
+                            {p.qty} adet
+                            {p.prev !== undefined && (
+                              <>
+                                {' · '}
+                                <span className="whitespace-nowrap">{!p.prev ? 'geçen hafta veri yok' : p.prev.qty > 0 ? `geçen hafta ${p.prev.qty}` : 'geçen hafta yok'}</span>
+                              </>
+                            )}
+                            {showCost && (
+                              <>
+                                {' · '}
+                                {/* Brüt kâr KDV hariç ciro − reçete maliyeti; indirim ya da maliyet neti aşınca eksi, kırmızı */}
+                                <span className={cn('whitespace-nowrap', p.margin != null && p.margin < 0 && 'text-danger-ink')}>{p.margin == null ? 'maliyet yok' : `brüt kâr ${tl(p.margin)}`}</span>
+                              </>
+                            )}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <Amount k={p.revenue} />
+                        {p.prev && p.prev.revenue > 0 && p.change != null && <Delta size="sm" value={p.change} />}
+                      </span>
+                    </li>
+                  );
+                })
+              )}
+            </Group>
+
+            {/* Dikkat isteyenler en altta (sahibin sıralaması, 22 Kas 2026): önce rakamlar, sonra uyarılar */}
             <Group
               title="Dikkat isteyenler"
-              style={order(attention.length > 0 ? 1 : 9)}
-              className={attention.length === 0 ? 'max-lg:hidden' : undefined}
+              style={order(10)}
               meta={
                 attention.length > 0 && (
                   <span className={cn('tabular inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-2 text-[13px] font-medium', attention.some((a) => a.alarm) ? 'bg-danger-soft text-danger-ink' : 'bg-warning-soft text-warning-ink')}>
@@ -542,58 +588,6 @@ export default function PatronPage() {
                       ) : (
                         <div className={ROW_STATIC}>{body}</div>
                       )}
-                    </li>
-                  );
-                })
-              )}
-            </Group>
-
-            <Group
-              title="En çok satanlar"
-              style={order(10)}
-              meta={tops.length > 0 && (st && source === 'kasa' ? `geçen hafta bugüne göre` : 'ciro sırasıyla')}
-              footer={staleCosts && <p className="text-xs font-medium text-warning-ink">{staleCosts}</p>}
-            >
-              {tops.length === 0 ? (
-                <QuietRow>Sıralama ilk satışla başlar</QuietRow>
-              ) : (
-                tops.map((p, i) => {
-                  const size = sizeName(p.size);
-                  return (
-                    <li key={p.key} className={ROW_STATIC}>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span aria-hidden="true" className="tabular w-4 shrink-0 text-center text-sm text-muted">
-                          {i + 1}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex min-w-0 items-center text-[15px] leading-5">
-                            <span className="truncate font-medium text-ink" title={p.name}>
-                              {p.name}
-                            </span>
-                            {size && <SizeTag>{size}</SizeTag>}
-                          </span>
-                          <span className="mt-0.5 block text-xs leading-4 text-muted">
-                            {p.qty} adet
-                            {p.prev !== undefined && (
-                              <>
-                                {' · '}
-                                <span className="whitespace-nowrap">{!p.prev ? 'geçen hafta veri yok' : p.prev.qty > 0 ? `geçen hafta ${p.prev.qty}` : 'geçen hafta yok'}</span>
-                              </>
-                            )}
-                            {showCost && (
-                              <>
-                                {' · '}
-                                {/* Brüt kâr KDV hariç ciro − reçete maliyeti; indirim ya da maliyet neti aşınca eksi, kırmızı */}
-                                <span className={cn('whitespace-nowrap', p.margin != null && p.margin < 0 && 'text-danger-ink')}>{p.margin == null ? 'maliyet yok' : `brüt kâr ${tl(p.margin)}`}</span>
-                              </>
-                            )}
-                          </span>
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <Amount k={p.revenue} />
-                        {p.prev && p.prev.revenue > 0 && p.change != null && <Delta size="sm" value={p.change} />}
-                      </span>
                     </li>
                   );
                 })

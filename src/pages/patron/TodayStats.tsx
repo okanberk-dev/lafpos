@@ -206,15 +206,26 @@ const DAY_NAMES = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cu
 const weekdayOf = (date: string) => DAY_NAMES[new Date(`${date}T12:00:00Z`).getUTCDay()]!;
 
 function PeriodRow({ p }: { p: Period }) {
-  const prevName = p.key === 'hafta' ? 'Geçen hafta' : p.wholePrev ? `${monthName(p.prev.from)} (tamamı)` : 'Geçen ay';
+  const prevName = p.key === 'hafta' ? 'Geçen hafta' : p.key === 'son7' ? 'Önceki 7 gün' : p.wholePrev ? `${monthName(p.prev.from)} (tamamı)` : 'Geçen ay';
   return (
     <Row
       label={p.label}
+      // Önceki dönemin tutarı ve ₺ fark satırın altında hep görünür (dokunmadan); ayrıntı tarihleri ve adisyonu açar
+      sub={
+        p.prev.days ? (
+          <>
+            {prevName.toLocaleLowerCase('tr-TR')} {tlShort(p.prev.netSales)}
+            {p.diff != null && p.diff !== 0 && <> · fark {signed(p.diff)}</>}
+          </>
+        ) : (
+          'kıyas için veri yok'
+        )
+      }
       detail={
         <Facts
           items={[
             [rangeText(p.cur.from, p.cur.to), `${tl(p.cur.netSales)} · ${p.cur.receipts} adisyon · ${p.cur.days} gün`],
-            [p.prev.days ? `${prevName} · ${rangeText(p.prev.from, p.prev.to)}` : prevName, p.prev.days ? `${tl(p.prev.netSales)} · ${p.prev.days} gün` : 'veri yok'],
+            [p.prev.days ? `${prevName} · ${rangeText(p.prev.from, p.prev.to)}` : prevName, p.prev.days ? `${tl(p.prev.netSales)} · ${p.prev.receipts} adisyon · ${p.prev.days} gün` : 'veri yok'],
           ]}
         />
       }
@@ -225,15 +236,15 @@ function PeriodRow({ p }: { p: Period }) {
   );
 }
 
-/** Hafta ve ay başından bugüne, gün sonu tahmini */
+/** Dönem kıyası: hafta başından, ay başından ve son 7 gün (önceki dönemle); gün sürerken gün sonu tahmini */
 export function PeriodGroup({ s, today }: { s: Stats; today: string }) {
   const f = s.forecast;
   return (
-    <Group title="Hafta ve ay" meta={s.mode === 'none' ? 'düne kadar' : 'bugün dahil'}>
+    <Group title="Dönem kıyası" meta={s.mode === 'none' ? 'düne kadar' : 'bugün dahil'}>
       {s.periods.map((p) => (
         <PeriodRow key={p.key} p={p} />
       ))}
-      {!s.periods.length && <QuietRow>Hafta ve ay bugün başlıyor; kıyas ilk satışla</QuietRow>}
+      {!s.periods.length && <QuietRow>Dönem bugün başlıyor; kıyas ilk satışla</QuietRow>}
       {s.mode === 'live' && (
         <Row
           label="Gün sonu tahmini"
@@ -457,5 +468,78 @@ export function CumulativeChart({ s }: { s: Stats }) {
         </table>
       )}
     </div>
+  );
+}
+
+/**
+ * Ödeme türleri dağılımı (patron paneli): nakit, kart, yemek kartı ve diğer (online, havale, cari). Üstte yatay yığılmış
+ * çubuk, altında her türün tutarı ve payı; tür adı ve yüzde yazıyla da var (renk tek başına bilgi taşımaz). Birden çok
+ * ödeme türü olan grubun satırı dokununca türleri açar. Gruplama Z raporunun alanından (`zField`)
+ */
+const PAY_KINDS = [
+  { key: 'nakit', label: 'Nakit', color: 'var(--admin-primary)' },
+  { key: 'kart', label: 'Kart', color: 'var(--admin-blue)' },
+  { key: 'yemek', label: 'Yemek kartı', color: 'var(--admin-warning)' },
+  { key: 'diger', label: 'Diğer', color: 'var(--chart-context)' },
+] as const;
+const MEAL_NAME = /yemek|multinet|pluxee|sodexo|ticket|edenred|setcard|metropol|paye/i;
+/** Türün grubu: önce Z alanı; alan yoksa (eski özet, örnek gün) ödeme türünün adından */
+export function payKind(p: { name: string; zField?: string }): (typeof PAY_KINDS)[number]['key'] {
+  if (p.zField === 'cash') return 'nakit';
+  if (p.zField === 'card') return 'kart';
+  if (p.zField === 'meal_card') return 'yemek';
+  if (p.zField) return 'diger';
+  if (/nakit/i.test(p.name)) return 'nakit';
+  if (MEAL_NAME.test(p.name)) return 'yemek';
+  return /kart|kredi|banka|pos/i.test(p.name) ? 'kart' : 'diger';
+}
+
+export function PaymentMix({ payments }: { payments: { name: string; zField?: string; amount: number; count: number }[] }) {
+  const total = payments.reduce((a, p) => a + Math.max(0, p.amount), 0);
+  const groups = PAY_KINDS.map((k) => {
+    const rows = payments.filter((p) => payKind(p) === k.key);
+    const amount = rows.reduce((a, r) => a + r.amount, 0);
+    return { ...k, rows, amount, count: rows.reduce((a, r) => a + r.count, 0), share: total > 0 ? Math.round((Math.max(0, amount) / total) * 1000) / 10 : 0 };
+  });
+  if (!payments.length || total <= 0) {
+    return (
+      <ul className={ROWS}>
+        <QuietRow>Bugün henüz ödeme alınmadı</QuietRow>
+      </ul>
+    );
+  }
+  const shown = groups.filter((g) => g.share > 0);
+  return (
+    <>
+      <div role="img" aria-label={`Ödeme dağılımı: ${shown.map((g) => `${g.label} yüzde ${g.share.toLocaleString('tr-TR')}`).join(', ')}`} className="mb-1.5 mt-2 flex h-3.5 w-full gap-[3px]">
+        {shown.map((g) => (
+          <span key={g.key} className="h-full min-w-2 rounded-full" style={{ flexGrow: g.share, flexBasis: 0, background: g.color }} />
+        ))}
+      </div>
+      <ul className={ROWS}>
+        {groups.map((g) => (
+          <Row
+            key={g.key}
+            label={
+              <span className="inline-flex items-center gap-2.5">
+                <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: g.color }} />
+                {g.label}
+              </span>
+            }
+            sub={g.count > 0 ? `${g.count} işlem` : undefined}
+            detail={g.rows.length > 1 || (g.rows.length === 1 && g.rows[0]!.name !== g.label) ? <Facts items={g.rows.map((r) => [r.name, `${tl(r.amount)} · ${r.count} işlem`])} /> : undefined}
+          >
+            {g.count > 0 ? (
+              <>
+                <span className="tabular whitespace-nowrap text-[13px] leading-5 text-muted">%{g.share.toLocaleString('tr-TR')}</span>
+                <Amount k={g.amount} />
+              </>
+            ) : (
+              <Faint>yok</Faint>
+            )}
+          </Row>
+        ))}
+      </ul>
+    </>
   );
 }

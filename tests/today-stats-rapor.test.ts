@@ -97,6 +97,8 @@ describe('kıyas girdisi gün raporlarından (eski kasa)', () => {
     expect(live.periods.map((p) => [p.key, p.cur.netSales, p.cur.days])).toEqual([
       ['hafta', 30_000 + 35_700, 3],
       ['ay', 60_000 + 35_700, 4],
+      // Bugün Pazar: son 7 gün haftayla aynı günler (16-22 Kasım)
+      ['son7', 30_000 + 35_700, 3],
     ]);
     const closed = { ...patron, dayOpen: false };
     expect(todayStats(closed, statsFromReports(closed, days), at(900)).mode).toBe('closed');
