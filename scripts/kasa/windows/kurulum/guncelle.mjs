@@ -148,13 +148,13 @@ export function planUpdate({ installed, nodeVersion, manifest, failed = [], cap 
 }
 
 /**
- * Merkez'in sınırı (saf): kurulacak en yeni derleme. Sunucu Merkez açık derse hedefi kurulma iznidir, üst sınır değil:
- * kanal yalnız son derlemeyi tutar, gönderilen derleme gün kapanmadan kanaldan düşebilir. Kurulu derlemeden yeni hedef
- * gönderilmişse kanalın son derlemesi kurulur; hedef yoksa ya da kurulu derlemeden yeni değilse yerinde kalınır.
- * Merkez kapalıysa sınır yok (kanalın son sürümü). Sunucuya ulaşılamazsa son bilinen karar geçerli: Merkez'e
- * ulaşılamayan kasa son bildiği hedefle karar verir. `merkez`: durum.json'a yazılacak son karar
+ * Merkez'in sınırı (saf): kurulacak en yeni derleme. Sunucu Merkez açık derse izin gönderilen derlemeye bağlıdır:
+ * kurulu derlemeden yeni hedef gönderildiyse en çok o kurulur (sonradan main'e giren, gönderilmemiş derleme kendiliğinden
+ * kurulmaz). Kanal ilerlerse indirilmiş yük tutulur (check); yük yoksa kasa bekler, panel "gönderilmedi" gösterir.
+ * Hedef yoksa ya da kurulu derlemeden yeni değilse yerinde kalınır. Merkez kapalıysa sınır yok (kanalın son sürümü).
+ * Sunucuya ulaşılamazsa son bilinen karar geçerli. `merkez`: durum.json'a yazılacak son karar
  */
-const allowed = (hedef, installedBuild) => (hedef != null && hedef > (installedBuild ?? 0) ? Infinity : (installedBuild ?? 0));
+const allowed = (hedef, installedBuild) => (hedef != null && hedef > (installedBuild ?? 0) ? hedef : (installedBuild ?? 0));
 export function merkezCap({ server, last, installedBuild }) {
   const m = server?.merkez;
   if (m && typeof m.enabled === 'boolean') {
@@ -237,6 +237,9 @@ export function nextStatus(prev, ev) {
       const base = { ...p, sonKontrol: iso(ev.now), sonBasariliKontrol: iso(ev.now), sonHata: null, merkez: ev.merkez ?? p.merkez };
       if (ev.plan) return base;
       // Kanalda yeni sürüm var ama Merkez bu dükkâna henüz göndermedi
+      if (ev.held && ev.manifest && ev.kanalIlerledi) {
+        return { ...base, durum: 'guncel', yeni: null, mesaj: `Gönderilen derleme (${ev.gonderilen}) kanalda yok, kanal ${label({ surum: ev.manifest.version, build: ev.manifest.build })} sürümüne ilerledi; Merkez'den yeniden gönderin` };
+      }
       if (ev.held && ev.manifest) return { ...base, durum: 'guncel', yeni: null, mesaj: `Yeni sürüm ${label({ surum: ev.manifest.version, build: ev.manifest.build })} hazır; Merkez'den gönderilince kurulacak` };
       if (ev.manifest && p.basarisiz.includes(ev.manifest.build) && ev.manifest.build > (p.kurulu?.build ?? 0)) {
         return { ...base, durum: 'geri-dondu', yeni: null, mesaj: `${label({ surum: ev.manifest.version, build: ev.manifest.build })} kurulunca sorun çıkmıştı; eski sürüm çalışıyor. Bu sürüm bir daha denenmeyecek, sonraki sürüm beklenecek` };
@@ -550,9 +553,13 @@ export function createUpdater(deps) {
       // Elle istek (kafede patron "Şimdi güncelle"ye bastı) Merkez'in tutmasını aşar: kanalın son sürümü kurulur
       const { cap, merkez } =
         newer && !manual ? merkezCap({ server: await askServer(), last: status?.merkez, installedBuild: inst.build }) : { cap: Infinity, merkez: status?.merkez ?? null };
-      const plan = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [], cap });
+      const fresh = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [], cap });
+      // Gönderilen derlemenin yükü hazır ama kanal ilerledi: gönderilen kurulur (yeniden indirilmez, silinmez)
+      const sent = merkez?.acik && Number.isInteger(merkez.hedef) && merkez.hedef > (inst.build ?? 0) ? merkez.hedef : null;
+      const plan = fresh ?? (!manual && sent != null && ready?.plan.build === sent ? ready.plan : null);
       const held = !plan && manifest.build > (inst.build ?? 0) && manifest.build > cap && !(status?.basarisiz ?? []).includes(manifest.build);
-      set({ type: 'kontrol', plan, manifest, now: now(), merkez, held });
+      const kanalIlerledi = held && sent != null && manifest.build > sent;
+      set({ type: 'kontrol', plan, manifest, now: now(), merkez, held, kanalIlerledi, gonderilen: sent });
       if (!plan) {
         ready = null;
         manual = null;

@@ -13,7 +13,7 @@ import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
-import { applyPendingRestore } from './geri-yukle.mjs';
+import { applyPendingRestore, recoverMissingDb } from './geri-yukle.mjs';
 import { channelUrls, createUpdater, updateMode } from './guncelle.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
@@ -136,6 +136,13 @@ function start() {
     if (restored) log(`[bekçi] ${restored}`);
   } catch (e) {
     log(`[bekçi] geri yükleme uygulanamadı: ${e instanceof Error ? e.message : e}`);
+  }
+  // Veritabanı yerinde değilken (yarıda kalmış geri yükleme) sunucu boş veritabanıyla açılmaz: önce geri taşınır
+  const stuck = recoverMissingDb(HOME);
+  if (stuck) {
+    log(`[bekçi] ${stuck}`);
+    setTimeout(start, 5000);
+    return;
   }
   const env = envFor();
   const heapMb = heapLimitMb(env.LAFPOS_MAX_HEAP_MB, totalmem());

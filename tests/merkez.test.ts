@@ -355,4 +355,34 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(await merkezBeat()).toBe(true);
     expect(store.has(`lafpos:merkez:kurulum:${id}`)).toBe(true);
   });
+
+  it('kayıtlı eski (rastgele) kimlik: kayıt silinse de aynı kimlikle, adı ve lisansıyla döner; dükkân kimliği değişmez', async () => {
+    const { merkezBeat, identity, remoteShop, merkezLast, licenseNow } = await import('../server/sync/merkez');
+    const { setSyncState } = await import('../server/lib/settings');
+    const { randomBytes } = await import('node:crypto');
+    const oldId = randomBytes(12).toString('hex');
+    const key = randomBytes(32).toString('base64url');
+    const createdAt = Date.now() - 30 * DAY;
+    setSyncState('merkez.kimlik', { id: oldId, key, createdAt, registered: true });
+    const inst = { id: oldId, key, ad: 'Marina', createdAt, lastSeen: null, surum: null, build: null, guncelleme: null, gunAcik: null, lisans: { durum: 'aktif', bitis: null }, mod: 'elle', hedef: null, gonderildi: null, kod: 'MRN' };
+    store.set(`lafpos:merkez:kurulum:${oldId}`, JSON.stringify(inst));
+    expect(await merkezBeat()).toBe(true);
+    expect(remoteShop()).toBe(oldId);
+    // Lisansı aktif kurulum silinmez
+    expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(400);
+    expect(store.has(`lafpos:merkez:kurulum:${oldId}`)).toBe(true);
+    // Pasife alınıp silinir: kasa sonraki nabızlarda aynı kimlikle, adı, kodu ve lisansıyla döner
+    expect((await panel('POST', 'merkez/kurulum', { id: oldId, lisans: 'pasif' })).status).toBe(200);
+    expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(200);
+    expect(await merkezBeat()).toBe(false);
+    expect(identity().id).toBe(oldId);
+    expect(await merkezBeat()).toBe(true);
+    expect(remoteShop()).toBe(oldId);
+    expect(merkezLast()).toMatchObject({ ad: 'Marina', kod: 'MRN', lisans: { durum: 'pasif' } });
+    // Pasif yeniden aktif: satış açık
+    expect((await panel('POST', 'merkez/kurulum', { id: oldId, lisans: 'aktif' })).status).toBe(200);
+    await merkezBeat();
+    expect(licenseNow()?.state).not.toBe('kapali');
+    expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
+  });
 });

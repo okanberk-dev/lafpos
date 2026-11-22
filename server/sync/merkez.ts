@@ -33,6 +33,11 @@ export interface Identity {
   key: string;
   createdAt: number;
   registered: boolean;
+  /**
+   * Merkez'e bir kez kaydoldu: kayıt sonradan silinse (404) de kimlik değişmez. Uzaktan özeti, raporlar ve bulut
+   * yedekleri bu kimlikle (remoteShop) yazılır; kimlik değişseydi dükkân ikiye bölünür, lisans "bekliyor"a dönerdi
+   */
+  everRegistered?: boolean;
 }
 
 export interface MerkezLast {
@@ -56,13 +61,14 @@ export const merkezEnabled = () => !!env.merkezUrl && env.cloudSecret.length >= 
 export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
 
 /**
- * Kurulum kimliği: ilk okumada üretilir ve hep aynı kalır (yedekten dönüşte de; gün sonu verisiyle birlikte). Henüz
- * kaydolmamış eski (rastgele) kimlik anahtardan türeyen kimliğe geçer; kayıtlı eski kimlik kaldıkça kullanılır
+ * Kurulum kimliği: ilk okumada üretilir ve hep aynı kalır (yedekten dönüşte de; gün sonu verisiyle birlikte). Hiç
+ * kaydolmamış eski (rastgele) kimlik anahtardan türeyen kimliğe geçer; bir kez kaydolmuş eski kimlik, kaydı Merkez'de
+ * silinse de kalır (Merkez mezar taşıyla aynı kimliği yeniden kaydeder)
  */
 export function identity(now = Date.now()): Identity {
   const existing = getSyncState<Identity>(IDENTITY);
   if (existing?.id && existing.key) {
-    if (existing.registered || existing.id === installIdFor(existing.key)) return existing;
+    if (existing.registered || existing.everRegistered || existing.id === installIdFor(existing.key)) return existing;
     const migrated = { ...existing, id: installIdFor(existing.key) };
     setSyncState(IDENTITY, migrated);
     return migrated;
@@ -183,8 +189,13 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
         setSyncState(IDENTITY, { ...me, id: installIdFor(key), key, registered: false });
         throw new Error('Kimlik başkasınca alınmıştı; yeni kimlik üretildi');
       }
+      if (res.status === 400 && isRecord(res.json) && res.json.code === 'bad_id' && me.id !== installIdFor(me.key)) {
+        // Eski kimliğin Merkez'deki izi de yok (Redis kaybı): anahtardan türeyen kimlikle kaydolunur
+        setSyncState(IDENTITY, { ...me, id: installIdFor(me.key), registered: false });
+        throw new Error('Eski kimlik Merkez’de bulunamadı; anahtardan türeyen kimlikle kaydolunacak');
+      }
       if (res.status !== 200) throw new Error(`Merkez kaydı alınmadı (${res.status})`);
-      setSyncState(IDENTITY, { ...me, registered: true });
+      setSyncState(IDENTITY, { ...me, registered: true, everRegistered: true });
     }
     const upd = readUpdateStatus();
     const url = new URL('/api/merkez/nabiz', env.merkezUrl);
@@ -195,10 +206,12 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
       guncelleme: upd ? { durum: upd.durum, mesaj: upd.mesaj, yeni: upd.yeni } : null,
       // Panel "Kasa aldı" desin: işlenen son "Şimdi güncelle" isteği
       istekAlindi: getSyncState<number>(HANDLED_REQUEST),
+      // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın
+      kesinHedef: true,
     };
     const res = await signedFetch(me.key, 'POST', url, body, 8000, { 'x-laf-kurulum': me.id });
     // Kayıt Merkez'de silindiyse (Redis sıfırlandı) bir sonraki nabız yeniden kaydolur
-    if (res.status === 404) setSyncState(IDENTITY, { ...me, registered: false });
+    if (res.status === 404) setSyncState(IDENTITY, { ...me, registered: false, everRegistered: me.registered || !!me.everRegistered });
     const parsed = res.status === 200 ? parseBeat(res.json, now) : null;
     if (!parsed) throw new Error(`Merkez yanıt vermedi (${res.status})`);
     const prev = merkezLast();

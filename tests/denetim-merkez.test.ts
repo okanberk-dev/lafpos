@@ -282,3 +282,26 @@ describe('Uzaktan oturumları', () => {
     expect((await call('GET', 'merkez/kurulumlar', { token: 'yok' })).status).toBe(401);
   });
 });
+
+describe('son denetim: gönderilen güncelleme geçişte kaybolmaz', () => {
+  const rel = (build: number) => ({ version: '0.3.0', build, date: '', not: null });
+  const base = { id: 'b'.repeat(24), key: '', ad: 'Marina', createdAt: 0, lastSeen: null, surum: null, gunAcik: null, lisans: { durum: 'aktif' as const }, gonderildi: null, guncelleme: null };
+
+  it('eski kasa (kesinHedef yok): gönderilen derleme kanaldan düştüyse hedef kanalın son derlemesi', async () => {
+    const { targetFor, installView } = await merkezApi();
+    expect(targetFor({ mod: 'elle', hedef: 85, build: 63 }, rel(86))).toBe(86);
+    expect(installView({ ...base, mod: 'elle', hedef: 85, build: 63 }, rel(86), Date.now()).bekleyen).toBe(false);
+    // Kurulu derlemeden yeni gönderim yoksa hedef değişmez (gönderilmemiş sürüm kurulmaz)
+    expect(targetFor({ mod: 'elle', hedef: 63, build: 63 }, rel(86))).toBe(63);
+    expect(targetFor({ mod: 'elle', hedef: null, build: 63 }, rel(86))).toBe(null);
+    expect(targetFor({ mod: 'elle', hedef: 85, build: 63 }, null)).toBe(85);
+  });
+
+  it('yeni kasa (kesinHedef): yalnız gönderilen derleme; kanal ilerlediyse panel "gönderilmedi" gösterir', async () => {
+    const { targetFor, installView } = await merkezApi();
+    expect(targetFor({ mod: 'elle', hedef: 85, build: 63, kesinHedef: true }, rel(86))).toBe(85);
+    expect(installView({ ...base, mod: 'elle', hedef: 85, build: 63, kesinHedef: true }, rel(86), Date.now()).bekleyen).toBe(true);
+    expect(installView({ ...base, mod: 'elle', hedef: 86, build: 63, kesinHedef: true }, rel(86), Date.now()).bekleyen).toBe(false);
+    expect(installView({ ...base, mod: 'otomatik', hedef: null, build: 63, kesinHedef: true }, rel(86), Date.now()).bekleyen).toBe(false);
+  });
+});

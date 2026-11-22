@@ -43,6 +43,11 @@ export interface Install {
   guncelleIstek?: number | null;
   /** Kasanın işlediğini bildirdiği son istek (nabızda `istekAlindi`) */
   istekAlindi?: number | null;
+  /**
+   * Kasa yalnız gönderilen derlemeyi kurar (nabızda `kesinHedef`; #83 ve sonrası). Eski kasa (alan yok) hedefi üst
+   * sınır sayar: gönderilen derleme kanaldan düşünce hiç kurmaz (targetFor onu kanalın son derlemesine taşır)
+   */
+  kesinHedef?: boolean;
 }
 
 /** Güncelleme kanalının son derlemesi (surum.json'dan, kısa değişiklik notuyla) */
@@ -78,6 +83,10 @@ const SET_KEY = 'lafpos:merkez:kurulumlar';
 const PENDING_KEY = 'lafpos:merkez:bekleyen';
 const installKey = (id: string) => `lafpos:merkez:kurulum:${id}`;
 const statusKey = (id: string) => `lafpos:merkez:durum:${id}`;
+/** Silinen kurulumun mezar taşı: aynı kimlik ve anahtarla yeniden kayıtta ad, kod, lisans ve kuruluş geri gelir */
+const graveKey = (id: string) => `lafpos:merkez:silinen:${id}`;
+const GRAVE_TTL_S = 180 * 86_400;
+type Grave = Pick<Install, 'ad' | 'createdAt' | 'lisans' | 'mod' | 'kod'> & { anahtarOzet: string };
 export const ID_RE = /^[a-z0-9]{20,40}$/;
 const MIN_KEY = 32;
 /** Kayıt: IP başına saatte en çok bu kadar; onay bekleyen kurulum en çok bu kadar */
@@ -92,7 +101,7 @@ const LIST_CHUNK = 100;
 export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
 
 /** Nabzın yazdığı alanlar (ayrı anahtar) */
-type Beat = Pick<Install, 'lastSeen' | 'surum' | 'build' | 'gunAcik' | 'guncelleme' | 'istekAlindi'>;
+type Beat = Pick<Install, 'lastSeen' | 'surum' | 'build' | 'gunAcik' | 'guncelleme' | 'istekAlindi' | 'kesinHedef'>;
 
 function merged(raw: string | null | undefined, beat: string | null | undefined): Install | null {
   if (!raw) return null;
@@ -113,9 +122,15 @@ const writeInstall = (deps: MerkezDeps, i: Install) => deps.redis('SET', install
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : null);
 const intOrNull = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : null);
 
-/** Kasanın çalıştıracağı derleme: otomatikte kanalın sonu, elle gönderilende sahibin gönderdiği (yoksa null: kurulu kalır) */
-export function targetFor(i: Pick<Install, 'mod' | 'hedef'>, release: Release | null): number | null {
+/**
+ * Kasanın çalıştıracağı derleme: otomatikte kanalın sonu, elle gönderilende sahibin gönderdiği (yoksa null: kurulu
+ * kalır). Eski kasa (`kesinHedef` yok) hedefi üst sınır sayar; gönderilen derleme kanaldan düşerse (gönderdikten sonra
+ * main'e giren PR) hiç kurmaz ve panel de "gönderildi" görürdü. Ona, kurulu derlemeden yeni bir gönderim varken
+ * kanalın son derlemesi söylenir: geçişte gönderilen güncelleme kaybolmaz
+ */
+export function targetFor(i: Pick<Install, 'mod' | 'hedef' | 'build' | 'kesinHedef'>, release: Release | null): number | null {
   if (i.mod === 'otomatik') return release?.build ?? i.hedef;
+  if (!i.kesinHedef && release && i.hedef != null && i.build != null && i.hedef > i.build && release.build > i.hedef) return release.build;
   return i.hedef;
 }
 
@@ -143,11 +158,10 @@ export function installView(i: Install, release: Release | null, now: number) {
     /** "Şimdi güncelle" istendi, kasa henüz almadı */
     istekBekliyor: !!i.guncelleIstek && i.istekAlindi !== i.guncelleIstek,
     /**
-     * Kanalda daha yeni derleme var ve bu dükkâna henüz gönderilmedi. Gönderilen derleme "kurulabilir" izni sayılır
-     * (kanal yalnız son derlemeyi tutar; kasa gün kapanınca o an kanalda olanı kurar): kurulu derlemeden yeni bir
-     * hedef varsa gönderilmiş demektir
+     * Kanalda daha yeni derleme var ve kasanın çalıştıracağı derleme o değil: hiç gönderilmedi ya da gönderilen derleme
+     * kanaldan düştü (kasa yalnız gönderileni kurar; kanal ilerlediyse yeniden gönderilmeli)
      */
-    bekleyen: behind && i.mod === 'elle' && !(i.hedef != null && i.hedef > (i.build ?? 0)),
+    bekleyen: behind && targetFor(i, release) !== release!.build,
   };
 }
 
@@ -203,9 +217,18 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // Aynı kasa yeniden bildiriyorsa (yanıtı almadan internet kesildi) sorun yok; başka anahtar kabul edilmez
     const existing = await readInstall(deps, id);
     if (existing) return existing.key === key ? json({ ok: true, yeni: false }) : fail(409, 'Bu kurulum kimliği başka bir anahtarla kayıtlı', 'install_exists');
-    // Yeni kurulumun kimliği anahtarının özeti olmalı (eski kurulumlar kayıtlı kaldıkça yukarıdan geçer)
-    if (id !== installIdFor(key)) return fail(400, 'Kurulum kimliği anahtarla uyuşmuyor', 'bad_id');
-    if (Number(await deps.redis('SCARD', PENDING_KEY)) >= PENDING_MAX) return fail(429, 'Onay bekleyen kurulum çok; önce Merkez’de bekleyenleri onaylayın ya da silin', 'too_many_pending');
+    // Silinen kurulum aynı anahtarla dönüyor: eski (rastgele) kimliği de kabul edilir, ad, kod ve lisans geri gelir
+    let grave: Grave | null = null;
+    try {
+      const raw = (await deps.redis('GET', graveKey(id))) as string | null;
+      grave = raw ? (JSON.parse(raw) as Grave) : null;
+    } catch {
+      grave = null;
+    }
+    if (grave && grave.anahtarOzet !== installIdFor(key)) grave = null;
+    // Yeni kurulumun kimliği anahtarının özeti olmalı (eski kurulumlar kayıtlı kaldıkça yukarıdan, silindiyse mezar taşıyla geçer)
+    if (!grave && id !== installIdFor(key)) return fail(400, 'Kurulum kimliği anahtarla uyuşmuyor', 'bad_id');
+    if (!grave && Number(await deps.redis('SCARD', PENDING_KEY)) >= PENDING_MAX) return fail(429, 'Onay bekleyen kurulum çok; önce Merkez’de bekleyenleri onaylayın ya da silin', 'too_many_pending');
     const fresh: Install = {
       id,
       key,
@@ -224,9 +247,11 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // Kasa kendi kuruluş anını söyler (internete geç çıkan kurulumun deneme süresi kuruluştan sayılır); gelecekte olamaz
     const installedAt = intOrNull(body.kurulus);
     if (installedAt && installedAt <= now) fresh.createdAt = installedAt;
+    if (grave) Object.assign(fresh, { ad: grave.ad, createdAt: grave.createdAt, lisans: grave.lisans, mod: grave.mod, kod: grave.kod ?? null });
     if ((await deps.redis('SET', installKey(id), JSON.stringify(fresh), 'NX')) === 'OK') {
       await deps.redis('SADD', SET_KEY, id);
-      await deps.redis('SADD', PENDING_KEY, id);
+      if (fresh.lisans.durum === 'bekliyor') await deps.redis('SADD', PENDING_KEY, id);
+      if (grave) await deps.redis('DEL', graveKey(id));
       return json({ ok: true, yeni: true });
     }
     const raced = await readInstall(deps, id);
@@ -259,6 +284,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       build: intOrNull(body.build) ?? inst.build,
       gunAcik: typeof body.gunAcik === 'boolean' ? body.gunAcik : inst.gunAcik,
       istekAlindi: intOrNull(body.istekAlindi) ?? inst.istekAlindi ?? null,
+      kesinHedef: body.kesinHedef === true,
       guncelleme:
         g && typeof g === 'object'
           ? { durum, mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null }
@@ -308,11 +334,17 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     if (denied) return denied;
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-    // Kaydı sil: bilinmeyen ya da artık kullanılmayan kurulum. Kasa hâlâ çalışıyorsa sonraki nabızda yeniden
-    // "Onay bekliyor" olarak kaydolur
+    // Kaydı sil: bilinmeyen ya da artık kullanılmayan kurulum. Lisansı aktif kurulum silinmez (önce pasife alınır).
+    // Mezar taşı kalır: kasa hâlâ çalışıyorsa sonraki nabızda aynı kimlikle, adı, kodu ve lisansıyla yeniden kaydolur
     if (path === 'merkez/sil') {
       const id = String(body.id ?? '');
       if (!ID_RE.test(id)) return fail(400, 'Kurulum kimliği anlaşılamadı', 'bad_body');
+      const inst = await readInstall(deps, id);
+      if (inst?.lisans.durum === 'aktif') return fail(400, 'Lisansı aktif kurulum silinmez; önce pasife alın', 'license_active');
+      if (inst?.key) {
+        const grave: Grave = { ad: inst.ad, createdAt: inst.createdAt, lisans: inst.lisans, mod: inst.mod, kod: inst.kod ?? null, anahtarOzet: installIdFor(inst.key) };
+        await deps.redis('SET', graveKey(id), JSON.stringify(grave), 'EX', GRAVE_TTL_S);
+      }
       await deps.redis('DEL', installKey(id), statusKey(id));
       await deps.redis('SREM', SET_KEY, id);
       await deps.redis('SREM', PENDING_KEY, id);
