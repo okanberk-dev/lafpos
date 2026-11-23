@@ -687,6 +687,14 @@ describe('akış (sahte cihaz)', () => {
       expect(first.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: eod.dayCardKurus, trigger: 'otomatik', z: null });
       for (const secret of ['expectedCash', 'countedCash', 'cashDiff', 'byUser', 'odenmezPeople']) expect(JSON.stringify(first)).not.toContain(secret);
       expect((await h.ok<{ slip: unknown }>('patron', 'POST', '/okc/eod/slip', {})).slip).toBeNull();
+      // Yazıcı kapalıydı, kâğıt kayboldu: Yönetim › Yazarkasa POS'tan yeniden basılır (gün işlemleri yetkisiyle). Kör
+      // kasiyere Z yine gitmez; yeniden basma batch'i "basılmadı" yapmaz (kasa ekranları ikinci kez basmaz)
+      expect((await h.call('garson', 'POST', '/okc/eod/slip', { again: true })).status).toBe(403);
+      const again = await h.ok<{ slip: Slip }>('mudur', 'POST', '/okc/eod/slip', { again: true });
+      expect(again.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: eod.dayCardKurus, z: { zNo: expect.any(Number) } });
+      const blind = await h.ok<{ slip: Slip }>('kasa', 'POST', '/okc/eod/slip', { again: true });
+      expect(blind.slip).toMatchObject({ batchNo: '000278', z: null });
+      expect((await h.ok<{ slip: unknown }>('kasa', 'POST', '/okc/eod/slip', {})).slip).toBeNull();
       // Kasa rakamlarını ve personel tutarlarını gören (müdür) aynı kâğıtta kapanan günün Z'sinin tamamını alır
       mods.setSyncState('pavo.eod.fis', 'onceki');
       const full = await h.ok<{ slip: Slip | null }>('mudur', 'POST', '/okc/eod/slip', {});

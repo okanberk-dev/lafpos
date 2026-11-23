@@ -176,6 +176,17 @@ export function eodSlipHere(boot: BootstrapDTO): boolean {
 }
 
 /**
+ * Banka gün sonunun kayıt kâğıtları: önce LafPOS Z'si (kör kasada yok), sonra banka gün sonu ve Pavo - LafPOS kıyası
+ * (Pavo kendi slibini ayrıca basar). Gün sonunda kendiliğinden ve Yönetim › Yazarkasa POS › "Kâğıdı yeniden bas"la
+ */
+export function printBankEodSlip(boot: BootstrapDTO, slip: BankEodSlip) {
+  return printEach([
+    ...(slip.z ? [<ZReceipt key="z" boot={boot} date={slip.z.date} zNo={slip.z.zNo} s={slip.z.summary} closedAt={slip.z.closedAt} />] : []),
+    <BankEodReceipt key="b" boot={boot} slip={slip} />,
+  ]);
+}
+
+/**
  * Pavo'da banka gün sonu alınınca (gün kapanınca ya da elle) fiş yazıcısından gün sonu kâğıdı: fiş yazıcılı kasa
  * ekranında (`eodSlipHere`; ödeme sonrası nüsha ayarlarına bağlı değil). Sunucu kâğıdı batch başına bir kez, ilk
  * soran ekrana verir; olay kaçtıysa açılışta, bağlantı yeniden kurulunca ve sekme görünür olunca sorulur. Ayar: Yönetim ›
@@ -197,14 +208,7 @@ export function useBankEodSlip(boot: BootstrapDTO) {
       busy = true;
       try {
         const { slip } = await post<{ slip: BankEodSlip | null }>('/okc/eod/slip', {});
-        // Kayıt için iki kâğıt: önce LafPOS Z'si, sonra banka gün sonu ve kıyası (Pavo kendi slibini ayrıca basar)
-        if (slip) {
-          const b = ref.current;
-          await printEach([
-            ...(slip.z ? [<ZReceipt key="z" boot={b} date={slip.z.date} zNo={slip.z.zNo} s={slip.z.summary} closedAt={slip.z.closedAt} />] : []),
-            <BankEodReceipt key="b" boot={b} slip={slip} />,
-          ]);
-        }
+        if (slip) await printBankEodSlip(ref.current, slip);
       } catch {
         // Sessiz: cihazın kendi slibi var, gün sonu sonucu Yönetim › Yazarkasa POS'ta
       } finally {
