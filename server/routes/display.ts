@@ -5,7 +5,6 @@ import { getPublicSettings } from '../lib/settings';
 import { db } from '../db/client';
 import { pickupBoard } from '../services/floor';
 import { type AppEnv, requirePermission } from '../lib/auth';
-import { bus } from '../lib/events';
 import { bad, body, kurus } from '../lib/http';
 
 /**
@@ -55,7 +54,9 @@ displayRoutes.put('/:code', async (c) => {
   if (!states.has(k) && states.size >= MAX_DISPLAYS) throw bad('Çok fazla ekran adı', 'display_limit');
   const state = { ...(await body(c, stateShape)), at: Date.now() } as DisplayStateDTO;
   states.set(k, state);
-  bus.publish({ topic: 'orders', kind: 'display.update', message: k, byUserId: user.id });
+  // Canlı olay yayılmaz (inceleme, 23 Kas 2026): ekran durumu veritabanında değil, ekran onu oturumsuz yoklayarak okur
+  // (1,5 sn) ve olayı dinleyen yok. Kasa adisyon görüntüsünü 10 sn'de bir yeniden gönderdiğinden `orders` olayı her
+  // cihazda adisyon ve masa sorgularını yeniletiyor, Uzaktan özetini ve rapor gönderimini boşuna kuruyordu
   return c.json({ ok: true });
 });
 
