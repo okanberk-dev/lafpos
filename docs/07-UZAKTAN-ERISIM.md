@@ -346,9 +346,10 @@ Kasa ikisini birleştirir (aynı tarihte lafmaliyet'inki geçer; `mergeHistory`,
   `historyReport`: kaynak ve `zText` alanlarıyla; bulut ikisini kısa metin olarak doğrular). Yalnız LafPOS'ta gerçek iş
   günü olmayan tarihte ve içerik değişince gider (kayıt ya da geçmişin geçtiği tarihler değişince, ör. kurulum modundan
   çıkınca deneme gününün yerine geçmiş geçer, bütün geçmiş günlerine bir kez bakılır; gün özeti aynıysa gitmez). Dönemin
-  ürün listesi bloğun dönemindeki her geçmiş gününde `urunler` alanında gider (blok ve dönemin geçmiş günü sayısı `n`;
-  bulut biçimini doğrular): Uzaktan Ürünler bloğu, seçilen dönem onu kapsıyor ve `n` günün hepsi raporda duruyorsa ürün
-  ürün gösterir, değilse not. lafmaliyet'te silinen ya da başka güne taşınan gün Uzaktan'da kalmaz: önceki bakışta
+  ürün listesi `urunler` alanında gider: bloğun dönemindeki her geçmiş günü dönemi ve dönemin geçmiş günü sayısını (`n`)
+  taşır, satırları yalnız bloğun son geçmiş günü (liste her gün anahtarında kopyalanmaz: 400 gün × 500 satır uzun dönemin
+  MGET'ini şişirirdi; bulut biçimini doğrular). Uzaktan Ürünler bloğu, seçilen dönem onu kapsıyor, `n` günün hepsi ve
+  satırları taşıyan gün raporda duruyorsa ürün ürün gösterir, değilse not. lafmaliyet'te silinen ya da başka güne taşınan gün Uzaktan'da kalmaz: önceki bakışta
   geçmiş günü olarak giden tarih kayıttan çıkınca yerine satışsız gün raporu (`n: 0`; o tarihte artık LafPOS günü varsa
   onun raporu) gider. Böylece geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da "Geçen
   hafta" ModPOS günlerini gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an).

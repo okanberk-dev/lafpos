@@ -68,10 +68,12 @@ export interface HistoryProducts {
 }
 
 /**
- * Uzaktan'a giden geçmiş gününün taşıdığı dönem ürün listesi (`RemoteDayReport.urunler`): blok ve bloğun dönemindeki
- * geçmiş günü sayısı (`n`). Bulut bloğu ancak bu kadar gün raporda geçmiş günü olarak duruyorsa tam gösterir
+ * Uzaktan'a giden geçmiş gününün taşıdığı dönem ürün listesi işareti (`RemoteDayReport.urunler`): bloğun dönemi ve o
+ * dönemin geçmiş günü sayısı (`n`) her geçmiş gününde, satırlar (`rows`) yalnız bloğun son geçmiş gününde (liste her gün
+ * anahtarında kopyalanmasın: 400 gün × 500 satır). Bulut bloğu ancak `n` gün raporda geçmiş günü olarak duruyorsa ve
+ * satırları taşıyan gün de dönemdeyse tam gösterir
  */
-export type PushedHistoryProducts = HistoryProducts & { n: number };
+export type PushedHistoryProducts = Pick<HistoryProducts, 'from' | 'to'> & { n: number; rows?: HistoryProducts['rows'] };
 
 export interface HistoryStore {
   v: 1;
@@ -271,10 +273,16 @@ export function validProducts(u: unknown): HistoryProducts | null {
   return ok ? { from: b.from, to: b.to, rows: b.rows } : null;
 }
 
-/** Gün raporundaki dönem bloğunun biçimi (kasanın ittiği; api/uzaktan.ts doğrular): blok ve 1-800 arası gün sayısı */
+/**
+ * Gün raporundaki dönem bloğu işaretinin biçimi (kasanın ittiği; api/uzaktan.ts doğrular): dönem, 1-800 arası gün sayısı;
+ * satırlar varsa bloğun biçiminde
+ */
 export function validPushedProducts(u: unknown): u is PushedHistoryProducts {
-  const n = (u as { n?: unknown } | null)?.n;
-  return Number.isInteger(n) && (n as number) >= 1 && (n as number) <= HISTORY_MAX_DAYS && validProducts(u) !== null;
+  if (!u || typeof u !== 'object') return false;
+  const b = u as { from?: unknown; to?: unknown; n?: unknown; rows?: unknown };
+  if (!Number.isInteger(b.n) || (b.n as number) < 1 || (b.n as number) > HISTORY_MAX_DAYS) return false;
+  if (b.rows === undefined) return validDate(b.from) && validDate(b.to) && b.from <= b.to;
+  return validProducts(u) !== null;
 }
 
 /** Raporlara giden dönem ürün listesi: başlık, toplamlar ve satırlar (en çok satan önce) */

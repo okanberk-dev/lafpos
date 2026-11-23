@@ -84,9 +84,10 @@ export interface RemoteDayReport {
   /** Geçmiş gününün indirimi bilinmiyor (yalnız ModPOS föyünden): `s.disc` 0 ama raporlar onu bilinen sıfır saymaz */
   indirimBilinmiyor?: true;
   /**
-   * Geçmiş cironun dönem ürün listesi (shared/gecmis.ts `PushedHistoryProducts`, indirim öncesi): kasa bloğun dönemindeki
-   * her geçmiş gününe koyar, `n` o dönemin geçmiş günü sayısıdır. Uzaktan bloğu yalnız seçilen dönem bloğu kapsıyor ve
-   * bloğu taşıyan `n` günün hepsi raporda duruyorsa ürün ürün gösterir (api/uzaktan.ts `pushedHistoryBlock`)
+   * Geçmiş cironun dönem ürün listesi işareti (shared/gecmis.ts `PushedHistoryProducts`, indirim öncesi): kasa bloğun
+   * dönemindeki her geçmiş gününe dönemi ve `n`'i (o dönemin geçmiş günü sayısı) koyar, satırları (`rows`) yalnız son
+   * geçmiş gününe. Uzaktan bloğu yalnız seçilen dönem bloğu kapsıyor, işareti taşıyan `n` gün ve satırlı gün raporda
+   * duruyorsa ürün ürün gösterir (api/uzaktan.ts `pushedHistoryBlock`)
    */
   urunler?: PushedHistoryProducts;
   /** Ek sekmeler (hazırlama, adisyonlar, kalem listeleri, iadeler, platformlar): bulutta ayrı anahtarda tutulur */

@@ -539,14 +539,28 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
     expect(part.history).toEqual({ kaynak: 'ModPOS', from: dateOf(0), to: dateOf(8), covered: false });
     const partSum = await remote<any>(`reports/summary?from=${dateOf(3)}&to=${dateOf(8)}`);
     expect(partSum.itemsSold).toBe(0);
-    // Bloğun bir günü bulutta yoksa (gidemedi ya da başka kaynak) blok o günü de sayardı: tam değil, not
-    const missing = store.get(`lafpos:rapor:default:gun:${dateOf(4)}`)!;
-    store.delete(`lafpos:rapor:default:gun:${dateOf(4)}`);
-    try {
-      const gap = await remote<any>(`reports/products?from=${dateOf(0)}&to=${dateOf(8)}`);
-      expect(gap.history).toMatchObject({ covered: false });
-    } finally {
-      store.set(`lafpos:rapor:default:gun:${dateOf(4)}`, missing);
+    // Satırlar bulutta bir kez durur (bloğun son geçmiş gününde); öbür günler yalnız dönemi ve gün sayısını taşır. Böylece
+    // 400 günlük ModPOS dönemi ve 500 satırlık liste her gün anahtarında kopyalanmaz, uzun dönemin MGET'i şişmez
+    const pushed = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(i)}`)!) as RemoteDayReport).urunler);
+    expect(pushed.slice(0, 8)).toEqual(Array(8).fill({ from: dateOf(0), to: dateOf(8), n: 9 }));
+    expect(pushed[8]).toMatchObject({ from: dateOf(0), to: dateOf(8), n: 9 });
+    expect(pushed[8]!.rows).toHaveLength(31);
+    // Satırları taşıyan gün seçilen dönemde değilse not (dönem ve gün sayısı işaretten)
+    const early = await remote<any>(`reports/products?from=${dateOf(0)}&to=${dateOf(4)}`);
+    expect(early.history).toEqual({ kaynak: 'ModPOS', from: dateOf(0), to: dateOf(8), covered: false });
+    // Bloğun bir günü bulutta yoksa (gidemedi ya da başka kaynak) blok o günü de sayardı: tam değil, not. Satırları taşıyan
+    // gün yoksa da not
+    for (const i of [4, 8]) {
+      const key = `lafpos:rapor:default:gun:${dateOf(i)}`;
+      const missing = store.get(key)!;
+      store.delete(key);
+      try {
+        const gap = await remote<any>(`reports/products?from=${dateOf(0)}&to=${dateOf(8)}`);
+        expect(gap.history).toEqual({ kaynak: 'ModPOS', from: dateOf(0), to: dateOf(8), covered: false });
+        expect((await remote<any>(`reports/summary?from=${dateOf(0)}&to=${dateOf(8)}`)).itemsSold).toBe(0);
+      } finally {
+        store.set(key, missing);
+      }
     }
   });
 

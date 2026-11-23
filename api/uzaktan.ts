@@ -1454,17 +1454,23 @@ function historyBlock(r: Range, days: DayRep[], store: { kaynak: string; gunler:
 
 /**
  * Kasanın ittiği geçmiş günlerinin dönem ürün listesi (server/sync/cloud-reports.ts `historyDayReport`): bloğun
- * dönemindeki her geçmiş günü bloğu ve dönemin geçmiş günü sayısını (`n`) taşır. En yeni günün bloğu geçer; seçilen dönem
- * bloğun hepsini kapsıyor ve aynı bloğu taşıyan `n` gün raporda duruyorsa tam (biri gidemediyse, LafPOS günüyle ya da
- * buluttaki elle yüklenmiş günle değiştiyse blok o günü de sayardı: not). Dönemde bloğu taşıyan gün yoksa null
+ * dönemindeki her geçmiş günü dönemi ve dönemin geçmiş günü sayısını (`n`) taşır, satırları yalnız biri. En yeni günün
+ * işareti geçer; seçilen dönem bloğun hepsini kapsıyor, aynı dönemi taşıyan `n` gün raporda duruyor ve satırları taşıyan
+ * gün de aralarındaysa tam (biri gidemediyse, LafPOS günüyle ya da buluttaki elle yüklenmiş günle değiştiyse blok o günü
+ * de sayardı: not). Dönemde işaret taşıyan gün yoksa null
  */
 export function pushedHistoryBlock(r: Range, days: DayRep[]): HistoryBlock | null {
   let latest: DayRep | null = null;
   for (const d of days) if (d.kaynak && d.urunler && (!latest || d.at > latest.at)) latest = d;
   if (!latest?.urunler) return null;
-  const { from, to, n, rows } = latest.urunler;
-  const carriers = days.filter((d) => d.kaynak && d.urunler?.from === from && d.urunler.to === to).length;
-  return { kaynak: latest.kaynak!, block: { from, to, rows }, shown: r.from <= from && r.to >= to && carriers >= n ? 'tam' : 'kismi' };
+  const { from, to, n } = latest.urunler;
+  const same = days.filter((d) => d.kaynak && d.urunler?.from === from && d.urunler.to === to);
+  // Satırlar: aynı dönemi taşıyan günlerden satırlısı (birden çoksa en yenisi)
+  let rows: HistoryProducts['rows'] | null = null;
+  let rowsAt = -Infinity;
+  for (const d of same) if (d.urunler!.rows && d.at > rowsAt) [rows, rowsAt] = [d.urunler!.rows, d.at];
+  const full = r.from <= from && r.to >= to && same.length >= n && rows != null;
+  return { kaynak: latest.kaynak!, block: { from, to, rows: rows ?? [] }, shown: full ? 'tam' : 'kismi' };
 }
 
 function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>, remote = false, hist: HistoryBlock | null = null): Response {

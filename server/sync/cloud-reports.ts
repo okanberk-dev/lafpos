@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { and, gte, isNull, lt, lte } from 'drizzle-orm';
-import { type HistoryDay, historyReport, type PushedHistoryProducts } from '@shared/gecmis';
+import { type HistoryDay, type HistoryProducts, historyReport, type PushedHistoryProducts } from '@shared/gecmis';
 import type { ItemListRow } from '@shared/remote-calc';
 import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
@@ -281,19 +281,34 @@ export function resetReportSync() {
 }
 
 /**
- * Geçmiş cironun dönem ürün listesi Uzaktan'a nasıl gider: blok ve dönemindeki geçmiş günü sayısı (`n`; kasanın
- * Raporlar'ındaki `historyProductsShown` gibi, biri LafPOS günüyle değiştiyse bulut bloğu tam göstermez). Blok yoksa null
+ * Geçmiş cironun dönem ürün listesi Uzaktan'a nasıl gider: blok, dönemindeki geçmiş günü sayısı (`n`; kasanın
+ * Raporlar'ındaki `historyProductsShown` gibi, biri LafPOS günüyle değiştiyse bulut bloğu tam göstermez) ve satırları
+ * taşıyacak gün (`carrier`: bloğun dönemindeki son giden geçmiş günü). Blok yoksa ya da döneminde giden gün yoksa null
  */
-export function historyBlockOf(hist: HistoryIn | null): PushedHistoryProducts | null {
+export interface PushedBlock {
+  block: HistoryProducts;
+  n: number;
+  carrier: string;
+}
+export function historyBlockOf(hist: HistoryIn | null): PushedBlock | null {
   const u = hist?.urunler;
   if (!u) return null;
-  const n = hist.inRange.filter((d) => d.date >= u.from && d.date <= u.to).length;
-  return n ? { ...u, n } : null;
+  const inBlock = (d: HistoryDay) => d.date >= u.from && d.date <= u.to;
+  const n = hist.inRange.filter(inBlock).length;
+  const carrier = hist.days.filter(inBlock).at(-1)?.date;
+  return n && carrier ? { block: u, n, carrier } : null;
 }
 
-/** Geçmiş gününün Uzaktan'a giden raporu (`historyReport`); bloğun dönemindeki gün dönemin ürün listesini de taşır */
-export function historyDayReport(h: HistoryDay, kaynak: string, block: PushedHistoryProducts | null, now: number): RemoteDayReport {
-  return { ...historyReport(h, kaynak), at: now, ...(block && h.date >= block.from && h.date <= block.to ? { urunler: block } : {}) };
+/**
+ * Geçmiş gününün Uzaktan'a giden raporu (`historyReport`). Bloğun dönemindeki gün dönemi ve gün sayısını taşır
+ * (`PushedHistoryProducts`); satırlar yalnız `carrier` gününde (liste her gün anahtarında kopyalanmaz)
+ */
+export function historyDayReport(h: HistoryDay, kaynak: string, pushed: PushedBlock | null, now: number): RemoteDayReport {
+  const report = { ...historyReport(h, kaynak), at: now };
+  if (!pushed || h.date < pushed.block.from || h.date > pushed.block.to) return report;
+  const { from, to, rows } = pushed.block;
+  const urunler: PushedHistoryProducts = h.date === pushed.carrier ? { from, to, n: pushed.n, rows } : { from, to, n: pushed.n };
+  return { ...report, urunler };
 }
 
 /** Gönderim; bulutun saklamadığı günler (sınırı aştı) döner */

@@ -876,7 +876,7 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
 - **Kullanım:** patron panelinin kıyası, kasadaki Raporlar (Ciro, Ürünler, Saatlik; "ModPOS" etiketli; Ürünler'de dönem
   bloğu yalnız dönemin hepsi seçiliyse) ve LafPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
   iter (server/sync/cloud-reports.ts), yalnız LafPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi
-  o günlerle gider, lafmaliyet'te silinen gün Uzaktan'da boşaltılır (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro"). İş günü,
+  o günlerle gider (satırları yalnız son günde), lafmaliyet'te silinen gün Uzaktan'da boşaltılır (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro"). İş günü,
   Z zinciri ve lafmaliyet'e giden gün paketi (§4) bu günleri hiç görmez.
 - **Sıklık:** kendiliğinden iş günü başına bir kez (05:00'ten ya da kasa açıldıktan sonraki ilk tur), elle Yönetim ›
   Site ve lafmaliyet › "ModPOS dönemini çek" (`senkron.yonet`, denetim kaydı `sync.lafmaliyet_modpos`); ikisi de 5

@@ -242,9 +242,14 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     // Dönem ürün listesi: biçimi ve gün sayısı denetlenir; bozuk blok taşıyan gün saklanmaz
     const withBlock = { ...historyReport(days()[2]!, 'ModPOS'), at: 10, urunler: { ...URUNLER, n: 9 } };
     const badBlock = { ...historyReport(days()[3]!, 'ModPOS'), at: 10, urunler: { ...URUNLER, n: 0 } };
-    const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-23', at: 10, days: [good, bad, withBlock, badBlock] })).toString('base64') });
+    // Satırsız işaret (blok satırları yalnız bir günde): dönemi ve gün sayısı denetlenir
+    const marker = { ...historyReport(days()[4]!, 'ModPOS'), at: 10, urunler: { from: '2026-11-13', to: '2026-11-21', n: 9 } };
+    const badMarker = { ...historyReport(days()[5]!, 'ModPOS'), at: 10, urunler: { from: '2026-11-21', to: '2026-11-13', n: 9 } };
+    const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-23', at: 10, days: [good, bad, withBlock, badBlock, marker, badMarker] })).toString('base64') });
     const res = await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/rapor`, { method: 'POST', body, headers: signedHeaders('g'.repeat(40), 'POST', new URL(`${CLOUD}/api/uzaktan/rapor`), body) }));
-    expect(await res.json()).toMatchObject({ ok: true, stored: 2 });
+    expect(await res.json()).toMatchObject({ ok: true, stored: 3 });
+    expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-17`)!).urunler).toEqual({ from: '2026-11-13', to: '2026-11-21', n: 9 });
+    expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-18`)).toBe(false);
     expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-13`)!)).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-002', s: { rev: 39000 } });
     expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-14`)).toBe(false);
     expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-15`)!).urunler).toMatchObject({ from: '2026-11-13', to: '2026-11-21', n: 9 });
