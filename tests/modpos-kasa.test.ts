@@ -77,7 +77,9 @@ beforeAll(async () => {
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'https://redis.test') return new Response(JSON.stringify({ result: upstashCommand(store, JSON.parse(String(init!.body)) as string[]) }));
-    if (url.startsWith(LADMIN)) {
+    // Kökü ayrıştırarak karşılaştır (önek karşılaştırması başka bir alan adını da yakalardı)
+    const origin = new URL(url).origin;
+    if (origin === new URL(LADMIN).origin) {
       const u = new URL(url);
       const headers = new Headers(init?.headers);
       const ts = Number(headers.get('x-laf-timestamp'));
@@ -85,7 +87,7 @@ beforeAll(async () => {
       ladminCalls.push({ path: u.pathname, query: u.search, signed });
       return ladminAnswer(u);
     }
-    if (url.startsWith(CLOUD)) {
+    if (origin === new URL(CLOUD).origin) {
       const { GET, POST } = await import('../api/uzaktan');
       const path = new URL(url).pathname.replace(/^\/api\//, '');
       const req = new Request(`${CLOUD}/api/uzaktan?yol=${path}`, { method: init?.method ?? 'GET', body: init?.body as string | undefined, headers: init?.headers as Record<string, string> });
