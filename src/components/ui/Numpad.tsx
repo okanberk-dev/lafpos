@@ -54,6 +54,8 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               className={cn(
                 'inline-flex items-center justify-between gap-2 rounded-2xl bg-[var(--admin-ink-fill)] pl-4 pr-2 text-base font-semibold text-[var(--admin-on-ink)] transition-[background-color,transform] duration-150 hover:bg-[var(--admin-ink-fill-hover)] active:scale-[0.97] motion-reduce:active:scale-100 disabled:bg-surface-3 disabled:text-muted disabled:active:scale-100',
                 size === 'lg' ? 'h-16 [--ring:2.25rem]' : size === 'sm' ? 'h-11 [--ring:1.75rem]' : 'h-12 [--ring:1.75rem]',
+                // 360 px'ten dar telefonda tuş ~80 px: yazı ve ok halkası birlikte sığmaz, halka çekilir, yazı ortalanır
+                'max-[22.49rem]:justify-center max-[22.49rem]:px-2 max-[22.49rem]:[&>.lp-ring]:hidden',
               )}
             >
               {confirm.label}

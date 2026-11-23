@@ -26,6 +26,7 @@ Her arayüz değişikliği bu listeye uyar. Uymayan bir ihtiyaç çıkarsa
 - [ ] **Boş durum:** tek cümle + ne yapılacağı; sıfır gibi gösterme ("veri yok", "satış yok").
 - [ ] **Uyarı:** yumuşak zemin + ikon + kısa metin; ekranda en çok bir kalıcı uyarı şeridi.
 - [ ] **Telefon (390 px):** tek sütun, yatay kaydırma yok, dokunma hedefi ≥ 44 px, alt dok ve alttan açılan pencere; rakamlar büyük.
+- [ ] **Her ekran boyu:** 320 px telefondan alçak kasa bilgisayarına (1093 × 614) düğme tam görünür: uzun etiket `wrap` ile alt satıra iner, sabit enli karoda kısalan ad `title` taşır, içerik karta sığmazsa kesilmez sadeleşir (masa kartı: `tile-*`).
 - [ ] **Koyu tema:** aynı belirteç adlarıyla; kontrast metin ≥ 4.5:1, arayüz öğesi ≥ 3:1.
 - [ ] **Kasa hızı:** satış akışına ek dokunuş, animasyon beklemesi ya da küçük hedef ekleme.
 - [ ] **Metin:** Türkçe ve sade; başlıkta sonda nokta yok.

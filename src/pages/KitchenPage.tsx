@@ -233,7 +233,8 @@ function KitchenScreen() {
           <div className="flex-1" />
           {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
-            <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium max-sm:order-first sm:hidden">
+            // En dar telefonda (320 px) iki sayaç ve iki düğme tek satıra sığmaz: sayaçlar alt alta iner, düğmeler taşmaz
+            <div className="flex min-w-0 flex-wrap gap-x-1.5 gap-y-1 whitespace-nowrap text-[13px] font-medium max-sm:order-first sm:hidden">
               <span className={cn('tabular inline-flex min-h-6 items-center rounded-full bg-surface-3 px-2.5 md:min-h-7 md:px-3', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
               {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-full bg-[var(--admin-blue-soft)] px-2.5 text-[var(--admin-blue)] md:min-h-7 md:px-3">{counts.making} hazırlanıyor</span>}
             </div>

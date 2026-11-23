@@ -812,7 +812,10 @@ export function PaymentModal({
                         >
                           {/* Türün karosu: türün renginin açık tonunda kare, içinde türün ikonu; seçiliyken beyaz */}
                           <PayIcon kind={m.kind} color={m.color} on={method?.id === m.id} big={g.key === 'ana'} />
-                          <span className="min-w-0 truncate">{m.name}</span>
+                          {/* Dar pencerede ad iki satıra iner ("Kredi kartı" 320 px'te kısalıyordu); daha uzunu ipucunda */}
+                          <span className="line-clamp-2 min-w-0 leading-tight" title={m.name}>
+                            {m.name}
+                          </span>
                         </button>
                       ))}
                     </div>

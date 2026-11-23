@@ -20,6 +20,8 @@ export const PINS = { patron: '1897', mudur: '2468', kasa: '1111', garson: '2222
 /** Telefon dokunmatik ve ince imleçsiz; tablet dokunmatik; bilgisayar fare */
 export const VIEWPORTS = {
   telefon: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  /** Küçük telefon (320 × 568: en dar ekran; WCAG 1.4.10'un yeniden akış eni) */
+  'kucuk-telefon': { viewport: { width: 320, height: 568 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   tablet: { viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   bilgisayar: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
   /** Dokunmatik ekranlı kasa bilgisayarı (fare de bağlı: birincil giriş fare, ama dokunmatik): kasa ve garson ekranları, 44 px */
@@ -28,6 +30,31 @@ export const VIEWPORTS = {
   koyu: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'dark' },
   /** Koyu tema telefonda (patronun en sık baktığı yer): yalnız patronun ekranları */
   'koyu-telefon': { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'dark' },
+};
+
+/**
+ * Kasa uygulamasının açıldığı küçük ve alçak ekranlar (sahip, 23 Kas 2026: "exe'deki butonlar her ekrana tam uyumlu
+ * değil: tablet, küçük PC, laptop, mobil"). Yalnız kasa taraması (run.mjs) döner; demo ve Uzaktan taramaları
+ * VIEWPORTS'la kalır (süre). Kiosk Chrome tam ekrandır: görünen alan ekranın çözünürlüğü bölü Windows ölçeği
+ */
+export const KASA_VIEWPORTS = {
+  /** Yatay tablet ve 15" dokunmatik POS terminali */
+  'yatay-tablet': { viewport: { width: 1024, height: 768 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  /** Küçük kasa bilgisayarı: 1366 × 768 ekran, Windows ölçeği %125 (masa planı burada düğme olmaktan çıkıyordu) */
+  'kucuk-pc': { viewport: { width: 1093, height: 614 }, deviceScaleFactor: 1.25, hasTouch: true },
+  /** Alçak ekran: yatay telefon; sahne kendi içinde kayar (index.css). Yalnız kasa ve garson ekranları */
+  'yatay-telefon': { viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+};
+
+/** Kasa taramasının bütün ekranları */
+export const SWEEP_VIEWPORTS = { ...VIEWPORTS, ...KASA_VIEWPORTS };
+
+/** Bu boyutta yalnız bu roller taranır (yazılmayan boyutta bütün roller) */
+export const VIEWPORT_ROLES = {
+  'dokunmatik-pc': ['kasa', 'garson'],
+  koyu: ['patron'],
+  'koyu-telefon': ['patron'],
+  'yatay-telefon': ['kasa', 'garson'],
 };
 
 export async function freePort() {
@@ -136,7 +163,7 @@ export async function launchBrowser() {
 
 /** Rolün oturum jetonunu sayfa açılmadan yerleştirir; konsol ve ağ hatalarını toplar */
 export async function openContext(browser, viewport, token) {
-  const context = await browser.newContext({ ...VIEWPORTS[viewport], locale: 'tr-TR', timezoneId: 'Europe/Istanbul', reducedMotion: 'reduce' });
+  const context = await browser.newContext({ ...SWEEP_VIEWPORTS[viewport], locale: 'tr-TR', timezoneId: 'Europe/Istanbul', reducedMotion: 'reduce' });
   if (token) await context.addInitScript((t) => localStorage.setItem('lafpos.token', t), token);
   const page = await context.newPage();
   const problems = [];
@@ -369,9 +396,48 @@ export async function overflowReport(page) {
       }
       if (why) clipped.push({ kind: 'kırpılan düğme', text: `${describe(el)}: ${why}`, right: Math.round(r.right), left: Math.round(r.left) });
     }
+    /*
+     * Ulaşılamayan düğme (22 Kas 2026, sahip: "butonlar her ekrana tam uyumlu değil"): düğmenin bir kısmı ya da tamamı
+     * kaydırılamayan bir kabın (overflow hidden/clip) ya da ekranın dışında kalıyor, oraya kaydırmak da mümkün değil
+     * (alçak ekranda pencerenin dibindeki eylem, dar sütunda satırın sonundaki düğme). Kayan kabın içindeki öğe o eksende
+     * sayılmaz: kaydırınca görünür
+     */
+    const cut = [];
+    const scrolls = (v) => /(auto|scroll)/.test(v);
+    const clips = (v) => /(hidden|clip)/.test(v);
+    for (const el of document.querySelectorAll('button, a[href], [role="button"], [role="tab"], [role="switch"], input:not([type="hidden"]), select, textarea')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (el.closest('[aria-hidden="true"], .sr-only, [data-overflow-ok], [inert]')) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === 'hidden' || st.display === 'none' || Number(st.opacity) === 0) continue;
+      // Görünmez yerleşik denetim (onay kutusunun, dosya seçicinin gizli input'u): görünen etiketi ayrıca denetlenir
+      if (st.position === 'absolute' && (st.clip !== 'auto' || st.clipPath !== 'none')) continue;
+      let freeX = false;
+      let freeY = false;
+      let why = null;
+      let fixed = st.position === 'fixed';
+      for (let p = el.parentElement; p && p !== document.documentElement && !why; p = p.parentElement) {
+        const ps = getComputedStyle(p);
+        if (fixed) {
+          // Sabit öğeyi yalnız kendi kapsayıcı bloğu kırpar (transform, filter, contain); ötekiler etkilemez
+          if (ps.transform === 'none' && ps.filter === 'none' && ps.contain === 'none' && ps.perspective === 'none') continue;
+          fixed = false;
+        }
+        const pr = p.getBoundingClientRect();
+        if (scrolls(ps.overflowX) && p.scrollWidth > p.clientWidth + 1) freeX = true;
+        else if (!freeX && (clips(ps.overflowX) || scrolls(ps.overflowX)) && (r.left < pr.left - 1.5 || r.right > pr.right + 1.5)) why = `yanda ${Math.round(Math.max(pr.left - r.left, r.right - pr.right))} px kesiliyor`;
+        if (scrolls(ps.overflowY) && p.scrollHeight > p.clientHeight + 1) freeY = true;
+        else if (!why && !freeY && (clips(ps.overflowY) || scrolls(ps.overflowY)) && (r.top < pr.top - 1.5 || r.bottom > pr.bottom + 1.5)) why = `${r.top < pr.top - 1.5 ? 'üstte' : 'altta'} ${Math.round(Math.max(pr.top - r.top, r.bottom - pr.bottom))} px kesiliyor`;
+        if (ps.position === 'fixed') fixed = true;
+      }
+      // Ekranın dışı: belge kaymıyorsa (kabuk ekrana oturur) oraya ulaşılamaz
+      if (!why && !freeY && (r.bottom > vh + 1.5 || r.top < -1.5) && (fixed || st.position === 'fixed' || document.documentElement.scrollHeight <= vh + 1)) why = `ekranın ${r.top < -1.5 ? 'üstünde' : 'altında'} ${Math.round(Math.max(-r.top, r.bottom - vh))} px dışarıda`;
+      if (why) cut.push({ kind: 'ulaşılamayan düğme', text: `${describe(el)}: ${why}`, right: Math.round(r.right), left: Math.round(r.left) });
+    }
     return {
       page: document.documentElement.scrollWidth - vw,
-      items: [...bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })), ...faint.slice(0, 8), ...clipped.slice(0, 8)],
+      items: [...bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })), ...faint.slice(0, 8), ...clipped.slice(0, 8), ...cut.slice(0, 8)],
     };
   });
 }

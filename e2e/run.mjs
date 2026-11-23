@@ -1,16 +1,18 @@
 /**
  * LafPOS uçtan uca denetimi. Önce `npm run build`, sonra `npm run e2e`.
  *
- * 1. Tarama: her rol, izinli her ekranı telefon (390 px, dokunmatik), tablet (768 px, dokunmatik) ve
- *    bilgisayar (1280 px) boyutunda, patronun ekranlarını ayrıca koyu temada açar. Konsol ve sayfa hatası, 4xx/5xx istek, yatay taşma ve dokunmatik
- *    ekranda 44 px'ten küçük hedef arar; her ekranın görüntüsünü e2e/out/ altına kaydeder.
+ * 1. Tarama: her rol, izinli her ekranı telefon (390 ve 320 px, dokunmatik), tablet (768 px dikey, 1024 px yatay,
+ *    dokunmatik), bilgisayar (1280 px), dokunmatik kasa bilgisayarı (1366 × 768; Windows ölçeği %125 iken 1093 × 614)
+ *    ve yatay telefon (844 × 390) boyutunda, patronun ekranlarını ayrıca koyu temada açar (lib.mjs SWEEP_VIEWPORTS).
+ *    Konsol ve sayfa hatası, 4xx/5xx istek, yatay taşma, okunmayan yazı, kırpılan ya da ulaşılamayan düğme ve
+ *    dokunmatik ekranda 44 px'ten küçük hedef arar; her ekranın görüntüsünü e2e/out/ altına kaydeder.
  * 2. Akışlar: e2e/flows.mjs (telefonda sipariş, ödeme, yönetimde düzenleme).
  * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
  * 4. İnternet kesintisi: e2e/internet.mjs (sahte lafmaliyet ucu kapalıyken satış ve gün sonu, rozet, dönüşte tam bir kez).
  * 5. LafPOS Uzaktan: e2e/uzaktan.mjs (Vercel derlemesi; patron paneli, raporlar ve İndir, girişten önce ve sonra).
  *
  * Seçenekler: --only=tarama|akis|demo|internet|uzaktan  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
- *             --targets=warn (küçük hedefleri yalnız raporla)
+ *             --targets=warn (küçük hedefleri yalnız raporla)  --out=klasör (görüntüler; varsayılan e2e/out)
  * Sorun varsa çıkış kodu 1'dir.
  */
 import { mkdirSync, rmSync } from 'node:fs';
@@ -19,7 +21,7 @@ import { runDemo } from './demo.mjs';
 import { runFlows } from './flows.mjs';
 import { runRemote } from './uzaktan.mjs';
 import { runInternet } from './internet.mjs';
-import { apiClient, launchBrowser, openContext, overflowReport, ROOT, seedFloor, settle, smallTargets, startServer, VIEWPORTS } from './lib.mjs';
+import { apiClient, launchBrowser, openContext, overflowReport, ROOT, seedFloor, settle, smallTargets, startServer, SWEEP_VIEWPORTS, VIEWPORT_ROLES } from './lib.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -259,10 +261,10 @@ const LANDS = { '/satis': '/adisyon/' };
 const slug = (route) => route.replace(/^\/|^@/, '').replace(/[/?=&]+/g, '-') || 'kok';
 
 async function sweep(server, api, seed, browser) {
-  const outDir = join(ROOT, 'e2e/out');
+  const outDir = args.out ?? join(ROOT, 'e2e/out');
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  const viewports = list(args.viewports) ?? Object.keys(VIEWPORTS);
+  const viewports = list(args.viewports) ?? Object.keys(SWEEP_VIEWPORTS);
   const roles = list(args.roles) ?? Object.keys(ROUTES);
   const only = list(args.routes);
   const strictTargets = args.targets !== 'warn';
@@ -272,8 +274,7 @@ async function sweep(server, api, seed, browser) {
 
   for (const viewport of viewports) {
     for (const role of roles) {
-      if (viewport.startsWith('koyu') && role !== 'patron') continue;
-      if (viewport === 'dokunmatik-pc' && role !== 'kasa' && role !== 'garson') continue;
+      if (VIEWPORT_ROLES[viewport] && !VIEWPORT_ROLES[viewport].includes(role)) continue;
       const token = role === 'giris' ? null : api.tokens[role];
       const { context, page, problems } = await openContext(browser, viewport, token);
       // Kayma denetimi (sahibin isteği, 22 Kas 2026): tablette ve bilgisayarda marka rayı (sol menü) ve ekranlarının
@@ -314,7 +315,7 @@ async function sweep(server, api, seed, browser) {
         const overflow = await overflowReport(page);
         if (overflow.page > 1) problems.push(`sayfa ${overflow.page} px yatay taşıyor`);
         for (const o of overflow.items) problems.push(`${o.kind ?? 'taşan öğe'}: ${o.text} (sol ${o.left}, sağ ${o.right})`);
-        if (VIEWPORTS[viewport].hasTouch) {
+        if (SWEEP_VIEWPORTS[viewport].hasTouch) {
           const small = await smallTargets(page);
           if (small.length) (strictTargets ? problems : warnings).push(...small.map((s) => `${where}: küçük hedef ${s}`).slice(0, strictTargets ? 0 : 50));
           if (small.length && strictTargets) problems.push(`44 px altı ${small.length} hedef: ${small.slice(0, 6).join(', ')}`);

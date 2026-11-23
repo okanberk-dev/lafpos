@@ -42,6 +42,33 @@
 }
 
 /*
+ * Masa kartı (FloorPage TableTile) planda boyuna göre de sadeleşir: kart alçaldıkça ikincil satırlar sırayla çekilir
+ * (önce süre ve garson, sonra iç boşluk ve tutarın boyu, sonra rozet satırı köşeye iner, en son ad ve tutar tek satır).
+ * Sorgu adlı kaba (`tile`, container-type: size) bakar; planda kartın boyu bellidir. Liste görünümünde kart adsızdır
+ * (yalnız eni sorgulanır, boyu içeriği kadar): bu varyantların hiçbiri tutmaz
+ */
+@custom-variant tile-low {
+  @container tile (max-height: 6.74rem) {
+    @slot;
+  }
+}
+@custom-variant tile-short {
+  @container tile (max-height: 5.49rem) {
+    @slot;
+  }
+}
+@custom-variant tile-mini {
+  @container tile (max-height: 4.99rem) {
+    @slot;
+  }
+}
+@custom-variant tile-flat {
+  @container tile (max-height: 3.24rem) {
+    @slot;
+  }
+}
+
+/*
  * LafPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize
  * uyarla, olmayanları da bu metriklerle uyarla, branding yap", "menüsüne kadar 1:1", "yazı tipini de görseldeki gibi";
  * DESIGN.md). Panonun ölçüleri L'Affogato kimliğinde: tek açık gri zemin (üst çubuk ve içerik aynı zeminde), kartlar
@@ -1149,6 +1176,30 @@ html[class~='dark'] {
   }
   .lp-visual {
     display: none;
+  }
+  /*
+   * Alçak ekran (yatay telefon, Windows'ta %150 ölçekli küçük tablet): başlık satırı ve büyük sayılar ekranın yarısını
+   * tutar, yaprağa bir-iki satır kalırdı (düğmelere ulaşmak için 100 px'lik pencerede kaydırmak gerekiyordu). Sahne
+   * kendi içinde kayar: aşağı kaydırınca başlık çekilir, gövde (yaprak ve yan kart) sahnenin tam boyunu alır; yaprak
+   * yine kendi içinde kayar. Yönetimin geniş ekran ızgarası (lp-nav, 64rem+) zaten tam boydur, etkilenmez
+   */
+  @media (min-width: 48rem) and (max-height: 34rem) {
+    .lp-stage {
+      justify-content: flex-start;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+    }
+    .lp-stage::-webkit-scrollbar {
+      display: none;
+    }
+    .lp-stage > :is(.lp-side, .lp-glass) {
+      flex: none;
+    }
+    .lp-stage > .lp-body {
+      flex: none;
+      height: 100%;
+    }
   }
   @media (max-width: 39.99rem) {
     .lp-side > .lp-actions {

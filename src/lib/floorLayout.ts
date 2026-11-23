@@ -1,5 +1,6 @@
 /**
- * Masa planı düzenleyicisinin taslak kuralları (yönetim › Masa planı). DOM'a dokunmaz; testler doğrudan çağırır.
+ * Masa planının kuralları: düzenleyicinin taslağı (yönetim › Masa planı) ve salonun en küçük boyu (Masalar). DOM'a
+ * dokunmaz; testler doğrudan çağırır.
  */
 export interface Geometry {
   id: string;
@@ -48,4 +49,23 @@ export function settleSaved<T extends Geometry>(dirty: ReadonlySet<string>, loca
     if (s && sameGeometry(t, s)) out.delete(t.id);
   }
   return out;
+}
+
+/** Plandaki en küçük masanın inmeyeceği ölçü (px): ad ve tutar sığar, dokunma hedefi 44 px'in üstünde */
+export const PLAN_TILE_MIN = { w: 64, h: 56 } as const;
+/** Planın en-boy oranı (16:10) */
+export const PLAN_RATIO = 1.6;
+
+/**
+ * Planın en küçük boyu (px; 16:10 planın yüksekliği): en küçük masa `PLAN_TILE_MIN`'in altına inmesin. Alçak ekranda
+ * (küçük kasa bilgisayarı, Windows ölçeği %125-150, yatay telefon) plan bunun altına küçülmez, yaprak kayar; masalar
+ * düğme olmaktan çıkmaz (23 Kas 2026: 1366 × 768 ekranda %125 ölçekle masa 43 × 34 px'e iniyordu). Çok küçük çizilmiş
+ * masa planı ekranlar boyu büyütmesin diye üst sınır, seyrek planda da okunur bir salon kalsın diye alt sınır var
+ */
+export function planMinHeight(tables: readonly { w: number; h: number }[]): number {
+  if (!tables.length) return 0;
+  const w = Math.max(1, Math.min(...tables.map((t) => t.w)));
+  const h = Math.max(1, Math.min(...tables.map((t) => t.h)));
+  const need = Math.max((PLAN_TILE_MIN.w * 100) / w / PLAN_RATIO, (PLAN_TILE_MIN.h * 100) / h);
+  return Math.round(Math.min(640, Math.max(280, need)));
 }
