@@ -6,7 +6,7 @@ import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
 import { nextZNo } from '@shared/z-no';
 import { type DB, schema, type Tx } from '../db/client';
-import type { ZField, ZSummary } from '../db/schema';
+import type { FiscalStatus, ZField, ZSummary } from '../db/schema';
 import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
@@ -179,10 +179,10 @@ const Z_FIELDS: ZField[] = ['cash', 'card', 'meal_card', 'online', 'other'];
  * (birleştirmede ikisi birlikte taşınır, gün aşırı ödemede de). Adisyonlar alt sorguyla seçilir: uzun dönemde kimlik
  * listesi SQLite'ın değişken sınırına takılmaz (günler en çok 400)
  */
-export function deviceReceipts(t: Tx | DB, dayIds: string[]): { paymentIds: string[] }[] {
+export function deviceReceipts(t: Tx | DB, dayIds: string[]): { paymentIds: string[]; status: FiscalStatus }[] {
   const orderIds = t.select({ id: schema.payments.orderId }).from(schema.payments).where(inArray(schema.payments.dayId, dayIds));
   return t
-    .select({ paymentIds: schema.fiscalReceipts.paymentIds })
+    .select({ paymentIds: schema.fiscalReceipts.paymentIds, status: schema.fiscalReceipts.status })
     .from(schema.fiscalReceipts)
     .where(and(inArray(schema.fiscalReceipts.orderId, orderIds), sql`${schema.fiscalReceipts.paymentIds} <> '[]'`))
     .all();
