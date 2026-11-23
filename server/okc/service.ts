@@ -145,9 +145,9 @@ function publish(orderId: string, kind: string, message?: string, byUserId?: str
 }
 
 /**
- * Adisyonu (ya da seçilen kalemleri) cihaza gönderir. `storeCopy`: sepeti gönderen ekran ödemeden sonra işyeri nüshası
- * basan kasa ekranı (fiş yazıcısı var, ayar açık); cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
- * (`store-copy.ts`)
+ * Adisyonu (ya da seçilen kalemleri) cihaza gönderir. `storeCopy`: sepeti gönderen ekran ödemeden sonra nüsha basan kasa
+ * ekranı (fiş yazıcısı var, müşteri ve işyeri nüshasından en az birinin ayarı açık; her kâğıt kendi ayarıyla basılır);
+ * cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar (`store-copy.ts`)
  */
 export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean; odeme?: 'nakit' | 'kart' } = {}): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');

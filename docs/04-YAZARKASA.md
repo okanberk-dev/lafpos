@@ -128,7 +128,8 @@ bugünkü gibi. Ayar kapalıysa ya da bağlantı masada ödemedeyse pencere bug�
 çıkar, yazarkasa bağlıyken de (`src/lib/after-payment.tsx`, `src/lib/print.tsx`): önce **müşteri nüshası** (sipariş
 numarası ya da masa çok büyük, çağrı için; kalemler; "mali değeri yoktur"; `BillReceipt`), sonra **işyeri nüshası** (bar
 ve hazırlık için: adisyon no, masa ya da tür, tarih-saat, kalemler ve seçenekler, ikram edilen kalemde tutar yerine türü,
-adisyon toplamı, ödeme türleri, yazarkasa fiş ve Z no'su varsa, kasiyer; `StoreCopyReceipt`). Ayarlar Yönetim › Ayarlar
+indirimli kalemin altında indirimi, adisyondaki gibi ara toplam, indirim ve servis, adisyon toplamı, ödeme türleri,
+yazarkasa fiş ve Z no'su varsa, kasiyer; `StoreCopyReceipt`). Ayarlar Yönetim › Ayarlar
 ve yedek › Fiş yazıcısı kartında, her kâğıt kendi ayarıyla: "Ödeme sonrası müşteri nüshası" (`receiptInfoSlip`) ve
 "Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`), ikisi de varsayılan açık (`shared/odeme-fisi.ts` ›
 `afterPaymentParts`). İkram, ödenmez ve zayi kapanışında da aynı iki kâğıt (işyeri nüshasında kapanış türü). Her ödeme

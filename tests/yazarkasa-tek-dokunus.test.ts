@@ -281,7 +281,17 @@ describe('işyeri nüshası çıktısı', () => {
   it('kalem dökümü (bar için); adisyon no, toplam, ödeme türü, yazarkasa fiş ve Z no, kasiyer', async () => {
     const { StoreCopyReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props> };
     const boot = { settings: { businessName: "L'Affogato" }, branch: null } as unknown as BootstrapDTO;
-    const order = { no: 42, tableName: 'Masa 3', numarator: null, type: 'masa', total: 25000, paid: 25000, items: [{ id: 'i1', name: 'Türk Kahvesi', qty: 1, unitPrice: 25000, size: 'TEK', voided: false, optionsText: 'Orta şekerli' }], payments: [] } as unknown as OrderDTO;
+    const order = {
+      no: 42,
+      tableName: 'Masa 3',
+      numarator: null,
+      type: 'masa',
+      total: 25000,
+      paid: 25000,
+      totals: { gross: 25000, lineDiscounts: 0, orderDiscount: 0, service: 0, total: 25000 },
+      items: [{ id: 'i1', name: 'Türk Kahvesi', qty: 1, unitPrice: 25000, discount: 0, size: 'TEK', voided: false, optionsText: 'Orta şekerli' }],
+      payments: [],
+    } as unknown as OrderDTO;
     const html = renderToStaticMarkup(
       createElement(StoreCopyReceipt, { order, boot, payments: [{ id: 'p1', methodName: 'Kredi kartı', amount: 25000, tip: 0 }], device: { receiptNo: 17, zNo: 5, docId: null, docLabel: 'fiş' }, cashier: 'Ayşe', at: 0 }),
     );

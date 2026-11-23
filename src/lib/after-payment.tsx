@@ -2,11 +2,13 @@ import { useEffect, useRef } from 'react';
 import { COMP_LABEL } from '@shared/comp';
 import { afterPaymentParts, afterPaymentPrints, bankEodSlipHere, isKasaHost, printOnce } from '@shared/odeme-fisi';
 import type { BootstrapDTO, CompKind, OrderDTO } from '@shared/types';
-import { ApiError, get, post } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
-import { onLive, useLive } from '@/lib/live';
-import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, StoreCopyReceipt, ZReceipt } from '@/lib/print';
-import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '@/lib/store-copies';
+// Yan modüller göreli yoldan (src/lib'deki öbürleri gibi): test ekranın kararını bu modülü yükleyip dener
+// (tests/isyeri-nushasi.test.ts; vitest'te yalnız @shared takma adı var)
+import { ApiError, get, post } from './api';
+import { useAuth } from './auth';
+import { onLive, useLive } from './live';
+import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, StoreCopyReceipt, ZReceipt } from './print';
+import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from './store-copies';
 
 /** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
 const once = printOnce();
@@ -166,15 +168,22 @@ export function useDeviceCopies(boot: BootstrapDTO) {
 }
 
 /**
+ * Bu ekran Pavo'nun banka gün sonu kâğıdını basar mı: fiş yazıcılı kasa ekranı ve Pavo bağlantısı (`bankEodSlipHere`);
+ * ödeme sonrası nüsha ayarlarına bağlı değil. Kendi ayarını sunucu denetler (`takeEodSlip`)
+ */
+export function eodSlipHere(boot: BootstrapDTO): boolean {
+  return bankEodSlipHere({ printer: !!boot.integrations.receiptPrinter, kasaScreen: isKasaHost(window.location.hostname), provider: boot.integrations.okc.provider });
+}
+
+/**
  * Pavo'da banka gün sonu alınınca (gün kapanınca ya da elle) fiş yazıcısından gün sonu kâğıdı: fiş yazıcılı kasa
- * ekranında (`bankEodSlipHere`; ödeme sonrası nüsha ayarlarına bağlı değil). Sunucu kâğıdı batch başına bir kez, ilk
+ * ekranında (`eodSlipHere`; ödeme sonrası nüsha ayarlarına bağlı değil). Sunucu kâğıdı batch başına bir kez, ilk
  * soran ekrana verir; olay kaçtıysa açılışta, bağlantı yeniden kurulunca ve sekme görünür olunca sorulur. Ayar: Yönetim ›
  * Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın" (kapalıysa sunucu kâğıt vermez)
  */
 export function useBankEodSlip(boot: BootstrapDTO) {
   const canTake = useAuth((s) => !!s.me?.permissions.includes('odeme.al'));
-  const active =
-    canTake && bankEodSlipHere({ printer: !!boot.integrations.receiptPrinter, kasaScreen: isKasaHost(window.location.hostname), provider: boot.integrations.okc.provider });
+  const active = canTake && eodSlipHere(boot);
   const ref = useRef(boot);
   useEffect(() => {
     ref.current = boot;

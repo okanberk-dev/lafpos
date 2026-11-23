@@ -96,7 +96,7 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
     // İstek gitmeden: yanıtı kaybolan sepet de cihaza ulaşmış olabilir (okc_unknown), ödenirse sonuç bu cihazda karşılanır
     onSend?.();
     try {
-      // Nüsha basan kasa ekranıysa cihaz ödeyince işyeri nüshası sunucuda bekler (useDeviceCopies basar)
+      // Nüsha basan kasa ekranıysa cihaz ödeyince nüsha sunucuda bekler (useDeviceCopies müşteri ve işyeri nüshasını kendi ayarıyla basar)
       await post(`/okc/orders/${order.id}/send`, { items, storeCopy: deviceCopyHere(boot) });
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });
       toast.info(provider === 'simulator' ? 'Sepet eğitim cihazına gönderildi' : boot.integrations.okc.mode === 'anlik' ? 'Sepet yazarkasaya gönderildi; ödemeyi cihazdan alın' : 'Sepet cihaz listesine eklendi');

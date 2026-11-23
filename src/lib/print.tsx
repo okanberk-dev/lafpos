@@ -379,8 +379,8 @@ export function BillReceipt({ order, boot, sizeLabel, share, copy }: { order: Or
 
 /**
  * İşyeri nüshası: ödemeden sonra fiş yazıcısından çıkan, kasada ve barda kalan kâğıt (bar ve hazırlık için kalem
- * dökümü, adisyon toplamı, ödemeler). Müşterinin kâğıdı ayrı: müşteri nüshası (`BillReceipt` `copy`), mali fiş
- * yazarkasadan. `device`: yazarkasanın fiş ve Z no'su (cihazdan geldiyse)
+ * dökümü, indirim ve servisle adisyon toplamı, ödemeler). Müşterinin kâğıdı ayrı: müşteri nüshası (`BillReceipt`
+ * `copy`), mali fiş yazarkasadan. `device`: yazarkasanın fiş ve Z no'su (cihazdan geldiyse)
  */
 export function StoreCopyReceipt({
   order,
@@ -400,6 +400,7 @@ export function StoreCopyReceipt({
   /** Ciro dışı kapanış (ikram, ödenmez, zayi): "ALINAN" yerine türü yazılır */
   comp?: string | null;
 }) {
+  const t = order.totals;
   const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
   const branch = branchLine(boot);
   const paid = payments.reduce((a, p) => a + p.amount + p.tip, 0);
@@ -416,8 +417,10 @@ export function StoreCopyReceipt({
         {cashier && <Row l={`Kasiyer ${cashier}`} />}
       </div>
       <Hr />
-      {/* Bar ve hazırlık için kalem dökümü (seçenekler girintili). İkram edilen kalemde tutar yerine türü (adisyondaki
-          gibi): toplam onu saymaz, liste fiyatı yazılsa kalemler toplamı tutmazdı (inceleme, 23 Kas 2026) */}
+      {/* Bar ve hazırlık için kalem dökümü (seçenekler girintili). Kalemden adisyon toplamına adisyondaki gibi
+          (`BillReceipt`): ikram edilen kalemde tutar yerine türü (toplam onu saymaz), indirimli kalemin altında indirimi,
+          toplamdan önce ara toplam, indirim ve servis. Eskiden ikram liste fiyatıyla basılıyor, indirim hiç yazılmıyordu:
+          kalemler adisyon toplamının üstünde kalıyor, aradaki fark kâğıtta görünmüyordu (inceleme, 23 Kas 2026) */}
       <div className="rc-items">
         {order.items
           .filter((i) => !i.voided)
@@ -431,10 +434,23 @@ export function StoreCopyReceipt({
               <span className="rc-r">{i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(lineGross(i))}</span>
               {i.optionsText && <span className="rc-item-sub">{i.optionsText}</span>}
               {i.note && <span className="rc-item-sub">Not: {i.note}</span>}
+              {i.discount > 0 && (
+                <>
+                  <span className="rc-item-sub rc-item-sub-l">İndirim{i.discountReason ? ` (${i.discountReason})` : ''}</span>
+                  <span className="rc-r">-{tlPlain(i.discount)}</span>
+                </>
+              )}
             </div>
           ))}
       </div>
       <Hr />
+      {t.lineDiscounts + t.orderDiscount > 0 && (
+        <>
+          <Row l="Ara toplam" r={tlPlain(t.gross)} />
+          <Row l={`İndirim${order.discountReason ? ` (${order.discountReason})` : ''}`} r={`-${tlPlain(t.lineDiscounts + t.orderDiscount)}`} />
+        </>
+      )}
+      {t.service > 0 && <Row l={`Servis %${order.serviceRate}`} r={tlPlain(t.service)} />}
       <Row l="Adisyon toplamı" r={tlPlain(order.total)} />
       <div className="rc-block">
         {payments.map((p) => (

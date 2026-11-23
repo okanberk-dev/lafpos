@@ -335,7 +335,7 @@ export function PaymentModal({
     okcSentHere.current = order.id;
     autoSent.current = { amount, given: method.kind === 'nakit' && given != null ? given : null, methodName: method.name };
     try {
-      // Nüsha basan kasa ekranıysa cihaz ödeyince işyeri nüshası sunucuda bekler (useDeviceCopies basar)
+      // Nüsha basan kasa ekranıysa cihaz ödeyince nüsha sunucuda bekler (useDeviceCopies müşteri ve işyeri nüshasını kendi ayarıyla basar)
       // Seçilen tür (nakit, kart) Pavo'da cihazda hazır gelir: kasiyer cihazda yeniden seçmez
       await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null, storeCopy: deviceCopyHere(boot), ...(method.kind === 'nakit' || method.kind === 'kart' ? { odeme: method.kind } : {}) });
     } catch (e) {
