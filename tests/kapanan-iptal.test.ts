@@ -213,6 +213,19 @@ describe('kalem iadesinin hesabı', () => {
     const bad = await h.call<{ code: string }>('mudur', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: res.order.items.find((i) => i.complimentary)!.id, qty: 1 }], reason: 'İade' });
     expect(bad.status).toBe(409);
   });
+
+  it('geri verilecek tutarı olmayan kalem (tamamı indirimli) iade edilmez', async () => {
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 100, reason: 'Kampanya' });
+    expect(o.total).toBe(0);
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/close`, {});
+    expect(o.status).toBe('kapali');
+    const res = await refund(o, 1);
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('refund_zero');
+    expect((await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`)).status).toBe('kapali');
+  });
 });
 
 /**
@@ -277,8 +290,12 @@ describe('iade bar ekranına ve uyarılara karışmaz', () => {
     expect(alarmsAfter?.detail ?? null).toBe(alarmsBefore?.detail ?? null);
     const log = await h.ok<{ action: string; orderId: string | null; severity: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=50');
     const voidRow = log.find((r) => r.action === 'item.void' && r.orderId === o.id)!;
-    expect(voidRow.severity).toBe('uyari');
+    expect(voidRow.severity).toBe('info');
     expect(voidRow.message).toContain('iade etti');
+    // Patron panelinin uyarılarında bu iade tek satır: geri verilen tutarla iadenin özeti (iç adımlar bilgi düzeyinde)
+    const alerts = (await h.ok<{ alerts: { action: string; orderId: string | null; message: string }[] }>('patron', 'GET', '/reports/patron')).alerts.filter((a) => a.orderId === o.id);
+    expect(alerts.map((a) => a.action)).toEqual(['order.refund_items']);
+    expect(alerts[0]!.message).toContain('₺195,00 iade etti');
 
     const after = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
     const live = after.payments.filter((p) => !p.refundedAt);

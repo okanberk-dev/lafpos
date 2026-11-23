@@ -655,7 +655,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     userId: actor.user.id,
     approverId,
     action: 'item.void',
-    severity: fresh ? 'info' : afterBill ? 'alarm' : 'uyari',
+    // İadenin kalemi bilgi düzeyinde: uyarılarda iadenin özet kaydı görünür (refundItems)
+    severity: fresh || input.refund ? 'info' : afterBill ? 'alarm' : 'uyari',
     orderId,
     entity: 'order_item',
     entityId: it.id,
@@ -1697,7 +1698,12 @@ export function closeOrder(t: Tx, actor: Actor, fx: Effects, orderId: string): O
   return updated;
 }
 
-export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { paymentId: string; reason: string }): OrderRow {
+/**
+ * Ödeme iptali. `partOfRefund`: kalem iadesinin iç adımı (refundItems kalanı aynı türle hemen yeniden yazar): denetimde
+ * bilgi düzeyinde kalır, patron panelinin uyarılarına "₺390 Nakit ödemesini iptal etti" diye düşmez; iadenin kendi
+ * özet kaydı (geri verilen tutar ve tür) alarmdır (inceleme, 23 Kas 2026)
+ */
+export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { paymentId: string; reason: string; partOfRefund?: boolean }): OrderRow {
   const approverId = need(actor, 'odeme.iade', 'Ödeme iptali yetkili onayı gerektirir');
   const o = loadOrder(t, orderId);
   assertPosOrder(o);
@@ -1740,11 +1746,13 @@ export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string,
     userId: actor.user.id,
     approverId,
     action: 'payment.refund',
-    severity: wasClosed ? 'alarm' : 'uyari',
+    severity: input.partOfRefund ? 'info' : wasClosed ? 'alarm' : 'uyari',
     orderId,
     entityId: p.id,
     amount: p.amount,
-    message: `${actor.user.name} #${o.no} adisyonda ${tl(p.amount)} ${p.methodName} ödemesini iptal etti (${reason})${wasClosed ? '; adisyon yeniden açıldı' : ''}`,
+    message: input.partOfRefund
+      ? `${actor.user.name} #${o.no} kalem iadesinde ${tl(p.amount)} ${p.methodName} ödemesini kalanı yeniden yazmak için iptal etti (${reason})`
+      : `${actor.user.name} #${o.no} adisyonda ${tl(p.amount)} ${p.methodName} ödemesini iptal etti (${reason})${wasClosed ? '; adisyon yeniden açıldı' : ''}`,
   });
   orderEvents(fx, updated, actor.user.id, 'payment.refunded');
   fx.emit({ topic: 'cash', kind: 'payment.refunded', orderId, byUserId: actor.user.id });
@@ -1898,9 +1906,11 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
     calcInputFor(o, items),
     [...selection].map(([lineId, qty]) => ({ lineId, qty })),
   );
+  // Tamamı indirimli kalemin geri verilecek parası yoktur: iade değil (ödeme iptali ve yeniden açılış kaydı bırakırdı)
+  if (plan.refund <= 0) throw conflict('Seçilen kalemlerin geri verilecek tutarı yok', 'refund_zero');
   const note = `İade: ${why}`;
   const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
-  for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: note });
+  for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: note, partOfRefund: true });
   if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, note);
   // Paylaşım kalkar (kalan, payların ödemeleriyle yeniden yazılır); tutar indirimi iade hesabının küçülttüğü değere iner.
   // İadenin kalem iptalleri indirim büyümesi sayılmaz (voidItem `refund`): oran `refundCalc`'ta korunur
