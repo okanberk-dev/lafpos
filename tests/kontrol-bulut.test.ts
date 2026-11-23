@@ -715,6 +715,38 @@ describe('uzaktan gün sonu ve güncelleme', () => {
     expect(await nabiz({ kontrol: { ozet: durumParmakIzi(durumOrnek()) } })).toMatchObject({ guncelleKomut: null });
     await sifirla();
   });
+
+  it('kasaya gitmeden iptal edilen gün sonunun güncelleme isteği de geri alınır; Merkez "Şimdi güncelle" yeniden açık', async () => {
+    await sifirla();
+    kanal = { v: 1, version: '0.5.0', build: 2000, date: '2026-11-23T10:00:00.000Z', not: 'Yeni sürüm' };
+    (await api()).resetReleaseCache();
+    const sent = await komut(sahip, 'gun.sonu', { not: '' }, { guncelle: true });
+    const { id, at } = sent.body.komut as KontrolGecmisi;
+    expect(await merkezSatiri()).toMatchObject({ istekBekliyor: true });
+    const iptal = await call('POST', 'kontrol/iptal', { token: sahip, body: { id } });
+    expect(iptal.body.komut).toMatchObject({ id, durum: 'iptal' });
+    // İstek geri alındı: Merkez "Güncelleme istendi" demez, düğmesi açık; kasa nabızda isteği görmez (30 dakika gün
+    // sonunu bekleyip "kasaya ulaşmadı" yazmaz). Gönderilen hedef kalır (reddedilen gün sonundaki gibi)
+    expect(kurulum()).toMatchObject({ guncelleIstek: null, guncelleKomut: null, hedef: 2000, gonderildi: at });
+    expect(await merkezSatiri()).toMatchObject({ istekBekliyor: false, hedef: 2000 });
+    const beat = await nabiz({ kontrol: { ozet: durumParmakIzi(durumOrnek()) } });
+    expect(beat).toMatchObject({ guncelleIstek: null, guncelleKomut: null });
+    expect(beat.kontrol!.komutlar).toEqual([]);
+
+    // Arada Merkez'den verilen "Şimdi güncelle" (bağsız) eski gün sonunun iptaliyle geri alınmaz; başka işlemin iptali de
+    // isteğe dokunmaz
+    const ikinci = (await komut(sahip, 'gun.sonu', { not: '' }, { guncelle: true })).body.komut as KontrolGecmisi;
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await call('POST', 'merkez/simdi-guncelle', { token: sahip, body: { ids: [kasaId] } })).body).toMatchObject({ ok: true, istenen: 1 });
+    const merkezIstegi = kurulum().guncelleIstek;
+    expect((await call('POST', 'kontrol/iptal', { token: sahip, body: { id: ikinci.id } })).status).toBe(200);
+    expect(kurulum()).toMatchObject({ guncelleIstek: merkezIstegi, guncelleKomut: null });
+    expect(await merkezSatiri()).toMatchObject({ istekBekliyor: true });
+    const servis = (await komut(sahip, 'ayar.servis', { mod: 'self' })).body.komut as KontrolGecmisi;
+    expect((await call('POST', 'kontrol/iptal', { token: sahip, body: { id: servis.id } })).status).toBe(200);
+    expect(kurulum()).toMatchObject({ guncelleIstek: merkezIstegi });
+    await sifirla();
+  });
 });
 
 describe('panel üyeleri', () => {

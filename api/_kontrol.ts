@@ -84,6 +84,8 @@ export interface KontrolDeps {
    * `komut` gün sonuna bağlı. api/uzaktan.ts verir: Merkez nabız için bu dosyayı içe aktarır, burası onu aktarmaz (döngü)
    */
   guncelleIste?: (kurulum: string, now: number, komut: string) => Promise<unknown>;
+  /** Bağlı gün sonu iptal edildi: o gün sonuna bağlı güncelleme isteği de geri alınır (api/_merkez.ts withdrawLinkedUpdate) */
+  guncelleBirak?: (kurulum: string, komut: string) => Promise<unknown>;
   now?: () => number;
 }
 
@@ -444,6 +446,10 @@ async function komutIptal(req: Request, deps: KontrolDeps, ben: KontrolOturumu, 
   }
   const row = satir(kayit, 'iptal', ben.eposta ? `İptal eden: ${ben.eposta}` : 'Sahip iptal etti', now);
   await gecmiseYaz(deps.redis, id, [row]);
+  // "Gün sonu al ve güncelle"de güncelleme isteği bu gün sonuna bağlı: gün sonu gitmeyince istek de geri alınır. Yoksa
+  // Merkez 30 dakika "Güncelleme istendi" deyip "Şimdi güncelle"yi kapalı tutuyor, kasa da kayda "kasaya ulaşmadı"
+  // yazıyordu (inceleme, 23 Kas 2026)
+  if (kayit.tur === 'gun.sonu') await deps.guncelleBirak?.(id, kayit.id);
   if (Number(await deps.redis('HLEN', komutKey(id))) === 0) await isaretTemizle(deps.redis, id);
   return json({ ok: true, komut: row } satisfies KomutYaniti);
 }

@@ -161,9 +161,11 @@ const bekleyenler = () => getSyncState<KomutSonucu[]>(SONUCLAR) ?? [];
 
 /**
  * İşlenmiş komutun sonucu (son 500 içinde); kasa henüz görmediyse null. "Gün sonu al ve güncelle"de Merkez'in güncelleme
- * isteği bu gün sonunun sonucuna bağlıdır (sync/merkez.ts takeRemoteUpdate). Yarıda kalan işlem reddedilmiş sayılır
+ * isteği bu gün sonunun sonucuna bağlıdır (sync/merkez.ts takeRemoteUpdate). Yarıda kalan işlem reddedilmiş sayılır.
+ * İmzası ya da verisi tutmayan komut işlenmiş listeye yazılmaz, yalnız bildirilecek sonuca (komutIsle): onun reddi de
+ * görülür. Yoksa bağlı istek 30 dakika bekleyip "uygulanmadı" diye kapanıyordu (inceleme, 23 Kas 2026)
  */
-export const komutDurumu = (id: string): SonucDurumu | null => islenenler().find((x) => x.id === id)?.durum ?? null;
+export const komutDurumu = (id: string): SonucDurumu | null => (islenenler().find((x) => x.id === id) ?? bekleyenler().find((x) => x.id === id))?.durum ?? null;
 
 /**
  * Nabız isteğine eklenen kısım: özetin parmak izi her zaman; özetin kendisi yalnız bulut istediyse ya da son iletilenden

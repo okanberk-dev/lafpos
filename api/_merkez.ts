@@ -153,6 +153,20 @@ export async function requestUpdateNow(redis: MerkezDeps['redis'], id: string, n
   return true;
 }
 
+/**
+ * Bağlı gün sonu kasaya gitmeden iptal edildi (api/_kontrol.ts komutIptal): "hemen denetle" isteği de geri alınır. Yoksa
+ * kasa isteği 30 dakika gün sonunu bekleyip "kasaya ulaşmadı" diye kapatıyor, Merkez o sürece "Güncelleme istendi"
+ * gösterip "Şimdi güncelle"yi kapalı tutuyordu (inceleme, 23 Kas 2026). Yalnız istek hâlâ o gün sonuna bağlıysa: arada
+ * Merkez'den verilen "Şimdi güncelle" ya da yeni bir "Gün sonu al ve güncelle" geri alınmaz. Gönderilen hedef kalır
+ * (reddedilen gün sonundaki gibi: sürüm olağan yoldan gün kapanınca kurulur). Dönüş: geri alındıysa true
+ */
+export async function withdrawLinkedUpdate(redis: MerkezDeps['redis'], id: string, komut: string): Promise<boolean> {
+  const inst = await readInstall({ redis }, id);
+  if (!inst || inst.guncelleKomut !== komut) return false;
+  await writeInstall({ redis }, { ...inst, guncelleIstek: null, guncelleKomut: null });
+  return true;
+}
+
 /** ISO zaman → ms (anlaşılmazsa null) */
 const isoMs = (v: unknown) => {
   const ms = typeof v === 'string' && v.length <= 40 ? Date.parse(v) : NaN;

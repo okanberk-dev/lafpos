@@ -198,7 +198,9 @@ export function effectiveUpdateChoice(yeni: { build: number } | null | undefined
  * komutDurumu). Güncelleme ancak o gün sonu uygulandıysa istenir; gün sonu henüz gelmediyse `GUN_SONU_OMRU_MS` boyunca
  * beklenir. Reddedildiyse (açık adisyon, eski istek) ya da o sürede gelmediyse istek güncelleme başlatmadan kapanır ve
  * kayda düşer: reddedilen gün sonunun güncellemesi istenmiş kalmıyordu (inceleme, 23 Kas 2026). Merkez'in gönderdiği
- * hedef geçerli kalır: sürüm olağan denetimle gün kapanınca kurulur
+ * hedef geçerli kalır: sürüm olağan denetimle gün kapanınca kurulur. Kasaya gitmeden iptal edilen gün sonunun isteğini
+ * bulut geri alır (api/_merkez.ts withdrawLinkedUpdate); kasa gün sonunu hiç görmediyse nedenini bilemez, kayıt "kasada
+ * uygulanmadı (iptal edildi ya da kasaya ulaşmadı)" der
  */
 export function takeRemoteUpdate(istek: number | null | undefined, now = Date.now(), gunSonu: { komut: string; durum: SonucDurumu | null } | null = null): boolean {
   if (!istek || getSyncState<number>(HANDLED_REQUEST) === istek) return false;
@@ -212,7 +214,7 @@ export function takeRemoteUpdate(istek: number | null | undefined, now = Date.no
       action: 'guncelleme',
       entity: 'merkez',
       message: kalmadi
-        ? `Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu ${gunSonu.durum ? 'reddedildi' : 'kasaya ulaşmadı'}`
+        ? `Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu ${gunSonu.durum ? 'reddedildi' : 'kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)'}`
         : can
           ? "Merkez'den (LafPOS Uzaktan) güncelleme istendi: yeni sürüm denetleniyor, gün kapalıyken kurulur"
           : "Merkez'den (LafPOS Uzaktan) güncelleme istendi; bu kurulumda otomatik güncelleyici yok, sunucu elle güncellenir",

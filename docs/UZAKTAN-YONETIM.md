@@ -18,7 +18,9 @@ Sözleşme (türler, doğrulama, imza metni): `shared/kontrol.ts`. Bulut: `api/_
   alınmaz: gece çevrimdışı kasaya verilen istek ertesi sabah açılan günü kapatmasın. Güncelleme Merkez'in "Şimdi
   güncelle"siyle aynı yoldan gider (hedef, gönderim, istek) ve ancak gün sonu kasada uygulanınca istenir; gün sonu
   reddedilirse (açık adisyon, eski istek) hemen kurulmaz, Merkez'in gönderdiği sürüm olağan yoldan gün kapanınca kurulur.
-  Denetim kaydında "Uzaktan (e-posta) gün sonu aldı".
+  Gün sonu kasaya gitmeden iptal edilirse güncelleme isteği de geri alınır (Merkez'de "Güncelleme istendi" kalmaz,
+  "Şimdi güncelle" açılır); gönderilen sürüm yine gün kapanınca kurulur. Denetim kaydında "Uzaktan (e-posta) gün sonu
+  aldı".
 - **Panele kim girer** (Uzaktan yönetim › Panel erişimi): Sahip (Vercel'deki e-postalar) e-posta ekler ve rol seçer:
   **Yönetici** (personeli, Tükendi'yi ve servis modunu yönetir; patron hesabına ve rol yetkilerine dokunamaz) ya da
   **Yalnız görür**. Eklenen kişiye bir kez görünen **davet kodu** verilir (7 gün geçerli; kaybolursa satırdaki **Yeni kod**);

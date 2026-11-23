@@ -740,9 +740,39 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
     expect(getSyncState<number>('merkez.istek')).not.toBe(istek);
     expect(takeRemoteUpdate(istek, istek + GUN_SONU_OMRU_MS, gelmedi)).toBe(true);
     expect(getSyncState<number>('merkez.istek')).toBe(istek);
-    expect((await audits('guncelleme')).at(-1)!.message).toBe("Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu kasaya ulaşmadı");
+    // Kasa gün sonunu hiç görmedi: iptal mi edildi, ulaşmadı mı bilemez (bulut iptalde isteği geri alır, yine de)
+    expect((await audits('guncelleme')).at(-1)!.message).toBe("Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)");
     // Merkez'in kendi "Şimdi güncelle"si (bağsız) hemen işlenir
     expect(takeRemoteUpdate(istek + 1, istek + 1)).toBe(true);
     expect((await audits('guncelleme')).at(-1)!.message).toMatch(/^Merkez'den \(LafPOS Uzaktan\) güncelleme istendi/);
+  });
+
+  it('imzası tutmayan bağlı gün sonu: güncelleme isteği aynı nabızda "reddedildi" diye kapanır, 30 dakika beklemez', async () => {
+    const { merkezBeat } = await import('../server/sync/merkez');
+    const { getSyncState } = await import('../server/lib/settings');
+    const { env } = await import('../server/env');
+    const file = join(env.dataDir, 'guncelleme', 'istek.json');
+    // Kasadaki ve Vercel'deki ortak anahtar farklı: komut işlenmiş listeye yazılmaz, yalnız bildirilecek sonuca
+    const bozuk = komut('gun.sonu', { not: '' }, { secret: 'b'.repeat(40) });
+    siradaki = [{ komutlar: [bozuk] }];
+    ekYanit = { guncelleIstek: bozuk.at, guncelleKomut: bozuk.id };
+    const bekciOnce = process.env.LAFPOS_STDIN_CONTROL;
+    // Windows güncelleyicisi var: istek yazılabilir (yazılmaması kurala bağlı olsun)
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    try {
+      expect(await merkezBeat()).toBe(true);
+      expect(getSyncState<number>('merkez.istek')).toBe(bozuk.at);
+      expect((await audits('guncelleme')).at(-1)).toMatchObject({
+        message: "Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi",
+        data: { komut: bozuk.id, gunSonu: 'reddedildi' },
+      });
+      expect(existsSync(file)).toBe(false);
+    } finally {
+      if (bekciOnce === undefined) delete process.env.LAFPOS_STDIN_CONTROL;
+      else process.env.LAFPOS_STDIN_CONTROL = bekciOnce;
+      ekYanit = {};
+      siradaki = [];
+      rmSync(file, { force: true });
+    }
   });
 });
