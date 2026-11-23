@@ -274,10 +274,14 @@ export function summaryReport(range: Range, nowMs = Date.now(), opts: { history?
   };
 }
 
-/** Geçmiş gününün kıyas dönemindeki satışı: kesim yoksa bütün gün, varsa kapanış dakikalarıyla (dakikasız gün sayılmaz) */
+/**
+ * Geçmiş gününün kıyas dönemindeki satışı ("aynı saate kadar"): kesim yoksa ya da gün kesimden önce bittiyse (ve kesimden
+ * sonra kapanışı yoksa) bütün gün; kesimi içeren gün kapanış dakikalarıyla (dakikası olmayan gün, ModPOS, orada
+ * sayılmaz). api/uzaktan.ts `salesUntil` ile aynı kural
+ */
 function historySales(d: HistoryDay, cutoffMs: number | null): { netSales: number; receipts: number } {
-  if (cutoffMs == null) return { netSales: d.ciro, receipts: d.adisyon };
   const start = businessDayStartMs(d.date);
+  if (cutoffMs == null || (businessDayStartMs(addDays(d.date, 1)) <= cutoffMs && d.closes.every(([m]) => start + m * 60_000 <= cutoffMs))) return { netSales: d.ciro, receipts: d.adisyon };
   const until = d.closes.filter(([m]) => start + m * 60_000 <= cutoffMs);
   return { netSales: until.reduce((a, c) => a + c[1], 0), receipts: until.reduce((a, c) => a + c[2], 0) };
 }
@@ -296,9 +300,9 @@ function historyBlock(range: Range, hist: HistoryIn | null) {
 
 // ─── Ürün ve kategori ───────────────────────────────────────────────────────
 
-export function productReport(range: Range, withCost: boolean, opts: { history?: boolean } = {}) {
+export function productReport(range: Range, withCost: boolean, opts: { history?: boolean; skip?: string[] } = {}) {
   const hist = opts.history ? historyFor(range, reportToday()) : null;
-  const ds = load(range, {}, hist?.replaced);
+  const ds = load(range, {}, hist?.replaced ?? opts.skip);
   const closedIds = idsOf(ds.orders.filter(isSale));
   const voided = new Set(voidedItems(ds));
   const totals = new Map(ds.orders.map((o) => [o.id, totalsOf(o)]));
@@ -418,9 +422,9 @@ function hourMemo() {
  * sabahının 06'sına karışmaz, gecenin ardından çizilir. Çok günlük dönemde satır günün saatidir (dağılım), 24 satır.
  * Adisyon sayısı Adisyon kutusuyla aynı ölçütle: tutarı olan adisyon (tamamı ikram edilen ₺0 adisyon sayılmaz).
  */
-export function hourlyReport(range: Range, opts: { rawWeek?: boolean; history?: boolean } = {}) {
+export function hourlyReport(range: Range, opts: { rawWeek?: boolean; history?: boolean; skip?: string[] } = {}) {
   const hist = opts.history ? historyFor(range, reportToday()) : null;
-  const ds = load(range, ORDERS_ONLY, hist?.replaced);
+  const ds = load(range, ORDERS_ONLY, hist?.replaced ?? opts.skip);
   // Geçmiş günleri (ModPOS) yalnız kapanış dakikası biliniyorsa saatlere girer (lafmaliyet'ten gelen gün yalnız toplamıyla)
   const histDays = (hist?.days ?? []).filter((d) => d.closes.length);
   const closed = ds.orders.filter(isSale);
@@ -513,8 +517,8 @@ export function closingMinutes(date: string): [number, number, number][] {
  * `handoff`: hazırdan teslime (bar ekranında ya da kasada "Teslim edildi"); her teslim dokunuşu bir kez sayılır,
  * süresi o dokunuşta teslim edilen kalemlerin en son hazır olanından.
  */
-export function prepReport(range: Range) {
-  const { done, handoffs } = prepRaw(range);
+export function prepReport(range: Range, skip: string[] = []) {
+  const { done, handoffs } = prepRaw(range, skip);
   return { range, ...prepFrom(done, handoffs, hourMemo()) };
 }
 
@@ -522,8 +526,8 @@ export function prepReport(range: Range) {
  * Hazırlama raporunun ham verisi: hazırlanan kalemler ve teslim süreleri. LafPOS Uzaktan'a günlük gider; dönem
  * istatistiği iki yerde de `prepFrom` (shared/remote-calc.ts) ile kurulur
  */
-export function prepRaw(range: Range): { done: PrepDone[]; handoffs: number[] } {
-  const ds = load(range);
+export function prepRaw(range: Range, skip: string[] = []): { done: PrepDone[]; handoffs: number[] } {
+  const ds = load(range, {}, skip);
   const orderNo = new Map(ds.orders.map((o) => [o.id, o.no]));
   const done = ds.items
     .filter((i) => !i.voided && i.stationId && i.readyAt && i.readyAt >= i.sentAt)
@@ -563,8 +567,8 @@ export function crossDayPayments(range: Range): CrossPay[] {
 
 // ─── Personel (maliyet yetkisi: personel tutarları) ─────────────────────────
 
-export function staffReport(range: Range) {
-  const ds = load(range);
+export function staffReport(range: Range, skip: string[] = []) {
+  const ds = load(range, {}, skip);
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const rows = new Map<
     string,
@@ -626,8 +630,8 @@ const voidedAfterBill = (i: ItemRow, o: OrderRow) =>
   i.voidAfterBill || (!i.voidReason?.startsWith(REFUND_VOID) && o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
 
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
-export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy', showStaff: (userId: string) => boolean = () => true) {
-  const ds = load(range);
+export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy', showStaff: (userId: string) => boolean = () => true, skip: string[] = []) {
+  const ds = load(range, {}, skip);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
@@ -695,8 +699,8 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
   return { range, total: rows.reduce((a, r) => a + r.value, 0), count: rows.length, rows, odenmezPeople };
 }
 
-export function refundReport(range: Range) {
-  const ds = load(range);
+export function refundReport(range: Range, skip: string[] = []) {
+  const ds = load(range, {}, skip);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   // Kalem iadesinde ödeme iptal edilip kalan aynı türle yeniden yazılır (orders.refundItems): iade tutarı net gösterilir.
@@ -724,8 +728,8 @@ export function refundReport(range: Range) {
  * gerçek adisyon sayısı; `rows` en yeni `limit` adisyon (ekran), `limit` null ise hepsi (CSV). `showWaiter` garsonun
  * kime gösterileceğini söyler: garsona göre toplanan liste personel tutarıdır (`seesStaffOf`).
  */
-export function checksReport(range: Range, limit: number | null = 300, showWaiter: (waiterId: string | null) => boolean = () => true) {
-  const ds = load(range);
+export function checksReport(range: Range, limit: number | null = 300, showWaiter: (waiterId: string | null) => boolean = () => true, skip: string[] = []) {
+  const ds = load(range, {}, skip);
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const checks = ds.orders
@@ -780,8 +784,8 @@ type MissedKind = 'rejected' | 'expired' | 'cancelled' | 'unrecorded';
  * Tahmini komisyon bugünkü oranla (Yönetim › Paket platformları; sipariş anında dondurulmaz, oran değişirse geçmişin
  * tahmini de değişir) ve yalnız maliyet yetkisine (`withCost`): komisyon bir maliyettir.
  */
-export function platformReport(range: Range, withCost: boolean, nowMs = Date.now()) {
-  const ds = load(range, { items: false });
+export function platformReport(range: Range, withCost: boolean, nowMs = Date.now(), skip: string[] = []) {
+  const ds = load(range, { items: false }, skip);
   const netSales = ds.orders.filter(isSale).reduce((a, o) => a + totalsOf(o).total, 0);
   const own = ds.orders.filter((o) => o.source === 'pos' && o.platform != null);
   // Kabul edilen siparişlerin platform kaydı: platformun kampanyası ve iptalde müşterinin tutarı

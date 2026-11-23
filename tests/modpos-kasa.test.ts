@@ -357,6 +357,12 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
     expect(s.history).toEqual({ kaynak: 'ModPOS', days: 9, from: dateOf(0), to: dateOf(8) });
   });
 
+  it('bugünü içeren dönemin kıyası ("aynı saate kadar"): kesimden önce biten ModPOS günü bütün sayılır, kesimi içeren dakikasız gün sayılmaz', async () => {
+    // Son 7 gün: kıyas 13-7 gün öncesi; tablonun ilk iki günü (9 ve 8 gün önce) kesimden önce biter, 7 gün öncesi kesimi içerir
+    const s = await h.ok<any>('patron', 'GET', `/reports/summary?from=${addDays(today, -6)}&to=${today}`);
+    expect(s.previous).toMatchObject({ range: { from: addDays(today, -13), to: addDays(today, -7) }, label: 'geçen haftanın aynı günleri, aynı saate kadar', netSales: 39000 + 331100, receipts: 2 + 14 });
+  });
+
   it('Ürünler: dönemin hepsi seçiliyse ModPOS bloğu (indirim öncesi), bir kısmı seçiliyse not; İndirim ve İkram listesinde toplam notu', async () => {
     const p = await h.ok<any>('patron', 'GET', `/reports/products?${range()}`);
     expect(p.total).toBe(0);
@@ -406,6 +412,60 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
       expect(s.days).toBe(2);
     } finally {
       db.delete(schema.businessDays).run();
+    }
+  });
+
+  it('yerine ModPOS günü geçen deneme gününün adisyonları hiçbir sekmede okunmaz (İndirim, İkram, Adisyonlar, İade, Hazırlama, Personel, CSV)', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { getSettings, trainingMode, updateSettings } = await import('../server/lib/settings');
+    // Gerçek kullanım (deneme günü geçmişe yer bırakır)
+    const mode = getSettings();
+    updateSettings({ demoMode: false, okcProvider: 'kapali', liveSince: mode.liveSince ?? Date.now() });
+    expect(trainingMode()).toBe(false);
+    const at = (h_: number) => Date.parse(`${dateOf(1)}T${String(h_).padStart(2, '0')}:00:00+03:00`);
+    const method = db.select().from(schema.paymentMethods).all()[0]!;
+    db.insert(schema.businessDays).values({ id: 'deneme-ek', date: dateOf(1), zNo: 903, trainingDay: true, openedAt: at(9), closedAt: at(23), openingCash: 0 }).run();
+    db.insert(schema.orders)
+      .values({ id: 'deneme-adisyon', dayId: 'deneme-ek', no: 1, type: 'tezgah', status: 'kapali', source: 'pos', openedAt: at(10), closedAt: at(11), updatedAt: at(11), total: 10000, paid: 10000, discountType: 'amount', discountValue: 2500, discountReason: 'Deneme', totals: { gross: 15000, lineDiscounts: 5000, orderDiscount: 2500, complimentary: 3000, service: 0, total: 10000, lineNet: {}, kdv: [] } as never })
+      .run();
+    const item = { orderId: 'deneme-adisyon', size: 'TEK' as const, kdvRate: 10, sentAt: at(10), createdAt: at(10), stationId: 'bar' };
+    db.insert(schema.orderItems)
+      .values([
+        { ...item, id: 'deneme-kalem-1', name: 'DENEME LATTE', qty: 1, unitPrice: 10000, basePrice: 15000, discount: 5000, discountReason: 'Deneme', readyAt: at(10) + 120_000 },
+        { ...item, id: 'deneme-kalem-2', name: 'DENEME ÇAY', qty: 1, unitPrice: 3000, basePrice: 3000, complimentary: true, compKind: 'ikram', compReason: 'Deneme' },
+      ])
+      .run();
+    db.insert(schema.payments)
+      .values({ id: 'deneme-odeme', orderId: 'deneme-adisyon', dayId: 'deneme-ek', methodId: method.id, methodName: method.name, zField: method.zField, amount: 10000, createdAt: at(11), refundedAt: at(12), refundReason: 'Deneme' })
+      .run();
+    try {
+      const q = `from=${dateOf(0)}&to=${dateOf(8)}`;
+      const s = await h.ok<any>('patron', 'GET', `/reports/summary?${q}`);
+      // Ciro dökümü deneme gününü okumaz: indirim yalnız ModPOS'un
+      expect(s.waterfall.discounts).toBe(206625);
+      const ind = await h.ok<any>('patron', 'GET', `/reports/items?kind=indirim&${q}`);
+      expect(ind).toMatchObject({ count: 0, total: 0, history: { kaynak: 'ModPOS', days: 9, amount: 206625 } });
+      const ikr = await h.ok<any>('patron', 'GET', `/reports/items?kind=ikram&${q}`);
+      expect(ikr).toMatchObject({ count: 0, total: 0 });
+      const chk = await h.ok<any>('patron', 'GET', `/reports/checks?${q}`);
+      expect(chk).toMatchObject({ count: 0, history: { receipts: 135 } });
+      const ref = await h.ok<any>('patron', 'GET', `/reports/refunds?${q}`);
+      expect(ref).toMatchObject({ count: 0, total: 0 });
+      const staff = await h.ok<any>('patron', 'GET', `/reports/staff?${q}`);
+      expect(staff.staff).toEqual([]);
+      const prep = await h.ok<any>('patron', 'GET', `/reports/prep?${q}`);
+      expect(JSON.stringify(prep)).not.toContain('DENEME');
+      for (const type of ['indirim', 'ikram', 'adisyonlar', 'urunler']) {
+        const res = await h.call<string>('patron', 'GET', `/reports/export.csv?type=${type}&${q}`);
+        expect(res.status).toBe(200);
+        expect(String(res.json)).not.toMatch(/DENEME|Deneme/);
+      }
+    } finally {
+      db.delete(schema.payments).run();
+      db.delete(schema.orderItems).run();
+      db.delete(schema.orders).run();
+      db.delete(schema.businessDays).run();
+      updateSettings({ demoMode: mode.demoMode, okcProvider: mode.okcProvider, liveSince: mode.liveSince });
     }
   });
 
@@ -522,6 +582,17 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
     const back = await remote<any>(range);
     expect(back.netSales).toBe(2734875);
     expect(back.byDay).toHaveLength(9);
+  });
+
+  it('bugünü içeren dönemin kıyası Uzaktan\'da da kasadakiyle aynı: kesimden önce biten ModPOS günü bütün sayılır', async () => {
+    const { reportTick } = await import('../server/sync/cloud-reports');
+    await reportTick({ backfill: true });
+    const path = `reports/summary?from=${addDays(today, -6)}&to=${today}`;
+    const r = await remote<any>(path);
+    expect(r.previous).toMatchObject({ range: { from: addDays(today, -13), to: addDays(today, -7) }, netSales: 39000 + 331100, receipts: 2 + 14 });
+    const k = await h.ok<any>('patron', 'GET', `/${path}`);
+    expect(r.previous.netSales).toBe(k.previous.netSales);
+    expect(r.previous.receipts).toBe(k.previous.receipts);
   });
 });
 

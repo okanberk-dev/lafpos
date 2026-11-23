@@ -336,9 +336,12 @@ Kasa ikisini birleştirir (aynı tarihte lafmaliyet'inki geçer; `mergeHistory`,
   LafPOS ürün cirosuna eklenmez); İndirim ve İkram listeleri ModPOS günlerinin toplamını, İptal, Happy hour ve
   Adisyonlar yalnız notu söyler (kalem ve adisyon kaydı yok; Adisyonlar fiş sayısını yazar). Saatlik'e kapanış dakikası
   olmayan gün girmez (gün sayısına ve haftanın günü ortalamasına da); Paket platformlarının payı LafPOS günlerinin
-  cirosundandır. Geçmiş günü yalnız LafPOS'ta gerçek iş günü olmayan tarihte geçer; gerçek kullanımda deneme günlerinin
-  yerine geçer (`server/services/gecmis.ts` `historyFor`). Z raporu, Kasa › Geçmiş günler, iş günü, Z zinciri ve
-  lafmaliyet'e giden gün paketi geçmişi hiç görmez.
+  cirosundandır. Bugünü içeren dönemin "aynı saate kadar" kıyasında kesimden önce biten geçmiş günü bütün sayılır, kesimi
+  içeren gün kapanış dakikalarıyla (dakikası olmayan ModPOS günü orada sayılmaz); Uzaktan'ın `salesUntil`'i de aynı
+  kuralla. Geçmiş günü yalnız LafPOS'ta gerçek iş günü olmayan tarihte geçer; gerçek kullanımda deneme günlerinin
+  yerine geçer (`server/services/gecmis.ts` `historyFor`) ve o deneme günlerinin adisyonları hiçbir sekmede (İndirim,
+  İkram, Adisyonlar, İade, Hazırlama, Personel, Paket platformları, CSV) okunmaz. Z raporu, Kasa › Geçmiş günler, iş
+  günü, Z zinciri ve lafmaliyet'e giden gün paketi geçmişi hiç görmez.
 - **LafPOS Uzaktan:** kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak iter (`server/sync/cloud-reports.ts`,
   `historyReport`: kaynak ve `zText` alanlarıyla; bulut ikisini kısa metin olarak doğrular). Yalnız LafPOS'ta gerçek iş
   günü olmayan tarihte ve içerik değişince gider (kayıt ya da geçmişin geçtiği tarihler değişince, ör. kurulum modundan

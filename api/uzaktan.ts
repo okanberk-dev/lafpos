@@ -877,10 +877,14 @@ export function remoteComparison(r: Range, nowMs: number, today: string): { rang
   return { range, label, cutoffMs: partial ? nowMs - shiftMs : null };
 }
 
-/** Günün `cutoffMs`'e kadar kapanan satışı (dakika duyarlılığıyla); cutoff yoksa bütün gün */
+/**
+ * Günün `cutoffMs`'e kadar kapanan satışı (dakika duyarlılığıyla); cutoff yoksa ya da gün kesimden önce bittiyse (ve
+ * kesimden sonra kapanışı yoksa) bütün gün. Kapanış dakikası olmayan geçmiş günü (ModPOS) böylece kesimden önceyse
+ * bütün sayılır, kesimi içeriyorsa sayılmaz (kasada server/services/reports.ts `historySales`)
+ */
 export function salesUntil(d: DayRep, cutoffMs: number | null): { netSales: number; receipts: number } {
-  if (cutoffMs == null) return { netSales: d.s.rev, receipts: d.s.receipts };
   const start = dayStartMs(d.date);
+  if (cutoffMs == null || (dayStartMs(addDays(d.date, 1)) <= cutoffMs && d.closes.every(([m]) => start + m * 60_000 <= cutoffMs))) return { netSales: d.s.rev, receipts: d.s.receipts };
   let netSales = 0;
   let receipts = 0;
   for (const [m, sales, n] of d.closes) {
