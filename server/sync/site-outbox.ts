@@ -1,5 +1,5 @@
 import { and, asc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
-import { type DB, db, schema, type Tx } from '../db/client';
+import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { getSyncState, setSyncState } from '../lib/settings';
@@ -192,17 +192,35 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
         continue;
       }
       if (PERMANENT.has(status)) {
-        db.update(schema.outbox)
-          .set({
-            attempts: row.attempts + 1,
-            lastError:
-              status === 409 && (json as { error?: unknown } | null)?.error === 'site_closed'
-                ? "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz (sonraki menü eşitlemesi kasada da kapatır). Sitenin yönetim panelinde menüye geri koyun"
+        const siteClosed = status === 409 && (json as { error?: unknown } | null)?.error === 'site_closed';
+        const fx = new Effects();
+        tx((t) => {
+          t.update(schema.outbox)
+            .set({
+              attempts: row.attempts + 1,
+              lastError: siteClosed
+                ? "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz, kasada da kapatıldı. Sitenin yönetim panelinde menüye geri koyun"
                 : `Site Satışta bilgisini reddetti (HTTP ${status})`,
-            nextAttemptAt: PARKED,
-          })
-          .where(eq(schema.outbox.id, row.id))
-          .run();
+              nextAttemptAt: PARKED,
+            })
+            .where(eq(schema.outbox.id, row.id))
+            .run();
+          // İnternetsizken açılan ürün site reddedince kasada da kapanır (site bir şey yazmadığı için menü işareti oynamaz,
+          // menü eşitlemesi 304 alır: kasada açık kalırdı)
+          if (siteClosed && payload.isActive) {
+            const closed = t
+              .update(schema.products)
+              .set({ active: false, soldOutBy: 'site', updatedAt: Date.now() })
+              .where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, payload.id), eq(schema.products.active, true)))
+              .returning({ id: schema.products.id, name: schema.products.name })
+              .all();
+            for (const p of closed) {
+              fx.audit(t, { action: 'product.sold_out', message: `${p.name} sitede menüden kaldırılmış; LafPOS'taki açış geri alındı` });
+              fx.emit({ topic: 'menu', kind: 'availability', message: `${p.name} sitede satışta değil` });
+            }
+          }
+        });
+        fx.flush();
         failed++;
         continue;
       }

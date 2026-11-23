@@ -306,7 +306,9 @@ export function upsertOnlineOrders(
       if (indexed) {
         // Konumu yazılmamış eski kalem (alan gelmeden önce yazıldı): içeriği tutan, sahipsiz ilk satırın konumunu alır
         const claimed = new Set(items.filter((i) => i.extLine !== null).map((i) => i.extLine));
-        for (const it of items) {
+        // Canlı kalem önce: aynı içerikli iki satırdan biri kasada iptal edildiyse sitenin satırını canlı olan alır (iptal
+        // edilen alsaydı canlı ikizi "sitede iptal edildi" sayılırdı)
+        for (const it of [...items].sort((a, b) => Number(a.voided) - Number(b.voided))) {
           if (it.extLine !== null) continue;
           const key = lineKey(it.extProductId, it.size, it.optionsText, it.note, it.qty);
           const match = lines.find((l) => !claimed.has(lineIndex(l)) && siteLineKey(l) === key);
@@ -508,13 +510,27 @@ export function upsertOnlineOrders(
       fx.emit({ topic: 'orders', kind: 'online.done', orderId: o.id, tableId: o.tableId ?? undefined, message: `Online sipariş #${o.extNo ?? o.no} siteden kalktı` });
       fx.emit({ topic: 'kitchen', kind: 'online.done', orderId: o.id });
     }
-    // Daha önce kapanmış (sonucu bilinmeyen) siparişin sonucu sonradan gelirse yazılır: iptal ve iade toplamdan düşer
+    // Daha önce kapanmış siparişin sonucu sonradan gelirse yazılır: iptal ve iade toplamdan düşer. Tamamlanmış sayılan
+    // sipariş teslimden sonra sitede iptal ya da iade edilebilir (sitenin tam iadesi): o da yazılır, denetim kaydına düşer
     for (const [extId, outcome] of outcomes) {
       if (seen.has(extId)) continue;
-      t.update(schema.orders)
+      const undone = outcome === 'cancelled' || outcome === 'refunded';
+      const changed = t
+        .update(schema.orders)
         .set({ extOutcome: outcome, updatedAt: now })
-        .where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.extId, extId), eq(schema.orders.status, 'kapali'), isNull(schema.orders.extOutcome)))
-        .run();
+        .where(
+          and(
+            eq(schema.orders.source, 'laffogato'),
+            eq(schema.orders.extId, extId),
+            eq(schema.orders.status, 'kapali'),
+            undone ? or(isNull(schema.orders.extOutcome), eq(schema.orders.extOutcome, 'completed')) : isNull(schema.orders.extOutcome),
+          ),
+        )
+        .returning({ id: schema.orders.id, no: schema.orders.no, extNo: schema.orders.extNo })
+        .all();
+      for (const o of changed) {
+        if (undone) fx.audit(t, { action: 'online.outcome', orderId: o.id, message: `Online sipariş #${o.extNo ?? o.no} sitede ${outcome === 'refunded' ? 'iade edildi' : 'iptal edildi'}; online toplamdan düştü` });
+      }
     }
     return { created, updated, closed };
   });
@@ -796,7 +812,11 @@ export function onlineOrdersTick(): Promise<void> {
     let karaoke: unknown;
     try {
       if (versionSupported) {
-        const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
+        // Sinyal şubenin (laffogato #298): şube adı sorguda, imzanın içinde. Söylenmezse site anahtarın ilk şubesini
+        // varsayar; sitede birden çok LafPOS şubesi olunca başka şubenin işaretini okurduk
+        const versionUrl = new URL(`${env.laffogatoUrl}/api/pos/orders/version`);
+        versionUrl.searchParams.set('branch', siteBranch());
+        const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', versionUrl);
         const v = (json as { version?: unknown } | null)?.version;
         if (status === 200) {
           karaoke = (json as { karaoke?: unknown } | null)?.karaoke;

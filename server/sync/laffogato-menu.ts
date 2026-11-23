@@ -399,7 +399,9 @@ export function applyMenu(
       // POS sırası LafPOS'un (docs/03 §1): yalnız ürün ilk gelirken sitenin sırası verilir. Panel alınamadıysa
       // herkese açık listede görünen yeni kalem satıştadır
       const active = (rule.keep ? undefined : panel?.get(i.id)?.isActive) ?? true;
-      t.insert(schema.products).values({ id: productId, ...values, sort: idx, active, soldOutBy: active ? null : 'site', extSource: 'laffogato', extId: i.id, createdAt: now }).run();
+      // Yalnız bu şubede Tükendi (menüde) olan yeni kalem kasada açılabilir; kilit yalnız sitenin menüden kaldırdığında
+      const soldOutBy = active ? null : soldOutByAfterSync({ active: true, soldOutBy: null, portionsLeft: null }, false, panel?.get(i.id)?.onMenu);
+      t.insert(schema.products).values({ id: productId, ...values, sort: idx, active, soldOutBy, extSource: 'laffogato', extId: i.id, createdAt: now }).run();
       created++;
     }
     // Site seçenekleri (süt, şurup…) yalnız ürün ilk kez gelirken bağlanır, seçenek profiline göre (Su'ya süt, Çay'a

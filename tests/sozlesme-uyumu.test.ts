@@ -115,6 +115,14 @@ describe('şube: site şubeli (laffogato #279), LafPOS kendi şubesi adına okur
     await orders.syncOnlineOrders();
   });
 
+  it('sürüm sinyali de kasanın şubesini söyler (laffogato #298: işaret şubenin)', async () => {
+    const { orders } = await mod();
+    const before = site.queries.length;
+    orders.resetOnlineTimer();
+    await orders.onlineOrdersTick();
+    expect(site.queries.slice(before).filter((q) => q.startsWith('GET /api/pos/orders/version'))).toContain('GET /api/pos/orders/version?branch=marina');
+  });
+
   it('başka şubenin siparişi (409 wrong_branch) yeniden denenmez, ekrandan kalkar ve toplama girmez', async () => {
     const { orders } = await mod();
     orders.upsertOnlineOrders([panelOrder('ord-k1', 9003, [line('mnu-0003', 'Latte')], { totalMinor: 20000 })] as never);
@@ -246,6 +254,23 @@ describe('kalem iptali: sitede iptal edilen satır LafPOS bar ekranında kalmaz'
     expect(items.find((i) => i.name === 'Cheesecake')).toMatchObject({ voided: false, extLine: 1 });
     expect(items.find((i) => i.name === 'Latte')?.voided).toBe(true);
   });
+
+  it('konum ilk gelince aynı içerikli iki kalemden iptal edilen değil canlı olan sitenin satırını alır', async () => {
+    const { orders, db, schema, eq } = await mod();
+    orders.upsertOnlineOrders([panelOrder('ord-twin', 9204, [line('mnu-0003', 'Latte'), line('mnu-0003', 'Latte')])] as never);
+    const row = (await onlineRow('ord-twin'))!;
+    const [first] = (await itemsOf(row.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
+    // Kalemlerden biri kasada iptal edildi (konum gelmeden önce); sitede iki satır da duruyor
+    db.update(schema.orderItems).set({ voided: true, voidReason: 'Kasada iptal' }).where(eq(schema.orderItems.id, first!.id)).run();
+    // Site konum göndermeye başladı ve bu arada satırlardan birini (konum 0) kendisi iptal etti: kalan tek satır konum 1
+    orders.upsertOnlineOrders([panelOrder('ord-twin', 9204, [line('mnu-0003', 'Latte', 1)])] as never);
+    const items = await itemsOf(row.id);
+    // Sitenin canlı satırı kasada da canlı kalır (eski kodda iptal edilen kalem konumu alıyor, canlı ikizi "sitede iptal
+    // edildi" sayılıyordu: hiç canlı kalem kalmıyordu)
+    const live = items.filter((i) => !i.voided);
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({ extLine: 1 });
+  });
 });
 
 describe('kapanış sonucu (closed): iptal ve iade online toplamına girmez', () => {
@@ -268,6 +293,23 @@ describe('kapanış sonucu (closed): iptal ve iade online toplamına girmez', ()
     expect((await onlineRow('ord-c2'))?.extOutcome).toBe('refunded');
     expect((await online()).onlineTotal).toBe(before.onlineTotal - 65000);
     expect((await audits('online.gone')).some((x) => x.message.includes('#9301 siteden kalktı (sitede iptal edildi)'))).toBe(true);
+  });
+
+  it('teslimden sonra sitede iade ya da iptal edilen sipariş online toplamdan düşer, denetim kaydına yazılır; tamamlandı geri yazılmaz', async () => {
+    const { orders } = await mod();
+    const online = async () => (await h.ok<{ summary: { onlineTotal: number } }>('mudur', 'GET', '/cash/day')).summary;
+    orders.upsertOnlineOrders([panelOrder('ord-c3', 9303, [line('mnu-0003', 'Latte')], { totalMinor: 30000 })] as never);
+    const before = await online();
+    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'completed' }]);
+    expect((await onlineRow('ord-c3'))?.extOutcome).toBe('completed');
+    expect((await online()).onlineTotal).toBe(before.onlineTotal);
+    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'refunded' }]);
+    expect((await onlineRow('ord-c3'))?.extOutcome).toBe('refunded');
+    expect((await online()).onlineTotal).toBe(before.onlineTotal - 30000);
+    expect((await audits('online.outcome')).some((x) => x.message.includes('#9303 sitede iade edildi'))).toBe(true);
+    // Eski bir liste "tamamlandı" dese de iade geri alınmaz
+    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'completed' }]);
+    expect((await onlineRow('ord-c3'))?.extOutcome).toBe('refunded');
   });
 
   it('`closed` okunamayan satırı atlar; alanı göndermeyen site null', async () => {
