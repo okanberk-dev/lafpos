@@ -21,9 +21,10 @@ export const LOCKED_ROOT_FILES = ['baslat.cmd'];
 /**
  * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betik, lafpos.nsi ve
  * web-kurucu.ps1 ile aynı). 3: müşteri ekranı sunucu cevap verince açılır (inceleme, 23 Kas 2026); kasada çalışan eski
- * bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir
+ * bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir. 4: bakım arasında (Yönetim › Ağ) kasa penceresi
+ * yeniden açılmaz
  */
-export const WATCHER_VERSION = 3;
+export const WATCHER_VERSION = 4;
 /** Kasa bekçisinin Başlangıç kısayolu (ASCII ad: kasa-yazici.ps1 de arar) */
 export const WATCHER_LINK = 'LafPOS Kasa Bekcisi.lnk';
 const MARKER = 'kurulum-yenileme.json';

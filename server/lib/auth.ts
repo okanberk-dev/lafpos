@@ -322,7 +322,7 @@ export function resolveToken(token: string): AuthUser | null {
 }
 
 /** Oturumsuz uçlar */
-const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/kasa/guncelleme-durumu', '/api/kasa/yazicilar'];
+const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/kasa/guncelleme-durumu', '/api/kasa/yazicilar', '/api/kasa/bakim'];
 
 /**
  * Süreç içi isteğin kimliği (uzaktan yönetim, docs/UZAKTAN-YONETIM.md): server/sync/kontrol.ts kasanın kendi ucuna

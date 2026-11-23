@@ -251,7 +251,7 @@ SectionEnd
 Section "Oturum açılınca kasa ekranını aç" SecStartup
   CreateShortcut "$SMSTARTUP\LafPOS Kasa.lnk" "$INSTDIR\LafPOS-Kasa.bat" "" "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
   ; Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
-  CreateShortcut "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-yazici.ps1" -Bekci -BekciSurum 3' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ve müşteri ekranı açık kalsın"
+  CreateShortcut "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-yazici.ps1" -Bekci -BekciSurum 4' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ve müşteri ekranı açık kalsın"
 SectionEnd
 
 Section "Prizdeyken uyku kapalı" SecPower

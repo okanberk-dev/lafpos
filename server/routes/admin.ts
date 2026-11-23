@@ -14,6 +14,7 @@ import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNamed, backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clearFailures, clientKey, hashPin, isValidPin, recordFailure, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { checkFinish, denemeStatus, finishDeneme, isSamplePin, isSamplePinHash } from '../services/deneme';
+import { kasaBakim, setKasaBakim } from '../lib/kasa-bakim';
 import { installedVersion, pendingUpdateRequest, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
 import { busyNow } from '../lib/mesgul';
 import { connectionView, settingsFile, writeEnvEdits } from '../lib/ayar-dosyasi';
@@ -1176,7 +1177,28 @@ adminRoutes.get('/network', (c) => {
   const user = c.get('user');
   if (!can(user, 'ayar.yonet')) requirePermission(user, 'patron.panel');
   const { lastSize: _size, ...cloud } = cloudState();
-  return c.json({ ...networkInfo(), cloud });
+  return c.json({ ...networkInfo(), cloud, bekci: underBekci(), kasaBakim: kasaBakim()?.until ?? null });
+});
+
+/**
+ * Kasa penceresinin bakım arası (lib/kasa-bakim.ts): `on` 15 dakika boyunca kasa bekçisi kapatılan pencereyi yeniden
+ * açmaz; `off` hemen bitirir. Yalnız Windows kurulumunda (bekçi yoksa anlamı yok). Denetim kaydına yazılır
+ */
+adminRoutes.post('/kasa-bakim', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  const input = await body(c, z.object({ on: z.boolean() }));
+  if (!underBekci()) throw new HttpError(409, 'Kasa penceresi bekçisi yalnız Windows kurulumunda var', 'not_installed');
+  const r = setKasaBakim(input.on, user.id);
+  const fx = new Effects();
+  fx.audit(db, {
+    userId: user.id,
+    action: 'kasa.bakim',
+    message: input.on ? 'Kasa penceresi bakım için 15 dakika kapalı tutulabilir (bekçi yeniden açmaz)' : 'Kasa penceresinin bakım arası bitirildi',
+  });
+  fx.emit({ topic: 'settings', kind: 'kasa.bakim', byUserId: user.id });
+  fx.flush();
+  return c.json({ kasaBakim: r?.until ?? null });
 });
 
 /**

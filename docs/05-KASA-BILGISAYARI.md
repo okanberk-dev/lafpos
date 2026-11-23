@@ -247,6 +247,13 @@ müşterinin adı yalnız Yönetim › Ayarlar › İşletme ve fiş › "Fişte
 Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması için Windows'ta ayrı bir standart
 kullanıcı hesabı önerilir.
 
+Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini 15 sn içinde yeniden açar.
+Bakım için (Windows ayarı, yazıcı kurulumu, başka bir program) Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
+**15 dakika açılmasın** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca pencereyi açmaz
+(`GET /api/kasa/bakim`, oturumsuz, yalnız bu bilgisayardan; sunucuya ulaşılamazsa ara yok sayılır). Süre bitince ya da
+**Bakımı bitir**le yine açar; kalıcı kapatma yoktur. Denetim kaydına yazılır. Kasa kısayolu (`-KasaAc`) aradan
+etkilenmez. Bekçi sürümü 4.
+
 ### Müşteri ekranı ikinci ekranda (kendiliğinden)
 
 Kasa bilgisayarına ikinci bir ekran takılıysa kasa kısayolu (`LafPOS-Kasa.bat` → `app\kasa-yazici.ps1`) müşteri
