@@ -396,8 +396,14 @@ export async function runFlows(ctx) {
           await go(ctx, page, '/yonetim/baglanti-bilgileri');
           // İç kart (dış yaprak da başlığı içerir: sonuncusu kart)
           const card = page.locator('section', { has: page.getByRole('heading', { name: 'lafmaliyet', exact: true }) }).last();
+          // Yol yazılmış adres ve kısa anahtar kaydedilmez; alanların altında neden yazar
+          await card.locator('input[name=LAFMALIYET_URL]').fill('https://ladmin.e2e.example/api/pos/gun');
+          await card.locator('input[name=LAFMALIYET_SYNC_SECRET]').fill('e2e-anahtar-kisa');
+          await card.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await card.getByText('en az 32 karakter', { exact: true }).waitFor({ timeout: 5000 });
+          await card.getByText(/yalnız site adresi yazın/).waitFor({ timeout: 5000 });
           await card.locator('input[name=LAFMALIYET_URL]').fill('https://ladmin.e2e.example');
-          await card.locator('input[name=LAFMALIYET_SYNC_SECRET]').fill('e2e-anahtar-1234567890');
+          await card.locator('input[name=LAFMALIYET_SYNC_SECRET]').fill('e2e-anahtar-1234567890-abcdefghijkl');
           await card.getByRole('button', { name: 'Kaydet', exact: true }).click();
           await card.getByText('Tanımlı', { exact: true }).waitFor({ timeout: 8000 });
           const view = await api.call('patron', 'GET', '/admin/baglanti');
