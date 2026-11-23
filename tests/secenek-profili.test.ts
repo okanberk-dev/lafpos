@@ -95,8 +95,9 @@ describe('kartta tek dokunuş', () => {
     expect(asksOptions(boot, matcha)).toBe(false);
     expect(asksOptions(boot, turkish)).toBe(true);
     expect(asksOptions({ ...boot, settings: { ...boot.settings, askOptions: 'hep' } }, matcha)).toBe(true);
-    const tile = readFileSync(new URL('../src/pages/order/ProductPanel.tsx', import.meta.url), 'utf8');
-    expect(tile).toContain('const ask = asksOptions(boot, p) || (!twoSizes && p.price <= 0);');
-    expect(tile).toContain("onClick={() => addSize(twoSizes ? 'M' : 'TEK')}");
+    // Kart ve en çok satanlar şeridinin ortak kuralı (tests/en-cok-satanlar.test.ts)
+    const tile = readFileSync(new URL('../src/pages/order/productTap.ts', import.meta.url), 'utf8');
+    expect(tile).toContain('ask: asksOptions(boot, p) || (!twoSizes && p.price <= 0)');
+    expect(tile).toContain("size: twoSizes ? 'M' : 'TEK'");
   });
 });

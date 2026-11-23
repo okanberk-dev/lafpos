@@ -8,21 +8,14 @@ import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/misc';
 import { get } from '@/lib/api';
-import { asksOptions, productGroups, useBoot } from '@/lib/boot';
+import { productGroups, useBoot } from '@/lib/boot';
 import { categoryIcon } from '@/lib/categoryIcon';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { DEMO, demoProductImage } from '@/lib/demo';
+import { productTap } from './productTap';
 
 const FAVORITES = '__sik__';
-
-/** Türkçe duyarsız arama anahtarı */
-const fold = (s: string) =>
-  s
-    .toLocaleLowerCase('tr-TR')
-    .replace(/ı/g, 'i')
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '');
 
 /** Görsel adresinin kısa özeti: site görseli değiştirince kart yeni kopyayı ister */
 function imageVersion(url: string): string {
@@ -163,7 +156,17 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
             'lp-enter lp-tiles scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1 md:px-1 md:pb-2 xl:pt-3.5',
           )}
         >
-          {!q.trim() && topProducts.length > 0 && <TopSellers products={topProducts} images={imagesOn} onPick={(p) => (p.optionGroupIds?.length ? onCustomize(p, 'M') : onQuickAdd(p, 'M'))} />}
+          {!q.trim() && topProducts.length > 0 && (
+            <TopSellers
+              products={topProducts}
+              images={imagesOn}
+              onPick={(p) => {
+                // Kartla aynı kural ve boy (productTap)
+                const { ask, size } = productTap(boot, p);
+                return ask ? onCustomize(p, size) : onQuickAdd(p, size);
+              }}
+            />
+          )}
           {list.map((p) => (
             <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
@@ -304,13 +307,9 @@ function ProductTile({
   const soldOut = !p.active;
   // Açık gruplardan (asksOptions ve needsChoice ile aynı kaynak): tek grubu kapatılmış ürün hızlı eklenir, simgesi çıkmaz
   const hasOptions = productGroups(boot, p).length > 0;
-  const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
-  // Zorunlu seçim (Türk kahvesinde şeker) varsa ya da ayar "Seçenekli her üründe" ise kart ve boy düğmesi hemen
-  // eklemez, seçenek penceresini o boy seçili açar. Yalnız isteğe bağlı seçeneği olan ürün (tek boylu da) tek dokunuşla
-  // eklenir, sunucu varsayılanı yazar (Normal süt); değişiklik köşedeki seçenek düğmesinden. Fiyatı 0 olan açık ürün
-  // (etkinlik ücreti, özel pasta) fiyat girilsin diye hep pencereyle
-  const ask = asksOptions(boot, p) || (!twoSizes && p.price <= 0);
+  // Kart, boy düğmesi ve en çok satanlar şeridi aynı kuralla ekler ya da seçenek penceresini açar (productTap)
+  const { twoSizes, ask, size: tapSize } = productTap(boot, p);
   const addSize = (size: Size) => (ask ? onCustomize(p, size) : onQuickAdd(p, size));
   const src = broken ? null : thumbUrl(p);
   // Görseli olmayan üründe baş harfler kategori renginin açık tonunda (kart ızgarada kategorisiyle tanınır)
@@ -328,7 +327,7 @@ function ProductTile({
     >
       <button
         disabled={soldOut}
-        onClick={() => addSize(twoSizes ? 'M' : 'TEK')}
+        onClick={() => addSize(tapSize)}
         aria-haspopup={ask ? 'dialog' : undefined}
         // İki boylu kartta ad tek satırsa düğme 41 px kalıyordu: dokunmatikte 44 (kart da pencereyi açabilir)
         className="flex min-h-11 flex-1 flex-col items-stretch text-left transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press disabled:hover:bg-transparent pointer-fine:min-h-0"
@@ -379,7 +378,7 @@ function ProductTile({
       {hasOptions && (
         <button
           disabled={soldOut}
-          onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
+          onClick={() => onCustomize(p, tapSize)}
           aria-label={`${label} seçenekleri`}
           title="Seçenekler"
           className="absolute right-0 top-0 grid size-11 place-items-center text-muted transition-colors duration-150 hover:text-ink focus-visible:-outline-offset-2 active:text-primary"
