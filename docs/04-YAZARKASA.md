@@ -124,34 +124,46 @@ Online ödenmiş sipariş cihaza gitmez ve tahsil edilmez; ikram, ödenmez ve za
 bugünkü gibi. Ayar kapalıysa ya da bağlantı masada ödemedeyse pencere bugünkü gibidir. Testler:
 `tests/yazarkasa-tek-dokunus.test.ts`, `tests/yazarkasa-tek-dokunus-pavo.test.ts`; e2e akışı eğitim cihazıyla.
 
-**Ödeme sonrası fişler.** Müşterinin fişini (mali belge) cihaz basar. Başarılı ödemeden sonra fiş yazıcısından kısa
-**işyeri nüshası** çıkar (adisyon no, masa ya da tür, tarih-saat, adisyon toplamı, ödeme türleri, yazarkasa fiş ve Z
-no'su varsa, kasiyer; kalem dökümü yok; `StoreCopyReceipt`, `src/lib/print.tsx`). Yazarkasasız kurulumda isteğe bağlı
-**müşteriye bilgi fişi** ("mali değeri yoktur") de basılır. Ayarlar Yönetim › Ayarlar ve yedek › Fiş yazıcısı kartında:
-"Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`, varsayılan açık), "Müşteriye bilgi fişi" (`receiptInfoSlip`,
-varsayılan kapalı). Her ödeme için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir
-fiş yazıcısı bildirdiyse (`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin nüshasını
-ödemeyi alan ekran basar.
+**Ödeme sonrası fişler.** Müşterinin mali fişini cihaz basar. Başarılı ödemeden sonra fiş yazıcısından iki ayrı kâğıt
+çıkar, yazarkasa bağlıyken de (`src/lib/after-payment.tsx`, `src/lib/print.tsx`): önce **müşteri nüshası** (sipariş
+numarası ya da masa çok büyük, çağrı için; kalemler; "mali değeri yoktur"; `BillReceipt`), sonra **işyeri nüshası** (bar
+ve hazırlık için: adisyon no, masa ya da tür, tarih-saat, kalemler ve seçenekler, ikram edilen kalemde tutar yerine türü,
+indirimli kalemin altında indirimi, adisyondaki gibi ara toplam, indirim ve servis, adisyon toplamı, ödeme türleri,
+yazarkasa fiş ve Z no'su varsa, kasiyer; `StoreCopyReceipt`). Ayarlar Yönetim › Ayarlar
+ve yedek › Fiş yazıcısı kartında, her kâğıt kendi ayarıyla: "Ödeme sonrası müşteri nüshası" (`receiptInfoSlip`) ve
+"Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`), ikisi de varsayılan açık (`shared/odeme-fisi.ts` ›
+`afterPaymentParts`). İkram, ödenmez ve zayi kapanışında da aynı iki kâğıt (işyeri nüshasında kapanış türü). Her ödeme
+için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir fiş yazıcısı bildirdiyse
+(`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin kâğıtlarını ödemeyi alan ekran basar.
+Her kâğıt ayrı yazdırma işi, yazıcı her birinin sonunda keser. Bütün çıktılar (nüshalar, Z, X, gün sonu kâğıdı, deneme
+fişi) tek sıradan geçer (`printQueue`, `tests/fis-sirasi.test.ts`): biri bitmeden (doğrudan basmada sunucunun yanıtı,
+tarayıcıda `afterprint`) öteki başlamaz; eskiden art arda iki ödemenin kâğıtları üst üste binince biri öbürünün fişini,
+öteki boş kâğıt basabiliyordu. Pavo'nun banka gün sonu kâğıdı (Z ve Pavo - LafPOS kıyası) bu iki ayara bağlı değil: fiş
+yazıcılı kasa ekranında, kendi ayarıyla (Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın";
+`shared/odeme-fisi.ts` › `bankEodSlipHere`).
 
 **Cihaz ödemesinin işyeri nüshası sunucuda bekler** (22 Kasım 2026; sunucu `server/okc/store-copy.ts`, ekran
 `src/lib/store-copies.ts`). Eskiden nüshayı yalnız canlı olay (`okc.paid`) bastırıyordu: ödeme anında kasa ekranı
 kapalıysa, yenileniyorsa, kilitliyse ya da canlı bağlantı (SSE) kopuksa nüsha hiç çıkmıyordu.
 
-- Sepeti nüsha basan kasa ekranı gönderirse (`POST /api/okc/orders/:id/send`, `storeCopy: true`) fişe "bekliyor"
-  yazılır (`fiscal_receipts.store_copy`). Telefondan ya da yazıcısız ekrandan giden sepetin nüshası yoktur (eskisi gibi).
+- Sepeti nüsha basan kasa ekranı (fiş yazıcısı var, iki nüshadan en az biri açık) gönderirse
+  (`POST /api/okc/orders/:id/send`, `storeCopy: true`) fişe "bekliyor" yazılır (`fiscal_receipts.store_copy`).
+  Telefondan ya da yazıcısız ekrandan giden sepetin nüshası yoktur (eskisi gibi).
 - Cihaz ödeyince `okc.paid` olayı fişin kimliğini (`receiptId`) taşır; kasa ekranı nüshayı bu kimlikle alır
   (`POST /api/okc/store-copies/:id/claim`), basar ve "basıldı" der (`…/printed`; denetim kaydı `okc.store_copy`,
   geç basıldıysa "ödemeden 12 dk sonra"). Fiş kimliği taşımayan eski olayda ekran bekleyenleri sorar.
 - Olay kaçtıysa kasa ekranı açılınca (giriş, sayfa yenileme) ve canlı bağlantı yeniden kurulunca bekleyenleri sorar
-  (`GET /api/okc/store-copies`) ve her birini basar; birden çoksa tek yazdırmada, aralarında kâğıt kesilir. Nüsha
-  ödemenin saatini yazar. Görünmeyen sekme (arkada ya da simge durumunda; tarayıcı orada yazdırmayı bekletir) nüsha
-  almaz, görünür olunca sorar.
+  (`GET /api/okc/store-copies`) ve her birini basar: her ödemenin müşteri ve işyeri nüshası (ayarı açık olanlar) ayrı
+  yazdırma işi. İşyeri nüshası ödemenin saatini yazar. Görünmeyen sekme (arkada ya da simge durumunda; tarayıcı orada
+  yazdırmayı bekletir) nüsha almaz, görünür olunca sorar.
 - Alma atomiktir: iki sekme ya da iki cihaz aynı nüshayı isterse yalnız biri alır, öbürü 409 `copy_taken` alır ve
   basmaz. Alınıp 2 dk içinde "basıldı" denmeyen nüsha (ekran basarken kapandı) yeniden verilir; denetim kaydı iki kez
   basılmış olabileceğini yazar.
-- Yalnız açık günün ödemeleri: gün kapanınca bekleyen nüsha basılmaz. "Ödeme sonrası işyeri nüshası" kapalıysa hiçbiri;
-  fişi iptal edilen ödemenin nüshası da basılmaz. Uçlar `odeme.al` ister. Kör kasada nüsha yine bu fişin ödemesini yazar
-  (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun öteki ödemeleri gitmez.
+- Yalnız açık günün ödemeleri: gün kapanınca bekleyen nüsha basılmaz. İki nüsha ayarı da kapalıysa hiçbiri; yalnız
+  müşteri nüshası açıksa nüsha yine bekler ve ekran yalnız onu basar (eskiden işyeri nüshası kapalıyken cihaz
+  ödemesinin müşteri nüshası hiç çıkmıyordu). Fişi iptal edilen ödemenin nüshası da basılmaz. Uçlar `odeme.al` ister.
+  Kör kasada nüsha yine bu fişin ödemesini yazar (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun
+  öteki ödemeleri gitmez.
 - Testler: `tests/isyeri-nushasi.test.ts`.
 
 ### 4.2 Yazarkasadan geçmeyen (X, Z, patron paneli, Uzaktan; Kasım 2026)
@@ -344,9 +356,20 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 - **Sonuç**: cihazın yanıtındaki satış kaydı (`Data` ya da `Data.Sale`): `AddedPayments` (`StatusId` 2 etkin;
   `PaymentTypeId` 1 nakit, 2 kart; `PaymentAmount` TL) ve `FinancialDocuments` (`InvoiceNo` belge no, `Type.Name`
   belge türü). Kasiyer vazgeçerse (`HasAbondon`) sepet kapanır, adisyon açık kalır. Hata dönen satışta belge kesilip
-  kesilmediği bir kez `/GetSaleResult` ile sorulur. Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu) sonuç
-  sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir). 8 saatten eski bekleyen sepet kendiliğinden
+  kesilmediği bir kez `/GetSaleResult` ile sorulur; belge yoksa sepet vazgeçildi sayılır, bu sorguyu cihaz eşleştirme
+  bozuk diye reddederse (73, 74) sepet kapanmaz (aşağıda). Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu)
+  sonuç sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir). 8 saatten eski bekleyen sepet kendiliğinden
   sorgulanmaz (yalnız onlar kaldıysa sorgu döngüsü durur); adisyondaki "Yenile" ile elle sorulur.
+  Sorgu "başarısız" derse (hata, satış kaydı yok; kart reddinden sonra satış cihazdan düştü) ve cihaz o satışla meşgul
+  değilse sepet vazgeçildi sayılır, adisyon açılır ve yeniden gönderilebilir (#131, sahada kart reddinden sonra sepet
+  "Cihazda ödeme bekleniyor"da kalıyordu). Cihazın "satış yok" kodu belgesiz ve tek okuma isteğin geçici reddi de
+  olabilir (cihaz meşgul): sepet ancak aynı kodlu okuma en az 15 sn sonraki bir sorguda da gelirse kapanır
+  (`pavoTiming.failConfirmMs`); arada gelen başka her okuma (başka kodlu "başarısız" da) sayacı baştan başlatır.
+  Eşleştirme bozuk derse (73, 74) sepet hiç kapanmaz: yanıt satış hakkında değil, müşteri cihazda ödemiş olabilir
+  (yeniden gönderim kartı ikinci kez çekerdi). Sorgu eşleştirme mesajıyla hata verir ("Son hata"da "Yeniden
+  eşleştir"), eşleşince sonuç gelir (hata dönen satışın belge sorgusunda da: eşleşince sonuç sorgusu belgeyi ya da
+  kesinleşen "satış yok"u okur). Kapanan sepetin sonucunda cihazın ham yanıtı saklanır: gerçek cihazın "satış yok"
+  kodu oradan öğrenilir.
 - **İptal**: satış cihazın ekranındayken LafPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse LafPOS cihaza
   sorar: ödenmişse sonuç işlenir, ödenmemişse cihazda silinecek bir şey yoktur. Cihaza ulaşılamazsa yetkili onayıyla
   LafPOS'ta iptal sayılır (§7, `okc.force_cancel`). LafPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
@@ -354,8 +377,11 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 
 ### 8.3 Temkin kuralları (para yolu tahminle kurulmaz)
 
-- Satış kaydı tanınmayan **hatasız** yanıt ödendi sayılmaz; sonuç sorulur. Satış kaydı hiç gelmezse sepet bekler,
-  kasiyer cihaza bakıp iptal eder.
+- Satış kaydı tanınmayan **hatasız** yanıt ödendi sayılmaz; sonuç sorulur. Hatasız ama satış kaydı yoksa sepet
+  bekler. Hata dönen ama satış kaydı olmayan sorgu sepeti ancak aynı kodla en az 15 sn arayla iki kez gelirse kapatır
+  (vazgeçildi; §8.2 Sonuç); eşleştirme reddi (73, 74) hiç kapatmaz, hata dönen satışın belge sorgusunda da.
+  Eşleştirme bozukken elle iptal de cihaza ulaşılamamış gibi yalnız yetkili onayıyla yapılır (`okc.force_cancel`):
+  sepetin cihazda ödenip ödenmediği bilinmez.
 - Anlamı belgelenmemiş ödeme tipi (1 ve 2 dışı: yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi
   LafPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
   yönetici doğru türle kasadan alır.
@@ -389,11 +415,23 @@ Gün sonundan sonra o işlemler cihazda iptal edilemez, yalnız iade edilir. Laf
 (`deviceEndOfDay`, `server/okc/service.ts`; elle ve otomatik gün sonu ikisi de). Cihaz yanıt vermese, hata dönse ya da
 hiç bağlı olmasa da gün kapalı kalır.
 
-- **İstek** (`/PerformEOD`): `useSummary: true`, `print` (varsayılan false: slip basılmaz), `receiptImage: false`,
-  `printData` kapalı (slip görüntüsü, JSON ve metin istenmez). Yanıt en çok 3 dk beklenir; süre boyunca cihaz meşgul
-  sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet sorgulanmaz (cihaz satışı hatayla
-  bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır, gün sonu bitince sorulur), iptali
-  409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal say" yoluna düşmez).
+- **İstek** (`/PerformEOD`): `useSummary: true`, `print: true` (cihaz kendi gün sonu slibini basar; gün kapanınca da
+  elle de, sahibin isteği), `receiptImage: false`, `printData` kapalı (slip görüntüsü, JSON ve metin istenmez).
+  `POST /api/okc/eod` gövdesinde `print: false` yalnız o istekte slipi kapatır (arayüzde yok). Yanıt en çok 3 dk
+  beklenir; süre boyunca cihaz meşgul sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet
+  sorgulanmaz (cihaz satışı hatayla bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır,
+  gün sonu bitince sorulur), iptali 409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal
+  say" yoluna düşmez). Kasa da meşgul sayılır (`server/lib/mesgul.ts`; `GET /api/kasa/guncelleme-durumu` ayrıca
+  `eod: true` der): güncelleme gün sonu bitmeden kurulmaz, sunucu yeniden başlayıp sonucu belirsiz bırakmaz. Gün
+  kapalıyken güncelleyicinin beklediği tek meşguliyet budur (`guncelle.mjs` `installDecision`; en çok 3 dk, 5 dk'da bir
+  yeniden sorar): bekleyen sepet gün kapalıyken de kalabildiğinden (site siparişi) kurulumu süresiz tutmaz.
+- **Kâğıt**: cihazın slibi her gün sonunda (yukarıda). Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da
+  çıksın" (`okcPavoEodFis`, varsayılan açık) yalnız fiş yazıcısını yönetir: açıkken işyeri nüshası basan kasa ekranı
+  `POST /api/okc/eod/slip` (`odeme.al`) ile son başarılı gün sonunun kâğıdını alır (batch başına bir kez, ilk soran
+  ekrana; 12 saatten eskisi basılmaz) ve önce kapanan günün LafPOS Z'sini, sonra bankalar, toplam ve Pavo - LafPOS
+  kart kıyasını basar. Kıyas kayıt kâğıdı olduğundan kör kasada da basılır; Z kasa uçlarının kuralıyla gider
+  (`server/lib/kor-kasa.ts`): kasa rakamlarını görmeyene hiç (`z: null`, kâğıt yalnız banka kısmıyla), maliyet yetkisi
+  olmayana personel tutarları gizli.
 - **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
   okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
   sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). "Özet vermedi" yalnız uç
@@ -420,8 +458,10 @@ hiç bağlı olmasa da gün kapalı kalır.
   cihaz saati, toplam, deneme anı, gün kapalı mıydı) taşır.
 - **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı LafPOS'un kıyas tutarından farklıysa uyarı
   (cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve belirsiz
-  alarm. Kıyas tutarı (`dayCardKurus`) günün ilk gün sonunda kapanmış günün kart toplamı; aynı günün sonraki gün
-  sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan, iade edilmemiş kart ödemeleri (bahşiş dahil).
+  alarm. Gün kapanınca alınamayan ya da belirsiz kalan gün sonu patronun telefonuna da bildirilir (`afterDeviceEod`;
+  kasadan, uzaktan ve otomatik gün sonunda). Kıyas tutarı (`dayCardKurus`) günün ilk gün sonunda kapanmış günün kart
+  toplamı; aynı günün sonraki gün sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan, iade edilmemiş kart
+  ödemeleri (bahşiş dahil).
 - **Yeniden deneme kendiliğinden yapılmaz.** Belirsiz sonucun üstüne ikinci gün sonu, bankada boş ya da yanlış batch
   açar. Yönetim › Yazarkasa POS › Gün sonu (banka):
   - **Cihazda gün sonu al** (`POST /api/okc/eod`, `kasa.gun`): onay sorulur; ayar kapalı olsa da çalışır. Son
@@ -444,7 +484,8 @@ hiç bağlı olmasa da gün kapalı kalır.
   (Genel bakış › Sistem sağlığı) tutar taşımaz.
 - **Testler**: `tests/pavo.test.ts` (sahte cihaz `tests/fake-pavo.ts`: kartla alınan ödemeler açık batch'e girer;
   `eodMode` `ok`, `fail` 5085, `silent` gün sonu alınır ama yanıt gelmez, `drop` istek işlenmez ve yanıt gelmez;
-  `eodDelayMs` yanıtı geciktirir; `menuEod` cihazın menüsünden gün sonu). Bekleme süreleri `pavoTiming.eodMs` ve
-  `eodCopyMs` (taban ve doğrulama) ile kısalır. Testler yeni gün için bugün kapanan günleri geçmiş tarihe alır (bir
-  iş gününe tek Z).
+  `eodDelayMs` yanıtı geciktirir; `menuEod` cihazın menüsünden gün sonu; `saleResultReply` sonuç sorgusunu isteğin
+  reddiyle yanıtlar, ör. 73). Bekleme süreleri `pavoTiming.eodMs` ve `eodCopyMs` (taban ve doğrulama) ile kısalır;
+  testler "satış yok" okumasını `failConfirmMs: 0` ile ilk okumada kesinleştirir (süreli hâlinin ayrı testi var).
+  Testler yeni gün için bugün kapanan günleri geçmiş tarihe alır (bir iş gününe tek Z).
 

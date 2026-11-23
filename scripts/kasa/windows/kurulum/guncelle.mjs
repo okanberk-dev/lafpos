@@ -171,13 +171,19 @@ export function merkezCap({ server, last, installedBuild }) {
   return { cap: Infinity, merkez: last ?? null };
 }
 
-/** Kurulum için an uygun mu (saf): yalnız sunucu "açık gün yok" derse */
 /** "Şimdi güncelle"de satış/ödeme bitsin diye bekleme: 5 sn'de bir sorulur, en çok 15 dakika */
 export const BUSY_POLL_MS = 5_000;
 export const BUSY_WAIT_MAX_MS = 15 * 60_000;
 
-export function installDecision(dayOpen) {
-  if (dayOpen === false) return 'kur';
+/**
+ * Kurulum için an uygun mu (saf): yalnız sunucu "açık gün yok" derse. Gün kapalı ama cihazda banka gün sonu sürüyorsa
+ * (`eod`: gün kapanınca arka planda başlar, en çok 3 dk) sonraki soruya kalır: kurulum sunucuyu durdurursa gün sonunun
+ * sonucu belirsiz kalır, kâğıdı basılmaz (inceleme, 23 Kas 2026). Gün kapalıyken sunucunun öbür meşguliyeti (`mesgul`)
+ * beklenmez: yazarkasada bekleyen sepet gün kapalıyken de kalabilir (gün sonunu yalnız kasanın açık adisyonu tutar,
+ * site siparişinin sepeti tutmaz) ve biri çözene dek sürer; bekleme gün sonuyla sınırlı kalır
+ */
+export function installDecision(dayOpen, eod = false) {
+  if (dayOpen === false) return eod === true ? 'gun-sonu' : 'kur';
   return dayOpen === true ? 'gun-acik' : 'bilinmiyor';
 }
 
@@ -623,7 +629,7 @@ export function createUpdater(deps) {
       schedule('install', BUSY_POLL_MS, tryInstall);
       return;
     }
-    const decision = manual?.force ? 'kur' : installDecision(typeof asked?.dayOpen === 'boolean' ? asked.dayOpen : null);
+    const decision = manual?.force ? 'kur' : installDecision(typeof asked?.dayOpen === 'boolean' ? asked.dayOpen : null, asked?.eod === true);
     if (decision !== 'kur') {
       if (decision === 'gun-acik') set({ type: 'gun-acik' });
       schedule('install', DAY_POLL_MS, tryInstall);

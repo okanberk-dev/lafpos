@@ -370,13 +370,22 @@ export function closedToday(t: Tx | DB): DayRow | null {
   );
 }
 
+/**
+ * Gün sonu. `actor` null: kasada kişi yok (otomatik ya da uzaktan gün sonu); kapanış ve adisyonun `closedBy`'ı boş kalır
+ * (personel tablosuna bağlı). `system`: kişisiz kapanışı kimin istediği ("Uzaktan (e-posta)", `uzaktan`): denetim kaydı
+ * onun adıyla yazılır, yoksa "Otomatik gün sonu". Uzaktan gün sonu zamanlanmış kapanışla karışıyordu (inceleme, 23 Kas
+ * 2026)
+ */
 export function closeDay(
   t: Tx,
   actor: Actor | null,
   fx: Effects,
   input: { countedCash: number | null; cashCounts?: Record<string, number> | null; note?: string | null },
+  system?: { userId: string; name: string },
 ): DayRow {
   if (actor) needDirect(actor, 'kasa.gun');
+  const by = actor?.user ?? system ?? null;
+  const byId = actor?.user.id ?? system?.userId ?? null;
   const day = requireOpenDay(t);
   const counted = input.countedCash == null ? null : Math.max(0, Math.trunc(input.countedCash));
   const cashCounts = closeCounts(input.cashCounts, counted);
@@ -390,7 +399,7 @@ export function closeDay(
   const openPos = open.filter((o) => {
     if (!isEmptyOrder(t, o.id)) return true;
     t.update(schema.orders).set({ status: 'iptal', cancelReason: 'Boş adisyon (gün sonu)', closedAt: emptyAt, closedBy: actor?.user.id ?? null, updatedAt: emptyAt }).where(eq(schema.orders.id, o.id)).run();
-    fx.audit(t, { userId: actor?.user.id ?? null, action: 'order.cancel', severity: 'info', orderId: o.id, amount: 0, message: `#${o.no} boş adisyon gün sonunda kapatıldı` });
+    fx.audit(t, { userId: byId, action: 'order.cancel', severity: 'info', orderId: o.id, amount: 0, message: `#${o.no} boş adisyon gün sonunda kapatıldı` });
     return false;
   });
   if (openPos.length) {
@@ -419,11 +428,11 @@ export function closeDay(
     .run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
-    userId: actor?.user.id ?? null,
+    userId: byId,
     action: 'day.close',
     severity: diff == null ? 'info' : Math.abs(diff) >= threshold ? 'alarm' : diff !== 0 ? 'uyari' : 'info',
     amount: summary.netSales,
-    message: `${actor ? `${actor.user.name} gün sonu aldı` : 'Otomatik gün sonu alındı'} (Z ${day.zNo}): ciro ${tl(summary.netSales)}, kasa farkı ${diff == null ? 'sayılmadı' : diff === 0 ? 'yok' : tl(diff)}`,
+    message: `${by ? `${by.name} gün sonu aldı` : 'Otomatik gün sonu alındı'} (Z ${day.zNo}): ciro ${tl(summary.netSales)}, kasa farkı ${diff == null ? 'sayılmadı' : diff === 0 ? 'yok' : tl(diff)}`,
     data: { expectedCash: summary.expectedCash, counted },
   });
   fx.emit({ topic: 'cash', kind: 'day.closed', byUserId: actor?.user.id });

@@ -30,9 +30,10 @@ beforeAll(async () => {
         res.end(JSON.stringify({ version: 1, now: new Date().toISOString(), items: [] }));
         return;
       }
-      lmBodies.push(JSON.parse(raw));
+      const body = JSON.parse(raw) as (typeof lmBodies)[number];
+      lmBodies.push(body);
       res.writeHead(lmStatus, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(lmStatus === 409 ? { error: 'z_conflict', date: 'x', zNo: 1 } : { ok: true, date: 'x', lines: 0 }));
+      res.end(JSON.stringify(lmStatus === 409 ? { error: 'z_conflict', date: body.date, zNo: 1 } : { ok: true, date: body.date, lines: 0 }));
     });
   });
   await new Promise<void>((r) => lafmaliyet.listen(0, '127.0.0.1', r));

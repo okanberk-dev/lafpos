@@ -13,6 +13,14 @@ Sözleşme (türler, doğrulama, imza metni): `shared/kontrol.ts`. Bulut: `api/_
   Bir komut aldıktan sonra kasa 10 dakika boyunca dakikada bir uğrar: art arda değişiklikler beklemez. Ekranda her
   işlem "Bekliyor → Uygulandı" ya da "Reddedildi (neden)" olarak görünür; bekleyen işlem iptal edilebilir.
 - Kasa kapalıysa ya da internet yoksa işlem bekler, kasa açılınca uygulanır; 24 saat içinde ulaşmazsa uygulanmaz.
+- **Gün sonu al ve güncelle** (Kasa sekmesi, yalnız sahip): yalnız kasa bağlıyken (çevrimdışı kasada düğme kapalı, bulut
+  da reddeder). Kasa isteği 30 dakika içinde almazsa ya da bu arada kasada gün kapatılıp yeniden açılırsa gün sonu
+  alınmaz: gece çevrimdışı kasaya verilen istek ertesi sabah açılan günü kapatmasın. Güncelleme Merkez'in "Şimdi
+  güncelle"siyle aynı yoldan gider (hedef, gönderim, istek) ve ancak gün sonu kasada uygulanınca istenir; gün sonu
+  reddedilirse (açık adisyon, eski istek) hemen kurulmaz, Merkez'in gönderdiği sürüm olağan yoldan gün kapanınca kurulur.
+  Gün sonu kasaya gitmeden iptal edilirse güncelleme isteği de geri alınır (Merkez'de "Güncelleme istendi" kalmaz,
+  "Şimdi güncelle" açılır); gönderilen sürüm yine gün kapanınca kurulur. Denetim kaydında "Uzaktan (e-posta) gün sonu
+  aldı".
 - **Panele kim girer** (Uzaktan yönetim › Panel erişimi): Sahip (Vercel'deki e-postalar) e-posta ekler ve rol seçer:
   **Yönetici** (personeli, Tükendi'yi ve servis modunu yönetir; patron hesabına ve rol yetkilerine dokunamaz) ya da
   **Yalnız görür**. Eklenen kişiye bir kez görünen **davet kodu** verilir (7 gün geçerli; kaybolursa satırdaki **Yeni kod**);
@@ -30,13 +38,15 @@ Sözleşme (türler, doğrulama, imza metni): `shared/kontrol.ts`. Bulut: `api/_
 
 1. Panel `POST /api/kontrol/komut` (dükkân `x-lafpos-dukkan` başlığından, uzaktan görünümün dükkân seçimi). Bulut:
    üyenin rolünü denetler (`uyeYapabilir`), kasanın son özeti var ve komut türünü destekliyor mu bakar, `komutDogrula`
-   ile doğrular, `komutOzeti` ile özetler, `imzaMetni`ni (kurulum kimliği ve üyenin rolü dahil) LAFPOS_CLOUD_SECRET ile
-   HMAC-SHA256 imzalar, kuyruğa koyar.
+   ile doğrular (gün sonunda kasanın son nabzı Merkez'in "çevrimiçi" süresinde mi: değilse 409 `kasa_cevrimdisi`),
+   `komutOzeti` ile özetler, `imzaMetni`ni (kurulum kimliği ve üyenin rolü dahil) LAFPOS_CLOUD_SECRET ile HMAC-SHA256
+   imzalar, kuyruğa koyar.
 2. Kasa nabzı (`POST /api/merkez/nabiz`) isteğe `kontrol: { ozet, durum?, sonuclar? }` ekler. Bulut yanıta
    `kontrol: { durumIste, komutlar }` ekler (eski kasa alanı görmez, eski bulut alanı göndermez: iki yön geriye uyumlu).
 3. Kasa her komutu sırayla: `komutDogrula` → imza (kendi kurulum kimliğiyle; sabit zamanlı karşılaştırma) → daha önce
    işlendi mi (son 500 kimlik; listeden düşenlerin en yeni anı alt sınır olur, ondan eski komut uygulanmaz) → süre
-   (`KOMUT_OMRU_MS`, gelecekten `SAAT_PAYI_MS`) → kasada uzaktan yönetim açık mı → üyenin rolü (izleyici hiç; yönetici
+   (`KOMUT_OMRU_MS`; gün sonu `GUN_SONU_OMRU_MS`, açık gün istekten sonra açıldıysa ya da yeniden açıldıysa da ret;
+   gelecekten `SAAT_PAYI_MS`) → kasada uzaktan yönetim açık mı → üyenin rolü (izleyici hiç; yönetici
    patron hesabına ve rol yetkilerine dokunamaz, hedefin rolü kasanın kendi kaydından) → PIN'i özel anahtarla çözer →
    kasadaki yönetim ekranının kullandığı uca iç istek (aşağıda) → sonucu kendi adlarıyla özetleyip saklar. Sonra hemen
    bir nabız daha atar (sonuçlar ve değişen özet beklemesin) ve 10 dakika hızlı nabza geçer.
@@ -58,8 +68,9 @@ ekranındakiyle birebir aynıdır (ayrı iş kuralı yazılmaz):
 | `secenek.satis` | `POST /api/option-items/:id/sold-out` `{ soldOut }` |
 | `ayar.servis` | `PUT /api/admin/settings` `{ serviceMode }` |
 | `urun.gorunum` | `PATCH /api/admin/products/:id` `{ hidden }` (siteden gelen üründe de: kasa alanı) |
+| `urun.gorsel` | `PATCH /api/admin/products/:id` `{ image }` (yalnız `https://laffogato.net/` adresi ya da null). Yalnız kasaya özel üründe: siteden gelen ürünün görselini menü eşitlemesi her seferinde yeniden yazar, uç reddeder (409 `synced_field`, "görseli siteden gelir"). Panelde henüz düğmesi yok |
 | `urun.ekle` | `POST /api/admin/products` `{ categoryId, name, price, kdvRate, groupIds }` |
-| `gun.sonu` | `POST /api/cash/day/close` `{ countedCash: null, note }` (yalnız sahip; sistem kapanışı gibi; `guncelle: true` ise Merkez'in "Şimdi güncelle" isteği de yazılır) |
+| `gun.sonu` | `POST /api/cash/day/close` `{ countedCash: null, note }` (yalnız sahip ve kasa bağlıyken; kapanış sistem kapanışı gibi, `closedBy` boş; denetim kaydı `uzaktan` kimliği ve "Uzaktan (e-posta) gün sonu aldı"). `guncelle: true` ise Merkez'in "Şimdi güncelle"si (`requestUpdateNow`: hedef, gönderim, istek) bu gün sonuna bağlı yazılır (`guncelleKomut`): kasa güncellemeyi ancak gün sonu uygulanınca ister, reddedilirse ya da 30 dakikada gelmezse istek güncelleme başlatmadan kapanır |
 | `secenek.duzenle` | `PUT /api/admin/option-groups/:id` (grubun bugünkü seçenekleri ve bağları + yenileri; yalnız ekleme) |
 | `secenek.grubu` | `POST /api/admin/option-groups` `{ name, kind: 'single', required, maxSelect: 1, items, productIds }` |
 
@@ -114,7 +125,10 @@ kasa çevrimiçiyken 15 sn'de bir, yoksa 60 sn'de bir sorar. Üye rolü oturum d
 `tests/kontrol-sozlesme.test.ts` (doğrulama, imza metni, parmak izi, üye yetkisi; api/uzaktan.ts'in eriştiği dosyalar
 Vercel gibi dosya dosya ESM'e derlenip Node'la yüklenir: uzantısız göreli yol bütün /api/* uçlarını düşürürdü),
 `tests/kontrol-bulut.test.ts` (rol kapısı, kuyruk, üye başına sınır ve sahibin payı, nabızla teslim ve sonuç, işaret ve
-iptal yarışları, anahtarın imzası, PIN sızmaz, davet ve üye kaldırma), `tests/kontrol-kasa.test.ts` (imza, başka şube ve
-rol değişimi, tekrar ve alt sınır, süre, kapalı anahtar, yöneticinin kasadaki rol kapısı ve PIN sınırı, PIN çözülür ve
-yeni PIN'le giriş, son patron korunur, sonuç ve kasanın özeti, saat geri alınınca nabız, eski bulut),
-`tests/kontrol-arayuz.test.ts` (rol kapısı, kasa bağlı değil, yoklama, son giriş, menü erişimi, davetlinin ilk girişi).
+iptal yarışları, anahtarın imzası, PIN sızmaz, davet ve üye kaldırma, çevrimdışı kasaya gün sonu yok, "Gün sonu al ve
+güncelle" Merkez'in "Şimdi güncelle"siyle aynı kayıt), `tests/kontrol-kasa.test.ts` (imza, başka şube ve rol değişimi,
+tekrar ve alt sınır, süre, eski ya da günü değişmiş gün sonu, uzaktan gün sonunun denetim kaydı, bağlı güncelleme yalnız
+gün sonu uygulanınca, siteden gelen ürünün görseli, kapalı anahtar, yöneticinin kasadaki rol kapısı ve PIN sınırı, PIN
+çözülür ve yeni PIN'le giriş, son patron korunur, sonuç ve kasanın özeti, saat geri alınınca nabız, eski bulut),
+`tests/kontrol-arayuz.test.ts` (rol kapısı, kasa bağlı değil, gün sonu düğmesi ve duyurusu, güncelleme isteği gider,
+yoklama, son giriş, menü erişimi, davetlinin ilk girişi).

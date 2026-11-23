@@ -23,8 +23,10 @@ function fakeLafmaliyet(port) {
           req.on('data', (c) => (body += c));
           req.on('end', () => {
             if (req.method === 'POST' && req.url === '/api/pos/gun') {
-              received.push({ signed: String(req.headers['x-laf-signature'] ?? '').startsWith('v1='), body: JSON.parse(body) });
-              res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, counted: true, switchDay: null }));
+              const day = JSON.parse(body);
+              received.push({ signed: String(req.headers['x-laf-signature'] ?? '').startsWith('v1='), body: day });
+              // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa LafPOS gönderildi saymaz)
+              res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, date: day.date, counted: true, switchDay: null }));
               return;
             }
             // Maliyet çekimi gibi öteki uçlar: boş yanıt (bu denemenin konusu değil)

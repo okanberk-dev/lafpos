@@ -21,9 +21,11 @@ beforeAll(async () => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
-      if (req.method === 'POST' && req.url === '/api/pos/gun') posts.push((JSON.parse(raw) as { date: string }).date);
+      const date = raw ? (JSON.parse(raw) as { date: string }).date : undefined;
+      if (req.method === 'POST' && req.url === '/api/pos/gun') posts.push(date!);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa LafPOS gönderildi saymaz)
+      res.end(JSON.stringify({ ok: true, date }));
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));

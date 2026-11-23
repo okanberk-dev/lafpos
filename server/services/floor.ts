@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, or, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL } from 'drizzle-orm';
 import { PLATFORM_LABEL, type PlatformId } from '@shared/platforms';
 import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
@@ -247,8 +247,9 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; re
         base,
         or(
           and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
-          // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
-          and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
+          // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür. Teslim edilmiş kalemin sonradan iptali
+          // (kapanmış siparişte iade) bara geri dönmez: hazırlanacak bir şey yok (inceleme, 23 Kas 2026)
+          and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), ne(schema.orderItems.status, 'servis'), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
         ),
       );
   if (!where) return [];

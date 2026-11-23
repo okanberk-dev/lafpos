@@ -264,8 +264,11 @@ try {
 }
 // Güncelleme yalnız app\ ve node\'u değiştirir: kök dosyalar (kasa kısayolu, yönetim betiği...) ve Başlat menüsü,
 // masaüstü, Başlangıç kısayolları burada yeni sürümle yenilenir; yapılamayan kalırsa durum.json'a uyarı (panelde
-// "Kurulumu yenileyin"). Deneme bekçisinde updater yok, dokunulmaz
-if (updater) {
+// "Kurulumu yenileyin"). Güncellemenin deneme bekçisinde updater yok, dokunulmaz. Kurulum derlemesinin paket denemesi
+// (derle.mjs, LAFPOS_PAKET_DENEME=1) bekçiyi geçici klasörden açar: yenilese, yönetici kabuğunda bu bilgisayardaki
+// LafPOS'un ortak kısayollarını deneme bitince silinen klasöre çevirirdi (inceleme, 23 Kas 2026). Güncelleyici orada
+// da çalışır: deneme onun durum dosyasına bakar
+if (updater && process.env.LAFPOS_PAKET_DENEME !== '1') {
   refreshInstall({ appDir: APP, installDir: INSTALL_DIR, home: HOME, build: readInstalled(APP).build, log, setWarning: (w) => updater.setInstallWarning(w) }).catch((e) =>
     log(`[kurulum] yenilenemedi: ${e instanceof Error ? e.message : e}`),
   );

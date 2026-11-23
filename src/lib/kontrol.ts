@@ -72,12 +72,13 @@ export const uyelerSorgusu = queryOptions({
 
 /**
  * Komutu kuyruğa koyar. Önce sözleşmenin doğrulaması burada da koşar (bulut ve kasa yeniden doğrular): eksik alan
- * istek gitmeden Türkçe iletiyle döner, veri sabit sırayla gider
+ * istek gitmeden Türkçe iletiyle döner, veri sabit sırayla gider. `guncelle` (yalnız gün sonu) da gider: düşüyordu,
+ * "Gün sonu al ve güncelle" güncellemeyi hiç istemiyordu (inceleme, 23 Kas 2026)
  */
 export async function komutGonder(istek: KomutIstegi): Promise<KomutYaniti> {
   const v = komutDogrula(istek.tur, istek.veri);
   if (!v.ok) throw new Error(v.hata);
-  return post<KomutYaniti>(KONTROL_UCLARI.komut, { tur: v.tur, veri: v.veri, ...(istek.ad ? { ad: istek.ad } : {}) });
+  return post<KomutYaniti>(KONTROL_UCLARI.komut, { tur: v.tur, veri: v.veri, ...(istek.ad ? { ad: istek.ad } : {}), ...(v.tur === 'gun.sonu' && istek.guncelle === true ? { guncelle: true } : {}) });
 }
 
 /**

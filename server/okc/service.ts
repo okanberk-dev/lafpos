@@ -7,6 +7,7 @@ import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
+import { zSummaryFor } from '../lib/kor-kasa';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
@@ -144,9 +145,9 @@ function publish(orderId: string, kind: string, message?: string, byUserId?: str
 }
 
 /**
- * Adisyonu (ya da seçilen kalemleri) cihaza gönderir. `storeCopy`: sepeti gönderen ekran ödemeden sonra işyeri nüshası
- * basan kasa ekranı (fiş yazıcısı var, ayar açık); cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
- * (`store-copy.ts`)
+ * Adisyonu (ya da seçilen kalemleri) cihaza gönderir. `storeCopy`: sepeti gönderen ekran ödemeden sonra nüsha basan kasa
+ * ekranı (fiş yazıcısı var, müşteri ve işyeri nüshasından en az birinin ayarı açık; her kâğıt kendi ayarıyla basılır);
+ * cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar (`store-copy.ts`)
  */
 export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean; odeme?: 'nakit' | 'kart' } = {}): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
@@ -1049,25 +1050,36 @@ function eodSummaryFor(user: AuthUser | null, s: PavoEodSummary | null) {
  * LafPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
  * alanı ve kartla alınan bahşiş: bankaya giden tutar). Aynı günün sonraki gün sonu (gün yeniden açılıp kapandı ya da
  * gün içinde elle alındı): önceki gün sonundan sonra alınan, iade edilmemiş kart ödemeleri; günün bütün kartıyla
- * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. Gün açıksa null
+ * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. İkisine de kartla açık hesap tahsilatı eklenir. Gün açıksa null
  */
-function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
+export function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
   const none = { dayCardKurus: null, dayCardSinceBatch: null };
   if (!dayId) return none;
   const day = db.select({ closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day?.closedAt || !day.summary) return none;
   const prev = earlier.at(-1);
+  const p = schema.payments;
+  // Kartla açık hesap tahsilatı (siparişsiz ödeme) Z'nin kart alanında yok ama bankaya gider: kıyasa girer
+  const collections = (since: number | null) =>
+    db
+      .select({ amount: p.amount })
+      .from(p)
+      .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNull(p.orderId), eq(p.zField, 'card'), since == null ? undefined : gt(p.createdAt, since)))
+      .all()
+      .reduce((a, r) => a + r.amount, 0);
   if (!prev) {
     const s = day.summary;
-    return { dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((p) => p.zField === 'card').reduce((a, p) => a + (p.tips ?? 0), 0), dayCardSinceBatch: null };
+    return {
+      dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((x) => x.zField === 'card').reduce((a, x) => a + (x.tips ?? 0), 0) + collections(null),
+      dayCardSinceBatch: null,
+    };
   }
-  const p = schema.payments;
   const rows = db
     .select({ amount: p.amount, tip: p.tip })
     .from(p)
     .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNotNull(p.orderId), eq(p.zField, 'card'), gt(p.createdAt, prev.at)))
     .all();
-  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0), dayCardSinceBatch: prev.batchNo };
+  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0) + collections(prev.at), dayCardSinceBatch: prev.batchNo };
 }
 
 /** Cihaz gün sonu neden denenmez; null: denenebilir. `auto`: gün kapanınca (ayara bağlı) */
@@ -1241,8 +1253,10 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
   let reading: EodReading;
   try {
     const res = await pavo()!.performEod({
-      // Gün sonunda (gün kapanınca ya da elle) cihaz kendi gün sonu slibini bir kez basar (sahibin isteği; ayar okcPavoEodFis). Doğrulama (eodCopy) basmaz
-      print: opts.print ?? getSettings().okcPavoEodFis,
+      // Gün sonunda (gün kapanınca ya da elle) cihaz kendi gün sonu slibini bir kez basar (sahibin isteği, #154, #157).
+      // `okcPavoEodFis` yalnız fiş yazıcısının kâğıdını açıp kapatır: kapalıyken cihaz da basmıyordu, "yalnız cihazdan
+      // çıkacak" diyen ayar hiç kâğıt bırakmıyordu (inceleme, 23 Kas 2026). Doğrulama (eodCopy) basmaz
+      print: opts.print ?? true,
       timeoutMs: pavoTiming.eodMs,
       before: async () => {
         stage = 'baseline';
@@ -1421,20 +1435,26 @@ export interface PavoEodSlip {
   acquirers: PavoEodSummary['acquirers'];
   /** LafPOS'un kıyas tutarı (kapanan günün kart toplamı); kayıt kâğıdı olduğundan kör kasada da basılır */
   dayCardKurus: number | null;
-  /** Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır); gün kapalı değilse null */
+  /**
+   * Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır). Gün kapalı değilse ya da
+   * isteyen kasa rakamlarını görmüyorsa (kör kasa) null: kâğıt yalnız banka kısmıyla basılır
+   */
   z: { date: string; zNo: number; closedAt: number | null; summary: ZSummary } | null;
   trigger: 'otomatik' | 'elle';
   at: number;
 }
 
-function zOf(dayId: string | null): PavoEodSlip['z'] {
+/** Kapanan günün Z'si isteyenin gözüyle: kasa uçlarıyla aynı süzgeç (lib/kor-kasa.ts) */
+function zOf(user: AuthUser, dayId: string | null): PavoEodSlip['z'] {
   if (!dayId) return null;
   const d = db
     .select({ date: schema.businessDays.date, zNo: schema.businessDays.zNo, closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary })
     .from(schema.businessDays)
     .where(eq(schema.businessDays.id, dayId))
     .get();
-  return d?.closedAt && d.summary && d.zNo != null ? { date: d.date, zNo: d.zNo, closedAt: d.closedAt, summary: d.summary } : null;
+  if (!d?.closedAt || d.zNo == null) return null;
+  const summary = zSummaryFor(user, d.summary);
+  return summary ? { date: d.date, zNo: d.zNo, closedAt: d.closedAt, summary } : null;
 }
 
 /** Bu süreden eski gün sonunun kâğıdı basılmaz (kasa ekranı ertesi gün açıldığında eski kâğıt çıkmasın) */
@@ -1442,10 +1462,12 @@ const EOD_SLIP_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Son başarılı banka gün sonunun kâğıdı: batch başına bir kez, ilk soran ekrana (iki sekme ya da iki kasa ekranı
- * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Tutarlar cihazın kendi
- * slibindekilerle aynı; LafPOS kıyası yalnız kasa rakamlarını görene
+ * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Banka tutarları cihazın
+ * kendi slibindekilerle aynı; Pavo - LafPOS kart kıyası (`dayCardKurus`) kayıt kâğıdı olduğundan herkese, kör kasada da
+ * basılır (sahibin isteği, #154). LafPOS'un Z'si kasa uçlarındaki kuralla: kasa rakamlarını görmeyene hiç gitmez
+ * (beklenen nakit, sayılan, fark), personel tutarları yalnız maliyet yetkisi olana (inceleme, 23 Kas 2026)
  */
-export function takeEodSlip(_user: AuthUser, now = Date.now()): PavoEodSlip | null {
+export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | null {
   const s = getSettings();
   if (s.okcProvider !== 'pavo' || !s.okcPavoEodFis) return null;
   const rec = getSyncState<PavoEodRecord>(EOD_LAST);
@@ -1460,6 +1482,6 @@ export function takeEodSlip(_user: AuthUser, now = Date.now()): PavoEodSlip | nu
     dayCardKurus: rec.dayCardKurus,
     trigger: rec.trigger,
     at: rec.at,
-    z: zOf(rec.dayId),
+    z: zOf(user, rec.dayId),
   };
 }

@@ -93,6 +93,9 @@ describe('güncelleme: saf kurallar', () => {
     expect(installDecision(false)).toBe('kur');
     expect(installDecision(true)).toBe('gun-acik');
     expect(installDecision(null)).toBe('bilinmiyor');
+    // Gün kapalı ama cihazda banka gün sonu sürüyor (gün kapanınca arka planda, en çok 3 dk): sonraki soruya kalır
+    expect(installDecision(false, true)).toBe('gun-sonu');
+    expect(installDecision(true, true)).toBe('gun-acik');
   });
 
   it('durum dosyası: kurulum sonrası açılış, geri dönüş ve geri dönülen sürümün yeniden görülmesi', async () => {
@@ -193,7 +196,7 @@ afterEach(() => {
 });
 
 async function setup(
-  opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean; mode?: 'otomatik' | 'kapali'; channelBuild?: number } = {},
+  opts: { dayOpen?: boolean; mesgul?: boolean; eod?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean; mode?: 'otomatik' | 'kapali'; channelBuild?: number } = {},
 ) {
   const { zipFiles } = await load('arsiv.mjs');
   const { createUpdater } = await load('guncelle.mjs');
@@ -224,7 +227,7 @@ async function setup(
     requests.push(url);
     if (url.endsWith('/api/kasa/guncelleme-durumu')) {
       if (opts.serverDown) throw new Error('ECONNREFUSED');
-      return Response.json({ dayOpen: opts.dayOpen ?? false, ...(opts.merkez ? { merkez: opts.merkez } : {}) });
+      return Response.json({ dayOpen: opts.dayOpen ?? false, ...(opts.merkez ? { merkez: opts.merkez } : {}), ...(opts.mesgul !== undefined ? { mesgul: opts.mesgul } : {}), ...(opts.eod !== undefined ? { eod: opts.eod } : {}) });
     }
     if (url.endsWith('/api/health')) {
       if (!trialRunning) throw new Error('ECONNREFUSED');
@@ -434,6 +437,31 @@ describe('güncelleme: kurulum akışı', () => {
     await t.updater.check();
     expect(t.requests.slice(before).filter((u) => u.endsWith('.zip') || u.includes('guncelleme-durumu'))).toEqual([]);
     expect(t.status().durum).toBe('geri-dondu');
+  });
+
+  it('gün kapalı ama cihazda banka gün sonu sürerken kurulmaz; gün sonu bitince kurulur', async () => {
+    const t = await setup({ dayOpen: false, mesgul: true, eod: true });
+    t.updater.start();
+    await t.updater.check();
+    // İndirildi, sunucu durdurulmadı: gün sonu yarıda kesilmez
+    expect(t.events).toEqual([]);
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_OLD);
+    expect(t.status()).toMatchObject({ durum: 'bekliyor', yeni: { build: BUILD_NEW } });
+    t.opts.mesgul = false;
+    t.opts.eod = false;
+    await t.updater.check();
+    expect(t.events).toEqual(['durdur', 'deneme']);
+    expect(t.exits).toEqual([75]);
+  });
+
+  it('gün kapalıyken yalnız banka gün sonu beklenir: yazarkasada bekleyen sepet (site siparişi) kurulumu süresiz tutmaz', async () => {
+    // Gün sonunu yalnız kasanın açık adisyonu tutar; site siparişinin bekleyen sepeti gün kapalıyken de kalabilir ve
+    // biri çözene dek sunucu "meşgul" der. Gün kapalıyken bu beklenmez (inceleme, 23 Kas 2026)
+    const t = await setup({ dayOpen: false, mesgul: true, eod: false });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.events).toEqual(['durdur', 'deneme']);
+    expect(t.exits).toEqual([75]);
   });
 
   it('gün açıkken kurulmaz: indirilir ve "gün kapanınca" bekler', async () => {

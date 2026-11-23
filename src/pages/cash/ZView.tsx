@@ -2,7 +2,7 @@ import { PaymentBar } from '@/pages/patron/TodayStats';
 import { Check, ClipboardCopy, Download, MessageCircle, Printer, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { dayText } from '@shared/gun-sonu-metni';
-import { tl } from '@shared/money';
+import { roundHalfUp, tl } from '@shared/money';
 import { fmtDateLong, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import type { BusinessDayDTO, ZSummary } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { Card, EmptyState, Stat } from '@/components/ui/misc';
 import { errorMessage, getToken, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { type DayAnswer, pushToast } from '@/lib/lafmaliyet';
 import { printNow, ZReceipt } from '@/lib/print';
@@ -48,16 +49,20 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
   const [copied, setCopied] = useState(false);
   const [waCopied, setWaCopied] = useState(false);
   const [sending, setSending] = useState(false);
+  // İki kopyalama düğmesi de aynı yoldan (`copyText`): pano API'si yoksa (telefonda http://192.168.x.x) eski kopyalama,
+  // o da olmazsa hata bildirimi
   const copy = async () => {
     if (!lafmaliyet) return;
     const text = LAF_FIELDS.map(([k, label]) => `${label}\t${fmtLaf(lafmaliyet[k])}`).join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.warn('Pano kullanılamıyor; değerleri tablodan okuyun');
-    }
+    if (!(await copyText(text, 'Panoya kopyalanamadı; değerleri tablodan okuyun'))) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  const copyDay = async () => {
+    const text = dayText({ branch: boot.settings.businessName, date: day.date, zNo: day.zNo, s: summary });
+    if (!(await copyText(text))) return;
+    setWaCopied(true);
+    setTimeout(() => setWaCopied(false), 2000);
   };
   const download = async () => {
     const res = await fetch(`/api/cash/days/${day.id}/lafmaliyet.json`, { headers: { authorization: `Bearer ${getToken()}` } });
@@ -98,19 +103,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
           {showMeta && <p className="text-pretty text-[13px] text-muted">{joinMeta([fmtDateLong(day.date), `açılış ${at(day.openedAt)}`, day.closedAt && `kapanış ${at(day.closedAt)}`])}</p>}
         </div>
         {day.closedAt && (
-          <Button
-            icon={waCopied ? <Check className="size-4" /> : <MessageCircle className="size-4" />}
-            onClick={() => {
-              const text = dayText({ branch: boot.settings.businessName, date: day.date, zNo: day.zNo, s: summary });
-              void navigator.clipboard.writeText(text).then(
-                () => {
-                  setWaCopied(true);
-                  setTimeout(() => setWaCopied(false), 2000);
-                },
-                () => toast.err('Panoya kopyalanamadı'),
-              );
-            }}
-          >
+          <Button icon={waCopied ? <Check className="size-4" /> : <MessageCircle className="size-4" />} onClick={copyDay}>
             {waCopied ? 'Kopyalandı' : 'WhatsApp için kopyala'}
           </Button>
         )}
@@ -123,7 +116,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
           beş haneli tutar yarım karonun kenarına dayanır. Tablette ve bilgisayarda sıra değişmez */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Net ciro" value={tl(summary.netSales)} strong className="max-sm:col-span-2" />
-        <Stat label="Adisyon" value={`${summary.receipts}`} hint={summary.receipts ? `ort. ${tl(Math.round(summary.netSales / summary.receipts))}` : undefined} className="max-sm:order-1" />
+        <Stat label="Adisyon" value={`${summary.receipts}`} hint={summary.receipts ? `ort. ${tl(roundHalfUp(summary.netSales / summary.receipts))}` : undefined} className="max-sm:order-1" />
         <Stat label="Beklenen nakit" value={tl(summary.expectedCash)} className="max-sm:col-span-2" />
         {day.closedAt ? (
           <Stat

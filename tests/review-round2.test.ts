@@ -54,9 +54,10 @@ beforeAll(async () => {
           res.end(JSON.stringify({ version: 1, now: new Date().toISOString(), items: [] }));
           return;
         }
-        lmBodies.push(JSON.parse(raw));
+        const body = JSON.parse(raw) as { date: string };
+        lmBodies.push(body);
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, date: 'x', lines: 0 }));
+        res.end(JSON.stringify({ ok: true, date: body.date, lines: 0 }));
       }, 150),
     );
   });

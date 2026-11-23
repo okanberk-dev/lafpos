@@ -10,7 +10,7 @@ import { type Harness, startApp } from './harness';
 /**
  * Yazarkasa tek dokunuşla (docs/04-YAZARKASA.md §4.1): "Ödemeyi al" sepeti kendiliğinden cihaza yollar; cihaz
  * ödeyince ödeme mevcut sonuç yoluyla yazılır. Ret, iptal ve ulaşılamayan cihazda adisyon açık kalır, yeniden deneme
- * tek sepettir. Ödemeden sonra kısa işyeri nüshası her ödeme için bir kez
+ * tek sepettir. Ödemeden sonra müşteri ve işyeri nüshası (her biri kendi ayarıyla) her ödeme için bir kez
  */
 
 type Receipt = { id: string; status: string; amount: number; receiptNo: number | null; zNo: number | null; paymentIds?: string[] };
@@ -134,14 +134,13 @@ describe('otomatik gönderimin ret yolları', () => {
 describe('ödeme sonrası fişler', () => {
   const settings = { receiptStoreCopy: true, receiptInfoSlip: false };
   it('yalnız kasa ekranında ve yazıcı varken; müşteri nüshası ayar açıkken yazarkasa bağlıyken de (2 nüsha)', () => {
-    expect(afterPaymentPrints({ settings, printer: true, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: true, infoSlip: false });
-    expect(afterPaymentPrints({ settings, printer: false, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: false, infoSlip: false });
-    expect(afterPaymentPrints({ settings, printer: true, kasaScreen: false, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: false, infoSlip: false });
-    expect(afterPaymentPrints({ settings: { receiptStoreCopy: false, receiptInfoSlip: false }, printer: true, kasaScreen: true, provider: 'kapali', viaDevice: false })).toEqual({ storeCopy: false, infoSlip: false });
+    // Yazarkasa bağlantısı ve ödemenin cihazdan gelmesi karara girmez (iki nüsha da yazarkasa bağlıyken basılır)
+    expect(afterPaymentPrints({ settings, printer: true, kasaScreen: true })).toEqual({ storeCopy: true, infoSlip: false });
+    expect(afterPaymentPrints({ settings, printer: false, kasaScreen: true })).toEqual({ storeCopy: false, infoSlip: false });
+    expect(afterPaymentPrints({ settings, printer: true, kasaScreen: false })).toEqual({ storeCopy: false, infoSlip: false });
+    expect(afterPaymentPrints({ settings: { receiptStoreCopy: false, receiptInfoSlip: false }, printer: true, kasaScreen: true })).toEqual({ storeCopy: false, infoSlip: false });
     const info = { receiptStoreCopy: true, receiptInfoSlip: true };
-    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'kapali', viaDevice: false })).toEqual({ storeCopy: true, infoSlip: true });
-    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'simulator', viaDevice: false })).toEqual({ storeCopy: true, infoSlip: true });
-    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: true, infoSlip: true });
+    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true })).toEqual({ storeCopy: true, infoSlip: true });
     expect(isKasaHost('localhost') && isKasaHost('127.0.0.1')).toBe(true);
     expect(isKasaHost('192.168.1.20')).toBe(false);
   });
@@ -282,7 +281,17 @@ describe('işyeri nüshası çıktısı', () => {
   it('kalem dökümü (bar için); adisyon no, toplam, ödeme türü, yazarkasa fiş ve Z no, kasiyer', async () => {
     const { StoreCopyReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props> };
     const boot = { settings: { businessName: "L'Affogato" }, branch: null } as unknown as BootstrapDTO;
-    const order = { no: 42, tableName: 'Masa 3', numarator: null, type: 'masa', total: 25000, paid: 25000, items: [{ id: 'i1', name: 'Türk Kahvesi', qty: 1, unitPrice: 25000, size: 'TEK', voided: false, optionsText: 'Orta şekerli' }], payments: [] } as unknown as OrderDTO;
+    const order = {
+      no: 42,
+      tableName: 'Masa 3',
+      numarator: null,
+      type: 'masa',
+      total: 25000,
+      paid: 25000,
+      totals: { gross: 25000, lineDiscounts: 0, orderDiscount: 0, service: 0, total: 25000 },
+      items: [{ id: 'i1', name: 'Türk Kahvesi', qty: 1, unitPrice: 25000, discount: 0, size: 'TEK', voided: false, optionsText: 'Orta şekerli' }],
+      payments: [],
+    } as unknown as OrderDTO;
     const html = renderToStaticMarkup(
       createElement(StoreCopyReceipt, { order, boot, payments: [{ id: 'p1', methodName: 'Kredi kartı', amount: 25000, tip: 0 }], device: { receiptNo: 17, zNo: 5, docId: null, docLabel: 'fiş' }, cashier: 'Ayşe', at: 0 }),
     );

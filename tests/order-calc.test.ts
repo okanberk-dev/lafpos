@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { amountForItems, type CalcInput, calcOrder, type CalcLine, itemPayLines, remainingDue, splitLineDiscount } from '@shared/order-calc';
+import { amountForItems, type CalcInput, calcOrder, type CalcLine, itemPayLines, refundCalc, refundKeeps, remainingDue, splitLineDiscount } from '@shared/order-calc';
 
 const line = (p: Partial<CalcLine> & { id: string }): CalcLine => ({
   qty: 1,
@@ -132,5 +132,53 @@ describe('kalem bölünürken indirimin bölüşü (iptal, ikram, taşıma)', ()
     const paid = paidLines(amount, { a: 3 });
     expect(splitLineDiscount(amount, paid, 'a', 1)).toEqual({ kept: 187, part: 63 });
     expect(paid[0]!.paidAmount! - after(amount, 'a', 1, 187).total).toBe(250);
+  });
+});
+
+describe('kalem iadesinin hesabı (refundCalc)', () => {
+  const line = (id: string, qty: number, unitPrice: number, extra: Partial<CalcLine> = {}): CalcLine => ({ id, qty, unitPrice, kdvRate: 10, discount: 0, complimentary: false, voided: false, ...extra });
+
+  it('indirimsiz adisyonda adet × birim fiyat', () => {
+    expect(refundCalc({ lines: [line('a', 3, 19500)] }, [{ lineId: 'a', qty: 1 }])).toEqual({ discount: null, total: 39000, refund: 19500 });
+  });
+
+  it('yüzde indirim oranını korur', () => {
+    const r = refundCalc({ lines: [line('a', 3, 19500)], discount: { type: 'percent', value: 20 } }, [{ lineId: 'a', qty: 1 }]);
+    expect(r).toEqual({ discount: { type: 'percent', value: 20 }, total: 31200, refund: 15600 });
+  });
+
+  it('tutar indirimi kalanla orantılı küçülür; iade edilen kalemin payı geri verilir', () => {
+    const r = refundCalc({ lines: [line('a', 3, 19500)], discount: { type: 'amount', value: 19500 } }, [{ lineId: 'a', qty: 1 }]);
+    expect(r).toEqual({ discount: { type: 'amount', value: 13000 }, total: 26000, refund: 13000 });
+    // İki lattede tek latte iadesi adisyonu sıfırlamaz
+    expect(refundCalc({ lines: [line('a', 2, 19500)], discount: { type: 'amount', value: 19500 } }, [{ lineId: 'a', qty: 1 }])).toEqual({ discount: { type: 'amount', value: 9750 }, total: 9750, refund: 9750 });
+    // Hepsi iade: indirim sıfırlanır, ödenenin tamamı geri verilir
+    expect(refundCalc({ lines: [line('a', 2, 19500)], discount: { type: 'amount', value: 19500 } }, [{ lineId: 'a', qty: 2 }])).toEqual({ discount: { type: 'amount', value: 0 }, total: 0, refund: 19500 });
+  });
+
+  it('kalem indirimi adetle bölünür; ikram ve iptal satır seçilse de tutar değişmez', () => {
+    const lines = [line('a', 2, 10000, { discount: 3000 }), line('b', 1, 5000, { complimentary: true }), line('c', 1, 5000, { voided: true })];
+    expect(refundCalc({ lines }, [{ lineId: 'a', qty: 1 }]).refund).toBe(8500);
+    expect(refundCalc({ lines }, [{ lineId: 'b', qty: 1 }, { lineId: 'c', qty: 1 }]).refund).toBe(0);
+  });
+
+  it('iade her zaman toplam farkıdır: geri verilen + kalan = ödenen', () => {
+    for (const discount of [null, { type: 'percent' as const, value: 15 }, { type: 'amount' as const, value: 7777 }]) {
+      const input = { lines: [line('a', 3, 19500), line('b', 2, 8950, { discount: 333 }), line('c', 1, 24500)], discount, serviceRate: 0 };
+      const paid = calcOrder(input).total;
+      const r = refundCalc(input, [{ lineId: 'a', qty: 2 }, { lineId: 'b', qty: 1 }]);
+      expect(r.refund + r.total).toBe(paid);
+      expect(r.refund).toBeGreaterThan(0);
+      expect(r.refund).toBeLessThan(2 * 19500 + 8950);
+    }
+  });
+});
+
+describe('iade sonrası kalan ödemeler (refundKeeps)', () => {
+  it('ödemeler alındıkları sırayla kalanı karşılar; son alınandan iade edilir', () => {
+    expect(refundKeeps([{ amount: 39000 }, { amount: 19500 }], 19500)).toEqual([19500, 0]);
+    expect(refundKeeps([{ amount: 19500 }, { amount: 39000 }], 19500)).toEqual([19500, 0]);
+    expect(refundKeeps([{ amount: 19500 }, { amount: 39000 }], 39000)).toEqual([19500, 19500]);
+    expect(refundKeeps([{ amount: 19500 }], 0)).toEqual([0]);
   });
 });

@@ -9,7 +9,8 @@
  * kendi anahtarıyla imzalıdır (server/lib/signature.ts kuralı). Kayıt IP başına saatte 10, onay bekleyen en çok 50.
  *
  * Nabzın yanıtı kasanın lisans kaydı (bitiş tarihiyle), şube kodu, çalıştıracağı derleme (hedef) ve sahibin son "Şimdi
- * güncelle" isteği: "otomatik" dükkânda hedef kanalın son derlemesi, "ben gönderince" dükkânda sahibin son gönderdiği
+ * güncelle" isteği (Uzaktan yönetimin "Gün sonu al ve güncelle"sinde bağlı olduğu gün sonunun kimliğiyle,
+ * `guncelleKomut`): "otomatik" dükkânda hedef kanalın son derlemesi, "ben gönderince" dükkânda sahibin son gönderdiği
  * derleme (hiç gönderilmediyse kurulu olan). Panelden kasaya giden her şey bu yanıtla gider (kasa 5 dakikada bir sorar;
  * ayrı itme yok): "Şimdi güncelle" de kasaya en geç bir sonraki nabızda ulaşır.
  *
@@ -52,6 +53,11 @@ export interface Install {
   kod?: string | null;
   /** Sahibin son "Şimdi güncelle" isteğinin anı; kasa nabzın yanıtında alır */
   guncelleIstek?: number | null;
+  /**
+   * İsteğin bağlı olduğu uzaktan gün sonunun komut kimliği (Uzaktan yönetim "Gün sonu al ve güncelle"); Merkez'in
+   * düğmesinde null. Kasa böyle bir isteği ancak o gün sonu uygulanınca işler (server/sync/merkez.ts takeRemoteUpdate)
+   */
+  guncelleKomut?: string | null;
   /** Kasanın işlediğini bildirdiği son istek (nabızda `istekAlindi`) */
   istekAlindi?: number | null;
   /**
@@ -125,12 +131,41 @@ function merged(raw: string | null | undefined, beat: string | null | undefined)
   }
 }
 
-async function readInstall(deps: MerkezDeps, id: string): Promise<Install | null> {
+async function readInstall(deps: Pick<MerkezDeps, 'redis'>, id: string): Promise<Install | null> {
   const [raw, beat] = ((await deps.redis('MGET', installKey(id), statusKey(id))) as (string | null)[] | null) ?? [];
   return merged(raw, beat);
 }
 /** Panelin yazması: kurulum kaydı (nabzın alanları ayrı anahtarda; burada kalan eski değerleri onlar ezer) */
-const writeInstall = (deps: MerkezDeps, i: Install) => deps.redis('SET', installKey(i.id), JSON.stringify(i));
+const writeInstall = (deps: Pick<MerkezDeps, 'redis'>, i: Install) => deps.redis('SET', installKey(i.id), JSON.stringify(i));
+
+/**
+ * "Şimdi güncelle": hedef kanalın son derlemesi (okunabildiyse) ve kasaya "hemen denetle" isteği. Merkez'in düğmesi ve
+ * Uzaktan yönetimin "Gün sonu al ve güncelle"si (api/uzaktan.ts üzerinden) aynı yoldan: ikincisi yalnız isteği yazıyordu,
+ * Merkez satırı gönderimin adımlarını göstermiyor, kasada sürüm Merkez'den gönderilmiş sayılmayıp kasiyere soruluyor ve
+ * güncelleyicinin Merkez sınırı aşılıyordu (inceleme, 23 Kas 2026). `komut`: isteğin bağlı olduğu uzaktan gün sonu (kasa
+ * ancak o uygulanınca işler); Merkez'in düğmesinde null. Kurulum yoksa false. Kasa bir sonraki nabızda alır; yeni sürüm
+ * gün kapalıyken kurulur, gün açıkken asla (server/sync/merkez.ts takeRemoteUpdate)
+ */
+export async function requestUpdateNow(redis: MerkezDeps['redis'], id: string, now: number, release: Release | null, komut: string | null = null): Promise<boolean> {
+  const inst = await readInstall({ redis }, id);
+  if (!inst) return false;
+  await writeInstall({ redis }, { ...inst, guncelleIstek: now, guncelleKomut: komut, ...(release ? { hedef: release.build, gonderildi: now } : {}) });
+  return true;
+}
+
+/**
+ * Bağlı gün sonu kasaya gitmeden iptal edildi (api/_kontrol.ts komutIptal): "hemen denetle" isteği de geri alınır. Yoksa
+ * kasa isteği 30 dakika gün sonunu bekleyip "kasaya ulaşmadı" diye kapatıyor, Merkez o sürece "Güncelleme istendi"
+ * gösterip "Şimdi güncelle"yi kapalı tutuyordu (inceleme, 23 Kas 2026). Yalnız istek hâlâ o gün sonuna bağlıysa: arada
+ * Merkez'den verilen "Şimdi güncelle" ya da yeni bir "Gün sonu al ve güncelle" geri alınmaz. Gönderilen hedef kalır
+ * (reddedilen gün sonundaki gibi: sürüm olağan yoldan gün kapanınca kurulur). Dönüş: geri alındıysa true
+ */
+export async function withdrawLinkedUpdate(redis: MerkezDeps['redis'], id: string, komut: string): Promise<boolean> {
+  const inst = await readInstall({ redis }, id);
+  if (!inst || inst.guncelleKomut !== komut) return false;
+  await writeInstall({ redis }, { ...inst, guncelleIstek: null, guncelleKomut: null });
+  return true;
+}
 
 /** ISO zaman → ms (anlaşılmazsa null) */
 const isoMs = (v: unknown) => {
@@ -371,7 +406,8 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     const gecmisAt = gecmisDays ? ((JSON.parse(rawGecmis!) as HistoryStore).at ?? 0) : null;
     const kasaGecmisAt = intOrNull(body.gecmisAt);
     const gecmis = (gecmisAt ?? 0) !== (kasaGecmisAt ?? 0) && 'gecmisAt' in body ? { gecmis: gecmisDays ? { at: gecmisAt, gunler: gecmisDays } : null } : {};
-    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now, ...gecmis, ...(kontrol ? { kontrol } : {}) });
+    // `guncelleKomut`: isteğin bağlı olduğu uzaktan gün sonu (eski kasa alanı görmez, isteği hemen işler)
+    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, guncelleKomut: next.guncelleKomut ?? null, at: now, ...gecmis, ...(kontrol ? { kontrol } : {}) });
   }
 
   // ─── Panel ───
@@ -467,16 +503,10 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     if (!ids.length) return fail(400, 'Dükkân seçin', 'bad_body');
     const release = await deps.fetchRelease();
 
-    // Şimdi güncelle: hedef kanalın son derlemesi (okunabildiyse) ve kasaya "hemen denetle" isteği. Kasa bir sonraki
-    // nabızda alır; yeni sürüm gün kapalıyken kurulur, gün açıkken asla (server/sync/merkez.ts takeRemoteUpdate)
+    // Şimdi güncelle (requestUpdateNow): hedef kanalın son derlemesi ve kasaya "hemen denetle" isteği
     if (path === 'merkez/simdi-guncelle') {
       let asked = 0;
-      for (const id of ids) {
-        const inst = await readInstall(deps, id);
-        if (!inst) continue;
-        await writeInstall(deps, { ...inst, guncelleIstek: now, ...(release ? { hedef: release.build, gonderildi: now } : {}) });
-        asked++;
-      }
+      for (const id of ids) if (await requestUpdateNow(deps.redis, id, now, release)) asked++;
       return json({ ok: true, istenen: asked, build: release?.build ?? null });
     }
 

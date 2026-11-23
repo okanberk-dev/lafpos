@@ -4,6 +4,7 @@ import { type Compare, dayLabel, monthName, type Period, type StatsMode } from '
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 import { CompareBars, PctPill } from './KeelPanel';
+import { COMPARE_SHORT, signed } from './TodayStats';
 
 /**
  * Kıyas kartının ayrıntılı dökümü (sahip, 22 Kas 2026: karta dokununca açılan pencere; telefonda tam ekran sayfa,
@@ -11,7 +12,6 @@ import { CompareBars, PctPill } from './KeelPanel';
  * tutarları, adisyon, ortalama sepet, ₺ fark ve değişim; altında hafta ve ay başından dönem kıyası
  */
 const avg = (s: { netSales: number; receipts: number } | null | undefined) => (s && s.receipts > 0 ? tl(Math.round(s.netSales / s.receipts)) : '—');
-const signed = (k: number) => `${k > 0 ? '+' : k < 0 ? '−' : ''}${tl(Math.abs(k))}`;
 const range = (from: string, to: string) => {
   const d = (x: string) => `${Number(x.slice(8))} ${monthName(x)}`;
   return from === to ? d(from) : `${d(from)} – ${d(to)}`;
@@ -57,7 +57,6 @@ export function KiyasDokum({
   periods: Period[] | null | undefined;
 }) {
   const live = mode === 'live';
-  const kisa: Record<string, string> = { dun: 'Dün', hafta: 'G. hafta', ay: 'G. ay' };
   return (
     <Modal open={open} onClose={onClose} size="xl" title="Kıyas dökümü" subtitle={live ? `Bugün ${fmtTime(now)} itibarıyla; kıyas günleri aynı saate kadar` : 'Gün sonu tutarlarıyla'}>
       {/* LafPOS Keel: soğuk gri zemin, kenarsız beyaz kartlar, bugün ters (mürekkep) kartta, nane vurgu */}
@@ -77,7 +76,7 @@ export function KiyasDokum({
           </section>
           <section aria-label="Kıyas grafiği" className={cn(KART, 'flex flex-col justify-end')}>
             <p className="k-cap text-[12.5px]">Bugün ve kıyas günleri</p>
-            <CompareBars today={today.netSales} items={compares.map((c) => ({ key: c.key, label: kisa[c.key] ?? c.label, value: c.value ? c.value.netSales : null }))} />
+            <CompareBars today={today.netSales} items={compares.map((c) => ({ key: c.key, label: COMPARE_SHORT[c.key], value: c.value ? c.value.netSales : null }))} />
           </section>
         </div>
 

@@ -183,9 +183,12 @@ export interface PublicSettings {
   receiptFooter: string;
   /** Adisyonda (hesap fişi) bağlı müşterinin adı yazılsın mı (varsayılan kapalı; müşteri yoksa hiç yazılmaz) */
   receiptCustomerName: boolean;
-  /** Ödeme alınınca fiş yazıcısından kısa işyeri nüshası (kasa bilgisayarında; varsayılan açık) */
+  /** Ödeme alınınca fiş yazıcısından işyeri nüshası: kalem dökümü, bar ve hazırlık için (kasa bilgisayarında; varsayılan açık) */
   receiptStoreCopy: boolean;
-  /** Yazarkasa bağlı değilken ödemeden sonra müşteriye bilgi fişi ("mali değeri yoktur"; varsayılan kapalı) */
+  /**
+   * Ödeme alınınca müşteri nüshası: sipariş no büyük (çağrı için), kalemler, "mali değeri yoktur". Yazarkasa bağlıyken
+   * de basılır (kasa bilgisayarında; varsayılan açık)
+   */
   receiptInfoSlip: boolean;
   /**
    * Fişi yazdırma penceresi açmadan doğrudan ağdaki fiş yazıcısına gönder (server/lib/escpos.ts; varsayılan açık).

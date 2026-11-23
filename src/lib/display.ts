@@ -17,8 +17,9 @@ export function useDisplayCode(): [string, (v: string) => void] {
 
 /**
  * Kasa bilgisayarının kendisi (Windows'ta sunucunun çalıştığı bilgisayardaki kasa penceresi): ikinci ekranda açılan
- * müşteri ekranına (`/musteri-ekrani?ekran=kasa`; kasa-yazici.ps1 açar) kendiliğinden yansıtır. Başka cihazlar
- * (tablet, telefon) eskisi gibi Adisyon › İşlemler'den seçer; kasa da oradan kapatabilir
+ * müşteri ekranına (`/musteri-ekrani?ekran=kasa`; kasa-yazici.ps1 açar) kendiliğinden yansıtır ve kapatılamaz
+ * (`useDisplayCode`; Adisyon › İşlemler'deki düğme orada hep açık). Başka cihazlar (tablet, telefon) eskisi gibi
+ * oradan açıp kapatır
  */
 const KASA_PC = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname) && /Windows/i.test(window.navigator.userAgent) && import.meta.env.MODE !== 'demo';
 

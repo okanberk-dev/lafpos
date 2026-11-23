@@ -10,6 +10,7 @@ import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
 import { DenemeCard } from '@/components/admin/DenemeCard';
+import { branchSlug } from '@shared/baglanti';
 import { CloudBackupCard } from '@/components/admin/CloudBackupCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { PrinterCard } from '@/components/admin/PrinterCard';
@@ -485,7 +486,7 @@ export default function SettingsAdmin() {
               >
                 <Input
                   value={s.branchId}
-                  onChange={(e) => set({ branchId: e.target.value.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9-]/g, '').slice(0, 24) })}
+                  onChange={(e) => set({ branchId: branchSlug(e.target.value) })}
                   placeholder="marina"
                   autoCapitalize="none"
                   spellCheck={false}

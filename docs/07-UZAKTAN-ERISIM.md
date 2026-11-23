@@ -232,7 +232,13 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     bootstrap `branch`) görünür. lafmaliyet'in şube kimliğinden (`branchId`) ayrıdır, sistemler arasında gitmez.
   - **Şimdi güncelle (uzaktan):** dükkânın ayarlarında "Şimdi güncelle" (`POST /api/merkez/simdi-guncelle`): hedef
     kanalın son derlemesi olur, kasa bir sonraki nabızda alır ve kasadaki "Şimdi güncelle"nin isteğini yazar; gün
-    açıkken kurdurmaz (`docs/05-KASA-BILGISAYARI.md` §6). Panelde kasa alana kadar "Güncelleme istendi".
+    açıkken kurdurmaz (`docs/05-KASA-BILGISAYARI.md` §6). Panelde kasa alana kadar "Güncelleme istendi". Uzaktan
+    yönetimin "Gün sonu al ve güncelle"si aynı kaydı yazar (`api/_merkez.ts` `requestUpdateNow`: hedef, gönderim anı,
+    istek), isteğe gün sonunun komut kimliğiyle (`guncelleKomut`, nabzın yanıtında): kasa önce komutları uygular,
+    güncellemeyi ancak o gün sonu uygulandıysa ister. Gün sonu reddedildiyse ya da 30 dakikada kasaya gelmediyse istek
+    güncelleme başlatmadan kapanır ve kayda düşer; gönderilen hedef geçerli kalır (olağan yoldan gün kapanınca kurulur).
+    Gün sonu kasaya gitmeden iptal edilirse bulut isteği de geri alır (`withdrawLinkedUpdate`; istek hâlâ o gün sonuna
+    bağlıysa), hedef kalır. Eski kasa alanı görmez, isteği hemen işler.
   - **Seçerek güncelleme:** dükkân "Ben gönderince" (varsayılan) ya da "Otomatik". Panelde dükkânlar seçilip
     "Güncelleme gönder": hedef kanalın o anki son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
     (`guncelle.mjs` `merkezCap`) kanalda daha yeni derleme görünce sunucuya (`/api/kasa/guncelleme-durumu`, yalnız bu

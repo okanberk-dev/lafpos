@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { afterDayClose, afterDeviceEod } from '../sync/bildirim';
-import { maskOdenmezPeople } from '@shared/comp';
 import { staleDayMessage } from '@shared/time';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
-import type { ShiftCountDTO, ZSummary } from '@shared/types';
+import type { ShiftCountDTO } from '@shared/types';
 import { db, schema } from '../db/client';
-import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers, seesStaffOf } from '../lib/auth';
+import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
+import { summaryFor } from '../lib/kor-kasa';
 import {
   addCashMovement,
   closeDay,
@@ -52,17 +52,7 @@ function movementsOf(dayId: string) {
  */
 const seesNumbers = seesCashNumbers;
 
-/**
- * Personel tutarları (kişi başına adisyon sayısı ve ciro) maliyet yetkisi ister, personel raporu gibi: kör kasası
- * kaldırılan kasiyer (`kasa.rakam`) ya da rapor gören (`rapor.gor`) kişi X ve Z özetinde onları görmez (denetim,
- * 26 Eki 2026). Kural yalnız bu özet için değil, verinin kendisi için: kapanmış adisyonun garsonu da aynı kişiye
- * gitmez (`seesStaffOf`: adisyon uçları `blindOrder`, adisyon raporu ve CSV dökümü).
- */
-function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
-  if (!s || can(user, 'rapor.maliyet')) return s;
-  // Personelin adına yazılan ödenmez de personel tutarıdır: kendisininki dışındakiler tek "Personel" satırında
-  return { ...s, byUser: [], ...(s.odenmezPeople ? { odenmezPeople: maskOdenmezPeople(s.odenmezPeople, (id) => seesStaffOf(user, id)) } : {}) };
-}
+// Personel tutarlarının süzgeci (`summaryFor`) lib/kor-kasa.ts'te: fiş yazıcısının gün sonu kâğıdı da onu kullanır
 
 /**
  * Vardiya sayımı kişiye göre: kör kasada beklenen nakit ve fark gitmez (sayılandan çıkarılıp beklenen nakit
@@ -153,10 +143,11 @@ cashRoutes.post('/day/close', async (c) => {
     z.object({ countedCash: kurus.nullable(), cashCounts: z.record(z.string(), z.number().int().min(0)).nullish(), note: z.string().max(500).nullish() }),
   );
   const actor = actorFrom(c);
-  // Uzaktan gün sonu (kontrol komutu `gun.sonu`): kasada kişi yok, sistem kapanışı gibi yazılır (otomatik gün sonuyla
-  // aynı; kim istediği notta ve uzaktan denetim kaydında)
+  // Uzaktan gün sonu (kontrol komutu `gun.sonu`): kasada kişi yok, kapanış sistem kapanışı gibi (closedBy boş: personel
+  // tablosuna bağlı). Denetim kaydı isteyenin adıyla, `uzaktan` kimliğiyle: otomatik gün sonuyla karışmasın (inceleme,
+  // 23 Kas 2026)
   const remote = actor.user.id === 'uzaktan';
-  const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input));
+  const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input, remote ? { userId: actor.user.id, name: actor.user.name } : undefined));
   // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
   afterDayClosed(day.id);
   // Kasa farkı eşiği geçtiyse patronun telefonuna

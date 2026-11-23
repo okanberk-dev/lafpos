@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { create } from 'zustand';
 import { COMP_LABEL } from '@shared/comp';
 import { tlPlain } from '@shared/money';
+import { lineGross } from '@shared/order-calc';
 import { fmtDateTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO, PublicSettings } from '@shared/types';
 import type { ZSummary } from '@shared/types';
@@ -155,25 +156,69 @@ async function printOne(content: ReactNode, sheet: boolean): Promise<{ how: 'dir
 }
 
 /**
+ * Yazdırma sırası (saf; test: tests/fis-sirasi.test.ts). Yazdırma alanı (`.print-area`) tek ve `afterprint` olayı bütün
+ * pencereye gelir: sırasız iki zincir (bir saniye arayla alınan iki payın nüshaları, nüsha ile gün sonu kâğıdı) üst üste
+ * binince biri ötekinin `afterprint`iyle bitmiş sayılıp ikinci kâğıdını ilki basılırken gönderiyor, içerik yazdırma
+ * anından önce değişince biri öbürünün fişini, öteki boş kâğıt basıyordu (inceleme, 23 Kas 2026). Her iş bu sıradan
+ * geçer: arayan, iş değerini verince (`value`, ör. yazdırma komutu verildi) devam eder; sıradaki iş ise bu işin
+ * bitişini (`finished`: doğrudan basmada sunucunun yanıtı, tarayıcıda `afterprint`) ve kısa bir arayı (`gapMs`; kiosk
+ * Chrome art arda gelen `window.print()`i yutabiliyor) bekler. Başarısız iş sırayı durdurmaz; bitmeyen iş (yanıtı
+ * gelmeyen istek) sırayı en çok `stallMs` tutar
+ */
+export function printQueue(opts: { gapMs?: number; stallMs?: number } = {}) {
+  const gapMs = opts.gapMs ?? 300;
+  const stallMs = opts.stallMs ?? 30_000;
+  const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+  /** İş bitince ya da en çok `ms` sonra (hata da bitiş sayılır) */
+  const settled = (p: Promise<unknown>, ms: number) =>
+    new Promise<void>((done) => {
+      const t = setTimeout(done, ms);
+      const end = () => {
+        clearTimeout(t);
+        done();
+      };
+      p.then(end, end);
+    });
+  let tail: Promise<void> = Promise.resolve();
+  return function add<T>(job: () => Promise<{ value: T; finished: Promise<void> }>): Promise<T> {
+    // İş öncekinin sırası bitince başlar; sıranın yeni sonu bu işin bitişi (ya da süre aşımı) ve ardından ara
+    const run = tail.then(job);
+    tail = tail.then(() => settled(run.then((r) => r.finished), stallMs)).then(() => wait(gapMs));
+    return run.then((r) => r.value);
+  };
+}
+
+/** Bu sekmenin bütün fiş ve sayfa çıktıları tek sırada (`printQueue`) */
+const enqueue = printQueue();
+
+/**
  * Fiş: ayar açıkken (Yönetim › Ayarlar ve yedek › Fiş yazıcısı, varsayılan açık) yazdırma penceresi açılmadan doğrudan
  * ağdaki fiş yazıcısına (`directPrint`); yazıcının adresi yoksa ya da ulaşılamazsa tarayıcıdan. `sheet`: 80 mm fiş değil
- * A4 sayfa (masa kartları; hep tarayıcıdan, index.css `.print-sheet`). Dönen söz fiş yazıcıya gidince (ya da yazdırma
- * komutu verilince; kiosk Chrome'da `window.print()` fişi yazıcıya gönderip döner) biter: işyeri nüshasının "basıldı"
- * onayı bundan sonra gider. Yazdırılamazsa reddedilir
+ * A4 sayfa (masa kartları; hep tarayıcıdan, index.css `.print-sheet`). Önceki çıktı bitince başlar (`printQueue`). Dönen
+ * söz fiş yazıcıya gidince (ya da yazdırma komutu verilince; kiosk Chrome'da `window.print()` fişi yazıcıya gönderip
+ * döner) biter. Yazdırılamazsa reddedilir
  */
-export async function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Promise<'direct' | 'browser'> {
-  return (await printOne(content, !!opts.sheet)).how;
+export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Promise<'direct' | 'browser'> {
+  return enqueue(async () => {
+    const r = await printOne(content, !!opts.sheet);
+    return { value: r.how, finished: r.finished };
+  });
 }
 
 /**
  * Birkaç fişi ayrı işler olarak basar: her biri ayrı kesilir (saha, 22 Kas 2026: iki nüsha böyle ayrı kâğıt çıkıyor).
- * Tarayıcı işi `afterprint` olayıyla (en çok 6 sn) biter, sonraki kısa bir aradan sonra gider
+ * Parçalar sıraya art arda girer, araya başka bir çıktı girmez; her biri öncekinin bitişini bekler (`printQueue`). Söz
+ * hepsi bitince (tarayıcıda sonuncusunun `afterprint`i) biter: işyeri nüshasının "basıldı" onayı bundan sonra gider.
+ * Biri basılamazsa reddedilir
  */
 export async function printEach(parts: ReactNode[]): Promise<void> {
-  for (let i = 0; i < parts.length; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 300));
-    await (await printOne(parts[i], false)).finished;
-  }
+  const done = parts.map((part) =>
+    enqueue(async () => {
+      const r = await printOne(part, false);
+      return { value: r.finished, finished: r.finished };
+    }),
+  );
+  await Promise.all(done);
 }
 
 export function PrintHost() {
@@ -278,7 +323,7 @@ export function BillReceipt({ order, boot, sizeLabel, share, copy }: { order: Or
               {i.name}
               {i.size !== 'TEK' ? ` ${sizeLabel(i.size)}` : ''}
             </span>
-            <span className="rc-r">{i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(i.qty * i.unitPrice)}</span>
+            <span className="rc-r">{i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(lineGross(i))}</span>
             {i.optionsText && <span className="rc-item-sub">{i.optionsText}</span>}
             {i.note && <span className="rc-item-sub">Not: {i.note}</span>}
             {i.discount > 0 && (
@@ -333,8 +378,9 @@ export function BillReceipt({ order, boot, sizeLabel, share, copy }: { order: Or
 }
 
 /**
- * İşyeri nüshası: ödemeden sonra fiş yazıcısından çıkan kısa kayıt (kalem dökümü yok). Müşterinin fişini yazarkasa
- * basar; bu kâğıt kasada kalır. `device`: yazarkasanın fiş ve Z no'su (cihazdan geldiyse)
+ * İşyeri nüshası: ödemeden sonra fiş yazıcısından çıkan, kasada ve barda kalan kâğıt (bar ve hazırlık için kalem
+ * dökümü, indirim ve servisle adisyon toplamı, ödemeler). Müşterinin kâğıdı ayrı: müşteri nüshası (`BillReceipt`
+ * `copy`), mali fiş yazarkasadan. `device`: yazarkasanın fiş ve Z no'su (cihazdan geldiyse)
  */
 export function StoreCopyReceipt({
   order,
@@ -354,6 +400,7 @@ export function StoreCopyReceipt({
   /** Ciro dışı kapanış (ikram, ödenmez, zayi): "ALINAN" yerine türü yazılır */
   comp?: string | null;
 }) {
+  const t = order.totals;
   const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
   const branch = branchLine(boot);
   const paid = payments.reduce((a, p) => a + p.amount + p.tip, 0);
@@ -370,7 +417,10 @@ export function StoreCopyReceipt({
         {cashier && <Row l={`Kasiyer ${cashier}`} />}
       </div>
       <Hr />
-      {/* Bar ve hazırlık için kalem dökümü (seçenekler girintili) */}
+      {/* Bar ve hazırlık için kalem dökümü (seçenekler girintili). Kalemden adisyon toplamına adisyondaki gibi
+          (`BillReceipt`): ikram edilen kalemde tutar yerine türü (toplam onu saymaz), indirimli kalemin altında indirimi,
+          toplamdan önce ara toplam, indirim ve servis. Eskiden ikram liste fiyatıyla basılıyor, indirim hiç yazılmıyordu:
+          kalemler adisyon toplamının üstünde kalıyor, aradaki fark kâğıtta görünmüyordu (inceleme, 23 Kas 2026) */}
       <div className="rc-items">
         {order.items
           .filter((i) => !i.voided)
@@ -381,13 +431,26 @@ export function StoreCopyReceipt({
                 {i.name}
                 {i.size && i.size !== 'TEK' ? ` ${boot.settings.sizeLabels?.[i.size as 'M' | 'L'] ?? i.size}` : ''}
               </span>
-              <span className="rc-r">{tlPlain(i.qty * i.unitPrice)}</span>
+              <span className="rc-r">{i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(lineGross(i))}</span>
               {i.optionsText && <span className="rc-item-sub">{i.optionsText}</span>}
               {i.note && <span className="rc-item-sub">Not: {i.note}</span>}
+              {i.discount > 0 && (
+                <>
+                  <span className="rc-item-sub rc-item-sub-l">İndirim{i.discountReason ? ` (${i.discountReason})` : ''}</span>
+                  <span className="rc-r">-{tlPlain(i.discount)}</span>
+                </>
+              )}
             </div>
           ))}
       </div>
       <Hr />
+      {t.lineDiscounts + t.orderDiscount > 0 && (
+        <>
+          <Row l="Ara toplam" r={tlPlain(t.gross)} />
+          <Row l={`İndirim${order.discountReason ? ` (${order.discountReason})` : ''}`} r={`-${tlPlain(t.lineDiscounts + t.orderDiscount)}`} />
+        </>
+      )}
+      {t.service > 0 && <Row l={`Servis %${order.serviceRate}`} r={tlPlain(t.service)} />}
       <Row l="Adisyon toplamı" r={tlPlain(order.total)} />
       <div className="rc-block">
         {payments.map((p) => (
@@ -421,9 +484,6 @@ export function StoreCopyReceipt({
     </div>
   );
 }
-
-/** Birden çok fiş tek yazdırmada (işyeri nüshası ve bilgi fişi): aralarında kâğıt kesilir */
-export const PrintCut = () => <div className="rc-cut" aria-hidden="true" />;
 
 /** Gün sonu (Z) ya da gün açıkken ara rapor (X) çıktısı: X'te kapanış anı yoktur */
 export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO; date: string; zNo: number; s: ZSummary; closedAt: number | null }) {

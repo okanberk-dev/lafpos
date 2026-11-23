@@ -51,7 +51,7 @@ interface OkcStatus {
   pavoAutoEod: boolean;
   /** Pavo: ödeme türü cihazda önceden seçili (yoksa eski sunucu: açık sayılır) */
   pavoOdemeSecili?: boolean;
-  /** Pavo: banka gün sonu kâğıdı fiş yazıcısından da (yoksa eski sunucu) */
+  /** Pavo: banka gün sonu kâğıdı fiş yazıcısından da (yoksa eski sunucu); cihazın kendi slibi ayardan bağımsız */
   pavoEodFis?: boolean;
   /** Ödemeyi alınca cihaza gönder (kasada ödeme) */
   auto: boolean;
@@ -443,7 +443,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
             disabled={savingFis}
             onChange={onFis}
             label="Gün sonu kâğıdı fiş yazıcısından da çıksın"
-            hint="Cihazda banka gün sonu alınınca kasa ekranı fiş yazıcısından bankalar ve toplamla bir kâğıt basar (her gün sonunda bir kez)"
+            hint="Cihaz kendi slibini her gün sonunda basar. Açıkken kasa ekranı fiş yazıcısından da LafPOS Z’sini ve bankalarla Pavo - LafPOS kıyasını basar (her gün sonunda bir kez; kör kasada Z basılmaz)"
           />
         )}
       </div>
@@ -601,6 +601,7 @@ export default function OkcAdmin() {
   const setEodFis = async (v: boolean) => {
     if (v === s.pavoEodFis || saving) return;
     setSaving('fis');
+    // Cihaz kendi slibini ayardan bağımsız basar: ayar yalnız fiş yazıcısının kâğıdını açıp kapatır
     await save({ pavoEodFis: v }, v ? 'Gün sonu kâğıdı fiş yazıcısından da çıkacak' : 'Gün sonu kâğıdı yalnız cihazdan çıkacak');
     setSaving(null);
   };

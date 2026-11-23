@@ -62,13 +62,25 @@ export async function signedFetch(
   if (raw) headers['content-type'] = 'application/json';
   let res: Response;
   try {
-    res = await fetch(url, { method, headers, body: raw || undefined, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
+    res = await fetch(url, { method, headers, body: raw || undefined, signal: AbortSignal.timeout(timeoutMs), redirect: 'manual' });
   } catch (e) {
     // İnternet durumu (server/lib/internet.ts): yanıt hiç gelmediyse "yok"
     if (isNetworkError(e)) noteUnreachable(e);
     throw e;
   }
   noteReachable();
+  // Yönlendirme izlenmez (imza yolu kapsar, gövde yeni adrese gitmez): sunucu yanıt verdi ama adres yanlış yazılmış
+  // (http, www, sonda yol). Hata yeniden denenir; adres düzeltilince geçer
+  if (res.status >= 300 && res.status < 400) {
+    const to = res.headers.get('location');
+    let where = '';
+    try {
+      if (to) where = ` → ${new URL(to, url).origin}`;
+    } catch {
+      where = '';
+    }
+    throw new Error(`Adres yönlendiriyor (HTTP ${res.status}${where}): Yönetim › Bağlantı bilgileri'nde adresi yönlendirmesiz, https:// ile ve sonunda yol olmadan yazın`);
+  }
   let json: unknown = null;
   try {
     json = await res.json();

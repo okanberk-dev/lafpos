@@ -20,7 +20,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
-import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs, GROUP, PaymentMix } from './TodayStats';
+import { Amount, COMPARE_SHORT, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs, GROUP, PaymentMix } from './TodayStats';
 import { UzaktanYonetimKarti } from '@/pages/kontrol/UzaktanYonetimKarti';
 import { CompareBars, HeroNumber, KPill, KpiTile, PaymentGaugeCard, PctPill, ThinBars } from './KeelPanel';
 import { KiyasDokum } from './KiyasDokum';
@@ -81,8 +81,6 @@ export interface PatronData {
 
 /** Dikkat isteyenlerde ilk bakışta en çok bu kadar satır; gerisi "Tümünü göster"le aynı kartta açılır */
 const ATTENTION_ROWS = 4;
-/** Kıyas kartının mini grafiğinde blokların altındaki kısa adlar (satırlarda tam adı yazar) */
-const COMPARE_SHORT = { dun: 'Dün', hafta: 'G. hafta', ay: 'G. ay' } as const;
 
 /** Pano yaprağının iç payı: telefonda kart kenara yakın, geniş ekranda biraz içeride */
 const PAD = 'px-1 pb-8 pt-1 md:px-2 md:pt-2';
@@ -447,7 +445,6 @@ export default function PatronPage() {
                   mode={kiyas.mode}
                   today={d.date}
                   now={d.now}
-                  fresh={ago ?? stamp}
                   stack
                   onOpen={() => setDokum(true)}
                   chart={<CompareBars today={d.netSales} items={kiyas.compares.map((c) => ({ key: c.key, label: COMPARE_SHORT[c.key], value: c.value ? c.value.netSales : null }))} />}

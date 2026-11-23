@@ -27,6 +27,7 @@ import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
 import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
+import { reservedPosName } from '../sync/lafmaliyet';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
@@ -134,6 +135,14 @@ function assertPosNameFree(self: Pick<ProductRow, 'name' | 'posName' | 'priceL' 
   const extOf = (p: Pick<ProductRow, 'extSource' | 'extId'>) => (p.extSource === 'laffogato' ? p.extId : null);
   const rowKey = (p: Pick<ProductRow, 'extSource' | 'extId'>, size: 'M' | 'L' | 'TEK') => `${extOf(p) ?? ''}|${posSlotOf(extOf(p), size) ?? ''}`;
   const mine = posNamesOf(self, suffix).map((n) => ({ ...n, key: posNameKey(n.name), row: rowKey(self, n.size) }));
+  for (const m of mine) {
+    const r = reservedPosName(m.name);
+    if (!r) continue;
+    const own =
+      (r.siteId !== null && extOf(self) === r.siteId) ||
+      (r.feeProduct && !!self.id && posNameKey(db.select({ posName: schema.products.posName }).from(schema.products).where(eq(schema.products.id, self.id)).get()?.posName ?? '') === m.key);
+    if (!own) throw conflict(`"${m.name}" lafmaliyet adını kasa kendi satırı için kullanıyor (servis ücreti, platform ücreti ya da ek); başka bir ad yazın`, 'pos_name_reserved');
+  }
   const others = db.select().from(schema.products).all().filter((p) => p.id !== self.id);
   for (const o of others) {
     for (const n of posNamesOf(o, suffix)) {
@@ -232,6 +241,12 @@ adminRoutes.patch('/products/:id', async (c) => {
   const synced = p.extSource === 'laffogato';
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
+  }
+  // Görsel de sitenin: menü eşitlemesi siteden gelen ürünün görselini her seferinde yeniden yazar, kasada verilen görsel
+  // (uzaktan `urun.gorsel`) "Uygulandı" deyip sonraki eşitlemede siliniyordu. Yönetim ekranı görsel göndermez (inceleme,
+  // 23 Kas 2026)
+  if (synced && input.image !== undefined) {
+    throw conflict('Bu ürünün görseli siteden gelir: sitede değiştirin (laffogato yönetim paneli). Kasada görsel yalnız sitede olmayan ürüne verilir', 'synced_field');
   }
   // Yalnız lafmaliyet adı değişiyorsa denetlenir: eski bir çakışma istasyon ya da renk kaydını engellemesin
   const next = { ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName !== undefined ? input.posName : p.posName };

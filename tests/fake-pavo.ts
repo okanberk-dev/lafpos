@@ -29,6 +29,11 @@ export interface FakePavo {
   reject(orderNo: string, code: string, message: string): void;
   /** Bundan sonraki `/CompleteSale` hemen bu yanıtla döner */
   nextSaleReply: Record<string, unknown> | null;
+  /**
+   * `/GetSaleResult` (kaldırılana dek her biri) satış kaydına bakmadan bu yanıtla döner: isteğin reddi (ör. eşleştirmesi
+   * bozulmuş cihazın 73'ü), satış hakkında bir şey söylemez
+   */
+  saleResultReply: Record<string, unknown> | null;
   /** Bundan sonraki istekler yanıtsız kalır (bağlantı açık, cevap yok) */
   silent: boolean;
   /**
@@ -134,6 +139,7 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     sales: new Map(),
     requests: [],
     nextSaleReply: null,
+    saleResultReply: null,
     silent: false,
     eodMode: 'ok',
     eodDelayMs: 0,
@@ -232,6 +238,7 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
       return;
     }
     if (path === '/GetSaleResult') {
+      if (device.saleResultReply) return send(res, device.saleResultReply);
       const orderNo = String((body.Sale as { OrderNo?: string } | undefined)?.OrderNo ?? '');
       const sale = device.sales.get(orderNo);
       if (!sale) return send(res, err('3001', 'Satış bulunamadı'));

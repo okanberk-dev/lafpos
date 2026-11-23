@@ -19,7 +19,7 @@ export function configFrom(vars: Record<string, string | undefined>) {
     laffogatoPanelSecret: (vars.LAFFOGATO_SYNC_SECRET ?? vars.LAFFOGATO_PANEL_SECRET ?? '').trim(),
 
     /** lafmaliyet (maliyet / arka ofis paneli) */
-    lafmaliyetUrl: (vars.LAFMALIYET_URL ?? '').replace(/\/$/, ''),
+    lafmaliyetUrl: (vars.LAFMALIYET_URL ?? '').trim().replace(/\/+$/, ''),
     /** lafmaliyet'in imzalı POS uçları: paneldeki LAFPOS_SYNC_SECRET değeri */
     lafmaliyetToken: (vars.LAFMALIYET_SYNC_SECRET ?? '').trim(),
 

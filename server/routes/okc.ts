@@ -108,7 +108,7 @@ okcRoutes.post('/eod', async (c) => {
 
 /**
  * Cihazda alınan son banka gün sonunun kâğıdı (fiş yazıcısı): batch başına bir kez, yalnız ilk soran kasa ekranına
- * verilir; basılacak bir şey yoksa `slip: null`
+ * verilir; basılacak bir şey yoksa `slip: null`. Kapanan günün Z'si kasa uçlarının kuralıyla (kör kasada `z: null`)
  */
 okcRoutes.post('/eod/slip', (c) => {
   requirePermission(c.get('user'), 'odeme.al');
@@ -167,7 +167,7 @@ okcRoutes.post('/orders/:id/send', async (c) => {
     c,
     z.object({
       items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish(),
-      /** Gönderen ekran ödemeden sonra işyeri nüshası basan kasa ekranı: cihaz ödeyince nüsha sunucuda bekler */
+      /** Gönderen ekran ödemeden sonra nüsha (müşteri, işyeri; ayarı açık olanlar) basan kasa ekranı: cihaz ödeyince nüsha sunucuda bekler */
       storeCopy: z.boolean().optional(),
       /** Kasada seçilen ödeme türü: Pavo'da cihazda önceden seçili gelir */
       odeme: z.enum(['nakit', 'kart']).optional(),

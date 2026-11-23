@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,8 +8,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 /**
  * Güncellemenin kurulumu da yenilemesi (scripts/kasa/windows/kurulum/kurulum-yenile.mjs): kök dosyalar (baslat.cmd
  * hariç), kısayollar (kurulumdakiyle aynı adlar, derleme başına bir kez), yapılamayanın uyarısı (durum.json
- * `kurulumUyari`) ve kasa ekranı bekçisi (kasa-yazici.ps1 -Bekci): kasa penceresini açık tutar, tek çalışır, geçici
- * denetçiyi kaldırır.
+ * `kurulumUyari`), kurulum derlemesinin paket denemesinde (derle.mjs) yenilemenin kapalı olması ve kasa ekranı bekçisi
+ * (kasa-yazici.ps1 -Bekci): kasa penceresini açık tutar, tek çalışır, geçici denetçiyi kaldırır, müşteri ekranını
+ * sunucu cevap verince açar.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Mod = Record<string, any>;
@@ -35,6 +38,38 @@ function install() {
   for (const [n, v] of Object.entries({ 'LafPOS-Kasa.bat': 'yeni bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'yeni baslat', 'BENIOKU.txt': 'yeni not' })) writeFileSync(join(app, 'kok', n), v);
   for (const [n, v] of Object.entries({ 'LafPOS-Kasa.bat': 'eski bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'eski baslat' })) writeFileSync(join(dir, n), v);
   return { dir, app, home: join(dir, 'veri') };
+}
+
+/**
+ * Gerçek bekçiyi (bekci.mjs ve pakete onunla giren betikler) install()'ın kurulum klasöründe sahte bir sunucuyla açar;
+ * sunucu hazır deyince durdurur. Kurulum yenilemesi açılışta, sunucunun ilk çıktısından önce kök dosyaları koyar
+ */
+async function runWatchdog(extra: Record<string, string>) {
+  const t = install();
+  for (const f of ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs', 'kurulum-yenile.mjs']) {
+    copyFileSync(new URL(`scripts/kasa/windows/kurulum/${f}`, root), join(t.app, f));
+  }
+  mkdirSync(join(t.app, 'server'));
+  // Bekçinin "kapat"ı gelince (ya da bekçi kapanıp standart girdi bitince) çıkar
+  writeFileSync(join(t.app, 'server', 'index.mjs'), "console.log('LafPOS sunucusu hazır');\nfor (const e of ['data', 'end']) process.stdin.on(e, () => process.exit(0));\n");
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const k of ['LAFPOS_GUNCELLEME_DENEME', 'LAFPOS_PAKET_DENEME', 'LAFPOS_BEKCI_STDIN', 'LAFPOS_MAX_HEAP_MB']) delete env[k];
+  const child = spawn(process.execPath, [join(t.app, 'bekci.mjs')], { env: { ...env, LAFPOS_HOME: t.home, ...extra }, stdio: 'ignore' });
+  const logFile = join(t.home, 'logs', 'sunucu.log');
+  const log = () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
+  try {
+    for (let i = 0; !log().includes('LafPOS sunucusu hazır'); i++) {
+      if (i > 200 || child.exitCode != null) throw new Error(`bekçi sunucuyu açmadı:\n${log()}`);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  } finally {
+    if (child.exitCode == null && child.signalCode == null) {
+      const exited = once(child, 'exit');
+      child.kill();
+      await exited;
+    }
+  }
+  return { ...t, log: log() };
 }
 
 describe('kurulumun kök dosyaları ve kısayolları', () => {
@@ -141,10 +176,37 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     expect(paket).toMatch(/KASA_SCRIPTS = \[[^\]]*'kurulum-yenile\.mjs'/);
     expect(paket).toContain("['kisayollar.ps1', 'kisayollar.ps1']");
     expect(paket).toContain('shellFiles(root)');
+    // Kasa kısayolu güncellemeyle yalnız app\kok\'ten gelir; app\'te okunmayan ikinci kopyası yok
+    const at = paket.indexOf('KASA_LAUNCHER = [');
+    const launcher = paket.slice(at, paket.indexOf('];', at));
+    expect(launcher).toContain("['kasa-yazici.ps1', 'kasa-yazici.ps1']");
+    expect(launcher).not.toContain('LafPOS-Kasa.bat');
     for (const f of ['kisayollar.ps1', 'kasa-yazici.ps1']) expect(ASCII.test(read(`scripts/kasa/windows/kurulum/${f}`, 'latin1')), f).toBe(true);
     const bekci = read('scripts/kasa/windows/kurulum/bekci.mjs');
     expect(bekci).toContain('refreshInstall(');
     expect(bekci).toContain('setInstallWarning');
+  });
+});
+
+describe('kurulumu yalnız kurulu bekçi yeniler (paket denemesi dokunmaz)', () => {
+  it('kurulu bekçi açılışta kök dosyaları yeniler', async () => {
+    const r = await runWatchdog({});
+    expect(readFileSync(join(r.dir, 'LafPOS-Kasa.bat'), 'utf8')).toBe('yeni bat');
+    expect(r.log).toContain('[kurulum] kök dosyalar yenilendi: BENIOKU.txt, LafPOS-Kasa.bat');
+  });
+
+  it('paket denemesi (derle.mjs, LAFPOS_PAKET_DENEME=1) kök dosyalara ve kısayollara dokunmaz; güncelleyici yine durumu yazar', async () => {
+    // Yenilese yönetici kabuğunda bu bilgisayardaki LafPOS'un ortak kısayolları silinecek deneme klasörüne dönerdi
+    const r = await runWatchdog({ LAFPOS_PAKET_DENEME: '1' });
+    expect(readFileSync(join(r.dir, 'LafPOS-Kasa.bat'), 'utf8')).toBe('eski bat');
+    expect(existsSync(join(r.dir, 'BENIOKU.txt'))).toBe(false);
+    expect(r.log).not.toContain('[kurulum]');
+    // Deneme güncelleyicinin durum dosyasına bakar (derle.mjs): güncelleyici kapanmaz
+    expect(JSON.parse(readFileSync(join(r.home, 'guncelleme', 'durum.json'), 'utf8')).kurulu.build).toBe(1_795_100_000);
+    // Kurulum derlemesinin denemesi bekçiyi bu bayrakla açar ve yenilenmediğini kendisi de denetler
+    const derle = read('scripts/kasa/windows/kurulum/derle.mjs');
+    expect(derle).toContain("LAFPOS_NO_JOBS: '1', LAFPOS_PAKET_DENEME: '1'");
+    expect(derle).toContain("existsSync(join(tmp, 'LafPOS-Kasa.bat'))");
   });
 });
 
@@ -178,6 +240,43 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     expect(ac).toBeLessThan(bat.indexOf(':chrome'));
     expect(bat).toContain('if not errorlevel 1 exit /b 0');
     expect(ASCII.test(read('scripts/kasa/windows/LafPOS-Kasa.bat', 'latin1'))).toBe(true);
+  });
+
+  it('müşteri ekranı sunucu cevap vermeden açılmaz (hata sayfası açık kalıp bekçiyi durdurmasın); eski bekçi değişir', async () => {
+    const fn = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
+    // Kasa penceresininkiyle aynı denetim (/api/health), tarayıcı açılmadan önce
+    expect(ps1).toContain('function Test-Server([string]$base)');
+    expect(fn).toContain('if (-not (Test-Server $base)) { return }');
+    expect(fn.indexOf('Test-Server $base')).toBeLessThan(fn.indexOf('Start-Process'));
+    // Bekçi ve bat aynı adresi verir: 127.0.0.1, sonda / yok (Test-Server /api/health ekler)
+    expect(ps1).toContain("$displayBase = ($displayBase -replace '//localhost', '//127.0.0.1').TrimEnd('/')");
+    expect(ps1.slice(ps1.indexOf('if ($Bekci) {'))).toContain('Start-CustomerDisplay $displayBase');
+    // Kasada çalışan eski bekçi (sunucuya bakmadan açan) kasa kısayolunun bir sonraki açılışında yenisiyle değişsin
+    const { WATCHER_VERSION } = await load('kurulum-yenile.mjs');
+    expect(WATCHER_VERSION).toBeGreaterThanOrEqual(3);
+  });
+
+  it('müşteri ekranı kilit altında açılır: oturum açılınca bat ile bekçi aynı anda iki pencere açmaz', () => {
+    const fn = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
+    // Kasa penceresinden ayrı kilit: biri açılırken öteki beklemesin
+    expect(fn).toContain("Mutex($false, 'Local\\LafPOS-MusteriPencere')");
+    expect(fn).toContain('catch [System.Threading.AbandonedMutexException] { $own = $true }');
+    // Açık mı, sunucu var mı ve açma aynı kilidin içinde; açtıktan sonra süreç görünene dek beklenir
+    const lock = fn.indexOf('WaitOne(');
+    const check = fn.indexOf('if (Test-CustomerDisplay) { return }');
+    const start = fn.indexOf('Start-Process');
+    expect(lock).toBeGreaterThan(0);
+    expect(check).toBeGreaterThan(lock);
+    expect(fn.indexOf('Test-Server $base')).toBeGreaterThan(check);
+    expect(start).toBeGreaterThan(fn.indexOf('Test-Server $base'));
+    const after = fn.slice(start);
+    expect(after).toMatch(/for \(\$i = 0; \$i -lt 20; \$i\+\+\) \{\s+Start-Sleep -Milliseconds 500\s+if \(Test-CustomerDisplay\) \{ break \}/);
+    // Kilit her çıkışta bırakılır (erken return dahil)
+    expect(after.indexOf('finally {')).toBeGreaterThan(after.indexOf('Test-CustomerDisplay'));
+    expect(after.slice(after.indexOf('finally {'))).toContain('$mx.ReleaseMutex()');
+    // Süreç denetimi tek yerde: kilitli açma ile döngüdeki bekleme aynı süreci arar
+    expect(ps1.slice(ps1.indexOf('function Test-CustomerDisplay'), ps1.indexOf('function Start-CustomerDisplay'))).toContain("-like '*chrome-musteri*'");
+    expect(fn).not.toContain('$running');
   });
 
   it('eski bekçi yenisiyle değişir; Başlangıç kısayolu yoksa kullanıcı düzeyinde konur', () => {

@@ -21,7 +21,8 @@ import { getOpenDay, getOrderDTO, loadOrder } from '../services/orders';
  *   isterse yalnız biri alır (`basiliyor`, alanın anahtarıyla), öbürü 409 `copy_taken`.
  * - Basan ekran "basıldı" der (`basildi`, denetim kaydı `okc.store_copy`). Alınıp süresinde basıldı denmeyen nüsha
  *   (ekran basarken kapandı) yeniden verilir.
- * - Yalnız açık günün ödemeleri: gün kapandıysa bekleyen nüsha artık basılmaz. Ayar kapalıysa hiçbiri.
+ * - Yalnız açık günün ödemeleri: gün kapandıysa bekleyen nüsha artık basılmaz. İki nüsha ayarı da (işyeri ve müşteri
+ *   nüshası) kapalıysa hiçbiri; biri açıksa nüsha bekler, ekran yalnız ayarı açık kâğıdı basar.
  */
 
 type ReceiptRow = typeof schema.fiscalReceipts.$inferSelect;
@@ -55,11 +56,19 @@ function claimable(now: number, dayOpenedAt: number) {
   );
 }
 
-/** Nüshaların verildiği günün açılışı; gün kapalıysa ya da "Ödeme sonrası işyeri nüshası" kapalıysa null */
+/**
+ * Nüshaların verildiği günün açılışı; gün kapalıysa ya da iki nüsha ayarı da kapalıysa null. Yalnız müşteri nüshası
+ * açıkken de verilir (shared/odeme-fisi.ts `afterPaymentParts`): eskiden yalnız işyeri nüshasına bakılıyordu, o
+ * kapalıyken cihaz ödemesinin müşteri nüshası hiç basılmıyordu (inceleme, 23 Kas 2026)
+ */
 function copiesSince(t: Tx | DB): number | null {
-  if (!getSettings().receiptStoreCopy) return null;
+  const s = getSettings();
+  if (!s.receiptStoreCopy && !s.receiptInfoSlip) return null;
   return getOpenDay(t)?.openedAt ?? null;
 }
+
+/** Denetim kaydında basılan kâğıdın adı: işyeri nüshası kapalıyken ekran yalnız müşteri nüshasını basar */
+const copyName = () => (getSettings().receiptStoreCopy ? 'işyeri nüshası' : 'müşteri nüshası');
 
 /** Basılmayı bekleyen nüshalar, ödeme sırasıyla (kasa ekranı açılınca ve canlı bağlantı yeniden kurulunca sorar) */
 export function pendingStoreCopies(now = Date.now()): { id: string; orderId: string; completedAt: number | null }[] {
@@ -96,7 +105,7 @@ export function claimStoreCopy(actor: Actor, receiptId: string, now = Date.now()
         entity: 'fiscal_receipt',
         entityId: before.id,
         amount: before.amount,
-        message: `#${loadOrder(t, before.orderId).no} adisyonun işyeri nüshası yeniden basılıyor: önceki ekran ${STORE_COPY_LEASE_MS / 60_000} dk içinde basıldığını bildirmedi, iki kez basılmış olabilir`,
+        message: `#${loadOrder(t, before.orderId).no} adisyonun ${copyName()} yeniden basılıyor: önceki ekran ${STORE_COPY_LEASE_MS / 60_000} dk içinde basıldığını bildirmedi, iki kez basılmış olabilir`,
       });
     }
     return before;
@@ -132,7 +141,7 @@ export function storeCopyPrinted(actor: Actor, receiptId: string, claim: string,
       entity: 'fiscal_receipt',
       entityId: r.id,
       amount: r.amount,
-      message: `#${loadOrder(t, r.orderId).no} adisyonun işyeri nüshası ${late >= 1 ? `ödemeden ${late} dk sonra ` : ''}basıldı (yazarkasa ödemesi ${tl(r.amount)})`,
+      message: `#${loadOrder(t, r.orderId).no} adisyonun ${copyName()} ${late >= 1 ? `ödemeden ${late} dk sonra ` : ''}basıldı (yazarkasa ödemesi ${tl(r.amount)})`,
     });
     return 'ok' as const;
   });
@@ -155,7 +164,8 @@ function printable(actor: Actor, r: ReceiptRow, claim: string): ClaimedStoreCopy
     claim,
     order: blindOrder(actor.user, full),
     payments: full.payments
-      .filter((p) => r.paymentIds.includes(p.id))
+      // İade edilen ödeme yazılmaz: kalem iadesinde kalanı yeni kimlikle fişin ödemelerine eklenir (orders.refundItems)
+      .filter((p) => r.paymentIds.includes(p.id) && !p.refundedAt)
       .map((p) => ({ id: p.id, methodName: p.methodName, amount: p.amount, tip: p.tip, userName: staff ? p.userName : null })),
     device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: result?.docKind ?? null, docId: result?.docId ?? null },
     at: r.completedAt ?? Date.now(),

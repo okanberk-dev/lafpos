@@ -148,7 +148,11 @@ export const ROW_STATIC = ROW;
 
 export const Amount = ({ k }: { k: number }) => <span className="tabular whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">{tlShort(k)}</span>;
 
-const signed = (k: number) => `${k > 0 ? '+' : k < 0 ? '−' : ''}${tl(Math.abs(k))}`;
+/** İşaretli ₺ fark ("+₺1.200,00", "−₺80,00"; eksi tipografik); kıyas kartı ve döküm aynı biçimle */
+export const signed = (k: number) => `${k > 0 ? '+' : k < 0 ? '−' : ''}${tl(Math.abs(k))}`;
+
+/** Kıyas günlerinin kısa adları: mini grafikte blokların altında (kıyas kartı ve döküm; satırlarda tam adı yazar) */
+export const COMPARE_SHORT: Record<Compare['key'], string> = { dun: 'Dün', hafta: 'G. hafta', ay: 'G. ay' };
 
 /** Kıyas gününün olmayan verisi: tarih takvimde yoksa ayın adıyla, iş günü yoksa nedeni */
 function missing(c: Compare, today: string) {
@@ -162,34 +166,28 @@ function missing(c: Compare, today: string) {
 /**
  * Kıyas (sahibin örneğiyle aynı yapı): "Dün", "Geçen hafta bugün", "Geçen ay bugün"; sağda aynı saate kadarki tutar ve
  * değişim hapı. O gün satış yoksa "satış yok", veri yoksa "veri yok". Satıra dokununca tarih ve gün adı, gün sonu
- * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce"); `chart`: satırların üstündeki mini
- * grafik (patron panelinde kıyas yalnız bu kartta)
+ * toplamı, adisyon ve ₺ fark. `chart`: satırların üstündeki mini grafik (patron panelinde kıyas yalnız bu kartta);
+ * grafiğe ve başlıktaki "Döküm"e dokununca ayrıntılı döküm açılır (`onOpen`)
  */
-export function CompareGroup({ compares, mode, today, now, fresh, chart, className, stack, onOpen }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string; stack?: boolean; /** Verilirse karta (grafiğe ve "Döküm"e) dokununca ayrıntılı döküm açılır */ onOpen?: () => void }) {
+export function CompareGroup({ compares, mode, today, now, chart, className, stack, onOpen }: { compares: Compare[]; mode: StatsMode; today: string; now: number; chart?: ReactNode; className?: string; stack?: boolean; onOpen: () => void }) {
   const title = mode === 'live' ? `Kıyas · ${fmtTime(now)} itibarıyla` : mode === 'closed' ? 'Kıyas · gün sonu' : 'Kıyas · gün açılmadı';
   return (
     <Group
       title={title}
       label="Kıyas"
       meta={
-        onOpen ? (
-          <Button variant="ghost" size="sm" onClick={onOpen} className="-my-2 gap-1 px-2 text-ink">
-            Döküm
-            <ChevronRight aria-hidden="true" className="size-4" />
-          </Button>
-        ) : (
-          fresh
-        )
+        <Button variant="ghost" size="sm" onClick={onOpen} className="-my-2 gap-1 px-2 text-ink">
+          Döküm
+          <ChevronRight aria-hidden="true" className="size-4" />
+        </Button>
       }
       flush
       className={className}
     >
-      {onOpen && chart ? (
+      {chart && (
         <button type="button" onClick={onOpen} aria-label="Kıyas dökümünü aç" className="block w-full text-left">
           {chart}
         </button>
-      ) : (
-        chart
       )}
       <ul className={ROWS}>
       {compares.map((c) => {

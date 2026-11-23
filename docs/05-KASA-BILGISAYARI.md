@@ -340,8 +340,12 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki özetle
   doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
 - **Kurulum yalnız açık iş günü yokken:** güncelleyici sunucuya `GET /api/kasa/guncelleme-durumu` ile sorar
-  (oturumsuz, yalnız bu bilgisayardan: yerel ağ ve Tailscale 403; yanıtta yalnız `dayOpen`). Gün açıksa 5 dk'da
-  bir yeniden sorar. Sıra: yük `app.yeni`'ye açılır (yerel modül eskisinden ya da indirilenden, yeni Node
+  (oturumsuz, yalnız bu bilgisayardan: yerel ağ ve Tailscale 403; yanıtta yalnız `dayOpen`, Merkez'in hedefi
+  `merkez`, satış/ödeme sürüyor mu `mesgul` ve cihazda banka gün sonu sürüyor mu `eod`). Gün açıksa 5 dk'da
+  bir yeniden sorar. Gün kapalı ama yazarkasada banka gün sonu sürüyorsa (`eod`; gün kapanınca arka planda başlar,
+  en çok 3 dk) de bekler, 5 dk'da bir yeniden sorar: sunucu o sırada durursa gün sonunun sonucu belirsiz kalır.
+  Gün kapalıyken öbür meşguliyet (`mesgul`, ör. bekleyen yazarkasa sepeti) beklenmez, kurulumu süresiz tutmasın
+  (`docs/04-YAZARKASA.md` §8.5). Sıra: yük `app.yeni`'ye açılır (yerel modül eskisinden ya da indirilenden, yeni Node
   `node.yeni`'ye), sunucu düzgün durur, veritabanı `backups\lafpos-guncelleme-<build>-<tarih>.db` olarak
   kopyalanır (son 5 güncelleme kopyası kalır), `app` → `app.eski`, `app.yeni` → `app`; yeni sürüm (bekçi ve
   sunucu) deneme olarak açılır. 60 sn içinde `/api/health` yeni derlemeyi söylerse deneme düzgün kapanır, bekçi 75
@@ -379,12 +383,14 @@ Yeni sürüm indirilip gün açıkken beklediğinde kasada (gün açıp kapatan 
 (`src/components/UpdateOffer.tsx`, `GET/POST /api/admin/guncelleme/teklif|secim`):
 
 - **Şimdi güncelle:** LafPOS bir dakika kadar kapanıp kendiliğinden açılır. **Satış ya da ödeme sürerken kurulmaz**
-  (`server/lib/mesgul.ts`: işlenen satış/ödeme isteği, son 5 saniyedeki yazma, yazarkasada bekleyen sepet); düğme o an
-  reddedilir, güncelleyici de kurmadan hemen önce yeniden sorar ve kasa boşalana dek 5 sn'de bir bekler (en çok 15 dk,
-  sonra gün sonuna kalır). Yeniden açılınca ekranlar kendiliğinden yenilenir ve **kaldığı yerden devam eder**
-  (`src/lib/buildWatch.ts`): açık masalar ve adisyonlar veritabanında, gönderilmemiş sepet ve oturum cihazda, açık ekran
-  adreste durur. Kurulum sorun çıkarırsa eski sürüme dönülür (aşağıdaki geri dönüş) ve kasiyere söylenir.
-- **Gün sonunda güncelle:** eski davranış; gün kapatılınca (Z'den sonra) kurulur.
+  (`server/lib/mesgul.ts`: işlenen satış/ödeme isteği, son 5 saniyedeki yazma, yazarkasada bekleyen sepet, cihazda süren
+  banka gün sonu); düğme o an reddedilir, güncelleyici de kurmadan hemen önce yeniden sorar ve kasa boşalana dek 5 sn'de
+  bir bekler (en çok 15 dk, sonra gün sonuna kalır). Yeniden açılınca ekranlar kendiliğinden yenilenir ve **kaldığı
+  yerden devam eder** (`src/lib/buildWatch.ts`): açık masalar ve adisyonlar veritabanında, gönderilmemiş sepet ve oturum
+  cihazda, açık ekran adreste durur. Kurulum sorun çıkarırsa eski sürüme dönülür (aşağıdaki geri dönüş) ve kasiyere
+  söylenir.
+- **Gün sonunda güncelle:** eski davranış; gün kapatılınca (Z'den sonra) kurulur. Gün kapanınca yazarkasada banka gün
+  sonu başladıysa güncelleyici onun bitmesini bekler (en çok 3 dk; 5 dk'da bir yeniden sorar), sonra kurar.
 
 Seçim sürüme bağlıdır (yeni sürümde yeniden sorulur) ve Merkez'e nabızla bildirilir: panelde her dükkânın durumu
 **Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı** olarak görünür. Uzaktan › Merkez ›

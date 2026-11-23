@@ -37,6 +37,7 @@ import {
   sekmeler,
   sekmeSec,
   secenekGruplari,
+  siraMetni,
   urunSatirlari,
   uygulananHaritasi,
 } from './yardimci';
@@ -158,9 +159,10 @@ export default function KontrolPage() {
       // Satır hemen "Bekliyor" olsun; kasa çevrimiçiyse yoklama 15 sn'ye iner
       qc.setQueryData<KontrolPaneli>(kontrolAnahtari.durum, (d) => (d && !d.bekleyen.some((b) => b.id === r.komut.id) ? { ...d, bekleyen: [...d.bekleyen, r.komut] } : d));
       void qc.invalidateQueries({ queryKey: kontrolAnahtari.durum });
-      // Kasa kapalıysa "5 dakikada" sözü verilmez: işlem kasa açılınca (24 saat içinde) uygulanır
-      if (kasaCevrimici(panelKasa?.sonGorulme, Date.now())) toast.ok('Sıraya alındı; kasa en geç 5 dakikada uygular');
-      else toast.warn('Sıraya alındı. Kasa şu an çevrimdışı: açılınca uygulanır (24 saat içinde)');
+      // Tek duyuru (sekme ayrıca duyurmaz): kasa kapalıysa "5 dakikada" sözü verilmez, süresi işleme göre (siraMetni)
+      const sira = siraMetni(istek.tur, kasaCevrimici(panelKasa?.sonGorulme, Date.now()));
+      if (sira.ton === 'ok') toast.ok(sira.metin);
+      else toast.warn(sira.metin);
       return r.komut;
     },
     [qc, panelKasa?.sonGorulme],

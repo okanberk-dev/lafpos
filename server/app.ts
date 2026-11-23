@@ -14,6 +14,7 @@ import { cashRoutes } from './routes/cash';
 import { eventRoutes } from './routes/events';
 import { customerRoutes } from './routes/customers';
 import { displayPublicRoutes, displayRoutes } from './routes/display';
+import { pavoEodRunning } from './okc/providers/pavo';
 import { okcPublicRoutes, okcRoutes } from './routes/okc';
 import { platformRoutes } from './routes/platforms';
 import { posRoutes } from './routes/pos';
@@ -59,8 +60,10 @@ export function createApp() {
   app.get('/api/kasa/guncelleme-durumu', (c) => {
     if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
     // Merkez'in hedefi: güncelleyici yalnız bu derlemeye kadar kurar (Merkez kapalıysa kanalın son sürümü)
-    // `mesgul`: satış ya da ödeme sürüyor; güncelleyici gün açıkken (Şimdi güncelle) kurmadan önce bunu bekler
-    return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget(), mesgul: busyNow() });
+    // `mesgul`: satış ya da ödeme sürüyor; güncelleyici gün açıkken (Şimdi güncelle) kurmadan önce bunu bekler.
+    // `eod`: cihazda banka gün sonu sürüyor (gün kapanınca arka planda, en çok 3 dk); gün kapalıyken güncelleyici
+    // yalnız bunu bekler, sunucu yeniden başlayıp gün sonunu belirsiz bırakmasın (inceleme, 23 Kas 2026)
+    return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget(), mesgul: busyNow(), eod: pavoEodRunning() });
   });
 
   // Kasa kısayolunun yazıcı betiği (app\kasa-yazici.ps1, oturumdaki kullanıcı): bilgisayardaki yazıcıları bildirir, yanıtta
@@ -93,6 +96,12 @@ export function createApp() {
     if (!isLoopback(clientKey(c)) && !can(user, 'odeme.al') && !can(user, 'ayar.yonet')) throw new HttpError(403, 'Bu işlem için yetkiniz yok', 'forbidden');
     const maxBytes = (RASTER_WIDTH / 8) * RASTER_MAX_HEIGHT;
     if (Number(c.req.header('content-length') ?? 0) > maxBytes * 1.4 + 1024) throw new HttpError(422, 'Fiş görüntüsü çok büyük', 'too_large');
+    // Yazıcının ağ adresi gövdeden önce: adresi olmayan (USB) yazıcıda her fiş en çok ~200 KB'lik gövde okunup
+    // çözüldükten sonra 409 alıyordu; arayüz zaten tarayıcıdan basar (inceleme, 23 Kas 2026)
+    const seen = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
+    const name = pickReceiptPrinter(seen?.printers ?? [], getSettings().receiptPrinter).name;
+    const addr = printerAddress(seen?.printers.find((p) => p.name === name)?.port);
+    if (!name || !addr) throw new HttpError(409, 'Fiş yazıcısının ağ adresi yok', 'no_printer_address');
     const input = await body(
       c,
       z.object({
@@ -101,12 +110,14 @@ export function createApp() {
         data: z.string().max(Math.ceil(maxBytes / 3) * 4).regex(/^[A-Za-z0-9+/]*={0,2}$/),
       }),
     );
-    const bits = Uint8Array.from(atob(input.data), (ch) => ch.charCodeAt(0));
+    // Biçime uyan ama çözülemeyen base64 ("A" gibi: uzunluğu 4'e tamamlanamaz) 500 değil, geçersiz görüntüdür
+    let bits: Uint8Array;
+    try {
+      bits = Uint8Array.from(atob(input.data), (ch) => ch.charCodeAt(0));
+    } catch {
+      throw new HttpError(422, 'Fiş görüntüsü çözülemedi', 'validation');
+    }
     if (bits.length !== (input.width / 8) * input.height) throw new HttpError(422, 'Fiş görüntüsünün boyu tutmuyor', 'validation');
-    const seen = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
-    const name = pickReceiptPrinter(seen?.printers ?? [], getSettings().receiptPrinter).name;
-    const addr = printerAddress(seen?.printers.find((p) => p.name === name)?.port);
-    if (!name || !addr) throw new HttpError(409, 'Fiş yazıcısının ağ adresi yok', 'no_printer_address');
     try {
       await sendRaw(addr, escposRaster({ width: input.width, height: input.height, bits }));
     } catch (e) {

@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  GUN_SONU_OMRU_MS,
   KOMUT_TURLERI,
   komutDogrula,
   komutOzeti,
@@ -24,6 +25,7 @@ import {
   bekleyenHaritasi,
   genelNeden,
   gorulmeMetni,
+  gunSonuNedeni,
   hedefBulucu,
   iptalNedeni,
   islemNedeni,
@@ -37,6 +39,7 @@ import {
   secenekOzetAdi,
   sekmeler,
   sekmeSec,
+  siraMetni,
   sonGirisMetni,
   urunSatirlari,
   uygulananHaritasi,
@@ -143,6 +146,28 @@ describe('rol kapısı (düğme kapanır, nedeni yazılır)', () => {
     expect(islemNedeni(panel('yonetici'), 'secenek.satis')).toBeNull();
     expect(islemNedeni(panel('sahip'), 'rol.yetki')).toBeNull();
     expect(islemNedeni(panel('sahip'), 'personel.pin', ['patron'])).toBeNull();
+    // Gün sonu: bulut ve kasanın nedeniyle aynı ("patron hesabı" değil)
+    expect(islemNedeni(panel('yonetici'), 'gun.sonu')).toBe('Gün sonunu uzaktan yalnız sahip alır');
+    expect(islemNedeni(panel('sahip'), 'gun.sonu')).toBeNull();
+  });
+  it('gün sonu yalnız kasa bağlıyken ve sırada gün sonu yokken; işlemin nedeni önce gelir', () => {
+    const now = 10 * 86_400_000;
+    const kasa = (sonGorulme: number | null) => ({ sonGorulme, surum: '1.0.0', build: null, gunAcik: true });
+    const sahip = { ...panel('sahip'), kasa: kasa(now - 2 * 60_000), bekleyen: [] };
+    expect(gunSonuNedeni(sahip, now)).toBeNull();
+    expect(gunSonuNedeni({ ...sahip, kasa: kasa(now - 11 * 60_000) }, now)).toBe('Kasa çevrimdışı: gün sonu yalnız kasa bağlıyken uzaktan alınır');
+    expect(gunSonuNedeni({ ...sahip, kasa: kasa(null) }, now)).toMatch(/^Kasa çevrimdışı/);
+    expect(gunSonuNedeni({ ...sahip, bekleyen: [islem('gun.sonu', { not: '' })] }, now)).toMatch(/^Gün sonu isteği sırada/);
+    // Başka bekleyen işlem gün sonunu kapatmaz
+    expect(gunSonuNedeni({ ...sahip, bekleyen: [islem('ayar.servis', { mod: 'self' })] }, now)).toBeNull();
+    expect(gunSonuNedeni({ ...sahip, ...panel('yonetici') }, now)).toBe('Gün sonunu uzaktan yalnız sahip alır');
+    expect(gunSonuNedeni({ ...sahip, demo: true }, now)).toMatch(/^Örnek görünüm/);
+  });
+  it('sıraya alındı duyurusu: kasa çevrimdışıyken gün sonunun süresi 30 dakika, öteki işlemlerin 24 saat', () => {
+    expect(siraMetni('gun.sonu', true)).toEqual({ ton: 'ok', metin: 'Sıraya alındı; kasa en geç 5 dakikada uygular' });
+    expect(siraMetni('gun.sonu', false)).toEqual({ ton: 'warn', metin: `Sıraya alındı. Kasa şu an çevrimdışı: gün sonu ancak kasa ${GUN_SONU_OMRU_MS / 60_000} dakika içinde bağlanırsa alınır` });
+    expect(siraMetni('gun.sonu', false).metin).toContain('30 dakika');
+    expect(siraMetni('ayar.servis', false)).toEqual({ ton: 'warn', metin: 'Sıraya alındı. Kasa şu an çevrimdışı: açılınca uygulanır (24 saat içinde)' });
   });
   it('arayüz bulutun kuralından gevşek değil: açık düğme her zaman uyeYapabilir', () => {
     for (const rol of UYE_ROLLERI)
@@ -315,6 +340,29 @@ describe('PIN şifrelemesi (Web Crypto, RSA-OAEP SHA-256)', () => {
     await expect(komutGonder({ tur: 'personel.pin', veri: { id: 'u1', pin: '4829' } })).rejects.toThrow(/şifrelenmemiş/);
     await expect(komutGonder({ tur: 'personel.ekle', veri: { ad: 'Can', rol: 'garson', pin: '482915' } })).rejects.toThrow(/şifrelenmemiş/);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('komut gönderimi', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('"Gün sonu al ve güncelle" güncelleme isteğini de taşır (düşüyordu); başka işlemde gitmez', async () => {
+    const giden: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        giden.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true, komut: islem('gun.sonu', { not: '' }) }), { status: 200 });
+      }),
+    );
+    await komutGonder({ tur: 'gun.sonu', veri: { not: '' }, guncelle: true });
+    await komutGonder({ tur: 'gun.sonu', veri: { not: '' } });
+    await komutGonder({ tur: 'ayar.servis', veri: { mod: 'self' }, guncelle: true });
+    expect(giden).toEqual([{ tur: 'gun.sonu', veri: { not: '' }, guncelle: true }, { tur: 'gun.sonu', veri: { not: '' } }, { tur: 'ayar.servis', veri: { mod: 'self' } }]);
+  });
+  it('gün sonu sekmesi sıraya alındığını ikinci kez duyurmaz (gonder duyurur)', () => {
+    const kasa = read('src/pages/kontrol/KasaSekmesi.tsx');
+    expect(kasa).toContain('gunSonuNedeni(panel, now)');
+    expect(kasa).not.toMatch(/toast\.ok\(/);
   });
 });
 

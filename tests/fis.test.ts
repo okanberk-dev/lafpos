@@ -89,3 +89,59 @@ describe('fiş başlığı ve X/Z', () => {
     expect(renderToStaticMarkup(createElement(TestReceipt, { boot: h.boot, printer: 'XP-80C' }))).toContain('DENEME FİŞİ');
   });
 });
+
+describe('işyeri nüshasında ikram edilen kalem', () => {
+  it('tutar yerine türü yazar (adisyondaki gibi): kalemler adisyon toplamını tutar', async () => {
+    const { StoreCopyReceipt, BillReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props>; BillReceipt: FC<Props> };
+    const { tlPlain } = await import('@shared/money');
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    const kahve = h.boot.products.find((p) => p.name === 'Türk Kahvesi')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 2 }, { productId: kahve.id, qty: 1 }] });
+    const comped = o.items.find((i) => i.name === 'Türk Kahvesi')!;
+    o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${comped.id}/comp`, { reason: 'Müdavim' });
+    const paid = o.items.find((i) => i.name === 'Latte')!;
+    // Toplam ikramı saymaz: yalnız Latte'ler
+    expect(o.total).toBe(paid.qty * paid.unitPrice);
+    const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
+    const html = renderToStaticMarkup(createElement(StoreCopyReceipt, { order: o, boot, payments: [], cashier: 'Ayşe', at: 0 }));
+    // Eskiden ikram edilen kalem liste fiyatıyla basılıyordu: kalemler toplamın üstünde kalıyordu
+    const compLine = /Türk Kahvesi[^<]*<\/span><span class="rc-r">İKRAM<\/span>/;
+    expect(html).toMatch(compLine);
+    expect(html).toContain(`Latte Orta</span><span class="rc-r">${tlPlain(o.total)}</span>`);
+    expect(html).toContain(`Adisyon toplamı</span><span class="rc-r">${tlPlain(o.total)}</span>`);
+    // Adisyondaki (müşteri nüshası) satırla aynı
+    expect(renderToStaticMarkup(createElement(BillReceipt, { order: o, boot, sizeLabel: (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s, copy: true }))).toMatch(compLine);
+  });
+});
+
+describe('işyeri nüshasında indirim ve servis', () => {
+  it('kalemden adisyon toplamına adisyondaki gibi: kalem indirimi, ara toplam, indirim, servis', async () => {
+    const { StoreCopyReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props> };
+    const { tlPlain } = await import('@shared/money');
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
+    try {
+      const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+      const table = h.boot.tables[0]!;
+      let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 2 });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 2 }] });
+      o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${o.items[0]!.id}/discount`, { type: 'percent', value: 50, reason: 'Müdavim' });
+      const t = o.totals;
+      const line = o.items[0]!;
+      expect(line.discount).toBeGreaterThan(0);
+      expect(t.service).toBeGreaterThan(0);
+      const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
+      const html = renderToStaticMarkup(createElement(StoreCopyReceipt, { order: o, boot, payments: [], cashier: 'Ayşe', at: 0 }));
+      // Eskiden kalem liste fiyatıyla basılıyor, indirim ve servis yazılmıyordu: kalemler toplamı tutmuyordu
+      expect(html).toContain(`İndirim (Müdavim)</span><span class="rc-r">-${tlPlain(line.discount)}</span>`);
+      expect(html).toContain(`Ara toplam</span><span class="rc-r">${tlPlain(t.gross)}</span>`);
+      expect(html).toContain(`İndirim</span><span class="rc-r">-${tlPlain(t.lineDiscounts + t.orderDiscount)}</span>`);
+      expect(html).toContain(`Servis %10</span><span class="rc-r">${tlPlain(t.service)}</span>`);
+      expect(html).toContain(`Adisyon toplamı</span><span class="rc-r">${tlPlain(o.total)}</span>`);
+      // Kâğıttaki rakamlar adisyon toplamını tutar
+      expect(t.gross - t.lineDiscounts - t.orderDiscount + t.service).toBe(o.total);
+    } finally {
+      await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
+    }
+  });
+});

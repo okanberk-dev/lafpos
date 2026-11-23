@@ -122,7 +122,10 @@ export interface SecenekDuzenle {
   ogeler: { ad: string; fiyat: number }[];
   urunler: string[];
 }
-/** Uzaktan gün sonu (Z): sayımsız kapanış (sayım sonra Kasa › Geçmiş günler › Kasa föyü); açık adisyon varsa kasa reddeder */
+/**
+ * Uzaktan gün sonu (Z): sayımsız kapanış (sayım sonra Kasa › Geçmiş günler › Kasa föyü); açık adisyon varsa, istek
+ * `GUN_SONU_OMRU_MS`'ten eskiyse ya da kasadaki gün istekten sonra açıldıysa kasa reddeder
+ */
 export interface GunSonu {
   not: string;
 }
@@ -288,7 +291,10 @@ export interface KomutIstegi {
   tur: KomutTuru;
   veri: unknown;
   ad?: string;
-  /** Yalnız `gun.sonu`: gün kapanınca yeni sürüm hemen kurulsun (Merkez'in "Şimdi güncelle" isteği) */
+  /**
+   * Yalnız `gun.sonu`: gün kapanınca yeni sürüm hemen kurulsun (Merkez'in "Şimdi güncelle" isteği, bu gün sonuna bağlı:
+   * kasa güncellemeyi ancak gün sonu uygulanınca ister)
+   */
   guncelle?: boolean;
 }
 /** `POST /api/kontrol/komut` yanıtı */
@@ -324,6 +330,12 @@ export const DAVET_OMRU_MS = 7 * 86_400_000;
 
 /** Komut kasaya bu süre içinde ulaşmazsa kasa uygulamaz ("süresi doldu") */
 export const KOMUT_OMRU_MS = 24 * 3600_000;
+/**
+ * Uzaktan gün sonu daha kısa ömürlü: kasa bundan eski ya da istekten sonra açılmış (yeniden açılmış) güne gelen gün
+ * sonunu reddeder, bulut da kasa çevrimdışıyken kuyruğa almaz. Gece çevrimdışı kasaya verilen istek ertesi sabah
+ * ulaşıp o arada açılan günü sayımsız kapatıyor, bağlı güncelleme servis ortasında kuruluyordu (inceleme, 23 Kas 2026)
+ */
+export const GUN_SONU_OMRU_MS = 30 * 60_000;
 /** Kasanın saatiyle bulutun saati arasında kabul edilen fark (gelecekten gelen komut) */
 export const SAAT_PAYI_MS = 5 * 60_000;
 /** Bir dükkânın kuyruğunda en çok bu kadar bekleyen komut */

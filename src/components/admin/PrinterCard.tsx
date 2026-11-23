@@ -170,7 +170,7 @@ export function PrinterCard() {
               block
               checked={boot.settings.receiptInfoSlip}
               disabled={savingOpt}
-              onChange={(v) => void setOpt({ receiptInfoSlip: v }, v ? 'Ödemeden sonra müşteriye bilgi fişi çıkacak' : 'Müşteriye bilgi fişi çıkmayacak')}
+              onChange={(v) => void setOpt({ receiptInfoSlip: v }, v ? 'Ödemeden sonra müşteri nüshası çıkacak' : 'Müşteri nüshası çıkmayacak')}
               label="Ödeme sonrası müşteri nüshası"
               hint="sipariş numarası çok büyük (çağrı için), kalemler; yazarkasa bağlıyken de basılır, “mali değeri yoktur” yazar"
             />

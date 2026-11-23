@@ -1,6 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { isValidElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LiveEvent } from '@shared/events';
-import type { OrderDTO } from '@shared/types';
+import { afterPaymentParts, afterPaymentPrints, bankEodSlipHere } from '@shared/odeme-fisi';
+import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '../src/lib/store-copies';
 import { type Harness, startApp } from './harness';
 
@@ -72,6 +75,46 @@ const screen = (who = 'kasa') => {
   });
   return { queue, printed, calls };
 };
+
+/**
+ * Ekranın modülü (src/lib/after-payment.tsx): kararı (`deviceCopyHere`, `eodSlipHere`) ve basılan kâğıtlar
+ * (`printStoreCopies`, `printAfterPayment`) testte de kendisi. Arayüz modülü (DOM ve JSX; tsconfig'te yok) fis.test.ts
+ * gibi çalışma anında yüklenir; `printEach` sahtesi her kâğıdı çizip başlığını `papers`a yazar, ekranın adresi `host`
+ */
+interface ScreenModule {
+  deviceCopyHere: (boot: BootstrapDTO) => boolean;
+  eodSlipHere: (boot: BootstrapDTO) => boolean;
+  printStoreCopies: (boot: BootstrapDTO, copies: ClaimedStoreCopy[]) => Promise<void>;
+  printAfterPayment: (opts: { key: string; boot: BootstrapDTO; order: OrderDTO; payments: { id: string; methodName: string; amount: number; tip: number }[] }) => void;
+}
+const AFTER_PAYMENT = '../src/lib/after-payment';
+const papers: string[] = [];
+const host = { hostname: 'localhost' };
+const paperTitle = (part: ReactNode) => {
+  const html = isValidElement(part) ? renderToStaticMarkup(part) : '';
+  return /<div class="rc-title">([^<]*)<\/div>/.exec(html)?.[1] ?? '?';
+};
+const screenModule = async (): Promise<ScreenModule> => {
+  vi.stubGlobal('window', { location: host });
+  vi.doMock('../src/lib/print', async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    printEach: async (parts: ReactNode[]) => {
+      papers.push(...parts.map(paperTitle));
+    },
+  }));
+  return (await import(/* @vite-ignore */ AFTER_PAYMENT)) as ScreenModule;
+};
+/** Fiş yazıcılı kasa ekranının açılış verisi, nüsha ayarlarıyla */
+const kasaBoot = (boot: BootstrapDTO, receiptStoreCopy = boot.settings.receiptStoreCopy, receiptInfoSlip = boot.settings.receiptInfoSlip): BootstrapDTO => ({
+  ...boot,
+  settings: { ...boot.settings, receiptStoreCopy, receiptInfoSlip },
+  integrations: { ...boot.integrations, receiptPrinter: true },
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  host.hostname = 'localhost';
+  papers.length = 0;
+});
 
 const audits = async (receiptId: string) => {
   const { db: d, schema, eq } = await db();
@@ -242,16 +285,45 @@ describe('işyeri nüshası sunucuda bekler', () => {
     expect((await h.call<{ code: string }>('kasa', 'POST', `/okc/store-copies/${phone.id}/claim`, {})).json.code).toBe('copy_taken');
   });
 
-  it('ayar kapalıysa ya da ödeme kapanmış güne aitse nüsha verilmez', async () => {
+  it('iki nüsha ayarı da kapalıysa ya da ödeme kapanmış güne aitse nüsha verilmez', async () => {
     const r = await paidOnDevice(await newOrder());
-    await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: false });
+    await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: false, receiptInfoSlip: false });
+    // Denetim kaydı iki ayarı da Yönetim'deki adıyla yazar (Fiş yazıcısı kartı); müşteri nüshası eskiden "Müşteriye bilgi fişi"
+    const changed = (await h.ok<{ message: string }[]>('patron', 'GET', '/admin/audit?limit=5')).find((a) => a.message.includes('ayarları değiştirdi'))?.message;
+    expect(changed).toContain('Ödeme sonrası işyeri nüshası');
+    expect(changed).toContain('Ödeme sonrası müşteri nüshası');
     expect(await pending()).toEqual([]);
-    await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: true });
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/okc/store-copies/${r.id}/claim`, {})).json.code).toBe('copy_taken');
+    await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: true, receiptInfoSlip: true });
     expect((await pending()).map((p) => p.id)).toEqual([r.id]);
     // Ödeme açık günden önceye düştü (gün kapanıp yenisi açıldı): eski günün nüshası basılmaz
     const { db: d, schema, eq } = await db();
     d.update(schema.fiscalReceipts).set({ completedAt: 1 }).where(eq(schema.fiscalReceipts.id, r.id)).run();
     expect(await pending()).toEqual([]);
+  });
+
+  it('işyeri nüshası kapalı, müşteri nüshası açık: nüsha yine bekler, ekran yalnız müşteri nüshasını basar', async () => {
+    // Eskiden yalnız işyeri nüshası ayarına bakılıyordu: o kapalıyken cihaz ödemesinin müşteri nüshası hiç çıkmıyordu
+    await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: false, receiptInfoSlip: true });
+    try {
+      const o = await newOrder();
+      const r = await paidOnDevice(o);
+      expect((await pending()).map((p) => p.id)).toEqual([r.id]);
+      // Ekran (src/lib/after-payment.tsx) açılış verisindeki ayarlarla karar verir: nüshayı alır, yalnız müşteri nüshasını basar
+      const boot = kasaBoot(await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap'));
+      expect(boot.settings).toMatchObject({ receiptStoreCopy: false, receiptInfoSlip: true });
+      const ekran = await screenModule();
+      expect(ekran.deviceCopyHere(boot)).toBe(true);
+      const queue = storeCopyQueue(apiFor('kasa'), (copies) => ekran.printStoreCopies(boot, copies));
+      await queue.sync();
+      expect(papers).toEqual(['MÜŞTERİ NÜSHASI']);
+      expect(await pending()).toEqual([]);
+      // Denetim kaydı basılan kâğıdın adıyla
+      const log = await audits(r.id);
+      expect(log.map((a) => a.message)).toEqual([expect.stringContaining(`#${o.no} adisyonun müşteri nüshası`)]);
+    } finally {
+      await h.ok('patron', 'PUT', '/admin/settings', { receiptStoreCopy: true, receiptInfoSlip: true });
+    }
   });
 
   it('yetki sunucuda: ödeme alamayan kişi nüshayı göremez, alamaz', async () => {
@@ -260,6 +332,87 @@ describe('işyeri nüshası sunucuda bekler', () => {
     expect((await h.call('garson', 'POST', `/okc/store-copies/${r.id}/claim`, {})).status).toBe(403);
     expect((await h.call('garson', 'POST', `/okc/store-copies/${r.id}/printed`, { claim: 'x' })).status).toBe(403);
     await screen().queue.sync();
+  });
+});
+
+describe('ekran hangi kâğıdı basar (shared/odeme-fisi.ts)', () => {
+  const kasa = { printer: true, kasaScreen: true };
+  const parts = (receiptStoreCopy: boolean, receiptInfoSlip: boolean, at = kasa) => afterPaymentParts(afterPaymentPrints({ settings: { receiptStoreCopy, receiptInfoSlip }, ...at }));
+
+  it('her kâğıt kendi ayarıyla, önce müşteri nüshası; cihaz nüshası ikisinden biri açıkken alınır', () => {
+    expect(parts(true, true)).toEqual(['musteri', 'isyeri']);
+    // İşyeri nüshası kapalı, müşteri nüshası açık: ekran cihaz ödemesinin nüshasını alır (`deviceCopyHere`), yalnız müşteri nüshasını basar
+    expect(parts(false, true)).toEqual(['musteri']);
+    expect(parts(true, false)).toEqual(['isyeri']);
+    expect(parts(false, false)).toEqual([]);
+    // Yazıcısız ya da kasa dışı ekran hiçbirini basmaz (nüsha almaz)
+    expect(parts(true, true, { printer: false, kasaScreen: true })).toEqual([]);
+    expect(parts(true, true, { printer: true, kasaScreen: false })).toEqual([]);
+  });
+
+  it('Pavo gün sonu kâğıdı nüsha ayarlarına bağlı değil: fiş yazıcılı kasa ekranında, Pavo bağlıyken', () => {
+    // Eskiden işyeri nüshası kapalıyken gün sonu kâğıdı da hiç çıkmıyordu; kendi ayarını sunucu denetler (takeEodSlip)
+    expect(bankEodSlipHere({ ...kasa, provider: 'pavo' })).toBe(true);
+    expect(bankEodSlipHere({ ...kasa, provider: 'simulator' })).toBe(false);
+    expect(bankEodSlipHere({ ...kasa, provider: 'kapali' })).toBe(false);
+    expect(bankEodSlipHere({ printer: false, kasaScreen: true, provider: 'pavo' })).toBe(false);
+    expect(bankEodSlipHere({ printer: true, kasaScreen: false, provider: 'pavo' })).toBe(false);
+  });
+});
+
+describe('ekranın kararı ve kâğıtları (src/lib/after-payment.tsx)', () => {
+  /** Alınmış iki cihaz ödemesi nüshası (sunucunun verdiği biçimde) */
+  const claimed = async (): Promise<ClaimedStoreCopy[]> =>
+    Promise.all(
+      ['r1', 'r2'].map(async (receiptId, i) => {
+        const order = await newOrder(1);
+        return { receiptId, claim: `k-${receiptId}`, order, payments: [{ id: `p${i}`, methodName: 'Nakit', amount: order.total, tip: 0, userName: 'Kasa' }], device: { receiptNo: i + 1, zNo: 1, docKind: 'okc_fis', docId: null }, at: Date.now() };
+      }),
+    );
+
+  it('cihaz ödemesinin nüshasını iki nüshadan biri açıkken alır, her kâğıdı kendi ayarıyla basar', async () => {
+    // Eskiden yalnız işyeri nüshası ayarına bakılıyordu: o kapalıyken nüsha alınmıyor, açıkken işyeri nüshası hep basılıyordu
+    const ekran = await screenModule();
+    const copies = await claimed();
+    const cases: [boolean, boolean, string[]][] = [
+      [true, true, ['MÜŞTERİ NÜSHASI', 'İŞYERİ NÜSHASI', 'MÜŞTERİ NÜSHASI', 'İŞYERİ NÜSHASI']],
+      [false, true, ['MÜŞTERİ NÜSHASI', 'MÜŞTERİ NÜSHASI']],
+      [true, false, ['İŞYERİ NÜSHASI', 'İŞYERİ NÜSHASI']],
+    ];
+    for (const [storeCopy, infoSlip, want] of cases) {
+      const boot = kasaBoot(h.boot, storeCopy, infoSlip);
+      expect(ekran.deviceCopyHere(boot)).toBe(true);
+      papers.length = 0;
+      await ekran.printStoreCopies(boot, copies);
+      expect(papers).toEqual(want);
+    }
+    expect(ekran.deviceCopyHere(kasaBoot(h.boot, false, false))).toBe(false);
+    // Yazıcısız kasa ekranı ve kasa dışı ekran (telefon, LAN adresi) nüsha almaz
+    expect(ekran.deviceCopyHere({ ...kasaBoot(h.boot, true, true), integrations: { ...h.boot.integrations, receiptPrinter: false } })).toBe(false);
+    host.hostname = '192.168.1.20';
+    expect(ekran.deviceCopyHere(kasaBoot(h.boot, true, true))).toBe(false);
+  });
+
+  it("LafPOS'ta alınan ödemenin kâğıtları da kendi ayarıyla", async () => {
+    const ekran = await screenModule();
+    const order = await newOrder(1);
+    const payments = [{ id: 'p-lafpos', methodName: 'Nakit', amount: order.total, tip: 0 }];
+    ekran.printAfterPayment({ key: 'odeme-1', boot: kasaBoot(h.boot, false, true), order, payments });
+    expect(papers).toEqual(['MÜŞTERİ NÜSHASI']);
+    papers.length = 0;
+    ekran.printAfterPayment({ key: 'odeme-2', boot: kasaBoot(h.boot, true, false), order, payments });
+    expect(papers).toEqual(['İŞYERİ NÜSHASI']);
+  });
+
+  it('Pavo gün sonu kâğıdı nüsha ayarlarına bakmaz: fiş yazıcılı kasa ekranında, Pavo bağlıyken', async () => {
+    // Eskiden işyeri nüshası kapalıyken gün sonu kâğıdı da hiç çıkmıyordu (`useBankEodSlip` bunu sorar)
+    const ekran = await screenModule();
+    const withProvider = (boot: BootstrapDTO, provider: BootstrapDTO['integrations']['okc']['provider']): BootstrapDTO => ({ ...boot, integrations: { ...boot.integrations, okc: { ...boot.integrations.okc, provider } } });
+    expect(ekran.eodSlipHere(withProvider(kasaBoot(h.boot, false, false), 'pavo'))).toBe(true);
+    expect(ekran.eodSlipHere(withProvider(kasaBoot(h.boot, true, true), 'simulator'))).toBe(false);
+    expect(ekran.eodSlipHere(withProvider({ ...h.boot, integrations: { ...h.boot.integrations, receiptPrinter: false } }, 'pavo'))).toBe(false);
+    host.hostname = '192.168.1.20';
+    expect(ekran.eodSlipHere(withProvider(kasaBoot(h.boot, true, true), 'pavo'))).toBe(false);
   });
 });
 
@@ -365,7 +518,7 @@ describe('ekranın nüsha sırası (sunucu sahtesiyle)', () => {
     // Açılış, bağlantının kurulması ve iki olay aynı anda
     await Promise.all([q.sync(), q.sync(), q.sync(), q.onEvent({ topic: 'okc', kind: 'okc.paid', receiptId: 'b' }), q.onEvent({ topic: 'okc', kind: 'okc.paid', receiptId: 'c' })]);
     expect(overlap).toBe(false);
-    // Bekleyen iki nüsha tek yazdırmada (aralarında kâğıt kesilir); b ikinci kez basılmaz, c'yi başka ekran almıştı
+    // Bekleyen iki nüsha tek seferde (ekran her kâğıdı ayrı yazdırma işi olarak basar); b ikinci kez basılmaz, c'yi başka ekran almıştı
     expect(printed).toEqual([['a', 'b']]);
     expect(srv.calls.filter((c) => c === 'pending')).toHaveLength(1);
   });

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { HIZLI_NABIZ_MS, HIZLI_SURE_MS, type NabizKontrol } from '@shared/kontrol';
+import { GUN_SONU_OMRU_MS, HIZLI_NABIZ_MS, HIZLI_SURE_MS, KOMUT_ID_RE, type NabizKontrol, type SonucDurumu } from '@shared/kontrol';
 import { GECMIS_KEY, type HistoryDay } from '@shared/gecmis';
 import { type LicenseRecord, type LicenseView, licenseState, normalizeBranchCode, salesAllowed } from '@shared/lisans';
 import { REMOTE_SHOP } from '@shared/remote-reports';
@@ -56,6 +56,8 @@ export interface MerkezLast {
   kod?: string | null;
   /** Sahibin Uzaktan'dan son "Şimdi güncelle" isteği (Merkez'deki an); yoksa null */
   guncelleIstek?: number | null;
+  /** İsteğin bağlı olduğu uzaktan gün sonunun komut kimliği ("Gün sonu al ve güncelle"); Merkez'in düğmesinde null */
+  guncelleKomut?: string | null;
   /** Son başarılı nabzın anı: lisans kaydının Merkez'den alındığı an */
   at: number;
 }
@@ -164,6 +166,7 @@ export function parseBeat(json: unknown, now: number): MerkezLast | null {
     hedef: Number.isInteger(json.hedef) && (json.hedef as number) > 0 ? (json.hedef as number) : null,
     kod: normalizeBranchCode(json.kod) ?? null,
     guncelleIstek: Number.isInteger(json.guncelleIstek) && (json.guncelleIstek as number) > 0 ? (json.guncelleIstek as number) : null,
+    guncelleKomut: typeof json.guncelleKomut === 'string' && KOMUT_ID_RE.test(json.guncelleKomut) ? json.guncelleKomut : null,
     at: now,
   };
 }
@@ -189,21 +192,33 @@ export function effectiveUpdateChoice(yeni: { build: number } | null | undefined
  * düğmesinin yazdığı isteğin aynısını yazar (guncelleme/istek.json; bekçi alır, güncelleyici hemen denetler ve
  * indirir). Uzaktan istek hiçbir zaman gün açıkken kurdurmaz (`simdi: false`): yeni sürüm gün kapalıysa hemen, açıksa
  * gün sonundan sonra kurulur (guncelle.mjs installDecision). Her istek bir kez işlenir ve denetim kaydına yazılır;
- * Windows güncelleyicisi olmayan kurulumda istek yazılmaz, kayıt bunu söyler. Dönüş: işlendiyse true
+ * Windows güncelleyicisi olmayan kurulumda istek yazılmaz, kayıt bunu söyler. Dönüş: işlendiyse true.
+ *
+ * `gunSonu`: isteğin bağlı olduğu uzaktan gün sonu ve kasadaki sonucu ("Gün sonu al ve güncelle"; sync/kontrol.ts
+ * komutDurumu). Güncelleme ancak o gün sonu uygulandıysa istenir; gün sonu henüz gelmediyse `GUN_SONU_OMRU_MS` boyunca
+ * beklenir. Reddedildiyse (açık adisyon, eski istek) ya da o sürede gelmediyse istek güncelleme başlatmadan kapanır ve
+ * kayda düşer: reddedilen gün sonunun güncellemesi istenmiş kalmıyordu (inceleme, 23 Kas 2026). Merkez'in gönderdiği
+ * hedef geçerli kalır: sürüm olağan denetimle gün kapanınca kurulur. Kasaya gitmeden iptal edilen gün sonunun isteğini
+ * bulut geri alır (api/_merkez.ts withdrawLinkedUpdate); kasa gün sonunu hiç görmediyse nedenini bilemez, kayıt "kasada
+ * uygulanmadı (iptal edildi ya da kasaya ulaşmadı)" der
  */
-export function takeRemoteUpdate(istek: number | null | undefined, now = Date.now()): boolean {
+export function takeRemoteUpdate(istek: number | null | undefined, now = Date.now(), gunSonu: { komut: string; durum: SonucDurumu | null } | null = null): boolean {
   if (!istek || getSyncState<number>(HANDLED_REQUEST) === istek) return false;
-  const can = underBekci();
+  const kalmadi = !!gunSonu && gunSonu.durum !== 'uygulandi';
+  if (kalmadi && gunSonu.durum == null && now - istek < GUN_SONU_OMRU_MS) return false;
+  const can = !kalmadi && underBekci();
   const fx = new Effects();
   tx((t) => {
     setSyncState(HANDLED_REQUEST, istek);
     fx.audit(t, {
       action: 'guncelleme',
       entity: 'merkez',
-      message: can
-        ? "Merkez'den (LafPOS Uzaktan) güncelleme istendi: yeni sürüm denetleniyor, gün kapalıyken kurulur"
-        : "Merkez'den (LafPOS Uzaktan) güncelleme istendi; bu kurulumda otomatik güncelleyici yok, sunucu elle güncellenir",
-      data: { kaynak: 'merkez', istek },
+      message: kalmadi
+        ? `Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu ${gunSonu.durum ? 'reddedildi' : 'kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)'}`
+        : can
+          ? "Merkez'den (LafPOS Uzaktan) güncelleme istendi: yeni sürüm denetleniyor, gün kapalıyken kurulur"
+          : "Merkez'den (LafPOS Uzaktan) güncelleme istendi; bu kurulumda otomatik güncelleyici yok, sunucu elle güncellenir",
+      data: { kaynak: 'merkez', istek, ...(gunSonu ? { komut: gunSonu.komut, gunSonu: gunSonu.durum } : {}) },
     });
   });
   if (can) writeUpdateRequest({ at: now, by: 'merkez', simdi: false });
@@ -343,9 +358,12 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
     lastError = null;
     // Dükkân adı ya da şube kodu değişti: ekranlar bootstrap'ı yeniden okusun (fiş başlığı)
     if ((prev?.ad ?? null) !== parsed.ad || (prev?.kod ?? null) !== parsed.kod) new Effects().emit({ topic: 'settings', kind: 'merkez', message: 'Şube bilgisi değişti' }).flush();
-    takeRemoteUpdate(parsed.guncelleIstek, now);
     takeHistory(res.json);
+    // Önce uzaktan yönetimin komutları, sonra güncelleme isteği: "Gün sonu al ve güncelle"de istek aynı yanıttaki gün
+    // sonunun sonucuna bağlı (gün sonu reddedilirse güncelleme istenmez)
     again = await kontrolSonrasi(kontrol, res.json, now);
+    const bagli = parsed.guncelleKomut ? { komut: parsed.guncelleKomut, durum: kontrol?.k.komutDurumu(parsed.guncelleKomut) ?? null } : null;
+    takeRemoteUpdate(parsed.guncelleIstek, now, bagli);
   } catch (e) {
     lastError = e instanceof Error ? e.message : String(e);
     return false;
