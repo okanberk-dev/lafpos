@@ -162,6 +162,13 @@
       "when": 1795455463317,
       "tag": "0022_gun_duzeltme",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795474913998,
+      "tag": "0023_sayim_ani",
+      "breakpoints": true
     }
   ]
 }

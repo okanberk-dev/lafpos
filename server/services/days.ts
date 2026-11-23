@@ -13,6 +13,7 @@ import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, trainingDayNow } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
+import { dropPending } from '../sync/outbox-flight';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
@@ -355,11 +356,13 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
       // sayımıyla geçersiz
       reopenReason: reason.trim().slice(0, 200),
       recountReason: null,
+      recountedAt: null,
     })
     .where(eq(schema.businessDays.id, dayId))
     .run();
-  // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
-  t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, `gun:${day.date}`), isNull(schema.outbox.sentAt))).run();
+  // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer. Yoldaki
+  // (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, almazsa gönderen onu atar (gün açık)
+  dropPending(t, 'lafmaliyet', `gun:${day.date}`);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -643,8 +646,11 @@ export function recordCount(
   const note = input.note == null ? day.note : input.note.trim() || null;
   // Kaydedilmiş sayımın değişmesi lafmaliyet'e giden günün düzeltmesidir (`correction` recount); ilk sayım değil, aynı
   // tutarla yeniden kaydetmek de değil (föyün notu ya da dökümü sayımla birlikte kaydedilir): önceki neden kalır
-  const recountReason = day.countedCash != null && day.countedCash !== counted ? `Kasa sayımı değiştirildi: ${tl(day.countedCash)} → ${tl(counted)}` : day.recountReason;
-  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note, recountReason }).where(eq(schema.businessDays.id, dayId)).run();
+  const recounted = day.countedCash != null && day.countedCash !== counted;
+  const recountReason = recounted ? `Kasa sayımı değiştirildi: ${tl(day.countedCash!)} → ${tl(counted)}` : day.recountReason;
+  // Düzeltmenin anı: yalnız ondan sonra kurulan ilk kabul edilen gövde düzeltmeyi taşır (sync/lafmaliyet.ts correctionFor)
+  const recountedAt = recounted ? Date.now() : day.recountedAt;
+  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note, recountReason, recountedAt }).where(eq(schema.businessDays.id, dayId)).run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
     userId: actor.user.id,

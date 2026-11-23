@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { z } from 'zod';
 import { compReasonText } from '@shared/comp';
 import { allocate } from '@shared/money';
@@ -17,6 +17,7 @@ import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
 import { REFUND_REWRITE, REFUND_VOID } from '../services/orders';
+import { dropPending, land, takeOff } from './outbox-flight';
 
 /**
  * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
@@ -266,28 +267,46 @@ function personKindOf(i: Pick<ItemRow, 'compKind' | 'compPersonKind' | 'compPers
   return i.compPersonId && roles.get(i.compPersonId) === 'patron' ? 'patron' : 'personel';
 }
 
-/**
- * Gönderim sırası: bu günün (aynı tarih) lafmaliyet'ten 200 almış kayıt sayısı + 1. Tarihe ya da saate bağlı değil
- * (altın gövde sabit kalır); bekleyen kayıt yenisiyle değişince sıra artmaz
- */
-function revisionOf(date: string): number {
-  const sent = db
-    .select({ id: schema.outbox.id })
+/** Bu günün (aynı tarih) lafmaliyet'ten 200 almış gövdeleri */
+const sentDayRows = (date: string) =>
+  db
+    .select({ createdAt: schema.outbox.createdAt })
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, `gun:${date}`), isNotNull(schema.outbox.sentAt)))
     .all();
-  return sent.length + 1;
+
+/**
+ * Gönderim sırası: bu günün lafmaliyet'ten 200 almış kayıt sayısı + 1. Tarihe ya da saate bağlı değil (altın gövde
+ * sabit kalır). Gövde kurulurken önizleme için yazılır, gönderilirken yeniden (`sendDue`, gönderimler sırayla): yanıtı
+ * beklenen gönderim sürerken kuyruğa giren gövde aynı sırayı almaz
+ */
+function revisionOf(date: string): number {
+  return sentDayRows(date).length + 1;
+}
+
+type DayCorrectionState = Pick<typeof schema.businessDays.$inferSelect, 'date' | 'reopenedAt' | 'reopenReason' | 'recountReason' | 'recountedAt'>;
+
+/**
+ * Günün son düzeltmesi ve anı: kapandıktan sonra kaydedilmiş sayımı değiştirmek (`recount`) ya da günü yeniden açmak
+ * (`reopen`). Yeniden açılış sayım düzeltmesini siler: ikisi de varsa sayım yeniden açılıştan sonradır
+ */
+function correctionOf(day: DayCorrectionState) {
+  if (day.recountReason) return { kind: 'recount' as const, reason: cap(day.recountReason)!, at: day.recountedAt ?? 0 };
+  if (day.reopenedAt != null) return { kind: 'reopen' as const, reason: cap(day.reopenReason) ?? '', at: day.reopenedAt };
+  return null;
 }
 
 /**
- * Günün son düzeltmesi: kapandıktan sonra kaydedilmiş sayımı değiştirmek (`recount`) ya da günü yeniden açmak
- * (`reopen`). Yeniden açılış sayım düzeltmesini siler: ikisi de varsa sayım yeniden açılıştan sonradır. Pavo'nun gün
- * sonu sonucuyla yeniden gönderim düzeltme değildir (alan yalnız günün kendi durumundan)
+ * `builtAt`'te kurulan gövdenin düzeltmesi. Düzeltme yalnız ondan sonra kurulan ve lafmaliyet'in kabul ettiği (200)
+ * İLK gövdeyle gider: sonraki gönderim (Pavo'nun gün sonu sonucu, elle "Gönder", geçmiş günler) yeni sıradır ama düzeltme
+ * değildir. Düzeltmeden önce kurulan gövde (yoldayken düzeltme geldi) onu taşımaz: verisi düzeltmeden öncedir
  */
-function correctionOf(day: { reopenedAt: number | null; reopenReason: string | null; recountReason: string | null }) {
-  if (day.recountReason) return { kind: 'recount' as const, reason: cap(day.recountReason)! };
-  if (day.reopenedAt != null) return { kind: 'reopen' as const, reason: cap(day.reopenReason) ?? '' };
-  return null;
+function correctionFor(day: DayCorrectionState, builtAt: number): { kind: 'reopen' | 'recount'; reason: string } | null {
+  const c = correctionOf(day);
+  if (!c || builtAt < c.at) return null;
+  // Düzeltmeden sonra kurulmuş bir gövde 200 aldıysa ulaştı (gönderimler sırayla: ilki onu taşıdı)
+  const delivered = sentDayRows(day.date).some((r) => r.createdAt >= c.at);
+  return delivered ? null : { kind: c.kind, reason: c.reason };
 }
 
 /**
@@ -347,7 +366,7 @@ export function buildDayPayload(dayId: string) {
     )
     .orderBy(desc(schema.fiscalReceipts.completedAt), desc(schema.fiscalReceipts.id))
     .get();
-  const correction = correctionOf(day);
+  const correction = correctionFor(day, Date.now());
   // Banka POS'unun gördüğü ama Z'nin kart alanına girmeyen tutarlar (lafmaliyet kart farkını bunlarla açıklar)
   const cardPays = db
     .select({ orderId: schema.payments.orderId, amount: schema.payments.amount, tip: schema.payments.tip })
@@ -437,8 +456,9 @@ export function buildDayPayload(dayId: string) {
         slot: p.slot,
         qty: p.qty,
         menuValue: toTL(p.value),
-        // Ödenmez ve zayi nedenin başında da yazılır (`kind`'ı bilmeyen eski lafmaliyet buradan okur)
-        reason: compReasonText(i.compKind, i.compReason),
+        // Ödenmez ve zayi nedenin başında da yazılır (`kind`'ı bilmeyen eski lafmaliyet buradan okur); önekiyle en çok
+        // 200 karakter (neden 200'e kadar yazılır, "Ödenmez: " onu aşırırdı)
+        reason: cap(compReasonText(i.compKind, i.compReason)),
         kind: compKindOf(i.compKind),
         personKind: personKindOf(i, roles),
       })),
@@ -500,7 +520,8 @@ export function enqueueDay(dayId: string): string | null {
   const key = `gun:${payload.date}`;
   const now = Date.now();
   tx((t) => {
-    t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
+    // Yoldaki (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, sıra ve düzeltme ona göre (sendDue)
+    dropPending(t, 'lafmaliyet', key);
     t.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now }).run();
   });
   return key;
@@ -633,6 +654,8 @@ interface PushState {
   failed?: number;
   /** En son gönderilen günün yanıtı */
   lastAnswer?: DayAnswer;
+  /** lafmaliyet'in en son kabul ettiği (200) gövdenin şubesi: şube kilidi bunu söyler, şu anki ayarı değil */
+  acceptedBranch?: string;
 }
 
 const dateOf = (payload: unknown) => {
@@ -640,10 +663,45 @@ const dateOf = (payload: unknown) => {
   return typeof d === 'string' ? d : '';
 };
 
+/**
+ * Kayıttaki gövdenin gönderilen hâli. Sıra ve düzeltme gönderim anında yeniden yazılır (gönderimler sırayla gider):
+ * sıra o ana dek 200 almış gövdeler + 1, düzeltme yalnız ondan sonra kurulan ilk kabul edilen gövdede. Şube kasanın
+ * ayarıdır, günün değil: kuyruktaki kayıt şube düzeltilmeden önce hazırlandıysa güncelini taşır
+ */
+function finalBody(row: typeof schema.outbox.$inferSelect): Record<string, unknown> {
+  const date = dateOf(row.payload);
+  const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.date, date)).orderBy(desc(schema.businessDays.zNo)).get();
+  const correction = day ? correctionFor(day, row.createdAt) : null;
+  const { revision: _revision, correction: _built, ...rest } = row.payload as Record<string, unknown>;
+  const body: Record<string, unknown> = { version: rest.version, source: rest.source, revision: revisionOf(date), ...(correction ? { correction } : {}), ...rest };
+  body.sube = getSettings().branchId;
+  return body;
+}
+
+/**
+ * Gidemeyen kayıt, yanıtı beklenirken yerine yenisi kuyruğa girdiyse ya da gün yeniden açıldıysa atılır: sonra yeniden
+ * denenip yeni gövdeyi eskisiyle ezmesin, gün açıkken eski Z gitmesin (outbox-flight.ts)
+ */
+function dropIfStale(row: typeof schema.outbox.$inferSelect) {
+  if (!row.dedupeKey) return;
+  const newer = db
+    .select({ id: schema.outbox.id })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, row.dedupeKey), isNull(schema.outbox.sentAt), gt(schema.outbox.id, row.id)))
+    .get();
+  const reopened = db
+    .select({ id: schema.businessDays.id })
+    .from(schema.businessDays)
+    .where(and(eq(schema.businessDays.date, dateOf(row.payload)), isNull(schema.businessDays.closedAt)))
+    .get();
+  if (newer || reopened) db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+}
+
 async function sendDue(): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
   let lastAnswer: DayAnswer | null = null;
+  let acceptedBranch: string | null = null;
   const due = db
     .select()
     .from(schema.outbox)
@@ -652,10 +710,17 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
     .orderBy(asc(schema.outbox.id))
     .limit(20)
     .all();
-  for (const row of due) {
+  for (const listed of due) {
+    // Liste turun başında alındı: önceki isteğin yanıtı beklenirken kayıt yenisiyle değiştiyse silineni göndermez
+    const row = db
+      .select()
+      .from(schema.outbox)
+      .where(and(eq(schema.outbox.id, listed.id), isNull(schema.outbox.sentAt)))
+      .get();
+    if (!row) continue;
+    const body = finalBody(row);
+    takeOff(row.id);
     try {
-      // Şube kasanın ayarıdır, günün değil: kuyruktaki kayıt şube düzeltilmeden önce hazırlandıysa güncelini taşır
-      const body = { ...(row.payload as object), sube: getSettings().branchId };
       const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL('/api/pos/gun', env.lafmaliyetUrl), body, 15_000);
       // 400/413/422 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
       // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
@@ -664,6 +729,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
           .set({ attempts: row.attempts + 1, lastError: pushErrorText(status, json, row.payload), nextAttemptAt: Date.now() + PARKED_MS })
           .where(eq(schema.outbox.id, row.id))
           .run();
+        dropIfStale(row);
         failed++;
         continue;
       }
@@ -676,7 +742,8 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       const answer = readDayAnswer(json, date);
       const now = Date.now();
       tx((t) => {
-        t.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1, response: { ...answer } }).where(eq(schema.outbox.id, row.id)).run();
+        // Kayıt gönderilen hâlini saklar (sıra, düzeltme, şube): sonraki sıra ve düzeltme buna göre
+        t.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1, response: { ...answer }, payload: body }).where(eq(schema.outbox.id, row.id)).run();
         // Gün gönderildi: paket günün son kapanışından sonra hazırlandıysa (arada yeniden açılmadıysa) işaretlenir.
         // "Geçmiş günleri gönder" bu işareti olmayan kapanmış günleri sayar
         t.update(schema.businessDays)
@@ -685,6 +752,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
           .run();
       });
       lastAnswer = answer;
+      acceptedBranch = String(body.sube);
       sent++;
     } catch (e) {
       const attempts = row.attempts + 1;
@@ -693,14 +761,25 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
         .set({ attempts, lastError: networkErrorText(e), nextAttemptAt: Date.now() + wait })
         .where(eq(schema.outbox.id, row.id))
         .run();
+      dropIfStale(row);
       failed++;
+    } finally {
+      land(row.id);
     }
   }
   if (sent || failed) {
     const prev = getSyncState<PushState>('lafmaliyet.push') ?? {};
     // Yanıtta gelmeyen geçiş günü bilinen eskisini silmez (eski ya da kısa yanıt "bilinmiyor" demek, "seçilmedi" değil)
     const kept = lastAnswer && !('switchDay' in lastAnswer) && prev.lastAnswer && 'switchDay' in prev.lastAnswer ? { ...lastAnswer, switchDay: prev.lastAnswer.switchDay } : lastAnswer;
-    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(sent ? { lastSuccessAt: Date.now() } : {}), ...(kept ? { lastAnswer: kept } : {}) } satisfies PushState);
+    setSyncState('lafmaliyet.push', {
+      ...prev,
+      lastRunAt: Date.now(),
+      sent,
+      failed,
+      ...(sent ? { lastSuccessAt: Date.now() } : {}),
+      ...(kept ? { lastAnswer: kept } : {}),
+      ...(acceptedBranch ? { acceptedBranch } : {}),
+    } satisfies PushState);
     bus.publish({ topic: 'sync', kind: 'lafmaliyet.push' });
   }
   return { sent, failed };
@@ -757,6 +836,23 @@ export function branchLocked(): boolean {
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
     .get();
+}
+
+/**
+ * lafmaliyet'in en son kabul ettiği (200) gövdenin şubesi: şube kilidinin metni ve onaysız dönülebilen kimlik. Bu alan
+ * tutulmadan önce gönderilmiş günde son gönderilen gövdeden; hiç gün kabul edilmemişse null
+ */
+export function acceptedBranch(): string | null {
+  const known = getSyncState<PushState>('lafmaliyet.push')?.acceptedBranch;
+  if (known) return known;
+  const last = db
+    .select({ payload: schema.outbox.payload })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
+    .orderBy(desc(schema.outbox.sentAt), desc(schema.outbox.id))
+    .get();
+  const sube = (last?.payload as { sube?: unknown } | null)?.sube;
+  return typeof sube === 'string' && sube ? sube : null;
 }
 
 /** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */

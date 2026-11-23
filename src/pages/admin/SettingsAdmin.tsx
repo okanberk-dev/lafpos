@@ -187,7 +187,11 @@ export default function SettingsAdmin() {
   // Z zinciri `cash` altında: gün açılıp kapanınca ve ayar kaydedilince canlı akış kendiliğinden yeniler
   const zChain = useQuery({ queryKey: ['cash', 'z-chain'], queryFn: () => get<{ lastZ: number | null; nextZ: number }>('/admin/settings/z') });
   // Şube kimliğinin kilidi `sync` altında: lafmaliyet ilk günü kabul edince canlı akış kendiliğinden yeniler
-  const branchLock = useQuery({ queryKey: ['sync', 'branch-lock'], queryFn: () => get<{ locked: boolean; branchId: string }>('/admin/settings/branch-lock') });
+  // `acceptedBranch`: lafmaliyet'in kabul ettiği şube (şu anki kimlik değil; ona dönmek onay istemez)
+  const branchLock = useQuery({
+    queryKey: ['sync', 'branch-lock'],
+    queryFn: () => get<{ locked: boolean; branchId: string; acceptedBranch: string | null }>('/admin/settings/branch-lock'),
+  });
   const [s, setS] = useState<Settings | null>(null);
   const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
   const [saving, setSaving] = useState(false);
@@ -291,11 +295,12 @@ export default function SettingsAdmin() {
     }
     // Kilitli şube kimliği (lafmaliyet bu kasanın gününü kabul etti) patronun ayrıca onayıyla değişir: onay ayar değil,
     // yalnız bu kayıtla gider. Patron dışındakine sunucu zaten "yalnız patron" der
-    const branchChange = typeof rest.branchId === 'string' ? { from: was?.branchId ?? '', to: rest.branchId } : null;
-    if (branchChange && patron && branchLock.data?.locked) {
+    const branchChange = typeof rest.branchId === 'string' ? { to: rest.branchId } : null;
+    const accepted = branchLock.data?.acceptedBranch ?? null;
+    if (branchChange && patron && branchLock.data?.locked && branchChange.to !== accepted) {
       const ok = await confirmDialog({
         title: 'Şube kimliği değişsin mi',
-        body: `lafmaliyet bu kasanın günlerini “${branchChange.from}” şubesine kaydetti. Kaydederseniz bundan sonraki günler “${branchChange.to}” şubesine gider; gönderilmiş günler yerinde kalır`,
+        body: `lafmaliyet bu kasanın günlerini ${accepted ? `“${accepted}” şubesine kaydetti` : 'kabul etti'}. Kaydederseniz bundan sonraki günler “${branchChange.to}” şubesine gider; gönderilmiş günler yerinde kalır`,
         confirmLabel: 'Şube kimliğini değiştir',
         tone: 'danger',
       });
@@ -519,7 +524,13 @@ export default function SettingsAdmin() {
                   <p id="branch-lock-info" className="mt-1.5 flex items-start gap-1.5 text-xs text-muted">
                     <Lock aria-hidden="true" className="mt-px size-3.5 shrink-0" />
                     <span>
-                      Kilitli: lafmaliyet bu kasanın günlerini “{branchLock.data.branchId}” şubesine kaydetti. Değiştirmek patronun ayrıca onayını ister
+                      {branchLock.data.acceptedBranch
+                        ? `Kilitli: lafmaliyet bu kasanın günlerini “${branchLock.data.acceptedBranch}” şubesine kaydetti${
+                            branchLock.data.acceptedBranch !== branchLock.data.branchId
+                              ? `; kayıtlı kimlik şu an “${branchLock.data.branchId}”. O şubeye dönmek onay istemez, başka kimlik patronun ayrıca onayını ister`
+                              : '. Değiştirmek patronun ayrıca onayını ister'
+                          }`
+                        : 'Kilitli: lafmaliyet bu kasanın günlerini kabul etti. Değiştirmek patronun ayrıca onayını ister'}
                     </span>
                   </p>
                 )}

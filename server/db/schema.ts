@@ -341,6 +341,11 @@ export const businessDays = sqliteTable(
      */
     recountReason: text('recount_reason'),
     /**
+     * `recountReason`'ın yazıldığı an. Düzeltme yalnız ondan (ya da yeniden açılıştan, `reopenedAt`) sonra kurulan ilk
+     * kabul edilen gövdeyle gider; sonraki gönderim (Pavo'nun gün sonu, elle "Gönder") düzeltme taşımaz
+     */
+    recountedAt: integer('recounted_at'),
+    /**
      * Gün sonu kurulum (eğitim) modunda mı alındı: true eğitim günü, false gerçek gün. null: gün açık ya da bu işaret
      * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
      */

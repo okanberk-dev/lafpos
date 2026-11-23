@@ -28,7 +28,7 @@ import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
 import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
-import { branchLocked, reservedPosName } from '../sync/lafmaliyet';
+import { acceptedBranch, branchLocked, reservedPosName } from '../sync/lafmaliyet';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
@@ -968,11 +968,14 @@ adminRoutes.get('/settings/z', (c) => {
 
 /**
  * Şube kimliğinin kilidi (Ayarlar › Şube kimliği'nin altındaki not ve kayıttaki onay adımı): lafmaliyet bu kasanın bir
- * gününü kabul ettiyse kimlik yalnız patronun ayrıca onayıyla değişir (PUT /settings `confirmBranchChange`)
+ * gününü kabul ettiyse kimlik yalnız patronun ayrıca onayıyla değişir (PUT /settings `confirmBranchChange`).
+ * `acceptedBranch`: lafmaliyet'in en son kabul ettiği gövdenin şubesi (şu anki kimlikten farklı olabilir); ona dönmek
+ * onay istemez
  */
 adminRoutes.get('/settings/branch-lock', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  return c.json({ locked: branchLocked(), branchId: getSettings().branchId });
+  const locked = branchLocked();
+  return c.json({ locked, branchId: getSettings().branchId, acceptedBranch: locked ? acceptedBranch() : null });
 });
 
 const settingsShape = patchOf(
@@ -1079,12 +1082,14 @@ adminRoutes.put('/settings', async (c) => {
     throw new HttpError(403, `${patronChanged.map(settingLabel).join(', ')} yalnız patron değiştirir`, 'patron_only');
   }
   // Şube kimliği lafmaliyet bir günü kabul ettikten sonra kilitli: yanlış değişiklik sonraki günleri başka şubeye
-  // yazdırır (ya da 409 wrong_branch ile biriktirir). Patron ayrıca onaylarsa değişir (Yönetim › Ayarlar'da onay adımı)
-  const branchLock = patronChanged.includes('branchId') && branchLocked();
+  // yazdırır (ya da 409 wrong_branch ile biriktirir). Patron ayrıca onaylarsa değişir (Yönetim › Ayarlar'da onay adımı).
+  // lafmaliyet'in kabul ettiği şubeye dönmek onay istemez; metin o şubeyi söyler, şu anki kimliği değil
+  const accepted = patronChanged.includes('branchId') && branchLocked() ? acceptedBranch() : null;
+  const branchLock = patronChanged.includes('branchId') && branchLocked() && input.branchId !== accepted;
   if (branchLock && confirmBranchChange !== true) {
     throw new HttpError(
       409,
-      `Şube kimliği kilitli: lafmaliyet bu kasanın günlerini "${prev.branchId}" şubesine kaydetti. "${String(input.branchId)}" yapmak patronun ayrıca onayını ister; sonraki günler o şubeye gider`,
+      `Şube kimliği kilitli: lafmaliyet bu kasanın günlerini ${accepted ? `"${accepted}" şubesine kaydetti` : 'kabul etti'}. "${String(input.branchId)}" yapmak patronun ayrıca onayını ister; sonraki günler o şubeye gider`,
       'branch_locked',
     );
   }

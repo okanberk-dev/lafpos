@@ -632,7 +632,9 @@ yanlış değişiklik sonraki günleri başka şubeye yazdırır ya da 409 `wron
 /api/admin/settings` `branchId` değişince 409 `branch_locked` döner; patron gövdeye `confirmBranchChange: true`
 koyarsa değişir (onay ayar değildir, saklanmaz). Denetimde `settings.branchId` uyarı önemiyle, `data.locked: true`.
 Yönetim › Ayarlar ve yedek › Şube kimliği kilidi alanın altında yazar (`GET /api/admin/settings/branch-lock`
-`{ locked, branchId }`) ve kayıtta onay sorar. Hiç gün kabul edilmemişse (ya da deneme bitince) kilit yoktur.
+`{ locked, branchId, acceptedBranch }`) ve kayıtta onay sorar. `acceptedBranch` lafmaliyet'in en son kabul ettiği
+gövdenin şubesidir (şu anki kimlik değil: yanlış bir değişiklikten sonra ikisi ayrılır); not, onay penceresi ve 409
+metni onu söyler, ona dönmek onay istemez. Hiç gün kabul edilmemişse (ya da deneme bitince) kilit yoktur.
 
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
@@ -740,7 +742,8 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   eşlemesinden bulunur, bulunamazsa `posMatchKey(posName)` ile `pos_mappings`).
 - Kişisel veri yok: müşteri, personel adı, kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız kişinin
   türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Serbest metin nedenler en çok 200
-  karakter.
+  karakter, önekiyle birlikte (`ikram[].reason`'ın "Ödenmez: " ve "Zayi: " öneki dahil; `iptal[].reason`'ın "İade: "
+  öneki dahil).
 - lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
   (§4.2). Ürün satışları aylık modele (B08), Kasa raporu ön doldurması, ikram ve ödeme kanalları geçiş gününden
   sonraki günlerde lafmaliyet partileriyle (B09-B11) okunur; ikram lafmaliyet'te `ikram[]` olarak saklanır, Zayi
@@ -770,14 +773,20 @@ Saklı eski Z'de (ödenmez, zayi, yazarkasadan geçmeyen alanları yokken kapanm
 kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondalık, 0 ya da büyük.
 
 - `revision`: bu tarihin kaçıncı gönderimi, 1'den başlar: lafmaliyet'ten 200 almış (`sentAt` dolu) `gun:<tarih>`
-  kaydı sayısı + 1, gövde kurulurken. Saate bağlı değil; bekleyen kayıt yenisiyle değişince sıra artmaz.
-- `correction`: `{ kind: "reopen" | "recount", reason }`, yalnız gün düzeltildiyse. `reopen`: kapanmış gün yeniden
-  açıldı, `reason` açarken yazılan neden (`business_days.reopenReason`). `recount`: kapandıktan sonra kaydedilmiş
-  kasa sayımı değiştirildi (yetkili onayıyla; ilk sayım düzeltme değil, aynı tutarla yeniden kaydetmek de değil:
-  föyün notu ya da dökümü), `reason` "Kasa sayımı değiştirildi: ₺600,00 → ₺610,00" (`business_days.recountReason`).
-  Yeniden açılış önceki sayım düzeltmesini siler. Gün yeniden açılıp ya da sayımı değiştirilip bir kez düzeltildiyse
-  sonraki her gönderimde `correction` kalır (günün son düzeltmesi). Pavo'nun gün sonu
-  sonucuyla yeniden gönderim yeni `revision`dır ama düzeltme değildir.
+  kaydı sayısı + 1. Saate bağlı değil; bekleyen kayıt yenisiyle değişince sıra artmaz. Gövde kurulurken yazılır
+  (önizleme, altın gövde) ve gönderilirken yeniden (gönderimler sırayla gider, `sube` gibi): yanıtı beklenen gönderim
+  (en çok 15 sn) sürerken aynı gün yeniden kuyruğa girerse yoldaki kayıt silinmez, 200 alırsa gönderilmiş sayılır ve
+  sonraki gövde bir sonraki sırayı alır; gidemezse (yerine yenisi girdiyse ya da gün yeniden açıldıysa) atılır.
+  Aynı sıra yalnız yanıtı yolda kaybolan (lafmaliyet'in aldığı ama LafPOS'a 200'ü ulaşmayan) gönderimden sonra
+  yeniden gidebilir; o zaman sonra gelen gövde yenisidir.
+- `correction`: `{ kind: "reopen" | "recount", reason }`, yalnız düzeltmeyi taşıyan gövdede. `reopen`: kapanmış gün
+  yeniden açıldı, `reason` açarken yazılan neden (`business_days.reopenReason`). `recount`: kapandıktan sonra
+  kaydedilmiş kasa sayımı değiştirildi (yetkili onayıyla; ilk sayım düzeltme değil, aynı tutarla yeniden kaydetmek de
+  değil: föyün notu ya da dökümü), `reason` "Kasa sayımı değiştirildi: ₺600,00 → ₺610,00"
+  (`business_days.recountReason`, anı `recountedAt`). Yeniden açılış önceki sayım düzeltmesini siler. Düzeltme yalnız
+  ondan (yeniden açılış ya da sayım anından) sonra kurulan ve lafmaliyet'in kabul ettiği İLK gövdeyle gider; sonraki
+  gönderimler (Pavo'nun gün sonu sonucu, elle "Gönder", geçmiş günler) yeni `revision`dır ama düzeltme değildir ve
+  alanı taşımaz. Yeni bir düzeltme (bir daha yeniden açılış ya da sayım) yine bir kez gider.
 - `offDevice`: `{ card, cash }`, mali fişi yazarkasada kesilmeyen satış ödemeleri (bahşiş hariç; tanım
   `shared/order-calc.ts` `offDeviceTotals`, Z'deki "Yazarkasadan geçmeyen" ile aynı).
 - `refunds[]`: `{ amount, zField, name, channel, reason }`, günün iptal edilen ödemeleri. `name` ödeme türünün adıdır

@@ -359,8 +359,8 @@ describe('inceleme düzeltmeleri', () => {
     const reopened = await h.ok<{ id: string; zNo: number; closedAt: number | null }>('kasa', 'POST', `/cash/days/${closed.day.id}/reopen`, { reason: 'Geç gelen müşteri', approverPin: MUDUR });
     expect(reopened).toMatchObject({ id: closed.day.id, zNo: closed.day.zNo, closedAt: null });
     expect((await audit('alarm')).some((a) => a.action === 'day.reopen')).toBe(true);
-    // Gitmemiş eski Z giden kutusundan düştü
-    expect(db.select().from(schema.outbox).all().filter((r) => !r.sentAt)).toHaveLength(0);
+    // Gitmemiş eski Z giden kutusundan düştü (yeniden sayımın gönderimi yoldaysa yanıtı gelince: sync/outbox-flight.ts)
+    await vi.waitFor(() => expect(db.select().from(schema.outbox).all().filter((r) => !r.sentAt)).toHaveLength(0), { timeout: 5000, interval: 20 });
 
     // Gün yeniden açıkken aynı günün fişi iptal edilir; adisyon açılır ve iptal edilir
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${paidReceipt.id}/cancel`, { voidReceipt: true, approverPin: MUDUR });
