@@ -18,8 +18,12 @@ import { join, win32 } from 'node:path';
 export const ROOT_DIR = 'kok';
 /** Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır */
 export const LOCKED_ROOT_FILES = ['baslat.cmd'];
-/** Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (iki yerde aynı) */
-export const WATCHER_VERSION = 2;
+/**
+ * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betik, lafpos.nsi ve
+ * web-kurucu.ps1 ile aynı). 3: müşteri ekranı sunucu cevap verince açılır (inceleme, 23 Kas 2026); kasada çalışan eski
+ * bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir
+ */
+export const WATCHER_VERSION = 3;
 /** Kasa bekçisinin Başlangıç kısayolu (ASCII ad: kasa-yazici.ps1 de arar) */
 export const WATCHER_LINK = 'LafPOS Kasa Bekcisi.lnk';
 const MARKER = 'kurulum-yenileme.json';

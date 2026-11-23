@@ -152,7 +152,10 @@ async function smokeTest() {
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const node = WIN ? join(STAGE, 'node', 'node.exe') : process.execPath;
-    const env = { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) };
+    // LAFPOS_PAKET_DENEME: bekçi kurulumu yenilemez. Yenilese kök dosyaları deneme klasörüne koyar ve (yönetici
+    // kabuğunda) bu bilgisayarda kurulu LafPOS'un Başlat menüsü, masaüstü ve Başlangıç kısayollarını deneme bitince
+    // silinen klasöre çevirirdi (inceleme, 23 Kas 2026)
+    const env = { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', LAFPOS_PAKET_DENEME: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) };
     // Bellek sınırı ayar dosyasından gelsin: gerçek ortam değişkeni dosyadakini ezerdi
     delete env.LAFPOS_MAX_HEAP_MB;
     const child = spawn(node, [join(tmp, 'app/bekci.mjs')], {
@@ -189,6 +192,8 @@ async function smokeTest() {
       const durum = join(home, 'guncelleme/durum.json');
       const st = existsSync(durum) ? JSON.parse(readFileSync(durum, 'utf8')) : null;
       if (st?.kurulu?.build !== BUILD.build) fail(`Bekçinin güncelleyicisi durum dosyasını yazmadı (${durum})`);
+      // Kurulumu yenileyen bekçi açılışta önce kök dosyaları koyar (kısayollardan önce): deneme klasöründe olmamalı
+      if (existsSync(join(tmp, 'LafPOS-Kasa.bat'))) fail('Paket denemesinde bekçi kurulumu yeniledi (LAFPOS_PAKET_DENEME)');
       console.log(`  tamam: derleme ${BUILD.build}, güncelleme durumu "${st.durum}"`);
       const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '1897' }) });
       if (!login.ok) fail(`Örnek PIN'le giriş olmadı (${login.status})`);

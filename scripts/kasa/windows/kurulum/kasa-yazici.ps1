@@ -46,6 +46,9 @@ function Start-CustomerDisplay([string]$base) {
     if ($running) { return }
     $exe = Get-DisplayExe
     if (-not $exe) { return }
+    # Sunucu cevap vermiyorsa acilmaz, bekci 15 sn sonra yeniden bakar (inceleme, 23 Kas 2026). Bekci oturum acilinca
+    # baslar, sunucu henuz kalkmamis olabilir: hata sayfasiyla acilan pencerenin sureci var oldugu icin bir daha acilmazdi
+    if (-not (Test-Server $base)) { return }
     $b = $second.Bounds
     $profileDir = Join-Path $env:LOCALAPPDATA 'LafPOS\chrome-musteri'
     $chromeArgs = @(
@@ -69,8 +72,8 @@ function Stop-TemporaryDisplayWatcher {
   } catch { }
 }
 
-# Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni)
-$BekciSurumu = 2
+# Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni). 3: musteri ekrani sunucu cevap verince acilir
+$BekciSurumu = 3
 $BekciKisayolu = 'LafPOS Kasa Bekcisi.lnk'
 
 function Get-KasaUrl {

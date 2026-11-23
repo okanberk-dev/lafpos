@@ -16,12 +16,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(HERE, '../../../..');
 /** Bekçiyle pakete giren betikler: bekçi, ayar kuralları, güncelleyici ve arşiv yardımcıları */
 export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs', 'kurulum-yenile.mjs'];
-/** Kasa kısayolunun güncellemeyle gelen parçaları: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF yazılır) */
+/**
+ * Güncellemeyle gelen, app\'ten çalışan PowerShell betikleri: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF
+ * yazılır). Kasa kısayolunun kendisi (LafPOS-Kasa.bat) kök dosyalarla app\kok\'ten gelir
+ */
 export const KASA_LAUNCHER = [
   ['kasa-yazici.ps1', 'kasa-yazici.ps1'],
   ['kasa-hazirla.ps1', 'kasa-hazirla.ps1'],
   ['kisayollar.ps1', 'kisayollar.ps1'],
-  ['../LafPOS-Kasa.bat', 'LafPOS-Kasa.bat'],
 ];
 /** better-sqlite3 ve yükledikleri: yalnız JavaScript (derleme klasörleri ve kaynak yok) */
 const SQLITE_MODULES = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
@@ -86,8 +88,9 @@ export async function stageApp({ appDir, webDir, build: buildNo, commit, root = 
   const skip = ['demo', 'guncelleme'].map((d) => join(resolve(webDir), d));
   cpSync(webDir, join(appDir, 'dist/web'), { recursive: true, filter: (src) => !skip.some((d) => src === d || src.startsWith(d + sep)) });
   for (const f of KASA_SCRIPTS) cpSync(join(HERE, f), join(appDir, f));
-  // Kasa kısayolunun parçaları güncellemeyle gelsin: yazıcı betiği (kısayol app\'ten çağırır) ve kısayolun kendisi (bekçi
-  // açılışta kurulum klasöründekiyle değiştirir; kısayol Chrome'u açıp hemen çıktığı için çalışırken değişmez)
+  // app\'ten çalışan betikler güncellemeyle gelsin: yazıcı ve kasa ekranı bekçisi (kasa kısayolu çağırır), kasa
+  // hazırlığı (Başlat menüsü) ve kısayol yenileyici (bekçi). Kasa kısayolunun kendisi aşağıda kök dosyalarla gelir;
+  // app\'e ayrıca konan kopyasını #144'ten beri okuyan yoktu (inceleme, 23 Kas 2026)
   for (const [from, to] of KASA_LAUNCHER) writeFileSync(join(appDir, to), readFileSync(join(HERE, from), 'utf8').replace(/\r?\n/g, '\r\n'));
   // Kurulum klasörünün kök dosyaları (kurulumdakinin aynısı, web-kurucu.mjs shellFiles): bekçi açılışta farklı olanları
   // yerine koyar (kurulum-yenile.mjs). Kaldırma betiği yalnız siteden kurulumun; güncellemeyle gelmez
