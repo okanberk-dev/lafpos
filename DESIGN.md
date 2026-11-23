@@ -248,7 +248,13 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   sayısıyla). Yaprakta bölümün adı, görünüm (plan / liste) ve plan: kabın hem enine hem boyuna sığar (16:10). Geniş
   ekranda sağdaki kartta masasız siparişler ve bugünkü rezervasyonlar, darda yaprağın altında. Masa kartı köşe 18, ad
   kalın, tutar kartın en büyük yazısı (26/700), altında süre ve garson; bara gitmiş ve hazır kalemler küçük hap, hazır
-  olan yeşil ve nabızlı.
+  olan yeşil ve nabızlı. **Plan düğme olmaktan çıkacak kadar küçülmez** (23 Kasım 2026, sahip: "butonlar her ekrana tam
+  uyumlu değil"): planın en küçük boyu en küçük masayı 64 × 56 px'in üstünde tutar (`planMinHeight`, 280-640 px);
+  alçak ekranda (küçük kasa bilgisayarı, Windows ölçeği %125-150, yatay telefon) plan bunun altına inmez, yaprak kayar.
+  **Kart içeriğini kesmez, sadeleştirir:** ene göre tutarın boyu ve süre satırı (`@min-[…]`), planda boya göre de
+  (`tile-low/short/mini/flat`, `index.css`): 108 px'in altında süre ve garson satırı, 88'in altında iç boşluk 8 ve tutar
+  20 px, 80'in altında rozet satırı çekilir (hazır sayısı köşede ✓ hapı), 52'nin altında ad ve tutar tek satır. Kısmen
+  ödenmiş masada süre satırının yerinde kalan tutar yazar. Kısalan masa adı ipucunda (`title`).
 - **Adisyon** (20 Kasım 2026, operatör: "espresso based vs. kısmı da ekteki gibi olabilir, componentleri bir yap"):
   geniş ekranda (xl) solda **alt menü kartı**, yönetimin alt menüsüyle aynı bileşen (`.lp-subnav`, `.lp-menu-col`,
   genişlik `--side-w` 240): "Kategoriler" grup başlığı küçük ve soluk, kategoriler alt alta 38 px satırlarda
@@ -590,7 +596,14 @@ Panonun ölçüleriyle her parça tek tek elden geçti; davranış ve erişilebi
   boyutlanır; kutunun boyu plandan geldiği için `data-tap-ok` taşır (44 px denetiminin dışında).
 - Dokunmatikte alan yazısı en az 16 px (iOS odaklanınca yakınlaştırmasın). Kural katmansızdır ve alanın yazı boyu
   sınıfını ezer: daha büyük alan yazısı (ör. 36 px tutar) alanın kabına verilir, alan onu 1em ile alır.
-- **Doğrulama:** `npm run build && npm run e2e`. Tarama her rolün her ekranını 390 px (dokunmatik), 768 px
-  (dokunmatik), 1280 px ve koyu temada açar; konsol ve ağ hatası, yatay taşma ve 44 px altı hedefi hata
-  sayar; görüntüler `e2e/out/`. Emülasyon gerçek iPhone ve Android dokunuşunu, Safari'yi kanıtlamaz; ilk
-  kurulumda gerçek cihazda bir tur atılmalı.
+- **Alçak ekran** (`min-width: 768px` ve `max-height: 544px`: yatay telefon, %150 ölçekli küçük Windows tableti):
+  başlık satırı ve büyük sayılar ekranın yarısını tutmasın diye sahne kendi içinde kayar; aşağı kaydırınca başlık
+  çekilir, yaprak sahnenin tam boyunu alır (`.lp-stage`, `index.css`).
+- **Düğme her ekranda tam görünür:** uzun etiket `wrap` ile alt satıra iner (Button); sabit enli karoda kısalan ad
+  `title` taşır; dar tuşta süs (ok halkası) çekilir, yazı kalır (tuş takımının Giriş'i 360 px'in altında).
+- **Doğrulama:** `npm run build && npm run e2e`. Tarama her rolün her ekranını telefonda (390 ve 320 px), tablette
+  (768 px dikey, 1024 px yatay), bilgisayarda (1280 px), dokunmatik kasa bilgisayarında (1366 × 768 ve Windows ölçeği
+  %125 iken 1093 × 614), yatay telefonda (844 × 390) ve koyu temada açar (`e2e/lib.mjs` `SWEEP_VIEWPORTS`); konsol ve
+  ağ hatası, yatay taşma, okunmayan yazı, kırpılan ya da ulaşılamayan düğme (kaydırılamayan kabın ya da ekranın
+  dışında kalan) ve 44 px altı hedefi hata sayar; görüntüler `e2e/out/`. Emülasyon gerçek iPhone ve Android
+  dokunuşunu, Safari'yi kanıtlamaz; ilk kurulumda gerçek cihazda bir tur atılmalı.

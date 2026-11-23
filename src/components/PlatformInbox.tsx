@@ -120,7 +120,8 @@ function PendingStrip({ waitingOrders, cancelOrders, settings }: { waitingOrders
         <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-signal)] text-[var(--admin-surface)]">
           <Bell className="size-3.5 stroke-[2.25]" />
         </span>
-        <span className="min-w-0 flex-1 truncate font-semibold text-signal-ink">
+        {/* Telefonda ileti kısalmaz, alt satıra iner (şerit uzar); geniş ekranda tek satır, sığmayan ek bilgi kısalır */}
+        <span className="min-w-0 flex-1 font-semibold leading-tight text-signal-ink sm:truncate">
           {waiting === 0 ? 'Platform iptal etti: kasadaki ödemeyi geri alın' : waiting === 1 ? 'Platform siparişi onay bekliyor' : `${waiting} platform siparişi onay bekliyor`}
           {waiting > 0 && cancelOrders.length > 0 && <span className="font-normal"> · {cancelOrders.length} iptal: ödemeyi geri alın</span>}
           <span className="font-normal text-ink-2 max-sm:hidden">

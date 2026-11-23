@@ -246,7 +246,10 @@ function TopSeller({ p, rank, image, onClick }: { p: ProductDTO; rank: number; i
           <span aria-hidden="true" className="tabular shrink-0 text-[11px] font-semibold text-[var(--admin-primary)]">
             {rank}
           </span>
-          <span className="truncate text-[14.5px] font-semibold leading-tight tracking-[-0.01em] text-ink">{label}</span>
+          {/* Şerit sabit enli: uzun ad kısalır, tam hali ipucunda (erişilebilir ad düğmede) */}
+          <span className="truncate text-[14.5px] font-semibold leading-tight tracking-[-0.01em] text-ink" title={label}>
+            {label}
+          </span>
         </span>
         <span className="tabular pl-[calc(1ch+0.375rem)] text-[12.5px] font-medium text-muted">{tlShort(p.price)}</span>
       </span>

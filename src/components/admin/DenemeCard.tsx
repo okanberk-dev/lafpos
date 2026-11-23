@@ -61,7 +61,8 @@ export function DenemeCard() {
           </Notice>
         )}
         <div>
-          <Button variant="primary" icon={<Rocket className="size-4" />} disabled={blocked} onClick={() => setOpen(true)}>
+          {/* Telefonda etiket kartın eninden uzun: alt satıra iner, düğme karttan taşmaz */}
+          <Button variant="primary" wrap className="max-w-full" icon={<Rocket className="size-4" />} disabled={blocked} onClick={() => setOpen(true)}>
             Denemeyi bitir, gerçek kullanıma başla
           </Button>
         </div>

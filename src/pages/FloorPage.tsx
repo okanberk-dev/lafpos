@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BellRing, Bike, CalendarClock, ChefHat, Clock3, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
+import { BellRing, Bike, CalendarClock, Check, ChefHat, Clock3, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
@@ -16,6 +16,7 @@ import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { PLAN_RATIO, planMinHeight } from '@/lib/floorLayout';
 import { useFinePointer, useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
@@ -35,8 +36,9 @@ export default function FloorPage() {
   const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), refetchInterval: REMOTE ? remotePollMs(!!boot.day) : 60_000 });
 
   const section = boot.sections.find((s) => s.id === sectionId) ?? boot.sections[0];
-  const tables = boot.tables.filter((t) => t.sectionId === section?.id);
+  const tables = useMemo(() => boot.tables.filter((t) => t.sectionId === section?.id), [boot.tables, section?.id]);
   const effectiveView = wide ? view : 'liste';
+  const planMin = useMemo(() => planMinHeight(tables), [tables]);
 
   const open = useMutation({
     mutationFn: (body: Record<string, unknown>) => (body.type === 'tezgah' ? openCounterSale() : post<OrderDTO>('/orders', body)),
@@ -241,8 +243,12 @@ export default function FloorPage() {
       leafLabel="Masa planı"
       leafClassName="flex flex-col"
     >
-      {/* Telefonda yaprak tek parça kayar; tablet ve bilgisayarda plan kalan yüksekliğe sığar, liste kendi içinde kayar */}
-      <section aria-label={section?.name ?? 'Masalar'} className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
+      {/*
+       * Telefonda yaprak tek parça kayar; tablet ve bilgisayarda plan kalan yüksekliğe sığar, liste kendi içinde kayar.
+       * Alçak ekranda (küçük kasa bilgisayarı, Windows'ta %125-150 ölçek, yatay telefon) bölüm en küçük boyunun altına
+       * inmez, yaprak kayar: plan düğme olmaktan çıkacak kadar küçülmez, altındaki bölümle üst üste binmez
+       */}
+      <section aria-label={section?.name ?? 'Masalar'} className="flex min-w-0 flex-col md:flex-1">
         {/* Yaprağın başı: seçili bölümün adı ve doluluğu, sağda görünüm */}
         <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3.5 md:px-5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -274,7 +280,12 @@ export default function FloorPage() {
         )}
 
         {/* Salonun zemini: plan görünümünde açık gri noktalı alan (masalar beyaz ve yeşil kartlar olarak üstünde ayrışır) */}
-        <div className={cn('p-4 md:min-h-0 md:flex-1 md:px-5 md:pb-4', effectiveView === 'plan' && tables.length > 0 ? 'lp-floor [container-type:size]' : 'md:overflow-y-auto')}>
+        <div
+          // Liste: taban boyu sıfır (yüzde değil; bölümün en küçük boyu listenin tamamı olmasın), en az iki sıra görünür
+          className={cn('p-4 md:px-5 md:pb-4', effectiveView === 'plan' && tables.length > 0 ? 'lp-floor [container-type:size] md:min-h-[var(--plan-min)] md:flex-1' : 'md:min-h-[17.5rem] md:flex-[1_1_0px] md:overflow-y-auto')}
+          // Planın en küçük boyu (kabın iç boşluğu ve kenarı, 34 px, dahil): en küçük masa dokunulabilir kalır (planMinHeight)
+          style={effectiveView === 'plan' && tables.length > 0 ? ({ '--plan-min': `${planMin + 34}px`, '--plan-min-w': `${Math.round(planMin * PLAN_RATIO)}px` } as React.CSSProperties) : undefined}
+        >
           {tables.length === 0 ? (
             <EmptyState
               icon={<LayoutGrid />}
@@ -290,8 +301,9 @@ export default function FloorPage() {
               Masaları Yönetim › Masa planı’ndan ekleyin; tezgâh, gel-al ve paket satışı masasız da çalışır
             </EmptyState>
           ) : effectiveView === 'plan' ? (
-            // Plan kabın hem enine hem boyuna sığar (16:10; en çok kabın eni ya da boyunun 1.6 katı)
-            <div className="relative mx-auto aspect-[16/10] w-[min(100%,160cqh)] max-w-6xl">
+            // Plan kabın hem enine hem boyuna sığar (16:10; en çok kabın eni ya da boyunun 1.6 katı), en küçük boyunun
+            // altına inmez (kap en küçük boyundayken cqh sıfır ölçülür: taban ayrıca verilir)
+            <div className="relative mx-auto aspect-[16/10] w-[min(100%,max(160cqh,var(--plan-min-w)))] max-w-6xl">
               {tables.map((t) => (
                 <TableTile
                   key={t.id}
@@ -302,6 +314,7 @@ export default function FloorPage() {
                   now={now}
                   onClick={() => tapTable(t)}
                   style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
+                  plan
                   className="absolute"
                 />
               ))}
@@ -399,6 +412,12 @@ const CALL_SHORT: Record<string, string> = { waiter: 'Garson', water: 'Su', napk
  * daralan rengi), kısmen ödendi altta beyaz ilerleme çubuğu ve kalan tutar; yalnız sitede ödenmiş siparişi
  * olan masa mor. Bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve nabızlı. Masadan açık çağrı köşede mor
  * zil hapı (genişte sebebi: "Su"). Yuvarlak masada içerik ortada.
+ *
+ * Kart her boyda düğme kalır (22-23 Kas 2026, sahip: "butonlar her ekrana tam uyumlu değil"): içerik karta sığmazsa
+ * kesilmez, sırayla sadeleşir. Ene göre (`@min-[…]`): tutarın boyu, süre satırı, hapların yazısı. Planda (`plan`) boya
+ * göre de (`tile-*`, index.css): alçalan kartta önce süre/garson satırı, sonra iç boşluk ve tutarın boyu, sonra rozet
+ * satırı köşeye iner (yalnız hazır sayısı), en alçakta ad ve tutar tek satırda. Kısmen ödenmiş masada süre satırının
+ * yerini kalan tutar alır (ikisi birden 110 px'lik karta sığmıyordu)
  */
 function TableTile({
   table,
@@ -407,6 +426,7 @@ function TableTile({
   call,
   now,
   onClick,
+  plan,
   className,
   style,
 }: {
@@ -416,6 +436,8 @@ function TableTile({
   call?: TableCallDTO;
   now: number;
   onClick: () => void;
+  /** Plan görünümü: kartın eni ve boyu plandan gelir (yüzde); içerik boya göre de sadeleşir */
+  plan?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -439,14 +461,17 @@ function TableTile({
   const round = table.shape === 'round';
   // Yeşil kartta ikincil yazı: beyazın %90'ı (degradenin en açık yerinde de 4.5:1'in üstünde)
   const soft = inked ? 'text-white/90' : 'text-ink-2';
+  const elapsed = room ? `Oda ${fmtElapsed(room, now)}` : fmtAgo(openedAt, now);
 
   return (
     <button
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group relative flex flex-col overflow-hidden p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
-        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-2xl', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
+        'group relative flex overflow-hidden text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
+        // Planda adlı kap: hem ene hem boya sorgulanır; listede yalnız ene (boyu içeriği kadar)
+        plan ? '[container:tile/size]' : '@container',
+        round ? 'rounded-[999px]' : 'rounded-2xl',
         // Boş masa (sade): beyaz kart, ince düz çerçeve ve çok hafif gölge; salonun noktalı zemininden ayrışır. Üstüne gelince
         // çerçeve ev yeşili, kart kalkar
         tone === 'free' && 'border border-[var(--admin-border-strong)] bg-surface shadow-[var(--shadow-control)] hover:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-[var(--shadow-card)] motion-reduce:hover:translate-y-0',
@@ -459,11 +484,20 @@ function TableTile({
         className,
       )}
     >
-      <div className={cn('flex w-full items-start gap-1', round && 'justify-center')}>
-        {/* Masanın adı Gabarito kalın; boş masada soluk */}
-        <span className="truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base">{table.name}</span>
+      {/* İç boşluk kabın kendisinde değil burada: kap sorgusu kabın kendi biçimini değiştiremez */}
+      <span
+        className={cn(
+          'flex min-w-0 flex-1 flex-col gap-1 p-3 tile-short:p-2 tile-flat:flex-row tile-flat:items-center tile-flat:gap-2 tile-flat:py-1',
+          round ? 'items-center justify-center text-center' : busy || reservation ? 'justify-between' : 'justify-start',
+        )}
+      >
+      <div className={cn('flex w-full min-w-0 items-start gap-1 tile-flat:w-auto tile-flat:flex-1 tile-flat:items-center', round && 'justify-center')}>
+        {/* Masanın adı Gabarito kalın; boş masada soluk. Dar kartta kısalırsa tam adı ipucunda */}
+        <span className="truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base" title={table.name}>
+          {table.name}
+        </span>
         {!round && <span className="flex-1" />}
-        <span className={cn('flex items-center gap-1', soft)}>
+        <span className={cn('flex shrink-0 items-center gap-1', soft)}>
           {/* Masadan çağrı: sitenin mor rengi, zil; dar kartta yalnız ikon (sebep ekran okuyucuda ve ipucunda) */}
           {call && (
             <span
@@ -484,29 +518,42 @@ function TableTile({
               <span className="sr-only @min-[7rem]:hidden">Hesap istendi</span>
             </span>
           )}
+          {/* Alçak kartta rozet satırına yer yok: hazır sayısı köşeye iner (bekleyen kalem adisyonda görünür) */}
+          {ready > 0 && (
+            <span className="tabular hidden h-5 items-center gap-0.5 rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#05432f] tile-mini:inline-flex" title={`${ready} kalem hazır`}>
+              <Check aria-hidden="true" className="size-3 shrink-0" />
+              {ready}
+              <span className="sr-only"> hazır</span>
+            </span>
+          )}
           {/* Online her boyda ve mor: adisyonlu masada da sitedeki sipariş görünür kalır */}
           {online && <Globe className={cn('size-4 shrink-0', inked ? '' : 'text-violet-ink')} aria-label="Online sipariş" />}
           {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Oda" />}
         </span>
       </div>
       {busy ? (
-        <div className={cn('w-full', round && 'text-center')}>
+        <div className={cn('w-full min-w-0 tile-flat:w-auto tile-flat:shrink-0', round && 'text-center')}>
           {tone === 'online' ? (
             // Tahsil edilecek bir şey yok: tutar yerine söz
             <div className="text-[13px] font-semibold leading-tight text-violet-ink">Sitede ödendi</div>
           ) : empty ? (
             <div className={cn('text-[13px] font-medium leading-tight', soft)}>Boş adisyon</div>
           ) : (
-            <div className="tabular font-headline text-[20px] font-bold leading-none tracking-[-0.045em] @min-[6rem]:text-[26px]">{tlShort(total)}</div>
+            <div className="tabular font-headline text-[20px] font-bold leading-none tracking-[-0.045em] @min-[6rem]:text-[26px] tile-short:text-[20px]!">{tlShort(total)}</div>
           )}
-          {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır; altta ödenen pay yeşil çubuk */}
-          {partial && <div className={cn('tabular mt-1 text-xs font-medium', soft)}>{tlShort(total - paid)} kaldı</div>}
-          {/* Meta satırı: bir dakikadan kısa süre "az önce" ("0 dk" değil), ayraç joinMeta'nın (eşit boşluk); oda sayacı süre */}
-          <div className={cn('mt-1 hidden min-w-0 truncate text-xs @min-[6.5rem]:block', soft)}>
-            <span className="tabular">{joinMeta([room ? `Oda ${fmtElapsed(room, now)}` : fmtAgo(openedAt, now), !round && pos[0]?.waiterName])}</span>
-          </div>
+          {partial ? (
+            // Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır (süre satırının yerinde); altta ödenen pay çubuğu
+            <div className={cn('tabular mt-1 truncate text-xs font-medium tile-low:hidden', soft)}>
+              {tlShort(total - paid)} kaldı<span className="hidden @min-[8.5rem]:inline"> · {elapsed}</span>
+            </div>
+          ) : (
+            // Meta satırı: bir dakikadan kısa süre "az önce" ("0 dk" değil), ayraç joinMeta'nın (eşit boşluk); oda sayacı süre
+            <div className={cn('mt-1 hidden min-w-0 truncate text-xs @min-[6.5rem]:block tile-low:hidden!', soft)}>
+              <span className="tabular">{joinMeta([elapsed, !round && pos[0]?.waiterName])}</span>
+            </div>
+          )}
           {(pending > 0 || ready > 0) && (
-            <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
+            <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium tile-mini:hidden', round && 'justify-center')}>
               {pending > 0 && (
                 <span className={cn('tabular inline-flex items-center gap-0.5 rounded-full px-2 py-0.5', inked ? 'bg-white/15 text-white' : 'bg-surface text-ink-2 ring-1 ring-inset ring-blue-line')} title={`${pending} kalem barda`}>
                   <ChefHat className="size-3" />
@@ -524,17 +571,20 @@ function TableTile({
           )}
         </div>
       ) : reservation ? (
-        <div className="w-full">
+        <div className="w-full min-w-0 tile-flat:w-auto tile-flat:shrink-0">
           <span className="tabular inline-flex rounded-full bg-[var(--admin-blue-soft)] px-2 py-0.5 text-xs font-medium text-[var(--admin-blue)]">{reservation.time}</span>
-          <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block">{reservation.name}</div>
+          <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block tile-mini:hidden!" title={reservation.name}>
+            {reservation.name}
+          </div>
         </div>
       ) : (
         // Odanın ikonu köşede (mikrofon); satırda ücretin türü
-        <span className={cn('hidden items-center gap-1 text-[13px] text-muted @min-[5rem]:inline-flex', round && 'justify-center')}>
+        <span className={cn('hidden items-center gap-1 text-[13px] text-muted @min-[5rem]:inline-flex tile-flat:hidden!', round && 'justify-center')}>
           {table.kind === 'oda' ? <Clock3 aria-hidden="true" className="size-3.5 shrink-0" /> : <Users aria-hidden="true" className="size-3.5 shrink-0" />}
           {table.kind === 'oda' ? 'Saatlik ücret' : `${table.seats} kişilik`}
         </span>
       )}
+      </span>
     </button>
   );
 }

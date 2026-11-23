@@ -97,8 +97,9 @@ export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { o
           <Button className="flex-1" onClick={close}>
             Vazgeç
           </Button>
-          <Button className="flex-[2]" variant="primary" icon={<ArrowLeftRight className="size-4" />} loading={busy} disabled={count.countedCash <= 0} onClick={() => void save()}>
-            Devri kaydet · <span className="tabular">{tl(count.countedCash)}</span>
+          <Button className="min-w-0 flex-[2]" wrap variant="primary" icon={<ArrowLeftRight className="size-4" />} loading={busy} disabled={count.countedCash <= 0} onClick={() => void save()}>
+            {/* Dar pencerede iki satır: ayraç tutarla birlikte iner, tek başına satıra düşmez */}
+            Devri kaydet <span className="tabular whitespace-nowrap">· {tl(count.countedCash)}</span>
           </Button>
         </div>
       }

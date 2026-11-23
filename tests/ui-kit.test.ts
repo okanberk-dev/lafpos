@@ -10,7 +10,7 @@ import { ApiError } from '../src/lib/api';
 import { useApproval, withApproval } from '../src/lib/approvalStore';
 import { bootThemeFor, resolveDark } from '../src/lib/bootDark';
 import { consumeLines, restoreLines, type PendingLine } from '../src/lib/cart';
-import { layoutChanges, mergeServerTables, settleSaved } from '../src/lib/floorLayout';
+import { layoutChanges, mergeServerTables, PLAN_TILE_MIN, planMinHeight, settleSaved } from '../src/lib/floorLayout';
 import { kpiCellSpan, kpiGridCols } from '../src/lib/kpiGrid';
 import { applyNumpadKey, groupTyped, numpadKeyOf, typeOverPrefill } from '../src/lib/numpad';
 import { lossParts, previousShort } from '../src/lib/reportLabels';
@@ -482,5 +482,43 @@ describe('Button wrap: uzun etiket alt satıra iner, düğme uzar', () => {
     }
     expect(src).toMatch(/const WRAP = 'whitespace-normal/);
     expect(src).toContain('opts.wrap ? cn(wrapSizes[size], WRAP) : sizes[size]');
+  });
+});
+
+/**
+ * Masalar planı her ekranda düğme kalır (23 Kas 2026, sahip: "exe'deki butonlar her ekrana tam uyumlu değil"): alçak
+ * ekranda plan en küçük boyunun altına inmez (yaprak kayar), kart içeriği boya göre sadeleşir
+ */
+describe('masa planının en küçük boyu', () => {
+  const tile = (t: { w: number; h: number }, planH: number) => ({ w: (planH * 1.6 * t.w) / 100, h: (planH * t.h) / 100 });
+
+  it('örnek salonda (22 × 28 masalar, 71 × 18 bar) en alçak masa 56 px, en dar masa 64 px altına inmez', () => {
+    const salon = [...Array.from({ length: 8 }, () => ({ w: 22, h: 28 })), { w: 71, h: 18 }];
+    const h = planMinHeight(salon);
+    expect(h).toBe(311);
+    for (const t of salon) {
+      expect(tile(t, h).w).toBeGreaterThanOrEqual(PLAN_TILE_MIN.w);
+      expect(tile(t, h).h).toBeGreaterThanOrEqual(PLAN_TILE_MIN.h - 0.5);
+    }
+  });
+
+  it('seyrek planda alt sınır (280), çok küçük çizilmiş masada üst sınır (640); masasız bölümde sıfır', () => {
+    expect(planMinHeight([{ w: 60, h: 45 }])).toBe(280);
+    expect(planMinHeight([{ w: 4, h: 4 }])).toBe(640);
+    expect(planMinHeight([])).toBe(0);
+    // Dar masa eni belirler: 8 × 30 masa 64 px ene 500 px'lik planda varır
+    expect(planMinHeight([{ w: 8, h: 30 }])).toBe(500);
+  });
+
+  it('kart planda adlı kapta boya göre sadeleşir; varyantlar index.css’te büyükten küçüğe', () => {
+    const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+    const heights = ['low', 'short', 'mini', 'flat'].map((n) => Number(new RegExp(`@custom-variant tile-${n} \\{\\s*@container tile \\(max-height: ([\\d.]+)rem\\)`).exec(css)?.[1]));
+    expect(heights.every((h) => h > 0)).toBe(true);
+    expect([...heights].sort((a, b) => b - a)).toEqual(heights);
+    const page = readFileSync(new URL('../src/pages/FloorPage.tsx', import.meta.url), 'utf8');
+    expect(page).toContain("plan ? '[container:tile/size]' : '@container'");
+    // Plan en küçük boyunun altına inmez: kabın tabanı ve planın en az eni
+    expect(page).toContain('md:min-h-[var(--plan-min)]');
+    expect(page).toContain('max(160cqh,var(--plan-min-w))');
   });
 });

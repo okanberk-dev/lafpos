@@ -74,6 +74,16 @@ function ProductMark({ name, color }: { name: string; color: string }) {
 }
 
 /** Boş hücre: tire değil, kitin soluk uzun çizgisi */
+/** Ürünün kaynağı ve öteki adları (tek satır): dar sütunda kısalır, tam hali ipucunda */
+function ProductSource({ p }: { p: ProductDTO }) {
+  const text = [p.extSource ? 'Siteden' : 'Yerel', p.shortName && `kısa: ${p.shortName}`, p.posName && `lafmaliyet: ${p.posName}`].filter(Boolean).join(' · ');
+  return (
+    <span className="block truncate text-xs text-[var(--admin-text-mute)]" title={text}>
+      {text}
+    </span>
+  );
+}
+
 const EMPTY = <span className="text-[var(--admin-text-mute)]">—</span>;
 
 /**
@@ -197,13 +207,13 @@ export default function MenuAdmin() {
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-medium text-[var(--admin-text)]">
               {/* Gizli ürün soluk değil (metin AA altına, ⋯ devre dışı görünürdü): ikon ve sakin ad; durum rozeti de söyler */}
-              <span className={cn('truncate', p.hidden && 'text-[var(--admin-text-soft)]')}>{p.name}</span>
+              <span className={cn('truncate', p.hidden && 'text-[var(--admin-text-soft)]')} title={p.name}>
+                {p.name}
+              </span>
               {p.hidden && <EyeOff role="img" aria-label="POS’ta gizli" className="size-3.5 shrink-0 text-[var(--admin-text-mute)]" />}
               {p.favorite && <Star aria-label="Sık kullanılan" className="size-3.5 shrink-0 fill-[var(--admin-warning)] text-[var(--admin-warning)]" />}
             </span>
-            <span className="block truncate text-xs text-[var(--admin-text-mute)]">
-              {[p.extSource ? 'Siteden' : 'Yerel', p.shortName && `kısa: ${p.shortName}`, p.posName && `lafmaliyet: ${p.posName}`].filter(Boolean).join(' · ')}
-            </span>
+            <ProductSource p={p} />
           </span>
         </span>
       ),

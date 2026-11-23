@@ -430,7 +430,8 @@ export default function FloorAdmin() {
               // Karo kitin karo köşesinde (12); seçili masa açık nane zeminde yeşil kenarlı (yönetimin seçim dili), ötekiler
               // beyaz ve hafif gölgeyle noktalı zeminden kalkar. Geçiş yalnız renkte: sürüklerken yer anında izler
               className={cn(
-                'group absolute flex cursor-grab flex-col items-center justify-center gap-0.5 border px-1 text-center text-sm font-semibold leading-tight tracking-[-0.01em] text-[var(--admin-text)] transition-[border-color,background-color,box-shadow] duration-150 active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]',
+                // Adlı kap (tile): alçak karoda kişi sayısı çekilir, ad kalır (index.css tile-flat; küçük telefonda plan küçülür)
+                'group absolute flex cursor-grab flex-col items-center justify-center gap-0.5 border px-1 text-center [container:tile/size] text-sm font-semibold leading-tight tracking-[-0.01em] text-[var(--admin-text)] transition-[border-color,background-color,box-shadow] duration-150 active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]',
                 t.shape === 'round' ? 'rounded-full' : 'rounded-[var(--r-tile)]',
                 selected === t.id
                   ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] ring-2 ring-[var(--admin-primary)]/30'
@@ -439,7 +440,7 @@ export default function FloorAdmin() {
             >
               {t.name}
               {/* Oda kasadaki masa planı gibi mikrofon ve "Saatlik"le ayrılır (mor zemin değil: mor online siparişin rengi) */}
-              <span className="inline-flex items-center gap-1 text-xs font-normal tabular-nums tracking-normal text-[var(--admin-text-mute)]">
+              <span className="inline-flex items-center gap-1 text-xs font-normal tabular-nums tracking-normal text-[var(--admin-text-mute)] tile-flat:hidden">
                 {t.kind === 'oda' ? (
                   <>
                     <Mic2 aria-hidden="true" className="size-3" />

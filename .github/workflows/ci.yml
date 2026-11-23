@@ -1,5 +1,5 @@
 # LafPOS sürekli entegrasyon: tip denetimi, birim testleri, üretim derlemesi ve gerçek tarayıcıda uçtan uca
-# tarama (runner'daki Google Chrome ile; telefon, tablet, bilgisayar, koyu tema ve akışlar).
+# tarama (runner'daki Google Chrome ile; telefon, tablet, bilgisayar, küçük kasa bilgisayarı, koyu tema ve akışlar).
 name: CI
 
 on:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   denetim:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
