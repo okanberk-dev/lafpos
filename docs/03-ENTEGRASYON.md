@@ -723,8 +723,9 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir. Ödenmez kapanan adisyonun kalemleri
   (personel yemeği, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
   (ör. `"Ödenmez: Personel yemeği"`); ödenmezin LafPOS'ta bağlandığı kayıtlı kişinin (personel ya da müşteri)
-  adı ve kimliği pakete girmez, yalnız türü (`personKind`, aşağıda). Zayi yazılan kalem (döküldü, yanlış hazırlandı, bozuk; ödeme ekranındaki
-  "Zayi" ya da kalem sayfasındaki "Zayi yaz") de aynı listededir, `reason` "Zayi: " ile başlar (ör. `"Zayi: Döküldü"`);
+  adı ve kimliği pakete girmez, yalnız türü (`personKind`, aşağıda). Zayi yazılan kalem (döküldü, yanlış
+  hazırlandı, bozuk; ödeme ekranındaki "Zayi" ya da kalem sayfasındaki "Zayi yaz") de aynı listededir, `reason`
+  "Zayi: " ile başlar (ör. `"Zayi: Döküldü"`);
   lafmaliyet bunları `waste_entries`'e `kind = 'zayi'` ile alabilir. Ön ekler `shared/comp.ts` `compReasonText`.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
@@ -794,8 +795,9 @@ kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondal
 - `z.vat[]`: `{ rate, base, vat }`, günün KDV dökümü (kapanmış kasa adisyonları, servis dahil; adisyon başına
   yuvarlanmış, oran başına toplam). lafmaliyet yeniden hesaplamaz; `Σ (base + vat) = zTotal`.
 - `z.openedAt`, `z.closedAt`: günün açılış ve son kapanış anı (ISO). `z.okcZNo`: yazarkasanın mali Z'si, günün en son
-  tamamlanan cihaz fişinden (metin; yoksa `null`). LafPOS'un `zNo`'sundan ayrıdır; Pavo satış sonucunda Z yok, o
-  zaman `null`.
+  tamamlanan cihaz fişinden (metin; yoksa `null`). LafPOS'un `zNo`'sundan ayrıdır. Cihaz Z numarasını sayı olarak
+  verir (baştaki sıfır cihazda da yok). Pavo satış sonucunda Z numarası vermez: Marina'nın Pavo'lu gününde alan
+  bugün `null`dır (Z numarası yalnız Z numarası dönen cihazda, ör. Token, dolar).
 - `lines[].gross`: satırın liste değeri, indirimden önce (mutlu saat birim fiyata işlenmiştir, indirim sayılmaz);
   servis satırında servis ücreti. `Σ (gross − revenue) = z.discounts`. `lines[].isAddon`: birleşen satırda içeceğin
   seçeneğinden ayrılan ek parçası var (EXTRA SHOT, SYRUP, ALTERNATIF SÜT); satır anahtarı değişmez.
