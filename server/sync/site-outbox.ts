@@ -29,6 +29,8 @@ export const TABLES_PUSH_STATE = 'laffogato.tablesPush';
 /** Yenilenen (emekli) masa kodları: siteye `active: false` ile gider ki eski kart sitede de kapansın */
 export const RETIRED_CODES_STATE = 'laffogato.retiredTableCodes';
 const RETIRED_MAX = 200;
+/** Sitenin bir listede aldığı en çok masa (laffogato `PANEL_TABLES_MAX`): aşan liste 400 alır, hiçbir kod gitmez */
+export const SITE_TABLES_MAX = 200;
 /** Site ucu henüz yoksa (404) liste bu aralıkla yeniden denenir; kod üretimi ve "yeniden gönder" hemen dener */
 const UNSUPPORTED_RETRY_MS = 6 * 3600_000;
 
@@ -60,8 +62,11 @@ export function enqueueSiteTables(t: Tx | DB): boolean {
     .all()
     .map((x) => ({ code: x.qrCode!, name: x.name, active: x.active }));
   const current = new Set(live.map((x) => x.code));
-  // Yenilenen kodlar pasif olarak gider: sitede eski kart da kapanır
-  const retired = (getSyncState<string[]>(RETIRED_CODES_STATE) ?? []).filter((c) => !current.has(c)).map((code) => ({ code, name: 'Eski kart', active: false }));
+  // Yenilenen kodlar pasif olarak gider: sitede eski kart da kapanır. Liste sitenin sınırını aşmaz: canlı masalar önce,
+  // emekli kodlardan en yeniler sığdığı kadar (eskileri sitede zaten kapandı; aşan liste bütünüyle reddedilirdi)
+  const room = Math.max(0, SITE_TABLES_MAX - live.length);
+  const old = (getSyncState<string[]>(RETIRED_CODES_STATE) ?? []).filter((c) => !current.has(c));
+  const retired = (room > 0 ? old.slice(-room) : []).map((code) => ({ code, name: 'Eski kart', active: false }));
   const tables = [...live, ...retired];
   const now = Date.now();
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, TABLES_KEY), isNull(schema.outbox.sentAt))).run();
@@ -175,7 +180,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       continue;
     }
     try {
-      const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { ...payload, branch: siteBranch() });
+      const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { ...payload, branch: siteBranch() });
       if (status === 200) {
         db.update(schema.outbox).set({ sentAt: Date.now(), lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
         sent++;
@@ -188,7 +193,14 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       }
       if (PERMANENT.has(status)) {
         db.update(schema.outbox)
-          .set({ attempts: row.attempts + 1, lastError: `Site Satışta bilgisini reddetti (HTTP ${status})`, nextAttemptAt: PARKED })
+          .set({
+            attempts: row.attempts + 1,
+            lastError:
+              status === 409 && (json as { error?: unknown } | null)?.error === 'site_closed'
+                ? "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz (sonraki menü eşitlemesi kasada da kapatır). Sitenin yönetim panelinde menüye geri koyun"
+                : `Site Satışta bilgisini reddetti (HTTP ${status})`,
+            nextAttemptAt: PARKED,
+          })
           .where(eq(schema.outbox.id, row.id))
           .run();
         failed++;

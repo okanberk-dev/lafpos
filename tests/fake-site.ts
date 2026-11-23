@@ -119,6 +119,11 @@ export interface FakeSite {
   panelActive: Map<string, boolean>;
   /** İmzalı panel menüsünde fiyat: kimlik → fiyat (yoksa fikstürdeki) */
   panelPrices: Map<string, { priceMinor: number; priceMinorL: number }>;
+  /**
+   * Şubeli sitenin `onMenu`'su: kimlik → site kalemi menüden kaldırdı mı (false). Boşsa alan gönderilmez (şube öncesi
+   * site). Menüden kalkmış kalemi açma isteği 409 `site_closed` alır (laffogato src/app/api/panel/menu/route.ts)
+   */
+  panelOnMenu: Map<string, boolean>;
   /** Sipariş listesinin `closed` alanı (akıştan çıkan siparişin sonucu); null: alan gönderilmez (bugünkü site) */
   closedOrders: { id: string; outcome: string }[] | null;
   /**
@@ -182,6 +187,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
     panelPrices: new Map(),
+    panelOnMenu: new Map(),
     closedOrders: null,
     answerBranch: undefined,
     conflictError: 'stale',
@@ -310,13 +316,24 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       if (site.panelMenuGate) await site.panelMenuGate;
       const code = site.panelMenuStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { ...panelMenu, ...branchField(), version: site.panelMenuVersion, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive, ...(site.panelPrices.get(i.id) ?? {}) })) });
+      return send(200, {
+        ...panelMenu,
+        ...branchField(),
+        version: site.panelMenuVersion,
+        items: panelMenu.items.map((i) => ({
+          ...i,
+          isActive: snapshot.get(i.id) ?? i.isActive,
+          ...(site.panelOnMenu.size ? { onMenu: site.panelOnMenu.get(i.id) ?? true } : {}),
+          ...(site.panelPrices.get(i.id) ?? {}),
+        })),
+      });
     }
     if (call === 'POST /api/panel/menu') {
       const change = JSON.parse(raw) as FakeSite['menuPosts'][number];
       site.menuPosts.push(change);
       const code = site.menuPostStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: code === 404 ? 'not_found' : 'unavailable' });
+      if (change.isActive === true && site.panelOnMenu.get(change.id) === false) return send(409, { error: 'site_closed' });
       if (change.isActive !== undefined) site.panelActive.set(change.id, change.isActive);
       const item = panelMenu.items.find((i) => i.id === change.id);
       return send(200, { item: { ...item, isActive: site.panelActive.get(change.id) } });

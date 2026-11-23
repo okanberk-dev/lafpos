@@ -82,8 +82,12 @@ söyler (`siteBranch()` = Yönetim › Ayarlar › Şube kimliği `branchId`, va
   ürünün (sitede Tükendi, ya da yeniden açıldı ama CDN henüz eski) fiyatı da panelden yazılır; önizleme bunu "fiyat" ve
   "boy" diye gösterir. Panel alınamazsa herkese açık menünün fiyatı.
 - **CDN bayatlığı:** panelde satışta olan bağlı ürün herkese açık listede yoksa liste CDN'de eskidir (`cdnStale`):
-  eşitleme ETag'i yazmaz ve 2 dakika sonra (s-maxage + swr) **bir kez** ETag'siz yeniden eşitler, ad, KDV ve görsel de
-  taze listeden gelsin. Yine bayatsa 15 dakikalık yoklama bekler (döngü yok).
+  2 dakika sonra (s-maxage + swr) **bir kez** ETag'siz yeniden eşitler, ad, KDV ve görsel de taze listeden gelsin. Yine
+  bayatsa 15 dakikalık yoklama bekler (döngü yok). ETag yine yazılır: CDN yenilenince ETag değişir, yoklama taze listeyi
+  alır. Herkese açık liste yalnız sitenin ana şubesinin (Tuzla) Satışta'sını gösterir (laffogato `src/lib/mobile/menu.ts`):
+  Tuzla'da tükenen, Marina'da satılan ürün listede yoktur ve "bayat" görünür; ETag yazılmasaydı her yoklama tam liste ve
+  imzalı panel okuması isterdi. Böyle bir ürünün adı, KDV'si ve görseli Tuzla'da satışa dönene dek yenilenmez; Tuzla'da
+  tükenmişken sitede açılan yeni ürün Marina'da o zamana dek oluşmaz (sitenin şubeli herkese açık menüsü yok).
 - **Sessiz bayatlama uyarısı** (`menuStaleError`): gün açıkken, bağlantı ve otomatik eşitleme açıkken menü 40 dakikadır
   (iki yoklama ve pay; gün açılışından önce sayılmaz) başarıyla kontrol edilmediyse ve kayıtlı hata yoksa
   `GET /api/sync/status` bunu menünün hatası olarak verir: Entegrasyon "Hata" der, yönetim çubuğu sayar. Yoklama hiç
@@ -222,7 +226,9 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   `src/lib/admin/cafe-tables-core.ts`), QR içeriği sitenin masa adresi `https://laffogato.net/masa/<kod>` (apex'e
   sabit; basılı kart adres değişse de çalışır). A4 masa kartları aynı ekrandan yazdırılır; "Kodu yenile" yeni kod
   üretir, eski kod siteye `active: false` ile gider (sitede de kapanır; site ucu gelene dek eski kart menüyü açmaya
-  devam eder, sipariş kodla değil etiketle eşlenir). Sipariş eşlemesi önce `tableCode` (yalnız etkin masa; aşağıda),
+  devam eder, sipariş kodla değil etiketle eşlenir). Liste sitenin sınırını (200 masa, `PANEL_TABLES_MAX`) aşmaz:
+  canlı masalar tam, emekli kodlardan en yenileri sığdığı kadar (eskiler sitede zaten kapandı; aşan liste 400 alır ve
+  hiçbir kod gitmezdi). Sipariş eşlemesi önce `tableCode` (yalnız etkin masa; aşağıda),
   sonra yukarıdaki etiket kuralı.
   Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato#268 (28 Ekim 2026) ile
   sitede**:
@@ -299,9 +305,14 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   (siparişlerin kuralı).
 
 **Tükendi kilidi** (`products.soldOutBy`): LafPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos`,
-sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
-sitenin kapattığı kasada "Sitede satışta değil" diye görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü
-yetkisi olan (`menu.yonet`) hepsini açar: açış önce siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer.
+sitenin kapattığı (senkron) `site` diye işaretlenir. Şubeli site panel menüsünde `onMenu` gönderir: kilit yalnız
+sitenin menüden kaldırdığı kalemde (`onMenu: false`); menüde olup yalnız bu şubede Tükendi olan kalem (kasa ya da köşkün
+paneli kapattı) `lafpos` sayılır, site onu LafPOS'tan açtırır. `onMenu` göndermeyen eski sitede sitenin kapattığı her
+kalem kilitlidir. Kasiyer (`urun.tukendi`) yalnız `lafpos`'u açar; kilitli olan kasada "Sitede satışta değil" diye
+görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü yetkisi olan (`menu.yonet`) açmayı dener: açış önce
+siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer. Site menüden kaldırılmış kalemi LafPOS'a açtırmaz (409
+`site_closed`): kasa "Site bu ürünü menüden kaldırmış; sitenin yönetim panelinde menüye geri koyun" der (409), yerelde
+değişmez; internetsizken kuyruğa giren açış aynı metinle Entegrasyon'da kalır, sonraki eşitleme kasada da kapatır.
 
 **İnternet yokken Tükendi** (Tükenen ürünler penceresi, Yönetim › Ürünler; `POST /api/sync/products/:id/availability`):
 kasada elle Tükendi / Satışa aç internetsiz de çalışır. Siteye ulaşılamazsa (ağ hatası, 8 sn'lik zaman aşımı; ya da
