@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Landmark, Link2, Pencil, PlugZap, Radar, Save, ShieldCheck, Webhook, XCircle } from 'lucide-react';
+import { CheckCircle2, Landmark, Link2, Pencil, PlugZap, Printer, Radar, Save, ShieldCheck, Webhook, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { tl } from '@shared/money';
@@ -10,7 +10,10 @@ import { Field, Input, Label, Toggle } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { Badge, Card, CARD, CODE, DefRow, PageHeader, Segmented, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
+import { printBankEodSlip } from '@/lib/after-payment';
 import { errorMessage, get, post, put } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import type { BankEodSlip } from '@/lib/print';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { REMOTE } from '@/lib/remote';
@@ -319,9 +322,25 @@ const EOD_BADGE: Record<PavoEod['status'], { tone: 'success' | 'danger' | 'warni
  */
 function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus; onAuto: (v: boolean) => void; savingAuto: boolean; onFis: (v: boolean) => void; savingFis: boolean }) {
   const qc = useQueryClient();
-  const [running, setRunning] = useState<'eod' | 'verify' | null>(null);
+  const [running, setRunning] = useState<'eod' | 'verify' | 'reprint' | null>(null);
+  const boot = useBoot();
+  const canReprint = useAuth((a) => !!a.me?.permissions.includes('kasa.gun'));
   const eod = s.pavo.eod;
   const ready = s.pavo.configured && s.pavo.paired;
+
+  // Kayıt kâğıdı ilk soran ekrana verildiği anda "basıldı" sayılır: yazıcı kapalıysa ya da kâğıt bittiyse buradan
+  const reprint = async () => {
+    if (running) return;
+    setRunning('reprint');
+    try {
+      const { slip } = await post<{ slip: BankEodSlip }>('/okc/eod/slip', { again: true });
+      await printBankEodSlip(boot, slip);
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setRunning(null);
+    }
+  };
 
   const run = async (what: 'eod' | 'verify') => {
     if (running) return;
@@ -454,6 +473,11 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
         <Button icon={<ShieldCheck className="size-4" />} loading={running === 'verify'} disabled={!ready || !!running || !!s.pavo.busy} onClick={() => void run('verify')}>
           Doğrula
         </Button>
+        {canReprint && eod?.status === 'ok' && eod.batchNo && (
+          <Button icon={<Printer className="size-4" />} loading={running === 'reprint'} disabled={!!running} onClick={() => void reprint()}>
+            Kâğıdı yeniden bas
+          </Button>
+        )}
       </div>
       {running === 'eod' ? (
         <p className="text-xs text-muted">Cihaz bankalara bağlanıyor; birkaç dakika sürebilir</p>

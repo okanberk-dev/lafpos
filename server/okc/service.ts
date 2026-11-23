@@ -1474,8 +1474,28 @@ export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | nul
   if (!rec || rec.status !== 'ok' || !rec.batchNo || now - rec.at > EOD_SLIP_MAX_AGE_MS) return null;
   if (getSyncState<string>(EOD_SLIP) === rec.batchNo) return null;
   setSyncState(EOD_SLIP, rec.batchNo);
+  return slipOf(user, rec);
+}
+
+/** Yeniden basılabilecek en eski gün sonu (bir hafta: kayıt kâğıdı kaybolduysa ertesi günlerde de basılır) */
+const EOD_REPRINT_MAX_AGE_MS = 7 * 86400_000;
+
+/**
+ * Son başarılı banka gün sonunun kâğıdını yeniden verir (Yönetim › Yazarkasa POS › "Kâğıdı yeniden bas"): kâğıt ilk
+ * soran ekrana verildiği anda "basıldı" sayılır, yazıcı o an kapalıysa ya da kâğıt bittiyse kayıt kâğıdı kaybolurdu.
+ * Ayardan bağımsız (elle istenen kâğıt), batch'i yeniden "basılmadı" yapmaz. Z, takeEodSlip'teki kuralla (kör kasada yok)
+ */
+export function reprintEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip {
+  if (getSettings().okcProvider !== 'pavo') throw conflict('Gün sonu kâğıdı yalnız Pavo bağlantısında', 'okc_no_eod');
+  const rec = getSyncState<PavoEodRecord>(EOD_LAST);
+  if (!rec || rec.status !== 'ok' || !rec.batchNo) throw conflict('Basılacak başarılı bir banka gün sonu yok', 'okc_no_slip');
+  if (now - rec.at > EOD_REPRINT_MAX_AGE_MS) throw conflict('Son banka gün sonu bir haftadan eski; kâğıdı cihazdan basın (Yönetim › Yazarkasa POS › Doğrula)', 'okc_no_slip');
+  return slipOf(user, rec);
+}
+
+function slipOf(user: AuthUser, rec: PavoEodRecord): PavoEodSlip {
   return {
-    batchNo: rec.batchNo,
+    batchNo: rec.batchNo!,
     deviceDateTime: rec.deviceDateTime,
     grandTotalKurus: rec.grandTotalKurus,
     acquirers: rec.acquirers,

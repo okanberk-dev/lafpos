@@ -432,6 +432,10 @@ hiç bağlı olmasa da gün kapalı kalır.
   kart kıyasını basar. Kıyas kayıt kâğıdı olduğundan kör kasada da basılır; Z kasa uçlarının kuralıyla gider
   (`server/lib/kor-kasa.ts`): kasa rakamlarını görmeyene hiç (`z: null`, kâğıt yalnız banka kısmıyla), maliyet yetkisi
   olmayana personel tutarları gizli.
+  Kâğıt ilk soran ekrana verildiği anda "basıldı" sayılır: yazıcı o an kapalıysa ya da kâğıt bittiyse Yönetim ›
+  Yazarkasa POS › Gün sonu (banka) › **Kâğıdı yeniden bas** (`POST /api/okc/eod/slip` `{ again: true }`, `kasa.gun`)
+  son başarılı gün sonunun kâğıdını yeniden verir: ayardan bağımsız, bir haftaya kadar, Z aynı kuralla; batch'i
+  "basılmadı" yapmaz (kasa ekranları ikinci kez basmaz).
 - **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
   okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
   sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). "Özet vermedi" yalnız uç

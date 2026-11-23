@@ -14,6 +14,7 @@ import {
   receiptsForOrder,
   refreshReceipt,
   runDeviceEod,
+  reprintEodSlip,
   takeEodSlip,
   sendOrderToDevice,
   setPavoDevice,
@@ -110,7 +111,13 @@ okcRoutes.post('/eod', async (c) => {
  * Cihazda alınan son banka gün sonunun kâğıdı (fiş yazıcısı): batch başına bir kez, yalnız ilk soran kasa ekranına
  * verilir; basılacak bir şey yoksa `slip: null`. Kapanan günün Z'si kasa uçlarının kuralıyla (kör kasada `z: null`)
  */
-okcRoutes.post('/eod/slip', (c) => {
+okcRoutes.post('/eod/slip', async (c) => {
+  const input = await body(c, z.object({ again: z.boolean().optional() }));
+  // Yeniden basma elle istenir (Yönetim › Yazarkasa POS): gün işlemleri yetkisiyle, ayardan ve "basıldı"dan bağımsız
+  if (input.again) {
+    requirePermission(c.get('user'), 'kasa.gun');
+    return c.json({ slip: reprintEodSlip(c.get('user')) });
+  }
   requirePermission(c.get('user'), 'odeme.al');
   return c.json({ slip: takeEodSlip(c.get('user')) });
 });
