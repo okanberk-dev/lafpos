@@ -442,7 +442,7 @@ export function eodAfter(device: Pick<PavoEodSummary, 'batchNo' | 'deviceDateTim
  * Bekleme süreleri (testler kısaltır). `sendWaitMs`: gönderimin ilk saniyeleri beklenir, cihaz satışı hemen
  * reddederse (KDV grubu, eşleştirme) kasiyer görür · `askEveryMs`: cihaz tek istek işler, sonuç sorgusu bekleyen
  * sepet başına en sık bu aralıkla · `failConfirmMs`: sonuç sorgusu "başarısız" derse satış ancak bu kadar sonraki bir
- * sorguda da aynısı gelince cihazdan düşmüş sayılır (tek okuma isteğin reddi olabilir, satış hakkında bir şey
+ * sorguda da aynı kod gelince cihazdan düşmüş sayılır (tek okuma isteğin reddi olabilir, satış hakkında bir şey
  * söylemez; ask) · `eodMs`: banka gün sonunun yanıtı en çok bu kadar beklenir (bankalara bağlanır, dakikalar
  * sürebilir) · `eodCopyMs`: son gün sonunun bilgisi (doğrulama ve gün sonundan hemen önceki taban)
  */
@@ -458,10 +458,11 @@ export function busyMessage(c: PavoClient, then: string): string | null {
 const outcomes = new Map<string, PavoResponse | PavoError>();
 const lastAsked = new Map<string, number>();
 /**
- * Sonuç sorgusunun "başarısız" okumasının art arda ilk görüldüğü an (sepet başına). Satış ancak bu okuma en az
- * `failConfirmMs` sonraki bir sorguda da gelirse cihazdan düşmüş sayılır; arada gelen başka her okuma sıfırlar
+ * Sonuç sorgusunun "başarısız" okumasının art arda ilk görüldüğü an ve kodu (sepet başına). Satış ancak aynı kodlu
+ * okuma en az `failConfirmMs` sonraki bir sorguda da gelirse cihazdan düşmüş sayılır; arada gelen başka her okuma
+ * (başka kodlu başarısız okuma da: geçici ret ardından "satış yok" iki ayrı tek okumadır) sayacı baştan başlatır
  */
-const failedSince = new Map<string, number>();
+const failedSince = new Map<string, { since: number; code: string | null }>();
 
 function cancelledResult(res: PavoResponse | null): FiscalResult {
   return { status: 'cancelled', docKind: null, zNo: null, receiptNo: null, docId: null, payments: [], raw: res };
@@ -484,12 +485,15 @@ async function ask(c: PavoClient, receiptId: string, orderNo: string): Promise<P
   // bitmiştir: sepet vazgeçildi sayılır, ödeme penceresi yeniden göndermeye hazır olur. Sahada (22 Kas 2026) kart reddinden
   // sonra sepet "Cihazda ödeme bekleniyor"da kalıyor, kasiyer elle iptal edip yeniden gönderiyordu. Belge kesilmişse yanıt
   // "ödendi" okunur (yukarıda); ağ hatası buraya gelmez (istek fırlatır, sepet bekler). Cihazın "satış yok" kodu
-  // bilinmiyor: tek "başarısız" okuma isteğin geçici reddi de olabilir (cihaz meşgul), satış ancak okuma `failConfirmMs`
-  // sonra da aynıysa düşmüş sayılır (inceleme, 23 Kas 2026). Sonuçta cihazın ham yanıtı saklanır: kod sahada öğrenilir
+  // bilinmiyor: tek "başarısız" okuma isteğin geçici reddi de olabilir (cihaz meşgul), satış ancak aynı kodlu okuma
+  // `failConfirmMs` sonra da gelirse düşmüş sayılır (inceleme, 23 Kas 2026). Sonuçta cihazın ham yanıtı saklanır: kod
+  // sahada öğrenilir
   if (reading.kind === 'failed' && c.busyWith !== orderNo) {
     const now = Date.now();
-    const since = failedSince.get(receiptId) ?? now;
-    failedSince.set(receiptId, since);
+    const prev = failedSince.get(receiptId);
+    // Kod değiştiyse (ör. önce cihaz meşgul, sonra "satış yok") okumalar aynı değil: sayaç yeni koddan başlar
+    const since = prev && prev.code === reading.code ? prev.since : now;
+    failedSince.set(receiptId, { since, code: reading.code });
     if (now - since >= pavoTiming.failConfirmMs) return { kind: 'result', result: cancelledResult(res) };
     return { kind: 'pending', locked: false, lockedBy: null };
   }
@@ -516,7 +520,14 @@ async function pollOnce(r: PendingReceipt): Promise<PollOutcome> {
           outcomes.set(r.id, out);
           return { kind: 'pending', locked: false, lockedBy: null };
         }
-        const again = await ask(c, r.id, orderNo).catch(() => null);
+        // Bu sorguyu cihaz eşleştirme bozuk diye reddederse (73, 74) belge kesilip kesilmediği bilinmez: sepet iptal
+        // sayılmaz, sorgu eşleştirme mesajıyla hata verir ("Son hata"). Eşleşince sonuç sorgusu (ask) karar verir: kart
+        // çekilmişse ödendi, değilse "satış yok" kesinleşince vazgeçildi; iptal sayılsaydı yeniden gönderim kartı
+        // ikinci kez çekerdi (inceleme, 23 Kas 2026)
+        const again = await ask(c, r.id, orderNo).catch((e: unknown) => {
+          if (e instanceof PavoError && pairingLost(e.code)) throw e;
+          return null;
+        });
         return again?.kind === 'result' ? again : { kind: 'result', result: cancelledResult(out) };
       }
       // Hatasız ama satış kaydı yok: sonuç sorulur

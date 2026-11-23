@@ -32,8 +32,9 @@ describe('güncelleyicinin soruları', () => {
     for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
       const r = await fromAddr(addr, '/kasa/guncelleme-durumu');
       expect(r.status).toBe(200);
-      // Yalnız açık gün, Merkez'in hedefi (Merkez kapalı: hedef yok) ve satış/ödeme sürüyor mu; başka bir şey dönmez
-      expect(await r.json()).toEqual({ dayOpen: expect.any(Boolean), merkez: { enabled: false, hedef: null }, mesgul: expect.any(Boolean) });
+      // Yalnız açık gün, Merkez'in hedefi (Merkez kapalı: hedef yok), satış/ödeme sürüyor mu ve cihazda banka gün sonu
+      // sürüyor mu; başka bir şey dönmez
+      expect(await r.json()).toEqual({ dayOpen: expect.any(Boolean), merkez: { enabled: false, hedef: null }, mesgul: expect.any(Boolean), eod: false });
     }
     for (const addr of ['192.168.1.20', '100.101.7.9', null]) expect((await fromAddr(addr, '/kasa/guncelleme-durumu')).status).toBe(403);
   });

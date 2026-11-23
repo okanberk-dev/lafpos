@@ -355,6 +355,31 @@ describe('akış (sahte cihaz)', () => {
     expect(row.result).toMatchObject({ status: 'cancelled', raw: { HasError: true, ErrorCode: '3001', Message: 'Satış bulunamadı' } });
   });
 
+  it('"başarısız" okumanın kodu değişirse sayaç baştan başlar: geçici ret (cihaz meşgul) ile sonraki "satış yok" birlikte sepeti kapatmaz', async () => {
+    const o = await newOrder(1);
+    device.nextSaleReply = { HasError: false, Message: 'Ödeme alınamadı', Data: null };
+    const r = await send(o);
+    expect(r.status).toBe(200);
+    device.sales.delete(pavoOrderNo(r.json.receipt.id));
+    const wait = () => new Promise((res) => setTimeout(res, 350));
+    pavoTiming.failConfirmMs = 300;
+    try {
+      // İlk okuma isteğin geçici reddi (9001); süre dolunca gelen başka kodlu okuma ("satış yok") onu kesinleştirmez
+      device.saleResultReply = { HasError: true, HasAbondon: false, ErrorCode: '9001', Message: 'Cihaz meşgul', Data: null };
+      expect((await refresh(r.json.receipt.id)).status).toBe('gonderildi');
+      device.saleResultReply = null;
+      await wait();
+      expect((await refresh(r.json.receipt.id)).status).toBe('gonderildi');
+      // "Satış yok" süre dolunca aynı kodla yeniden gelir: kesinleşir
+      await wait();
+      expect((await refresh(r.json.receipt.id)).status).toBe('iptal');
+    } finally {
+      device.saleResultReply = null;
+      pavoTiming.failConfirmMs = 0;
+    }
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('acik');
+  });
+
   it('sonuç sorgusunu cihaz eşleştirme bozuk diye reddederse (73) sepet iptal sayılmaz: bekler, mesaj eşleştirmeyi söyler; ödeme gelince işlenir', async () => {
     const o = await newOrder(1);
     device.nextSaleReply = { HasError: false, Message: 'Ödeme alınamadı', Data: null };
@@ -383,6 +408,34 @@ describe('akış (sahte cihaz)', () => {
     }
     // Eşleştirme düzelince sonuç gelir: müşterinin ödemesi adisyona işlenir
     device.pay(pavoOrderNo(r.json.receipt.id), [{ type: 1, amount: o.total / 100 }], { invoiceNo: 'LAF2026000000061' });
+    expect((await refresh(r.json.receipt.id)).status).toBe('tamamlandi');
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('kapali');
+  });
+
+  it('satış hatayla biterken belge sorgusunu cihaz eşleştirme bozuk diye reddederse (73) sepet iptal sayılmaz; eşleşince sorgu belgeyi bulur', async () => {
+    const o = await newOrder(1);
+    const r = await send(o);
+    expect(r.status).toBe(200);
+    const orderNo = pavoOrderNo(r.json.receipt.id);
+    device.saleResultReply = { HasError: true, HasAbondon: false, ErrorCode: '73', Message: 'Sequence error', Data: null };
+    try {
+      // Cihaz satışı yazıcı hatasıyla bitirdi (kayıtsız yanıt); belge kesilip kesilmediğini soran tek sorgu 73 alır
+      device.reject(orderNo, '5070', 'Yazıcı hatası');
+      await settle();
+      for (let i = 0; i < 2; i++) {
+        const res = await h.call<{ code: string; error: string }>('kasa', 'POST', `/okc/receipts/${r.json.receipt.id}/refresh`);
+        expect(res.status).toBe(502);
+        expect(res.json.error).toContain('başka bir programla eşleştirilmiş');
+      }
+      const [receipt] = await h.ok<Receipt[]>('kasa', 'GET', `/okc/orders/${o.id}/receipts`);
+      expect(receipt!.status).toBe('gonderildi');
+      // Adisyon kilitli kalır: kart çekilmiş olabilir, yeniden gönderim ikinci kez çekerdi
+      expect((await send(o)).json).toMatchObject({ code: 'okc_pending' });
+    } finally {
+      device.saleResultReply = null;
+    }
+    // Eşleşince sorgu cihazdaki kaydı okur: ödeme alınmış, belge kesilmişse adisyona işlenir
+    device.pay(orderNo, [{ type: 1, amount: o.total / 100 }], { invoiceNo: 'LAF2026000000062' });
     expect((await refresh(r.json.receipt.id)).status).toBe('tamamlandi');
     expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('kapali');
   });
@@ -1015,7 +1068,7 @@ describe('akış (sahte cihaz)', () => {
       const { busyNow, resetActivity } = await import('../server/lib/mesgul');
       const { createApp } = await import('../server/app');
       // Güncelleyicinin sorusu yalnız bu bilgisayardan (guncelle.mjs installDecision)
-      const askUpdater = async () => (await (await createApp().request('/api/kasa/guncelleme-durumu', {}, { incoming: { socket: { remoteAddress: '127.0.0.1' } } })).json()) as { dayOpen: boolean; mesgul: boolean };
+      const askUpdater = async () => (await (await createApp().request('/api/kasa/guncelleme-durumu', {}, { incoming: { socket: { remoteAddress: '127.0.0.1' } } })).json()) as { dayOpen: boolean; mesgul: boolean; eod: boolean };
       await newDay();
       device.eodDelayMs = 400;
       try {
@@ -1024,14 +1077,14 @@ describe('akış (sahte cihaz)', () => {
         // Kapanış isteği bitti (son yazmanın sessizliği de sıfır); cihazın gün sonu arka planda sürüyor
         resetActivity();
         expect(busyNow()).toBe(true);
-        expect(await askUpdater()).toEqual(expect.objectContaining({ dayOpen: false, mesgul: true }));
+        expect(await askUpdater()).toEqual(expect.objectContaining({ dayOpen: false, mesgul: true, eod: true }));
         await waitEod(t0, 'ok');
       } finally {
         device.eodDelayMs = 0;
       }
       resetActivity();
       expect(busyNow()).toBe(false);
-      expect(await askUpdater()).toEqual(expect.objectContaining({ dayOpen: false, mesgul: false }));
+      expect(await askUpdater()).toEqual(expect.objectContaining({ dayOpen: false, mesgul: false, eod: false }));
     });
 
     it('otomatik gün sonunda da cihaz gün sonu alınamazsa patronun telefonuna bildirim gider (kasadan alınan gün sonundaki gibi)', async () => {

@@ -344,17 +344,20 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 - **Sonuç**: cihazın yanıtındaki satış kaydı (`Data` ya da `Data.Sale`): `AddedPayments` (`StatusId` 2 etkin;
   `PaymentTypeId` 1 nakit, 2 kart; `PaymentAmount` TL) ve `FinancialDocuments` (`InvoiceNo` belge no, `Type.Name`
   belge türü). Kasiyer vazgeçerse (`HasAbondon`) sepet kapanır, adisyon açık kalır. Hata dönen satışta belge kesilip
-  kesilmediği bir kez `/GetSaleResult` ile sorulur. Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu) sonuç
-  sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir). 8 saatten eski bekleyen sepet kendiliğinden
+  kesilmediği bir kez `/GetSaleResult` ile sorulur; belge yoksa sepet vazgeçildi sayılır, bu sorguyu cihaz eşleştirme
+  bozuk diye reddederse (73, 74) sepet kapanmaz (aşağıda). Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu)
+  sonuç sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir). 8 saatten eski bekleyen sepet kendiliğinden
   sorgulanmaz (yalnız onlar kaldıysa sorgu döngüsü durur); adisyondaki "Yenile" ile elle sorulur.
   Sorgu "başarısız" derse (hata, satış kaydı yok; kart reddinden sonra satış cihazdan düştü) ve cihaz o satışla meşgul
   değilse sepet vazgeçildi sayılır, adisyon açılır ve yeniden gönderilebilir (#131, sahada kart reddinden sonra sepet
   "Cihazda ödeme bekleniyor"da kalıyordu). Cihazın "satış yok" kodu belgesiz ve tek okuma isteğin geçici reddi de
-  olabilir (cihaz meşgul): sepet ancak aynı okuma en az 15 sn sonraki bir sorguda da gelirse kapanır
-  (`pavoTiming.failConfirmMs`); arada gelen başka her okuma sayacı sıfırlar. Eşleştirme bozuk derse (73, 74) sepet
-  hiç kapanmaz: yanıt satış hakkında değil, müşteri cihazda ödemiş olabilir (yeniden gönderim kartı ikinci kez
-  çekerdi). Sorgu eşleştirme mesajıyla hata verir ("Son hata"da "Yeniden eşleştir"), eşleşince sonuç gelir. Kapanan
-  sepetin sonucunda cihazın ham yanıtı saklanır: gerçek cihazın "satış yok" kodu oradan öğrenilir.
+  olabilir (cihaz meşgul): sepet ancak aynı kodlu okuma en az 15 sn sonraki bir sorguda da gelirse kapanır
+  (`pavoTiming.failConfirmMs`); arada gelen başka her okuma (başka kodlu "başarısız" da) sayacı baştan başlatır.
+  Eşleştirme bozuk derse (73, 74) sepet hiç kapanmaz: yanıt satış hakkında değil, müşteri cihazda ödemiş olabilir
+  (yeniden gönderim kartı ikinci kez çekerdi). Sorgu eşleştirme mesajıyla hata verir ("Son hata"da "Yeniden
+  eşleştir"), eşleşince sonuç gelir (hata dönen satışın belge sorgusunda da: eşleşince sonuç sorgusu belgeyi ya da
+  kesinleşen "satış yok"u okur). Kapanan sepetin sonucunda cihazın ham yanıtı saklanır: gerçek cihazın "satış yok"
+  kodu oradan öğrenilir.
 - **İptal**: satış cihazın ekranındayken LafPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse LafPOS cihaza
   sorar: ödenmişse sonuç işlenir, ödenmemişse cihazda silinecek bir şey yoktur. Cihaza ulaşılamazsa yetkili onayıyla
   LafPOS'ta iptal sayılır (§7, `okc.force_cancel`). LafPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
@@ -363,9 +366,10 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 ### 8.3 Temkin kuralları (para yolu tahminle kurulmaz)
 
 - Satış kaydı tanınmayan **hatasız** yanıt ödendi sayılmaz; sonuç sorulur. Hatasız ama satış kaydı yoksa sepet
-  bekler. Hata dönen ama satış kaydı olmayan sorgu sepeti ancak en az 15 sn arayla iki kez gelirse kapatır (vazgeçildi;
-  §8.2 Sonuç); eşleştirme reddi (73, 74) hiç kapatmaz. Eşleştirme bozukken elle iptal de cihaza ulaşılamamış gibi
-  yalnız yetkili onayıyla yapılır (`okc.force_cancel`): sepetin cihazda ödenip ödenmediği bilinmez.
+  bekler. Hata dönen ama satış kaydı olmayan sorgu sepeti ancak aynı kodla en az 15 sn arayla iki kez gelirse kapatır
+  (vazgeçildi; §8.2 Sonuç); eşleştirme reddi (73, 74) hiç kapatmaz, hata dönen satışın belge sorgusunda da.
+  Eşleştirme bozukken elle iptal de cihaza ulaşılamamış gibi yalnız yetkili onayıyla yapılır (`okc.force_cancel`):
+  sepetin cihazda ödenip ödenmediği bilinmez.
 - Anlamı belgelenmemiş ödeme tipi (1 ve 2 dışı: yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi
   LafPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
   yönetici doğru türle kasadan alır.
@@ -405,8 +409,10 @@ hiç bağlı olmasa da gün kapalı kalır.
   beklenir; süre boyunca cihaz meşgul sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet
   sorgulanmaz (cihaz satışı hatayla bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır,
   gün sonu bitince sorulur), iptali 409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal
-  say" yoluna düşmez). Kasa da meşgul sayılır (`server/lib/mesgul.ts`): güncelleme gün sonu bitmeden kurulmaz,
-  sunucu yeniden başlayıp sonucu belirsiz bırakmaz.
+  say" yoluna düşmez). Kasa da meşgul sayılır (`server/lib/mesgul.ts`; `GET /api/kasa/guncelleme-durumu` ayrıca
+  `eod: true` der): güncelleme gün sonu bitmeden kurulmaz, sunucu yeniden başlayıp sonucu belirsiz bırakmaz. Gün
+  kapalıyken güncelleyicinin beklediği tek meşguliyet budur (`guncelle.mjs` `installDecision`; en çok 3 dk, 5 dk'da bir
+  yeniden sorar): bekleyen sepet gün kapalıyken de kalabildiğinden (site siparişi) kurulumu süresiz tutmaz.
 - **Kâğıt**: cihazın slibi her gün sonunda (yukarıda). Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da
   çıksın" (`okcPavoEodFis`, varsayılan açık) yalnız fiş yazıcısını yönetir: açıkken işyeri nüshası basan kasa ekranı
   `POST /api/okc/eod/slip` (`odeme.al`) ile son başarılı gün sonunun kâğıdını alır (batch başına bir kez, ilk soran
