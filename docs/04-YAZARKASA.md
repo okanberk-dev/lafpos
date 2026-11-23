@@ -389,6 +389,22 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 - Cihazın ham yanıtı sepetin sonucunda (`fiscal_receipts.result.raw`) saklanır; ilk gerçek satıştan sonra alan
   adları buradan doğrulanır.
 
+#### Sahada deneme listesi (gerçek cihazla; simülatör bunları göstermez)
+
+Güncellemeden sonra Marina'da bir kez, gün açıkken ve tezgâhta müşteri yokken:
+
+1. **Kart reddi:** küçük tutarlı bir adisyonu Pavo'ya gönderin, cihazda kartı reddettirin (bakiyesiz ya da yanlış PIN).
+   Adisyonda "Cihazda ödeme bekleniyor" en çok ~20 sn kalmalı, sonra açılmalı ve yeniden gönderilebilmeli. Açılmazsa
+   Yönetim › Yazarkasa POS › Son hata'daki kodu not edin (cihazın "satış yok" kodu belgesiz; `failConfirmMs` 15 sn).
+2. **Vazgeçme:** gönderip cihazda iptal edin: adisyon hemen açılmalı.
+3. **Bağlantı kesintisi:** gönderip cihazın ağ kablosunu ya da Wi-Fi'sını 30 sn kesin, kartla ödeyin, bağlantıyı geri
+   verin: ödeme LafPOS'a bir kez düşmeli (ikinci tahsilat yok), adisyon kapanmalı.
+4. **Gün sonu kâğıdı:** gün sonunda fiş yazıcısını kapalı tutun; açınca Yönetim › Yazarkasa POS › Gün sonu (banka) ›
+   **Kâğıdı yeniden bas** LafPOS Z'sini ve banka kıyasını basmalı.
+
+Biri beklendiği gibi değilse ekranın fotoğrafını ve saati not edin; cihazın kodu Yönetim › Yazarkasa POS › Son hata'da
+ve sepetin sonucunda (ham yanıt saklanır) görünür.
+
 ### 8.4 Kaynaklar ve Pavo'dan istenecekler
 
 Pavo'nun belge sitesi (docs.pavopay.dev) projeye özel ve kapalı. Doğrulanan: REST bağlantı kuralları ve eşleştirme

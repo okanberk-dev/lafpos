@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, WifiOff } from 'lucide-react';
-import { fmtDateTime } from '@shared/time';
+import { fmtDateTime, fmtTime } from '@shared/time';
 import type { BootstrapDTO, NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { NotifyCard } from '@/components/admin/NotifyCard';
@@ -122,6 +122,44 @@ function RemoteControlCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Kasa penceresinin bakım arası (server/lib/kasa-bakim.ts): kasa bekçisi kapatılan kasa penceresini 15 sn içinde yeniden
+ * açar. Bakım için (Windows ayarı, yazıcı kurulumu) 15 dakika açmaz; süre bitince ya da "Bitir"le yine açar
+ */
+function KasaBakim({ until }: { until: number | null }) {
+  const qc = useQueryClient();
+  const active = until != null && until > Date.now();
+  const m = useMutation({
+    mutationFn: (on: boolean) => post<{ kasaBakim: number | null }>('/admin/kasa-bakim', { on }),
+    onSuccess: (r) => {
+      toast.ok(r.kasaBakim ? 'Kasa penceresi 15 dakika yeniden açılmayacak' : 'Bakım arası bitti; kasa penceresi yeniden açılır');
+      void qc.invalidateQueries({ queryKey: ['admin', 'network'] });
+    },
+    onError: (e) => toast.err(errorMessage(e)),
+  });
+  return (
+    <div className="space-y-2 border-t border-[var(--admin-divider)] pt-3">
+      <p className={LABEL}>Bakım</p>
+      <p className={HINT}>
+        {active
+          ? `Bakım arası sürüyor (bitiş ${fmtTime(until!)}): kasa penceresi kapatılabilir, bekçi yeniden açmaz. Süre bitince kendiliğinden açılır`
+          : 'Kasa penceresi kapatılınca 15 saniye içinde yeniden açılır. Bilgisayarda bakım yapacaksanız (Windows ayarı, yazıcı kurulumu) 15 dakika açılmasın'}
+      </p>
+      <div className="flex flex-wrap gap-2 max-sm:[&>*]:grow">
+        {active ? (
+          <Button loading={m.isPending} onClick={() => m.mutate(false)}>
+            Bakımı bitir
+          </Button>
+        ) : (
+          <Button loading={m.isPending} onClick={() => m.mutate(true)}>
+            15 dakika açılmasın
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -304,6 +342,7 @@ export default function NetworkAdmin() {
           <DefRow label="Bu ekranın adresi">
             <span className="break-all">{window.location.origin}</span>
           </DefRow>
+          {n.bekci && can('ayar.yonet') && !REMOTE && <KasaBakim until={n.kasaBakim ?? null} />}
         </Card>
         {/* Uzaktan yönetim anahtarı tam genişlikte; uzaktan görünümde yok (kasayı yalnız kasadaki patron açar ya da kapatır) */}
         {!REMOTE && (

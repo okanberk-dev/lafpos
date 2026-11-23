@@ -92,8 +92,9 @@ function Stop-TemporaryDisplayWatcher {
   } catch { }
 }
 
-# Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni). 3: musteri ekrani sunucu cevap verince acilir
-$BekciSurumu = 3
+# Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni). 3: musteri ekrani sunucu cevap verince acilir;
+# 4: bakim arasinda (Yonetim > Ag > Bu bilgisayar) kasa penceresi yeniden acilmaz
+$BekciSurumu = 4
 $BekciKisayolu = 'LafPOS Kasa Bekcisi.lnk'
 
 function Get-KasaUrl {
@@ -107,6 +108,12 @@ function Test-KasaWindow {
     $_.CommandLine -and $_.CommandLine -match '\\LafPOS\\(chrome|edge)(?![\w-])' -and $_.CommandLine -notmatch '--type='
   } | Select-Object -First 1
   return [bool]$p
+}
+
+# Bakim arasi (Yonetim > Ag ve uzaktan erisim > Bu bilgisayar): sunucu "suruyor" derse bekci kasa penceresini acmaz.
+# Sunucuya ulasilamazsa ya da yanit bozuksa ara yok sayilir (kasa yine acik tutulur)
+function Test-KasaBakim([string]$base) {
+  try { return [bool](Invoke-RestMethod -UseBasicParsing -TimeoutSec 3 -Uri ($base + '/api/kasa/bakim')).active } catch { return $false }
 }
 
 function Test-Server([string]$base) {
@@ -178,7 +185,7 @@ if ($Bekci) {
   while ($true) {
     Start-CustomerDisplay $displayBase
     # Ilk turda kasa penceresine bat'in kendisi acsin diye bakilmaz (en gec 15 sn sonra bekci bakar)
-    if ($tur -gt 0) { Open-KasaWindow $true | Out-Null }
+    if ($tur -gt 0 -and -not (Test-KasaBakim $displayBase)) { Open-KasaWindow $true | Out-Null }
     $tur++
     Start-Sleep -Seconds 15
   }

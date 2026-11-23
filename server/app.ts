@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { kasaBakim } from './lib/kasa-bakim';
 import { relative, resolve } from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
@@ -64,6 +65,15 @@ export function createApp() {
     // `eod`: cihazda banka gün sonu sürüyor (gün kapanınca arka planda, en çok 3 dk); gün kapalıyken güncelleyici
     // yalnız bunu bekler, sunucu yeniden başlayıp gün sonunu belirsiz bırakmasın (inceleme, 23 Kas 2026)
     return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget(), mesgul: busyNow(), eod: pavoEodRunning() });
+  });
+
+  // Kasa bekçisinin sorusu (app\kasa-yazici.ps1): kasa penceresinin bakım arası sürüyor mu (lib/kasa-bakim.ts). Oturumsuz;
+  // yalnız bu bilgisayardan. `active` iken (`until`'e dek) bekçi kapatılan kasa penceresini yeniden açmaz
+  app.get('/api/kasa/bakim', (c) => {
+    if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
+    const b = kasaBakim();
+    // `active` sunucunun saatiyle: bekçi kendi saatini karşılaştırmaz
+    return c.json({ until: b?.until ?? null, active: !!b });
   });
 
   // Kasa kısayolunun yazıcı betiği (app\kasa-yazici.ps1, oturumdaki kullanıcı): bilgisayardaki yazıcıları bildirir, yanıtta

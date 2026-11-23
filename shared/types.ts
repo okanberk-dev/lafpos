@@ -706,6 +706,10 @@ export interface NetworkInfoDTO {
   tailscale: NetAddressDTO[];
   /** LafPOS Uzaktan (Vercel): canlı özetin son gönderimi */
   cloud?: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
+  /** Windows kurulumu: kasa bekçisi kasa penceresini açık tutar */
+  bekci?: boolean;
+  /** Kasa penceresinin bakım arası bu ana dek (bekçi yeniden açmaz); yoksa null */
+  kasaBakim?: number | null;
 }
 
 /** Çağrı ekranı (televizyon ya da tablet): gel-al ve tezgâh siparişleri, numara ve yalnız ad */
