@@ -352,3 +352,43 @@ describe('#71 dönemindeki kasa (rastgele kimlik, tek anahtardaki kayıt, eski n
     expect(list.kurulumlar[0]).toMatchObject({ id: ID, online: true, bekleyen: false, guncelleme: { etiket: 'Gün kapanınca kurulacak' } });
   });
 });
+
+describe('Şimdi güncelle: en güncel sürüm kuruluysa yeniden gönderilmez (sahibin isteği, 23 Kas 2026)', () => {
+  it('kurulu derleme kanalın sonuysa istek ve hedef yazılmaz; eskiyse istenir; gönder de aynı kuralla', async () => {
+    const { merkez, installIdFor, updateAskFor } = await merkezApi();
+    const rel = { version: '0.3.0', build: 2000, date: '', not: null };
+    expect(updateAskFor({ build: 2000 }, rel)).toBe('guncel');
+    expect(updateAskFor({ build: 2001 }, rel)).toBe('guncel');
+    expect(updateAskFor({ build: 1999 }, rel)).toBe('istendi');
+    // Kanal okunamadı ya da kurulu derleme bilinmiyor: karar verilemez, istenir (kasa kendisi denetler)
+    expect(updateAskFor({ build: 2000 }, null)).toBe('istendi');
+    expect(updateAskFor({ build: null }, rel)).toBe('istendi');
+
+    const key = 'g'.repeat(40);
+    const id = installIdFor(key);
+    await register(key);
+    const redis = async (...cmd: (string | number)[]) => redisCmd(String(cmd[0]), String(cmd[1]), cmd.slice(2).map(String));
+    const deps = { redis, verify: () => true, signedShared: () => true, admin: async () => true, demo: false, fetchRelease: async () => rel };
+    const post = async (path: string) => (await merkez(new Request(`${ORIGIN}/api/${path}`, { method: 'POST', body: JSON.stringify({ ids: [id] }) }), new URL(`${ORIGIN}/api/${path}`), path, deps)).json();
+    const saved = () => JSON.parse(store.get(`lafpos:merkez:kurulum:${id}`)!) as { guncelleIstek?: number | null; hedef: number | null; gonderildi: number | null };
+
+    // Kayıtta derleme 1000: eski, istenir
+    expect(await post('merkez/simdi-guncelle')).toMatchObject({ ok: true, istenen: 1, guncel: 0, surum: '0.3.0' });
+    expect(saved()).toMatchObject({ hedef: 2000 });
+
+    // Kasa en güncel derlemeyi kurdu (nabız): ne istek ne hedef yeniden yazılır, yanıt "güncel" der
+    store.set(`lafpos:merkez:durum:${id}`, JSON.stringify({ build: 2000, surum: '0.3.0' }));
+    const before = saved();
+    store.set(`lafpos:merkez:kurulum:${id}`, JSON.stringify({ ...before, guncelleIstek: null, gonderildi: 1 }));
+    expect(await post('merkez/simdi-guncelle')).toMatchObject({ ok: true, istenen: 0, guncel: 1, build: 2000, surum: '0.3.0' });
+    expect(saved()).toMatchObject({ guncelleIstek: null, gonderildi: 1 });
+    expect(await post('merkez/gonder')).toMatchObject({ ok: true, gonderilen: 0, guncel: 1 });
+    expect(saved()).toMatchObject({ gonderildi: 1 });
+
+    // Uzaktan yönetimin "Gün sonu al ve güncelle"si de aynı yoldan: güncel kasaya istek yazılmaz
+    const { requestUpdateNow } = await merkezApi();
+    expect(await requestUpdateNow(redis, id, 5, rel, 'komut-1')).toBe('guncel');
+    expect(saved()).toMatchObject({ guncelleIstek: null });
+    expect(await requestUpdateNow(redis, 'z'.repeat(24), 5, rel)).toBeNull();
+  });
+});

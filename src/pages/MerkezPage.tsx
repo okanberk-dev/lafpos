@@ -50,10 +50,21 @@ const licenseTone = (r: Row): Tone => (r.lisans.state === 'aktif' && r.lisans.so
 const licenseLabel = (r: Row) => (r.lisans.durum === 'bekliyor' && r.lisans.state === 'deneme' ? 'Onay bekliyor' : r.lisans.state === 'aktif' ? (r.lisans.soon ? 'Yakında bitiyor' : 'Aktif') : r.lisans.state === 'deneme' ? 'Deneme' : r.lisans.state === 'uyari' ? 'Uyarı' : 'Satış kapalı');
 const updateTone = (d: string | undefined): Tone => (d === 'geri-dondu' || d === 'hata' ? 'warning' : d === 'guncel' ? 'success' : 'info');
 
+/** Kurulu derleme kanalın son derlemesi (ya da yenisi): güncelleme yeniden gönderilmez (api/_merkez.ts updateAskFor) */
+const isCurrent = (r: Pick<Row, 'build'>, enYeni: Data['enYeni']) => !!enYeni && r.build != null && r.build >= enYeni.build;
+
+/** Gönderimin sonucu: kaç dükkâna gitti, kaçı zaten en güncel sürümdeydi */
+function sentText(r: { istenen: number; guncel?: number; surum?: string | null }): string {
+  const surum = r.surum ? ` (${r.surum})` : '';
+  if (!r.istenen && r.guncel) return `En güncel sürüm zaten kurulu${surum}; güncelleme gönderilmedi`;
+  const sent = `${r.istenen} dükkâna gönderildi; kasada "Şimdi" ya da "Gün sonunda" sorulacak`;
+  return r.guncel ? `${sent}. ${r.guncel} dükkân zaten en güncel sürümde${surum}` : sent;
+}
+
 export const merkezQuery = { queryKey: ['merkez'], queryFn: () => get<Data>('/merkez/kurulumlar'), refetchInterval: 30_000 };
 
 /** Bir dükkânın ayarları: ad, lisans, güncellemenin nasıl gideceği */
-function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
+function EditDialog({ row, enYeni, onClose }: { row: Row; enYeni: Data['enYeni']; onClose: () => void }) {
   const qc = useQueryClient();
   const [ad, setAd] = useState(row.ad ?? '');
   const [kod, setKod] = useState(row.kod ?? '');
@@ -71,13 +82,14 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
   // Şimdi güncelle: kasa bir sonraki bağlantısında (en geç 5 dakika) yeni sürümü denetler ve indirir; gün açıksa gün
   // sonundan sonra kurar
   const update = useMutation({
-    mutationFn: () => post<{ istenen: number }>('/merkez/simdi-guncelle', { ids: [row.id] }),
-    onSuccess: () => {
+    mutationFn: () => post<{ istenen: number; guncel?: number; surum?: string | null }>('/merkez/simdi-guncelle', { ids: [row.id] }),
+    onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
-      toast.ok('İstendi; dükkân birkaç dakika içinde denetler, gün kapalıyken kurar');
+      toast.ok(!r.istenen && r.guncel ? sentText(r) : 'İstendi; dükkân birkaç dakika içinde denetler, gün kapalıyken kurar');
     },
     onError: (e) => toast.err(errorMessage(e)),
   });
+  const current = isCurrent(row, enYeni);
   return (
     <Modal
       open
@@ -139,11 +151,15 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
           kalır. Kayıtlar, raporlar ve tahsilat hep açık
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[var(--admin-divider)] pt-4">
-          <Button variant="secondary" icon={<RefreshCw className="size-4" />} loading={update.isPending} disabled={row.istekBekliyor} onClick={() => update.mutate()}>
+          <Button variant="secondary" icon={<RefreshCw className="size-4" />} loading={update.isPending} disabled={row.istekBekliyor || current} onClick={() => update.mutate()}>
             Şimdi güncelle
           </Button>
           <span className="min-w-0 flex-[1_1_14rem] text-pretty text-[13px] leading-5 text-muted">
-            {row.istekBekliyor ? 'İstendi; dükkân bir sonraki bağlantısında alacak' : 'Dükkân birkaç dakika içinde yeni sürümü denetler; gün açıksa gün sonundan sonra kurar'}
+            {current
+              ? `En güncel sürüm bu${enYeni ? ` (${enYeni.version})` : ''}; yeni sürüm çıkınca gönderilebilir`
+              : row.istekBekliyor
+                ? 'İstendi; dükkân bir sonraki bağlantısında alacak'
+                : 'Dükkân birkaç dakika içinde yeni sürümü denetler; gün açıksa gün sonundan sonra kurar'}
           </span>
         </div>
         {save.isError && <Notice tone="danger">{errorMessage(save.error)}</Notice>}
@@ -267,15 +283,18 @@ export default function MerkezPage() {
   const send = useMutation({
     // Güncellemeyi şimdi gönder: hedef kanalın son sürümü ve kasaya "hemen denetle" isteği. Kasa en geç 5 dakikada alır,
     // indirir; gün açıksa kasada "Şimdi güncelle / Gün sonunda güncelle" sorulur, gün kapalıysa hemen kurulur
-    mutationFn: (ids: string[]) => post<{ istenen: number }>('/merkez/simdi-guncelle', { ids }),
+    mutationFn: (ids: string[]) => post<{ istenen: number; guncel?: number; surum?: string | null }>('/merkez/simdi-guncelle', { ids }),
     onSuccess: (r) => {
       setPicked(new Set());
       void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
-      toast.ok(`${r.istenen} dükkâna gönderildi; kasada "Şimdi" ya da "Gün sonunda" sorulacak`);
+      toast.ok(sentText(r));
     },
     onError: (e) => toast.err(errorMessage(e)),
   });
-  const targets = picked.size ? [...picked] : rows.length === 1 ? [rows[0]!.id] : [];
+  const chosen = picked.size ? [...picked] : rows.length === 1 ? [rows[0]!.id] : [];
+  // En güncel sürümdeki dükkâna yeniden gönderilmez (sunucu da göndermez); hepsi günceldeyse düğme kapalı
+  const targets = chosen.filter((id) => !isCurrent(rows.find((r) => r.id === id) ?? { build: null }, d?.enYeni ?? null));
+  const allCurrent = chosen.length > 0 && targets.length === 0;
   const toggle = (id: string) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -299,6 +318,11 @@ export default function MerkezPage() {
           }
         />
         {readOnly && <Notice tone="info">Örnek görünüm: kafe bağlanınca gerçek dükkânlar burada görünür</Notice>}
+        {!readOnly && d?.enYeni && allCurrent && (
+          <Notice tone="success" title={`En güncel sürüm bu: ${d.enYeni.version}`}>
+            {chosen.length > 1 ? 'Seçilen dükkânların hepsinde' : 'Dükkânda'} en güncel sürüm kurulu; gönderilecek güncelleme yok. Yeni sürüm çıkınca burada görünür
+          </Notice>
+        )}
         {d?.enYeni && waiting.length > 0 && (
           <Notice
             tone="info"
@@ -337,7 +361,7 @@ export default function MerkezPage() {
         </Card>
         <PushCard readOnly={readOnly} />
       </div>
-      {editing && <EditDialog row={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditDialog row={editing} enYeni={d?.enYeni ?? null} onClose={() => setEditing(null)} />}
     </Stage>
   );
 }
