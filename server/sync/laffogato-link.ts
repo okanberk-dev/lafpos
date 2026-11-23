@@ -16,7 +16,7 @@ export const siteSigned = () => siteLinked() && env.laffogatoPanelSecret.length 
 export const SITE_NOT_LINKED = 'Site bağlantısı kurulmadı';
 
 /**
- * İmzalı isteklerin şubesi: bu kasanın şubesi (Yönetim › Ayarlar › Şube kimliği, varsayılan `marina`). Site şubelidir
+ * İmzalı isteklerin şubesi: bu kasanın şubesi (Yönetim › Ayarlar ve yedek › Şube kimliği, varsayılan `marina`). Site şubelidir
  * (laffogato #279): GET'te `?branch=`, POST / PUT gövdesinde `branch`; sipariş, çağrı, Satışta ve masa kodları o
  * şubenindir. docs/03-ENTEGRASYON.md §2.3 "Şube"
  */

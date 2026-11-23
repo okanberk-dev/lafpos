@@ -6,7 +6,7 @@ import { getSyncState, setSyncState } from './settings';
  * kurulumu, başka bir program) yetkili bu süreyi verir; bekçi bu süre boyunca pencereyi açmaz, süre bitince yine açar.
  * Kalıcı kapatma yok: unutulsa da kasa en geç 15 dakikada kendine döner. Sync state `kasa.bakim`
  */
-export const KASA_BAKIM_KEY = 'kasa.bakim';
+const KASA_BAKIM_KEY = 'kasa.bakim';
 export const KASA_BAKIM_MS = 15 * 60_000;
 
 export interface KasaBakim {

@@ -307,8 +307,10 @@ export function upsertOnlineOrders(
         // Konumu yazılmamış eski kalem (alan gelmeden önce yazıldı): içeriği tutan, sahipsiz ilk satırın konumunu alır
         const claimed = new Set(items.filter((i) => i.extLine !== null).map((i) => i.extLine));
         // Canlı kalem önce: aynı içerikli iki satırdan biri kasada iptal edildiyse sitenin satırını canlı olan alır (iptal
-        // edilen alsaydı canlı ikizi "sitede iptal edildi" sayılırdı)
-        for (const it of [...items].sort((a, b) => Number(a.voided) - Number(b.voided))) {
+        // edilen alsaydı canlı ikizi "sitede iptal edildi" sayılırdı). Sonra kasada iptal edilen, en son sitede iptal
+        // edilen: sitede iptal edilmiş eski ikiz canlı satırı alırsa satırla birlikte geri açılırdı
+        const claimOrder = (i: (typeof items)[number]) => (!i.voided ? 0 : i.voidReason === SITE_LINE_VOID ? 2 : 1);
+        for (const it of [...items].sort((a, b) => claimOrder(a) - claimOrder(b))) {
           if (it.extLine !== null) continue;
           const key = lineKey(it.extProductId, it.size, it.optionsText, it.note, it.qty);
           const match = lines.find((l) => !claimed.has(lineIndex(l)) && siteLineKey(l) === key);
@@ -526,10 +528,20 @@ export function upsertOnlineOrders(
             undone ? or(isNull(schema.orders.extOutcome), eq(schema.orders.extOutcome, 'completed')) : isNull(schema.orders.extOutcome),
           ),
         )
-        .returning({ id: schema.orders.id, no: schema.orders.no, extNo: schema.orders.extNo })
+        .returning({ id: schema.orders.id, no: schema.orders.no, extNo: schema.orders.extNo, extTotal: schema.orders.extTotal, total: schema.orders.total, dayId: schema.orders.dayId })
         .all();
       for (const o of changed) {
-        if (undone) fx.audit(t, { action: 'online.outcome', orderId: o.id, message: `Online sipariş #${o.extNo ?? o.no} sitede ${outcome === 'refunded' ? 'iade edildi' : 'iptal edildi'}; online toplamdan düştü` });
+        if (!undone) continue;
+        // Kapanmış günün Z'si dondurulmuştur (closeDay özeti saklar): düşüş yalnız Raporlar'da ve Uzaktan özette görünür
+        const dayClosed = !!o.dayId && t.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.id, o.dayId)).get()?.closedAt != null;
+        fx.audit(t, {
+          action: 'online.outcome',
+          orderId: o.id,
+          amount: o.extTotal ?? o.total,
+          message: `Online sipariş #${o.extNo ?? o.no} sitede ${outcome === 'refunded' ? 'iade edildi' : 'iptal edildi'}; ${dayClosed ? "Raporlar'daki online toplamdan düştü, kapanmış günün Z'si değişmez" : 'online toplamdan düştü'}`,
+        });
+        // Kasa ekranının X'i ve patron özeti "Online (sitede ödendi)"yi yeniden okusun (tables/online.sync yalnız masa planını yeniler)
+        fx.emit({ topic: 'cash', kind: 'online.outcome', orderId: o.id });
       }
     }
     return { created, updated, closed };

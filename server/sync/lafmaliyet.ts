@@ -475,7 +475,7 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
   const detail = errorDetail(json);
   if (status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch') {
     const b = json as { sube?: unknown; expected?: unknown };
-    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Yönetim › Ayarlar ve yedek › Şube'yi "${String(b.expected)}" yapıp ${RESEND} ile yeniden gönderin`;
+    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Yönetim › Ayarlar ve yedek › Şube kimliği alanını "${String(b.expected)}" yapıp ${RESEND} ile yeniden gönderin`;
   }
   if (status === 409) {
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };

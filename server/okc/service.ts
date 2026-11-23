@@ -1489,7 +1489,7 @@ export function reprintEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip {
   if (getSettings().okcProvider !== 'pavo') throw conflict('Gün sonu kâğıdı yalnız Pavo bağlantısında', 'okc_no_eod');
   const rec = getSyncState<PavoEodRecord>(EOD_LAST);
   if (!rec || rec.status !== 'ok' || !rec.batchNo) throw conflict('Basılacak başarılı bir banka gün sonu yok', 'okc_no_slip');
-  if (now - rec.at > EOD_REPRINT_MAX_AGE_MS) throw conflict('Son banka gün sonu bir haftadan eski; kâğıdı cihazdan basın (Yönetim › Yazarkasa POS › Doğrula)', 'okc_no_slip');
+  if (now - rec.at > EOD_REPRINT_MAX_AGE_MS) throw conflict('Son banka gün sonu bir haftadan eski; kâğıdın kopyasını cihazın gün sonu menüsünden basın', 'okc_no_slip');
   return slipOf(user, rec);
 }
 

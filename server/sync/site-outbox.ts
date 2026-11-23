@@ -215,9 +215,14 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
               .returning({ id: schema.products.id, name: schema.products.name })
               .all();
             for (const p of closed) {
-              fx.audit(t, { action: 'product.sold_out', message: `${p.name} sitede menüden kaldırılmış; LafPOS'taki açış geri alındı` });
-              fx.emit({ topic: 'menu', kind: 'availability', message: `${p.name} sitede satışta değil` });
+              fx.audit(t, {
+                action: 'product.sold_out',
+                entity: 'product',
+                entityId: p.id,
+                message: `${p.name} sitede menüden kaldırılmış; ${payload.actor ? `${payload.actor} kullanıcısının ` : ''}LafPOS'taki açışı geri alındı`,
+              });
             }
+            if (closed.length) fx.emit({ topic: 'menu', kind: 'product.sold_out' });
           }
         });
         fx.flush();

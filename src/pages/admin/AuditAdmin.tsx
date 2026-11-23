@@ -4,7 +4,9 @@ import {
   AlertTriangle,
   Bike,
   CalendarDays,
+  ChefHat,
   ClipboardList,
+  Cloud,
   Clock,
   Coffee,
   CreditCard,
@@ -56,6 +58,8 @@ interface AuditRow {
 const ACTION_LABEL: Record<string, string> = {
   'auth.global_lock': 'Giriş kilidi',
   'auth.pin_lock': 'PIN kilidi',
+  'ayar.baglanti': 'Bağlantı bilgileri',
+  'ayar.yazici': 'Fiş yazıcısı',
   'cash.giris': 'Kasaya giriş',
   'cash.harcama': 'Kasadan harcama',
   'cash.shift_count': 'Vardiya sayımı',
@@ -80,6 +84,8 @@ const ACTION_LABEL: Record<string, string> = {
   'item.uncomp': 'İkramı geri alma',
   'item.void': 'Kalem iptali',
   'item.zayi': 'Zayi',
+  'kasa.bakim': 'Kasa penceresi bakımı',
+  'kitchen.undo': 'Hazır geri alındı',
   'menu.category': 'Kategori',
   'menu.happy': 'Happy hour',
   'menu.option_price': 'Seçenek fiyatı',
@@ -97,6 +103,7 @@ const ACTION_LABEL: Record<string, string> = {
   'online.gone': 'Online sipariş',
   'online.line_cancelled': 'Online kalem iptali',
   'online.line_restored': 'Online kalem geri geldi',
+  'online.outcome': 'Sitede iptal ya da iade',
   'online.paid_at_till': 'Kasada ödenen online sipariş',
   'order.bill': 'Hesap yazdırma',
   'order.cancel': 'Adisyon iptali',
@@ -108,6 +115,8 @@ const ACTION_LABEL: Record<string, string> = {
   'order.numarator': 'Numaratör',
   'order.odenmez': 'Ödenmez',
   'order.reopen': 'Yeniden açma',
+  'order.refund_items': 'Kalem iadesi',
+  'order.release': 'Ödemesiz bara gönderme',
   'order.split': 'Hesap bölme',
   'order.transfer': 'Aktarma',
   'order.waiter': 'Garson değişikliği',
@@ -133,16 +142,21 @@ const ACTION_LABEL: Record<string, string> = {
   'user.create': 'Personel ekleme',
   'user.pin_conflict': 'PIN çakışması',
   'user.update': 'Personel düzenleme',
+  'uzaktan.imza': 'Uzaktan imza tutmadı',
+  'uzaktan.red': 'Uzaktan istek reddi',
 };
 
 const PREFIX_LABEL: Record<string, string> = {
   auth: 'Giriş',
+  ayar: 'Ayar',
   cash: 'Kasa hareketi',
   customer: 'Müşteri',
   day: 'Gün',
   delivery: 'Teslimat',
   floor: 'Masa planı',
   item: 'Kalem',
+  kasa: 'Kasa penceresi',
+  kitchen: 'Mutfak',
   menu: 'Menü',
   okc: 'Yazarkasa',
   online: 'Online sipariş',
@@ -158,6 +172,7 @@ const PREFIX_LABEL: Record<string, string> = {
   // Mesai kaldırıldı (4 Kas 2026); eski kayıtlar (time.in, time.edit…) adıyla okunur kalır
   time: 'Mesai',
   user: 'Personel',
+  uzaktan: 'Uzaktan',
 };
 
 /**
@@ -167,12 +182,15 @@ const PREFIX_LABEL: Record<string, string> = {
  */
 const PREFIX_ICON: Record<string, LucideIcon> = {
   auth: KeyRound,
+  ayar: Settings2,
   cash: Wallet,
   customer: UserRound,
   day: CalendarDays,
   delivery: PackageCheck,
   floor: LayoutGrid,
   item: ReceiptText,
+  kasa: MonitorSmartphone,
+  kitchen: ChefHat,
   menu: Coffee,
   okc: MonitorSmartphone,
   online: Globe,
@@ -187,6 +205,7 @@ const PREFIX_ICON: Record<string, LucideIcon> = {
   table: QrCode,
   time: Clock,
   user: Users,
+  uzaktan: Cloud,
 };
 
 /** Ciro dışı kaydı geri alma tek kod (`item.uncomp`); adı kaydın türünden (ödenmez ve zayi de geri alınır) */

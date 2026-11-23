@@ -51,7 +51,7 @@ describe('kasa penceresinin bakım arası', () => {
     const audits = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=5');
     expect(audits.filter((a) => a.action === 'kasa.bakim').map((a) => a.message)).toEqual([
       'Kasa penceresinin bakım arası bitirildi',
-      'Kasa penceresi bakım için 15 dakika kapalı tutulabilir (bekçi yeniden açmaz)',
+      'Kasa penceresine 15 dakikalık bakım arası verildi (bekçi bu sürede yeniden açmaz)',
     ]);
   });
 

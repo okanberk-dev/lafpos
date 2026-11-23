@@ -1194,7 +1194,7 @@ adminRoutes.post('/kasa-bakim', async (c) => {
   fx.audit(db, {
     userId: user.id,
     action: 'kasa.bakim',
-    message: input.on ? 'Kasa penceresi bakım için 15 dakika kapalı tutulabilir (bekçi yeniden açmaz)' : 'Kasa penceresinin bakım arası bitirildi',
+    message: input.on ? 'Kasa penceresine 15 dakikalık bakım arası verildi (bekçi bu sürede yeniden açmaz)' : 'Kasa penceresinin bakım arası bitirildi',
   });
   fx.emit({ topic: 'settings', kind: 'kasa.bakim', byUserId: user.id });
   fx.flush();

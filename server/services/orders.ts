@@ -1884,6 +1884,9 @@ export interface RefundItemsResult {
  * - Özet denetim kaydı onaylayanla birlikte ve tam iadede de yazılır.
  */
 export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { items: { itemId: string; qty: number }[]; reason: string; expectTotal?: number | null }): RefundItemsResult {
+  // Kalan aynı ödeme türleriyle yeniden yazılır ve nakit kasadan geri verilir: ödeme alamayan (garson) yetkili onayıyla
+  // da yapamaz (Siparişler › kapananlarda düğme de yalnız `odeme.al`'a görünür)
+  needDirect(actor, 'odeme.al');
   const o = loadOrder(t, orderId);
   if (o.status !== 'kapali') throw conflict('Yalnız kapanmış sipariş iade edilir');
   assertPosOrder(o);

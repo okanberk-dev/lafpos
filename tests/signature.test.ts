@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { canonicalString, sign } from '../server/lib/signature';
 
 /**
- * laffogato `tests/panel-karaoke-sync-core.test.ts` ve lafmaliyet'in sabitlediği vektörlerin aynısı.
+ * lafmaliyet'in sabitlediği vektörlerin aynısı (lafmaliyet `tests/karaoke.test.ts`, `tests/lafpos.test.ts`). Sitenin
+ * testi 16 Kasım 2026'da kaldırıldı; vektörleri laffogato `docs/PANEL-KARAOKE.md` ve `docs/PANEL-ORDERS.md`'de durur.
  * Bu test kırılırsa LafPOS'un imzalı istekleri sitede 401 alır.
  */
 const SECRET = 'test-secret-0123456789-abcdefghijklmnop';
@@ -22,6 +23,12 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     const dayBody = '{"version":1,"source":"lafpos","date":"2026-10-26"}';
     expect(sign(SECRET, { timestamp: TS, method: 'POST', url: new URL('https://ladmin.laffogato.net/api/pos/gun'), body: dayBody })).toBe('5ab02280859d09c6afb003f9cc62bbfdd46b1738f6a25c9a6cf8a475113639cb');
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/urunler'), body: '' })).toBe('4693defb7ef97b132908d552133471db2827261b6468b2ef565effa6fcbf8a3c');
+  });
+
+  it('sitenin çağrı yanıtı vektörü (laffogato docs/PANEL-ORDERS.md "İmza vektörü")', () => {
+    // Masa çağrısına "Gördüm": sitenin belgesindeki gövde ve sonuç; kanonik metin yalnız yolu okur, alan adı imzaya girmez
+    const body = JSON.stringify({ id: 'tcl-3f9a0c4b7d2e1a68', actor: 'Selin' });
+    expect(sign(SECRET, { timestamp: TS, method: 'POST', url: new URL('https://laffogato.net/api/panel/calls/ack'), body })).toBe('cdda6260245ebae291a8a93e3e691144b393b3fb970335a1133e2b439df6d19a');
   });
 
   it('kanonik metin: zaman, yöntem, yol, sıralı sorgu, gövde özeti; alan adı yok', () => {

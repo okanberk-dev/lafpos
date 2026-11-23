@@ -135,7 +135,7 @@ function KasaBakim({ until }: { until: number | null }) {
   const m = useMutation({
     mutationFn: (on: boolean) => post<{ kasaBakim: number | null }>('/admin/kasa-bakim', { on }),
     onSuccess: (r) => {
-      toast.ok(r.kasaBakim ? 'Kasa penceresi 15 dakika yeniden açılmayacak' : 'Bakım arası bitti; kasa penceresi yeniden açılır');
+      toast.ok(r.kasaBakim ? 'Kasa penceresi 15 dakika yeniden açılmayacak' : 'Bakım arası bitti; kasa penceresi 15 saniye içinde yeniden açılır');
       void qc.invalidateQueries({ queryKey: ['admin', 'network'] });
     },
     onError: (e) => toast.err(errorMessage(e)),
@@ -146,7 +146,7 @@ function KasaBakim({ until }: { until: number | null }) {
       <p className={HINT}>
         {active
           ? `Bakım arası sürüyor (bitiş ${fmtTime(until!)}): kasa penceresi kapatılabilir, bekçi yeniden açmaz. Süre bitince kendiliğinden açılır`
-          : 'Kasa penceresi kapatılınca 15 saniye içinde yeniden açılır. Bilgisayarda bakım yapacaksanız (Windows ayarı, yazıcı kurulumu) 15 dakika açılmasın'}
+          : 'Kasa penceresi kapatılınca 15 saniye içinde yeniden açılır. Bilgisayarda bakım yapacaksanız (Windows ayarı, yazıcı kurulumu) aşağıdan 15 dakikalık bakım arası verin'}
       </p>
       <div className="flex flex-wrap gap-2 max-sm:[&>*]:grow">
         {active ? (
@@ -155,7 +155,7 @@ function KasaBakim({ until }: { until: number | null }) {
           </Button>
         ) : (
           <Button loading={m.isPending} onClick={() => m.mutate(true)}>
-            15 dakika açılmasın
+            15 dakika bakım arası
           </Button>
         )}
       </div>
