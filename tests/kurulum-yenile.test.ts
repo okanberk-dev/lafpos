@@ -256,6 +256,29 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     expect(WATCHER_VERSION).toBeGreaterThanOrEqual(3);
   });
 
+  it('müşteri ekranı kilit altında açılır: oturum açılınca bat ile bekçi aynı anda iki pencere açmaz', () => {
+    const fn = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
+    // Kasa penceresinden ayrı kilit: biri açılırken öteki beklemesin
+    expect(fn).toContain("Mutex($false, 'Local\\LafPOS-MusteriPencere')");
+    expect(fn).toContain('catch [System.Threading.AbandonedMutexException] { $own = $true }');
+    // Açık mı, sunucu var mı ve açma aynı kilidin içinde; açtıktan sonra süreç görünene dek beklenir
+    const lock = fn.indexOf('WaitOne(');
+    const check = fn.indexOf('if (Test-CustomerDisplay) { return }');
+    const start = fn.indexOf('Start-Process');
+    expect(lock).toBeGreaterThan(0);
+    expect(check).toBeGreaterThan(lock);
+    expect(fn.indexOf('Test-Server $base')).toBeGreaterThan(check);
+    expect(start).toBeGreaterThan(fn.indexOf('Test-Server $base'));
+    const after = fn.slice(start);
+    expect(after).toMatch(/for \(\$i = 0; \$i -lt 20; \$i\+\+\) \{\s+Start-Sleep -Milliseconds 500\s+if \(Test-CustomerDisplay\) \{ break \}/);
+    // Kilit her çıkışta bırakılır (erken return dahil)
+    expect(after.indexOf('finally {')).toBeGreaterThan(after.indexOf('Test-CustomerDisplay'));
+    expect(after.slice(after.indexOf('finally {'))).toContain('$mx.ReleaseMutex()');
+    // Süreç denetimi tek yerde: kilitli açma ile döngüdeki bekleme aynı süreci arar
+    expect(ps1.slice(ps1.indexOf('function Test-CustomerDisplay'), ps1.indexOf('function Start-CustomerDisplay'))).toContain("-like '*chrome-musteri*'");
+    expect(fn).not.toContain('$running');
+  });
+
   it('eski bekçi yenisiyle değişir; Başlangıç kısayolu yoksa kullanıcı düzeyinde konur', () => {
     expect(ps1).toContain("-notlike $surumli } | ForEach-Object { Stop-Process");
     expect(ps1).toContain("'-Bekci', '-BekciSurum', [string]$BekciSurumu");

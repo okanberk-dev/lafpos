@@ -37,13 +37,24 @@ function Get-DisplayExe {
   return $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 }
 
+# Musteri ekrani acik mi: musteri profiliyle (chrome-musteri) calisan Chrome/Edge sureci
+function Test-CustomerDisplay {
+  $p = Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*chrome-musteri*' } | Select-Object -First 1
+  return [bool]$p
+}
+
 function Start-CustomerDisplay([string]$base) {
+  $mx = $null
+  $own = $false
   try {
     Add-Type -AssemblyName System.Windows.Forms
     $second = [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | Select-Object -First 1
     if (-not $second) { return }
-    $running = Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*chrome-musteri*' } | Select-Object -First 1
-    if ($running) { return }
+    # Acmak kilit altinda (inceleme, 23 Kas 2026): oturum acilinca bat ile bekci ayni anda sunucunun kalkmasini bekler.
+    # Ikisi birden pencereyi yok gorup Chrome'u acarsa ikinci acilis ilk surece devredilir, ikinci tam ekran pencere acilir
+    $mx = New-Object System.Threading.Mutex($false, 'Local\LafPOS-MusteriPencere')
+    try { $own = $mx.WaitOne(30000) } catch [System.Threading.AbandonedMutexException] { $own = $true }
+    if (Test-CustomerDisplay) { return }
     $exe = Get-DisplayExe
     if (-not $exe) { return }
     # Sunucu cevap vermiyorsa acilmaz, bekci 15 sn sonra yeniden bakar (inceleme, 23 Kas 2026). Bekci oturum acilinca
@@ -61,7 +72,16 @@ function Start-CustomerDisplay([string]$base) {
       '--disable-session-crashed-bubble', '--disable-features=Translate'
     )
     Start-Process -FilePath $exe -ArgumentList $chromeArgs | Out-Null
-  } catch { }
+    # Surec gorunene dek beklenir: ardindan gelen (bat ya da bekci) ikinci pencere acmasin
+    for ($i = 0; $i -lt 20; $i++) {
+      Start-Sleep -Milliseconds 500
+      if (Test-CustomerDisplay) { break }
+    }
+  } catch {
+  } finally {
+    if ($own) { try { $mx.ReleaseMutex() } catch { } }
+    if ($mx) { $mx.Dispose() }
+  }
 }
 
 function Stop-TemporaryDisplayWatcher {
