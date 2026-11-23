@@ -100,6 +100,44 @@ describe('Tükendi kilidi: sitenin menüden kaldırdığı ile şubenin Tükendi
     }
   });
 
+  it('internetsizken açılıp sitede reddedilen (409 site_closed) ürün kasada da kapanır', async () => {
+    const { db, schema, eq } = await mod();
+    const { enqueueSiteAvailability, flushSiteOutbox } = await import('../server/sync/site-outbox');
+    const { p, row } = await productByName('Americano');
+    try {
+      expect(row().active).toBe(true);
+      site.panelOnMenu.set(p.extId!, false);
+      enqueueSiteAvailability(db, { extSource: 'laffogato', extId: p.extId! }, true, 'test');
+      await flushSiteOutbox();
+      expect(row()).toMatchObject({ active: false, soldOutBy: 'site' });
+      const parked = db.select().from(schema.outbox).where(eq(schema.outbox.kind, 'menu.isActive')).all().at(-1);
+      expect(parked?.lastError).toContain('kasada da kapatıldı');
+    } finally {
+      site.panelOnMenu.clear();
+      db.update(schema.products).set({ active: true, soldOutBy: null }).where(eq(schema.products.id, p.id)).run();
+    }
+  });
+
+  it('yeni gelen ürün yalnız bu şubede Tükendi ise (menüde) kasada açılabilir, kilitli gelmez', async () => {
+    const { db, schema, eq, sync } = await mod();
+    // Testin başka yerde kullanmadığı, siteye bağlı bir ürün
+    const p = h.boot.products.find((x) => x.extId && !['Latte', 'Americano'].includes(x.name))!;
+    // Ürün kasada hiç yok: eşitleme onu yeni ekler
+    db.delete(schema.productOptionGroups).where(eq(schema.productOptionGroups.productId, p.id)).run();
+    db.delete(schema.products).where(eq(schema.products.id, p.id)).run();
+    try {
+      site.panelOnMenu.set(p.extId!, true);
+      site.panelActive.set(p.extId!, false);
+      await sync.runMenuSync({ apply: true, force: true });
+      const fresh = db.select().from(schema.products).where(eq(schema.products.extId, p.extId!)).get()!;
+      expect(fresh).toMatchObject({ active: false, soldOutBy: 'lafpos' });
+    } finally {
+      site.panelOnMenu.clear();
+      site.panelActive.set(p.extId!, true);
+      await sync.runMenuSync({ apply: true, force: true });
+    }
+  });
+
   it('şube öncesi site (onMenu yok): eski kural, sitenin kapattığı kilitli', async () => {
     const { sync } = await mod();
     const { p, row } = await productByName('Americano');

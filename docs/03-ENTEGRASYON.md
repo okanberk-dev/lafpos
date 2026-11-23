@@ -42,8 +42,10 @@ Site şubelidir: sipariş, masa kodu (`cafe_tables`), masa çağrısı ve Satı�
 şubeler adına konuşur (varsayılan `marina`; laffogato `docs/LAFPOS.md` "Şube"). LafPOS her imzalı istekte kendi şubesini
 söyler (`siteBranch()` = Yönetim › Ayarlar › Şube kimliği `branchId`, varsayılan `marina`; `server/sync/laffogato-link.ts`):
 
-- GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke`.
-  Sürüm sinyali (`/api/pos/orders/version`) şubesizdir, sorgu almaz.
+- GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke` ve
+  sürüm sinyali `/api/pos/orders/version`. Sinyal laffogato #298'den beri şubenindir (`version` ve `menu` şubenin
+  okuyacağı listenin özeti); şube söylenmezse site anahtarın ilk şubesini varsayar, sitede birden çok LafPOS şubesi
+  olunca kasa başka şubenin işaretini okurdu.
 - POST / PUT gövdesinde `"branch": "<id>"`: aşama, çağrıya "Gördüm", Satışta yazımı (giden kutusundaki de, gönderim
   anındaki şubeyle) ve masa kodları.
 - **Yanıtın şubesi:** `GET /api/panel/orders` ve `GET /api/panel/menu` yanıtındaki `branch` kasanın şubesi değilse liste
