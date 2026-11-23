@@ -325,8 +325,8 @@ Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o 
    çek" ile elle. Kasada `sync_state` `lafmaliyet.modpos`.
 2. **Merkez (elle yüklenen, eski yol):** `POST merkez/gecmis` (yalnız panelin sahibi; ekranı yok). Kayıt dükkân başına
    tek anahtarda (`lafpos:gecmis:<kurulum>`); Merkez nabzıyla kasaya da gelir (yalnız değişince; kasa elindekinin anını
-   `gecmisAt` ile söyler, kaynağın adını taşımayan eski kopyası için 0 söyler, kayıt bir kez adıyla yeniden gelir),
-   kasada `sync_state` `merkez.gecmis`.
+   `gecmisAt` ile söyler, kaynağın adını taşımayan eski kopyası için -1 söyler: kayıt bir kez adıyla yeniden gelir, Merkez'de
+   silinmişse kopya da silinir), kasada `sync_state` `merkez.gecmis`.
 
 Kasa ikisini birleştirir (aynı tarihte lafmaliyet'inki geçer; `mergeHistory`, `server/sync/modpos.ts` `historyStore`):
 

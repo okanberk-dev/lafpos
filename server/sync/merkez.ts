@@ -155,12 +155,14 @@ export function takeHistory(json: unknown) {
 }
 
 /**
- * Nabızda söylenen geçmiş ciro anı: elimizdeki kayıt kaynağın adını taşımıyorsa (bu sürümden önce alınmış) 0 söylenir,
- * Merkez kaydı bir kez adıyla yeniden gönderir
+ * Nabızda söylenen geçmiş ciro anı: elimizdeki kayıt kaynağın adını taşımıyorsa (bu sürümden önce alınmış) -1 söylenir.
+ * -1 hiçbir kaydın anına ve "kayıt yok"un 0'ına eşit değildir: Merkez kaydı bir kez adıyla yeniden gönderir, kayıt
+ * Merkez'de silinmişse silindi (null) der. 0 söylense silinmiş kaydın adsız kopyası kasada kalırdı
  */
+const HISTORY_AT_UNNAMED = -1;
 export function historyAtForBeat(): number {
   const g = getSyncState<{ at?: number; kaynak?: string; gunler?: unknown[] }>(GECMIS_KEY);
-  return g?.gunler?.length && !g.kaynak ? 0 : (g?.at ?? 0);
+  return g?.gunler?.length && !g.kaynak ? HISTORY_AT_UNNAMED : (g?.at ?? 0);
 }
 
 export function parseBeat(json: unknown, now: number): MerkezLast | null {

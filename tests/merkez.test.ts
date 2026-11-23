@@ -443,7 +443,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(p.stats.days[dun]!.closes).toEqual([[300, 6205, 1], [600, 40000, 2]]);
     expect(p.stats.daily).toContainEqual([dun, 46205, 3]);
     // Kaynağın adı da gelir (kasanın Raporlar'ı günleri "ModPOS" diye etiketler); bu sürümden önce alınmış (adsız) kayıt
-    // için kasa nabızda 0 söyler, Merkez kaydı bir kez adıyla yeniden gönderir
+    // için kasa nabızda -1 söyler, Merkez kaydı bir kez adıyla yeniden gönderir
     const { getSyncState, setSyncState } = await import('../server/lib/settings');
     const { GECMIS_KEY } = await import('@shared/gecmis');
     const got = getSyncState<{ at: number; kaynak?: string; gunler: unknown[] }>(GECMIS_KEY)!;
@@ -457,6 +457,14 @@ describe('Merkez: kayıt, nabız, panel', () => {
     await merkezBeat();
     const after = await h.ok<{ stats: { days: Record<string, unknown> } }>('patron', 'GET', '/reports/patron');
     expect(after.stats.days[dun]).toBeUndefined();
+    // Merkez'de silinmiş kayıt, kasada bu sürümden önce alınmış (adsız) kopyası dursa da silinir (adsız kopyanın anı
+    // hiçbir zaman "kayıt yok"la eşit söylenmez)
+    setSyncState(GECMIS_KEY, { at: got.at, gunler: got.gunler });
+    await merkezBeat();
+    await merkezBeat();
+    expect(getSyncState<{ gunler: unknown[] }>(GECMIS_KEY)!.gunler).toEqual([]);
+    const gone = await h.ok<{ stats: { days: Record<string, unknown> } }>('patron', 'GET', '/reports/patron');
+    expect(gone.stats.days[dun]).toBeUndefined();
   });
 
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {

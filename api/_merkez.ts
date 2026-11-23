@@ -420,7 +420,8 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // Kaynağın adı da gider (kasanın Raporlar'ı günleri "ModPOS" diye etiketler)
     const gecmisStore = readHistoryStore(rawGecmis);
     const gecmisAt = gecmisStore ? gecmisStore.at : null;
-    const kasaGecmisAt = intOrNull(body.gecmisAt);
+    // Kasanın -1'i: elindeki kopya kaynağın adını taşımıyor (eski sürüm); kayıt varsa yeniden, yoksa silindi diye gider
+    const kasaGecmisAt = Number.isInteger(body.gecmisAt) ? (body.gecmisAt as number) : null;
     const gecmis = (gecmisAt ?? 0) !== (kasaGecmisAt ?? 0) && 'gecmisAt' in body ? { gecmis: gecmisStore ? { at: gecmisAt, kaynak: gecmisStore.kaynak, gunler: gecmisStore.gunler } : null } : {};
     // `guncelleKomut`: isteğin bağlı olduğu uzaktan gün sonu (eski kasa alanı görmez, isteği hemen işler)
     return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, guncelleKomut: next.guncelleKomut ?? null, at: now, ...gecmis, ...(kontrol ? { kontrol } : {}) });
