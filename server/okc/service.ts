@@ -1050,25 +1050,36 @@ function eodSummaryFor(user: AuthUser | null, s: PavoEodSummary | null) {
  * LafPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
  * alanı ve kartla alınan bahşiş: bankaya giden tutar). Aynı günün sonraki gün sonu (gün yeniden açılıp kapandı ya da
  * gün içinde elle alındı): önceki gün sonundan sonra alınan, iade edilmemiş kart ödemeleri; günün bütün kartıyla
- * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. Gün açıksa null
+ * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. İkisine de kartla açık hesap tahsilatı eklenir. Gün açıksa null
  */
-function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
+export function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
   const none = { dayCardKurus: null, dayCardSinceBatch: null };
   if (!dayId) return none;
   const day = db.select({ closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day?.closedAt || !day.summary) return none;
   const prev = earlier.at(-1);
+  const p = schema.payments;
+  // Kartla açık hesap tahsilatı (siparişsiz ödeme) Z'nin kart alanında yok ama bankaya gider: kıyasa girer
+  const collections = (since: number | null) =>
+    db
+      .select({ amount: p.amount })
+      .from(p)
+      .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNull(p.orderId), eq(p.zField, 'card'), since == null ? undefined : gt(p.createdAt, since)))
+      .all()
+      .reduce((a, r) => a + r.amount, 0);
   if (!prev) {
     const s = day.summary;
-    return { dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((p) => p.zField === 'card').reduce((a, p) => a + (p.tips ?? 0), 0), dayCardSinceBatch: null };
+    return {
+      dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((x) => x.zField === 'card').reduce((a, x) => a + (x.tips ?? 0), 0) + collections(null),
+      dayCardSinceBatch: null,
+    };
   }
-  const p = schema.payments;
   const rows = db
     .select({ amount: p.amount, tip: p.tip })
     .from(p)
     .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNotNull(p.orderId), eq(p.zField, 'card'), gt(p.createdAt, prev.at)))
     .all();
-  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0), dayCardSinceBatch: prev.batchNo };
+  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0) + collections(prev.at), dayCardSinceBatch: prev.batchNo };
 }
 
 /** Cihaz gün sonu neden denenmez; null: denenebilir. `auto`: gün kapanınca (ayara bağlı) */

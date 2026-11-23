@@ -643,7 +643,9 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   İşletme bahşiş almaz (Ayarlar `tipsEnabled` varsayılan kapalı, ödeme `tip > 0` 400 `tip_disabled`): `cardTips`
   yalnız eski kayıtlarda 0'dan büyük olur.
 - `bankPos` (22 Kasım 2026, #154) isteğe bağlıdır: yazarkasa POS'unun (Pavo) banka gün sonu ve LafPOS kıyası. Yalnız
-  günün banka gün sonu denendiyse gider; Pavo yoksa ya da denenmediyse alan yoktur. Banka gün sonu çoğu zaman gün
+  günün banka gün sonu denendiyse ve bittiyse gider (`status` `ok`, `failed` ya da `unknown`; cihazda sürerken alan
+  gitmez); Pavo yoksa ya da denenmediyse alan yoktur. `lafposCard` kartla bahşişi ve kartla açık hesap tahsilatını
+  da içerir (ikisi de bankaya gider). Banka gün sonu çoğu zaman gün
   kapandıktan sonra biter: sonucu gelince aynı gün yeniden gönderilir (`date` ve `zNo` aynı, idempotent). Okumayan
   sürüm alanı atar (`z.object`).
   ```
@@ -740,12 +742,16 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
 
 | Yanıt | Gövde | LafPOS |
 | --- | --- | --- |
-| 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay }` | Gönderildi. `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
-| 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; düzeltilince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
-| 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET'la aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)?" |
+| 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
+| 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; LafPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
+| 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
+| 409 | `{ error: "wrong_branch", sube, expected }` | Kalıcı: kasanın şubesi (`sube`) lafmaliyet'in LafPOS şubesi (`expected`, marina) değil; Yönetim › Ayarlar › Şube düzeltilip yeniden gönderilir. Şube gönderirken güncel ayardan yazılır |
 | 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
-| 413, 422 | `{ error: "too_large" }` | Kalıcı |
-| 503 | `{ error: "not_configured" }` | Yeniden denenir; "lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil" |
+| 413 | `{ error: "too_large" }` | Kalıcı (gövde 256 KB'tan büyük) |
+| 422 | (lafmaliyet bugün göndermez) | Kalıcı |
+| 503 | `{ error: "not_configured" }` | Yeniden denenir; "lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil". Gövdesi başka olan 503 (bakım, barındırma) geçici hata yazar |
+| 404, 405 | — | Yeniden denenir; adres yanlış ("adreste lafmaliyet yok") |
+| 3xx | — | İzlenmez, yeniden denenir; adres yönlendiriyor (http, www ya da sonda yol): adres yönlendirmesiz yazılır |
 | 500 | `{ error: "server_error" }` | Yeniden denenir |
 
 - `counted`: gün geçiş gününden önce değilse `true`. `switchDay`: lafmaliyet'teki geçiş günü (`null`: seçilmedi, kasa

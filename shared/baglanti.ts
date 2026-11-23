@@ -18,6 +18,11 @@ export interface ConnField {
   minLength?: number;
   /** Boş kalabilir: bağlantı onsuz da çalışır (kartın "Tanımlı" rozeti onu beklemez) */
   optional?: boolean;
+  /**
+   * Yalnız site kökü (imzalı uçların yolu adrese eklenir, imza yolu da kapsar): https şart (yerel ağda http olur),
+   * yol, sorgu ve kullanıcı bilgisi yazılmaz
+   */
+  originOnly?: boolean;
 }
 
 export interface ConnGroup {
@@ -33,8 +38,8 @@ export const CONN_GROUPS: ConnGroup[] = [
     title: 'lafmaliyet',
     desc: 'Gün sonu, ürün satış listesi ve maliyetler maliyet paneline gider',
     fields: [
-      { key: 'LAFMALIYET_URL', label: 'Adres', kind: 'url', placeholder: 'https://ladmin.laffogato.net' },
-      { key: 'LAFMALIYET_SYNC_SECRET', label: 'Anahtar', kind: 'secret', hint: 'Paneldeki LAFPOS_SYNC_SECRET ile aynı' },
+      { key: 'LAFMALIYET_URL', label: 'Adres', kind: 'url', placeholder: 'https://ladmin.laffogato.net', originOnly: true },
+      { key: 'LAFMALIYET_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Paneldeki LAFPOS_SYNC_SECRET ile aynı, en az 32 karakter' },
     ],
   },
   {
@@ -51,7 +56,7 @@ export const CONN_GROUPS: ConnGroup[] = [
     title: 'Site (laffogato)',
     desc: 'Menü ve fiyatlar, online siparişler, Tükendi, karaoke rezervasyonları. Deneme bittikten sonra açın; adres boşken siteye hiç bağlanılmaz',
     fields: [
-      { key: 'LAFFOGATO_URL', label: 'Adres', kind: 'url', placeholder: 'https://laffogato.net' },
+      { key: 'LAFFOGATO_URL', label: 'Adres', kind: 'url', placeholder: 'https://laffogato.net', originOnly: true },
       { key: 'LAFFOGATO_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Sitedeki LAFPOS_SYNC_SECRET ile aynı, en az 32 karakter' },
     ],
   },
@@ -124,6 +129,15 @@ export const CLOUD_KEYS: readonly string[] = CLOUD_KEY_GROUPS.flatMap((g) => g.k
 
 const TR_ASCII: Record<string, string> = { ç: 'c', Ç: 'C', ğ: 'g', Ğ: 'G', ı: 'i', İ: 'I', ö: 'o', Ö: 'O', ş: 's', Ş: 'S', ü: 'u', Ü: 'U' };
 
+/** Şube kimliği yazımı (Yönetim › Ayarlar): Türkçe harf ASCII'ye (MARINA, Marına → marina); büyük I silinmez */
+export function branchSlug(v: string): string {
+  return v
+    .replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_ASCII[c] ?? c)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 24);
+}
+
 /**
  * Şubenin Vercel ortamındaki adı: büyük harf, Türkçe karaktersiz, yalnız harf ve rakam ('marina' → 'MARINA',
  * 'tuzla-2' → 'TUZLA2', 'Kadıköy' → 'KADIKOY'). Boş ya da geçersizse null: şubesi bilinmeyen kasa hiçbir platform
@@ -169,6 +183,16 @@ export function cleanCloudKeys(raw: unknown): Record<string, string> {
  * Yazılacak değerin denetimi: boş değer "kaldır" demektir (null). Satır sonu, boşluk ve tırnak kabul edilmez (dosyada tek
  * satır kalmalı, sunucunun okuyucusu tırnağı soyar). Adres http(s) olmalı. Hata Türkçe mesaj, yoksa temiz değer
  */
+/** Yerel ağ adı ya da adresi: bu adreslere düz http olur (deneme sunucusu, kafedeki başka bilgisayar) */
+function localHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === 'localhost' || h.endsWith('.local') || h === '::1') return true;
+  const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+
 export function checkConnValue(field: ConnField, raw: string): { value: string | null } | { error: string } {
   const value = raw.trim();
   if (!value) return { value: null };
@@ -182,6 +206,12 @@ export function checkConnValue(field: ConnField, raw: string): { value: string |
       return { error: `${field.label}: adres https:// ile başlamalı` };
     }
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: `${field.label}: adres https:// ile başlamalı` };
+    if (field.originOnly) {
+      if (u.protocol === 'http:' && !localHost(u.hostname)) return { error: `${field.label}: adres https:// ile başlamalı (http yalnız yerel ağda)` };
+      if (u.pathname.replace(/\/+$/, '') || u.search || u.hash || u.username || u.password)
+        return { error: `${field.label}: yalnız site adresi yazın, sonunda yol olmadan (örnek ${field.placeholder ?? 'https://site.com'})` };
+      return { value: u.origin };
+    }
     return { value: value.replace(/\/+$/, '') };
   }
   if (field.minLength && value.length < field.minLength) return { error: `${field.label}: en az ${field.minLength} karakter` };

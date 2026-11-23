@@ -27,6 +27,7 @@ import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
 import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
+import { reservedPosName } from '../sync/lafmaliyet';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
@@ -134,6 +135,14 @@ function assertPosNameFree(self: Pick<ProductRow, 'name' | 'posName' | 'priceL' 
   const extOf = (p: Pick<ProductRow, 'extSource' | 'extId'>) => (p.extSource === 'laffogato' ? p.extId : null);
   const rowKey = (p: Pick<ProductRow, 'extSource' | 'extId'>, size: 'M' | 'L' | 'TEK') => `${extOf(p) ?? ''}|${posSlotOf(extOf(p), size) ?? ''}`;
   const mine = posNamesOf(self, suffix).map((n) => ({ ...n, key: posNameKey(n.name), row: rowKey(self, n.size) }));
+  for (const m of mine) {
+    const r = reservedPosName(m.name);
+    if (!r) continue;
+    const own =
+      (r.siteId !== null && extOf(self) === r.siteId) ||
+      (r.feeProduct && !!self.id && posNameKey(db.select({ posName: schema.products.posName }).from(schema.products).where(eq(schema.products.id, self.id)).get()?.posName ?? '') === m.key);
+    if (!own) throw conflict(`"${m.name}" lafmaliyet adını kasa kendi satırı için kullanıyor (servis ücreti, platform ücreti ya da ek); başka bir ad yazın`, 'pos_name_reserved');
+  }
   const others = db.select().from(schema.products).all().filter((p) => p.id !== self.id);
   for (const o of others) {
     for (const n of posNamesOf(o, suffix)) {

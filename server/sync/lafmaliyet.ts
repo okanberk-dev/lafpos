@@ -13,6 +13,7 @@ import { Effects } from '../lib/effects';
 import { bus } from '../lib/events';
 import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
+import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
 
@@ -42,6 +43,19 @@ const ADDON_NAMES: Record<AddonKey, string> = { extraShot: 'EXTRA SHOT', syrup: 
 export const SERVICE_POS_NAME = 'SERVİS ÜCRETİ';
 /** Eklerin sitedeki sabit kalemleri (laffogato menüsü, `extras` kategorisi; server/db/menu-snapshot.json) */
 const ADDON_SITE_IDS: Record<AddonKey, string> = { syrup: 'mnu-0080', extraShot: 'mnu-0081', milk: 'mnu-0082' };
+
+/**
+ * Kasanın kendi yazdığı lafmaliyet satırının adı mı (servis ücreti, platform ücreti, ekler): başka ürüne verilirse o
+ * ürünün satışı bu satıra karışır (platform ücreti adı hizmet de sayılır). Ek adı yalnız ekin site kalemine, platform
+ * ücreti yalnız kendi gizli ürününe uyar (`siteId`, `feeProduct`); null: ad serbest
+ */
+export function reservedPosName(name: string): { siteId: string | null; feeProduct: boolean } | null {
+  const key = posNameKey(name);
+  if (key === posNameKey(SERVICE_POS_NAME)) return { siteId: null, feeProduct: false };
+  if (key === posNameKey(PLATFORM_FEE_POS_NAME)) return { siteId: null, feeProduct: true };
+  const addon = (Object.keys(ADDON_NAMES) as AddonKey[]).find((k) => posNameKey(ADDON_NAMES[k]) === key);
+  return addon ? { siteId: ADDON_SITE_IDS[addon], feeProduct: false } : null;
+}
 /** Ek sayılmayan varsayılan seçenek kodları (sitenin `customization` kimlikleri) */
 const ADDON_NONE: Partial<Record<AddonKey, string>> = { milk: 'normal', syrup: 'none' };
 const isAddonKey = (k: string | null): k is AddonKey => k === 'extraShot' || k === 'syrup' || k === 'milk';
@@ -253,8 +267,10 @@ export function buildDayPayload(dayId: string) {
     message: string | null;
     acquirers: { name: string; count: number | null; totalKurus: number | null }[];
   }>(`pavo.eod.${day.id}`);
+  // 'running' (cihazda gün sonu sürüyor) sözleşmede yok: lafmaliyet bilinmeyen durumu sessizce atardı. Gün sonu bitince
+  // gün yeniden gönderilir
   const bankPos =
-    eod && eod.status !== 'skipped'
+    eod && eod.status !== 'skipped' && eod.status !== 'running'
       ? {
           status: eod.status,
           batchNo: eod.batchNo,
@@ -270,8 +286,8 @@ export function buildDayPayload(dayId: string) {
     version: 1,
     source: 'lafpos',
     ...(bankPos ? { bankPos } : {}),
-    // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel günü bu şubeye yazar. Eski panel alanı yok sayar ve günü
-    // Tuzla'ya yazar (geri uyumlu, docs/03-ENTEGRASYON.md §4)
+    // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel yalnız kendi şubesinin (marina) gününü alır, başkasına 409
+    // wrong_branch (docs/03-ENTEGRASYON.md §4). Gönderirken güncel ayardan yeniden yazılır (sendDue)
     sube: getSettings().branchId,
     date: day.date,
     z: {
@@ -430,9 +446,25 @@ const RESEND = 'Kasa › Geçmiş günler › Z › Gönder';
 /** HTTP hatasının kısa açıklaması (gün sonu ve maliyet ortak): 401 ve 503'te neden ve ne yapılacağı */
 function httpErrorText(status: number, json: unknown): string {
   const detail = errorDetail(json);
-  if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. LafPOS'taki LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET'la aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)?`;
-  if (status === 503) return `HTTP 503${detail}: lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil, bağlantı panelde kapalı`;
+  const code = (json as { error?: unknown } | null)?.error;
+  if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. LafPOS'taki LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)`;
+  // 503 yalnız gövdesi not_configured ise "anahtar yok"; başkası (bakım, barındırma hatası) geçici sayılır
+  if (status === 503 && code === 'not_configured') return `HTTP 503${detail}: lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil, bağlantı panelde kapalı`;
+  if (status === 503 || status === 502 || status === 504) return `HTTP ${status}${detail}: lafmaliyet şu an yanıt vermiyor (bakım ya da sunucu hatası)`;
+  if (status === 404 || status === 405) return `HTTP ${status}${detail}: adreste lafmaliyet yok. Yönetim › Bağlantı bilgileri › lafmaliyet adresi https://ladmin.laffogato.net olmalı`;
   return `HTTP ${status}${detail}`;
+}
+
+/** Yanıt hiç gelmediyse (internet yok, ad çözülemedi, zaman aşımı) Türkçe neden; değilse hatanın kendi metni */
+export function networkErrorText(e: unknown): string {
+  if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) return 'lafmaliyet zamanında yanıt vermedi';
+  if (isNetworkError(e)) {
+    const code = String((e as { cause?: { code?: unknown } }).cause?.code ?? (e as { code?: unknown }).code ?? '');
+    const why = code === 'ENOTFOUND' || code === 'EAI_AGAIN' ? 'adres bulunamadı (internet ya da adres yazımı)' : 'bağlantı kurulamadı (internet)';
+    return `lafmaliyet'e ulaşılamadı: ${why}${code ? ` [${code}]` : ''}`;
+  }
+  const m = e instanceof Error ? e.message : String(e);
+  return m === 'fetch failed' ? "lafmaliyet'e ulaşılamadı" : m;
 }
 
 /**
@@ -443,7 +475,7 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
   const detail = errorDetail(json);
   if (status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch') {
     const b = json as { sube?: unknown; expected?: unknown };
-    return `lafmaliyet bu kasanın gün sonunu almıyor: kasa "${String(b.sube)}" şubesine ayarlı, LafPOS'un şubesi "${String(b.expected)}". Yönetim › Ayarlar ve yedek › Şube'yi düzeltip ${RESEND} ile yeniden gönderin`;
+    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Yönetim › Ayarlar ve yedek › Şube'yi "${String(b.expected)}" yapıp ${RESEND} ile yeniden gönderin`;
   }
   if (status === 409) {
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
@@ -451,7 +483,8 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
     const known = typeof body.zNo === 'number' ? `lafmaliyet'te bu güne Z ${body.zNo} kayıtlı, gönderilen Z ${typeof sent === 'number' ? sent : '?'}. ` : '';
     return `lafmaliyet reddetti: HTTP 409${detail}. ${known}Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince ${RESEND} ile yeniden gönderin`;
   }
-  if (PERMANENT.has(status)) return `lafmaliyet reddetti: HTTP ${status}${detail}. Kendiliğinden yeniden denenmez; düzeltilince ${RESEND} ile yeniden gönderin`;
+  // 400/413/422: gövde sözleşmeye uymadı ya da çok büyük; LafPOS'un ya da panelin sürüm farkı, kullanıcının düzelteceği bir şey yok
+  if (PERMANENT.has(status)) return `lafmaliyet reddetti: HTTP ${status}${detail}. Kendiliğinden yeniden denenmez; LafPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin, sürerse destekle görüşün`;
   return httpErrorText(status, json);
 }
 
@@ -484,7 +517,9 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
     .all();
   for (const row of due) {
     try {
-      const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL(`${env.lafmaliyetUrl}/api/pos/gun`), row.payload, 15_000);
+      // Şube kasanın ayarıdır, günün değil: kuyruktaki kayıt şube düzeltilmeden önce hazırlandıysa güncelini taşır
+      const body = { ...(row.payload as object), sube: getSettings().branchId };
+      const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL('/api/pos/gun', env.lafmaliyetUrl), body, 15_000);
       // 400/413/422 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
       // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
       if (PERMANENT.has(status)) {
@@ -497,6 +532,10 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       }
       if (status !== 200) throw new Error(pushErrorText(status, json, row.payload));
       const date = dateOf(row.payload);
+      // 200 yalnız lafmaliyet'in kendi yanıtıysa gönderildi sayılır (`ok` ve aynı gün): araya giren bir sayfa (giriş,
+      // bakım, başka site) günü "gitti" diye işaretletmez
+      const reply = (json && typeof json === 'object' ? json : {}) as { ok?: unknown; date?: unknown };
+      if (reply.ok !== true || reply.date !== date) throw new Error("Adresten lafmaliyet yanıtı gelmedi (HTTP 200, beklenen gövde yok). Yönetim › Bağlantı bilgileri › lafmaliyet adresi https://ladmin.laffogato.net olmalı");
       const answer = readDayAnswer(json, date);
       const now = Date.now();
       tx((t) => {
@@ -514,7 +553,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       const attempts = row.attempts + 1;
       const wait = Math.min(6 * 3600_000, 60_000 * 2 ** Math.min(attempts, 8));
       db.update(schema.outbox)
-        .set({ attempts, lastError: e instanceof Error ? e.message : String(e), nextAttemptAt: Date.now() + wait })
+        .set({ attempts, lastError: networkErrorText(e), nextAttemptAt: Date.now() + wait })
         .where(eq(schema.outbox.id, row.id))
         .run();
       failed++;
@@ -522,7 +561,9 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
   }
   if (sent || failed) {
     const prev = getSyncState<PushState>('lafmaliyet.push') ?? {};
-    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(sent ? { lastSuccessAt: Date.now() } : {}), ...(lastAnswer ? { lastAnswer } : {}) } satisfies PushState);
+    // Yanıtta gelmeyen geçiş günü bilinen eskisini silmez (eski ya da kısa yanıt "bilinmiyor" demek, "seçilmedi" değil)
+    const kept = lastAnswer && !('switchDay' in lastAnswer) && prev.lastAnswer && 'switchDay' in prev.lastAnswer ? { ...lastAnswer, switchDay: prev.lastAnswer.switchDay } : lastAnswer;
+    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(sent ? { lastSuccessAt: Date.now() } : {}), ...(kept ? { lastAnswer: kept } : {}) } satisfies PushState);
     bus.publish({ topic: 'sync', kind: 'lafmaliyet.push' });
   }
   return { sent, failed };
@@ -672,9 +713,9 @@ export async function pullCosts() {
   if (!configured()) throw conflict('lafmaliyet bağlantısı tanımlı değil', 'not_configured');
   let res: { status: number; json: unknown };
   try {
-    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL(`${env.lafmaliyetUrl}/api/panel/pos/urunler`));
+    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL('/api/panel/pos/urunler', env.lafmaliyetUrl));
   } catch (e) {
-    costsFailed(`Maliyetler alınamadı: lafmaliyet'e ulaşılamadı (${e instanceof Error ? e.message : e})`);
+    costsFailed(`Maliyetler alınamadı: ${networkErrorText(e)}`);
   }
   if (res.status !== 200) costsFailed(`Maliyetler alınamadı (${httpErrorText(res.status, res.json)})`);
   const parsed = costsBody.safeParse(res.json);
