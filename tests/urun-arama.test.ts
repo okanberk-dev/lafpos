@@ -41,6 +41,16 @@ describe('ürün arama', () => {
     expect(searchProducts(menu, 'latte').similar.map((p) => p.id)).not.toContain('5');
   });
 
+  it('yazarken de ikizden yalnız yerel olan bir kez çıkar: sorgu yalnız site kopyasının yazılışını tutsa da', () => {
+    // "kara…" yalnız Karamel'i (site), "cara…" yalnız CARAMEL'i (yerel) tutar; öteki ikiz benzerlerde çıkıyordu
+    for (const q of ['cara', 'caram', 'carame', 'kara', 'karam', 'karame']) {
+      expect(searchProducts(menu, q)).toEqual({ exact: [menu[3]], similar: [] });
+    }
+    expect(searchProducts(menu, 'çile').exact.map((p) => p.id)).toEqual(['2', '1']);
+    // Yazım hatasında benzerlerde de site kopyası yerine yerel ikizi
+    expect(searchProducts(menu, 'çilekk').similar.map((p) => p.id)).toEqual(['2', '1']);
+  });
+
   it('yalnız yerel ve site ikizi birleşir; iki yerel ya da iki site ürünü ayrı kalır', () => {
     const ids = (list: { id: string }[]) => list.map((p) => p.id);
     // Başka kategoride, başka fiyatla ikinci limonata; Türkçe ve İngilizce adlı iki yerel ürün

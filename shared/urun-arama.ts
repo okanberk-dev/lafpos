@@ -82,20 +82,26 @@ function variants(q: string): string[] {
  * "Limonata", "Çay" ile "Tea" ya da "Su" ile "Water" aramada hiç bulunmuyordu)
  */
 export function dedupe<T extends SearchItem>(list: T[]): T[] {
-  const locals = new Map<string, number>();
+  const twins = twinsOf(list);
+  return list.filter((p) => !twins.has(p.id));
+}
+
+/** Yerel ikizi olan site ürünü → o yerel ürün (sırayla, her yerel en çok bir site ürünüyle; `dedupe` bunları gizler) */
+function twinsOf<T extends SearchItem>(list: T[]): Map<string, T> {
+  const locals = new Map<string, T[]>();
   for (const p of list) {
     if (p.site) continue;
     const key = canonicalName(p.name);
-    locals.set(key, (locals.get(key) ?? 0) + 1);
+    const same = locals.get(key);
+    if (same) same.push(p);
+    else locals.set(key, [p]);
   }
-  return list.filter((p) => {
-    if (!p.site) return true;
-    const key = canonicalName(p.name);
-    const free = locals.get(key) ?? 0;
-    if (!free) return true;
-    locals.set(key, free - 1);
-    return false;
-  });
+  const twins = new Map<string, T>();
+  for (const p of list) {
+    const local = p.site ? locals.get(canonicalName(p.name))?.shift() : undefined;
+    if (local) twins.set(p.id, local);
+  }
+  return twins;
 }
 
 /** Baş harf: yabancı adın c'si Türkçede k yazılır (kola, kafe, kortado); ikisi aynı sayılır */
@@ -116,16 +122,24 @@ function near(w: string, t: string): boolean {
 export function searchProducts<T extends SearchItem>(items: T[], q: string, limit = 60): { exact: T[]; similar: T[] } {
   const vs = variants(q);
   if (!vs[0]) return { exact: [], similar: [] };
-  const matched = items.filter((p) => vs.some((v) => hay(p).includes(v)));
-  const exact = dedupe(matched).slice(0, limit);
+  // İkizler bütün menüde eşlenir: eşleşen site kopyası yerine yerel ikizi gösterilir, ürün kesin sonuçlar ve benzerler
+  // boyunca bir kez çıkar (inceleme, 23 Kas 2026: tekilleştirme iki listede ayrı yapılıyordu; "çilek smoothie" ya da
+  // yazarken "kara" ve "cara" bir ikizi sonuçta, ötekini "Benzer ürünler"de gösteriyordu, "kara"da görünen site kopyasıydı)
+  const twins = twinsOf(items);
+  const shown = new Set<string>();
+  const once = (list: T[]) =>
+    list
+      .map((p) => twins.get(p.id) ?? p)
+      .filter((p) => {
+        if (shown.has(p.id)) return false;
+        shown.add(p.id);
+        return true;
+      });
+  const exact = once(items.filter((p) => vs.some((v) => hay(p).includes(v)))).slice(0, limit);
   if (exact.length >= 3) return { exact, similar: [] };
-  // Kesin eşleşenin tekilleştirmede gizlenen site ikizi benzerlerde yeniden çıkmaz (inceleme, 23 Kas 2026: "çilek
-  // smoothie" STRAWBERRY SMOOTHIE'yi bulup Çilek Smoothie'yi "Benzer ürünler"de gösteriyordu)
-  const taken = new Set(matched.map((p) => p.id));
   const words = vs[0].split(' ').filter((w) => w.length >= 3);
-  const similar = dedupe(
+  const similar = once(
     items.filter((p) => {
-      if (taken.has(p.id)) return false;
       const tokens = hay(p).split(/[^a-z0-9]+/).filter(Boolean);
       return words.length > 0 && words.every((w) => tokens.some((t) => near(w, t)));
     }),
