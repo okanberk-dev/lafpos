@@ -212,6 +212,7 @@ function ClosedCard({ r, mode, onOpen, onCancel }: { r: ClosedOrderRow; mode: Re
     <button
       type="button"
       data-order-card=""
+      data-order-id={r.id}
       {...(onCancel ? long.handlers : {})}
       aria-description={onCancel ? 'Uzun basınca iptal' : undefined}
       onClick={() => {

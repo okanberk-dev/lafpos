@@ -134,6 +134,41 @@ const ROUTES = {
         await page.getByRole('button', { name: 'Hesabı yeniden yazdır', exact: true }).waitFor({ timeout: 5000 });
       }
     }),
+    // Kalem iadesi penceresi (kapanmış siparişte): bir latte seçilince geri verilecek tutar ve ödeme yolu kutusu. Sunucu
+    // başına bir kez indirimli, iki türle ödenmiş bir tezgâh satışı kapatılır (yalnız bu durum için; iade yapılmaz)
+    state('/siparisler', 'kapanan-iade', async (page) => {
+      const id = await page.evaluate(async () => {
+        const call = async (method, path, body) => {
+          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+          if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+          return res.json();
+        };
+        const boot = await call('GET', '/bootstrap');
+        const latte = boot.products.find((p) => p.name === 'Latte');
+        // Üç orta latte, %10 indirim: önceki ekranlarda kapatılan aynı satış yeniden kullanılır (iade onaylanmaz)
+        const total = Math.round(latte.price * 3 * 0.9);
+        const found = (await call('GET', '/reports/checks')).rows.find((r) => r.status === 'kapali' && r.total === total);
+        if (found) return found.id;
+        const nakit = boot.paymentMethods.find((m) => m.kind === 'nakit');
+        const kart = boot.paymentMethods.find((m) => m.zField === 'card');
+        let o = await call('POST', '/orders', { type: 'tezgah', reuse: null });
+        o = await call('POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 3 }] });
+        o = await call('POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Kampanya' });
+        const half = Math.floor(o.total / 2);
+        await call('POST', `/orders/${o.id}/payments`, { methodId: nakit.id, amount: half });
+        await call('POST', `/orders/${o.id}/payments`, { methodId: kart.id, amount: o.total - half });
+        return o.id;
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await settle(page);
+      await page.getByRole('tab', { name: /^Kapanan/ }).click({ timeout: 5000 });
+      await page.getByRole('searchbox', { name: 'Kapanan adisyonlarda ara' }).waitFor({ timeout: 5000 });
+      await page.locator(`[data-order-card][data-order-id="${id}"]`).click({ timeout: 5000 });
+      await page.getByRole('button', { name: 'Kalem iade et', exact: true }).click({ timeout: 5000 });
+      const dialog = page.getByRole('dialog', { name: 'Kalem iade et' });
+      await dialog.getByRole('button', { name: /bir artır$/ }).first().click({ timeout: 5000 });
+      await dialog.getByText('Geri verilecek', { exact: true }).waitFor({ timeout: 5000 });
+    }),
     '/mutfak',
     // Tükenen ürünler › Seçenekler (yulaf sütü bitti); telefon ve tablette araçlar "Diğer" penceresinde
     state('/mutfak', 'tukenen-secenekler', async (page) => {
