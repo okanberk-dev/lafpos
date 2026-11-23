@@ -112,6 +112,10 @@ describe('Tükendi kilidi: sitenin menüden kaldırdığı ile şubenin Tükendi
       expect(row()).toMatchObject({ active: false, soldOutBy: 'site' });
       const parked = db.select().from(schema.outbox).where(eq(schema.outbox.kind, 'menu.isActive')).all().at(-1);
       expect(parked?.lastError).toContain('kasada da kapatıldı');
+      // Denetim kaydı ürüne bağlı, açışı kimin yaptığını söyler
+      const rec = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, 'product.sold_out')).all().at(-1);
+      expect(rec).toMatchObject({ entity: 'product', entityId: p.id });
+      expect(rec?.message).toBe("Americano sitede menüden kaldırılmış; test kullanıcısının LafPOS'taki açışı geri alındı");
     } finally {
       site.panelOnMenu.clear();
       db.update(schema.products).set({ active: true, soldOutBy: null }).where(eq(schema.products.id, p.id)).run();

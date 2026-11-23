@@ -335,6 +335,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
     try {
       const { slip } = await post<{ slip: BankEodSlip }>('/okc/eod/slip', { again: true });
       await printBankEodSlip(boot, slip);
+      toast.ok('Gün sonu kâğıdı yazıcıya gönderildi');
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {

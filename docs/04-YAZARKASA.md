@@ -442,8 +442,8 @@ hiç bağlı olmasa da gün kapalı kalır.
   kapalıyken güncelleyicinin beklediği tek meşguliyet budur (`guncelle.mjs` `installDecision`; en çok 3 dk, 5 dk'da bir
   yeniden sorar): bekleyen sepet gün kapalıyken de kalabildiğinden (site siparişi) kurulumu süresiz tutmaz.
 - **Kâğıt**: cihazın slibi her gün sonunda (yukarıda). Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da
-  çıksın" (`okcPavoEodFis`, varsayılan açık) yalnız fiş yazıcısını yönetir: açıkken işyeri nüshası basan kasa ekranı
-  `POST /api/okc/eod/slip` (`odeme.al`) ile son başarılı gün sonunun kâğıdını alır (batch başına bir kez, ilk soran
+  çıksın" (`okcPavoEodFis`, varsayılan açık) yalnız fiş yazıcısını yönetir: açıkken fiş yazıcılı kasa ekranı (Pavo
+  bağlı; ödeme sonrası nüsha ayarlarından bağımsız) `POST /api/okc/eod/slip` (`odeme.al`) ile son başarılı gün sonunun kâğıdını alır (batch başına bir kez, ilk soran
   ekrana; 12 saatten eskisi basılmaz) ve önce kapanan günün LafPOS Z'sini, sonra bankalar, toplam ve Pavo - LafPOS
   kart kıyasını basar. Kıyas kayıt kâğıdı olduğundan kör kasada da basılır; Z kasa uçlarının kuralıyla gider
   (`server/lib/kor-kasa.ts`): kasa rakamlarını görmeyene hiç (`z: null`, kâğıt yalnız banka kısmıyla), maliyet yetkisi

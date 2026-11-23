@@ -271,6 +271,22 @@ describe('kalem iptali: sitede iptal edilen satır LafPOS bar ekranında kalmaz'
     expect(live).toHaveLength(1);
     expect(live[0]).toMatchObject({ extLine: 1 });
   });
+
+  it('sitede iptal edilmiş eski ikiz, kasada iptal edilenden sonra eşlenir: sitenin canlı satırıyla geri açılmaz', async () => {
+    const { orders, db, schema, eq } = await mod();
+    orders.upsertOnlineOrders([panelOrder('ord-twin3', 9205, [line('mnu-0003', 'Latte'), line('mnu-0003', 'Latte'), line('mnu-0003', 'Latte')])] as never);
+    const row = (await onlineRow('ord-twin3'))!;
+    const [a, b] = (await itemsOf(row.id)).sort((x, y) => (x.id < y.id ? -1 : 1));
+    // En eski ikiz sitede iptal edildi (konum gelmeden önce), ikincisi kasada; sitede iki satır canlı (konum 1 ve 2)
+    db.update(schema.orderItems).set({ voided: true, voidReason: orders.SITE_LINE_VOID, voidBy: 'Site' }).where(eq(schema.orderItems.id, a!.id)).run();
+    db.update(schema.orderItems).set({ voided: true, voidReason: 'Kasada iptal' }).where(eq(schema.orderItems.id, b!.id)).run();
+    orders.upsertOnlineOrders([panelOrder('ord-twin3', 9205, [line('mnu-0003', 'Latte', 1), line('mnu-0003', 'Latte', 2)])] as never);
+    const items = await itemsOf(row.id);
+    // Sitede iptal edilen geri gelmez; sitenin ikinci canlı satırını kasada iptal edilen alır, iptali kasanındır
+    expect(items.find((i) => i.id === a!.id)).toMatchObject({ voided: true, voidReason: orders.SITE_LINE_VOID });
+    expect(items.find((i) => i.id === b!.id)).toMatchObject({ voided: true, extLine: 2 });
+    expect(items.filter((i) => !i.voided)).toHaveLength(1);
+  });
 });
 
 describe('kapanış sonucu (closed): iptal ve iade online toplamına girmez', () => {
@@ -296,20 +312,44 @@ describe('kapanış sonucu (closed): iptal ve iade online toplamına girmez', ()
   });
 
   it('teslimden sonra sitede iade ya da iptal edilen sipariş online toplamdan düşer, denetim kaydına yazılır; tamamlandı geri yazılmaz', async () => {
-    const { orders } = await mod();
+    const { orders, bus } = await mod();
     const online = async () => (await h.ok<{ summary: { onlineTotal: number } }>('mudur', 'GET', '/cash/day')).summary;
     orders.upsertOnlineOrders([panelOrder('ord-c3', 9303, [line('mnu-0003', 'Latte')], { totalMinor: 30000 })] as never);
     const before = await online();
     orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'completed' }]);
     expect((await onlineRow('ord-c3'))?.extOutcome).toBe('completed');
     expect((await online()).onlineTotal).toBe(before.onlineTotal);
-    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'refunded' }]);
+    const ev = collect(bus);
+    try {
+      orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'refunded' }]);
+      // Kasa ekranının X'i ve patron özeti yeniden okunur (tables/online.sync yalnız masa planını yeniler)
+      expect(ev.events.filter((e) => e.topic === 'cash' && e.kind === 'online.outcome')).toHaveLength(1);
+    } finally {
+      ev.stop();
+    }
     expect((await onlineRow('ord-c3'))?.extOutcome).toBe('refunded');
     expect((await online()).onlineTotal).toBe(before.onlineTotal - 30000);
-    expect((await audits('online.outcome')).some((x) => x.message.includes('#9303 sitede iade edildi'))).toBe(true);
+    // Gün açık: X değişir; tutar kayıtta
+    const rec = (await audits('online.outcome')).find((x) => x.message.includes('#9303 sitede iade edildi'));
+    expect(rec?.message).toBe('Online sipariş #9303 sitede iade edildi; online toplamdan düştü');
+    expect(rec?.amount).toBe(30000);
     // Eski bir liste "tamamlandı" dese de iade geri alınmaz
     orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c3', outcome: 'completed' }]);
     expect((await onlineRow('ord-c3'))?.extOutcome).toBe('refunded');
+  });
+
+  it("kapanmış günün siparişi sonradan iade edilirse kayıt Z'nin değişmediğini söyler", async () => {
+    const { orders, db, schema, eq } = await mod();
+    orders.upsertOnlineOrders([panelOrder('ord-c4', 9304, [line('mnu-0003', 'Latte')], { totalMinor: 12000 })] as never);
+    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c4', outcome: 'completed' }]);
+    // Siparişin günü kapanmış (Z'si dondurulmuş) bir gün olsun
+    const at = Date.now() - 86_400_000;
+    db.insert(schema.businessDays).values({ id: 'day-eski-c4', date: '2026-11-01', zNo: 9001, openedAt: at, openingCash: 0, closedAt: at + 3_600_000 }).run();
+    db.update(schema.orders).set({ dayId: 'day-eski-c4' }).where(eq(schema.orders.extId, 'ord-c4')).run();
+    orders.upsertOnlineOrders([] as never, true, Number.POSITIVE_INFINITY, null, [{ id: 'ord-c4', outcome: 'cancelled' }]);
+    const rec = (await audits('online.outcome')).find((x) => x.message.includes('#9304'));
+    expect(rec?.message).toBe("Online sipariş #9304 sitede iptal edildi; Raporlar'daki online toplamdan düştü, kapanmış günün Z'si değişmez");
+    expect(rec?.amount).toBe(12000);
   });
 
   it('`closed` okunamayan satırı atlar; alanı göndermeyen site null', async () => {

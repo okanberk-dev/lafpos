@@ -66,6 +66,11 @@ describe('kalem kalem iade', () => {
     const unit = item.unitPrice;
     const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi' });
     expect(denied.json.code).toBe('approval_required');
+    // Ödeme alamayan (garson) yetkili onayıyla da iade edemez: kalan yeniden yazılır, nakit kasadan geri verilir
+    const waiter = await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi', approverPin: PINS.mudur });
+    expect(waiter.status).toBe(403);
+    expect(waiter.json.code).toBe('forbidden');
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).total).toBe(withItems.total);
     const res = await h.ok<Refund>('kasa', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi', approverPin: PINS.mudur });
     const after = res.order;
     expect(after.status).toBe('kapali');

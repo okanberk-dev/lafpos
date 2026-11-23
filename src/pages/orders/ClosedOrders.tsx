@@ -454,6 +454,11 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
   );
   const tutar = plan.refund;
   const liste = secili.reduce((a, i) => a + (adet[i.id] ?? 0) * i.unitPrice, 0);
+  const nedenler = [
+    (order.discountType != null || secili.some((i) => i.discount > 0)) && 'adisyondaki indirim düşüldü',
+    order.serviceRate > 0 && 'servis ücreti eklendi',
+  ].filter(Boolean);
+  const fark = `Liste fiyatı ${tl(liste)}${nedenler.length ? `; ${nedenler.join(', ')}` : ''}`;
   // Ödeme türüne göre geri verilecek (kör kasada kapanan adisyonun ödemeleri gelmez: döküm iadeden sonra bildirimde)
   const odemeler = order.payments.filter((p) => !p.refundedAt);
   const kalan = refundKeeps(odemeler, plan.total);
@@ -531,8 +536,8 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
               <span className="text-ink-2">Geri verilecek</span>
               <span className="tabular font-headline text-lg font-bold">{tl(tutar)}</span>
             </div>
-            {/* İndirimli adisyon: liste fiyatı değil, müşterinin ödediği geri verilir */}
-            {tutar !== liste && <p className="mt-0.5 text-xs text-muted">Liste fiyatı {tl(liste)}; adisyondaki indirim düşüldü</p>}
+            {/* Liste fiyatı değil, müşterinin ödediği geri verilir: indirim düşer, servis ücreti eklenir */}
+            {tutar !== liste && <p className="mt-0.5 text-xs text-muted">{fark}</p>}
             {yollar.size > 0 && <p className="mt-1 text-[13px] font-medium text-ink">{[...yollar.values()].map(iadeYolu).join(' · ')}</p>}
           </div>
         )}

@@ -141,7 +141,7 @@ export function failureMessage(status: number, json: unknown): string {
   const code = errorCode(json);
   if (status === 401) return "Site karaoke okumasını kabul etmedi (HTTP 401): site LafPOS'a karaokeyi açmamış, anahtar farklı ya da kasa saati 5 dakikadan fazla kaymış";
   // Şube reddi: sitenin LAFPOS_BRANCHES'ında bu kasanın şubesi yok (gün ya da saat meselesi değil)
-  if (status === 403 && (json as { field?: unknown } | null)?.field === 'branch') return `Site karaokeyi bu kasanın şubesine (${siteBranch()}) açmadı (HTTP 403): sitedeki LAFPOS_BRANCHES ile Yönetim › Ayarlar › Şube aynı olmalı`;
+  if (status === 403 && (json as { field?: unknown } | null)?.field === 'branch') return `Site karaokeyi bu kasanın şubesine (${siteBranch()}) açmadı (HTTP 403): sitedeki LAFPOS_BRANCHES ile Yönetim › Ayarlar ve yedek › Şube kimliği aynı olmalı`;
   if (status === 403) return 'Site bu günü LafPOS\'a açmadı (HTTP 403): kasa bilgisayarının tarihi ya da saati yanlış olabilir';
   if (status === 503 && code === 'not_configured') return "Sitede LafPOS anahtarı tanımlı değil (HTTP 503)";
   if (status === 503) return 'Site rezervasyonları şu an okuyamıyor (HTTP 503)';

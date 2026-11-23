@@ -179,10 +179,6 @@ export function cleanCloudKeys(raw: unknown): Record<string, string> {
   return out;
 }
 
-/**
- * Yazılacak değerin denetimi: boş değer "kaldır" demektir (null). Satır sonu, boşluk ve tırnak kabul edilmez (dosyada tek
- * satır kalmalı, sunucunun okuyucusu tırnağı soyar). Adres http(s) olmalı. Hata Türkçe mesaj, yoksa temiz değer
- */
 /** Yerel ağ adı ya da adresi: bu adreslere düz http olur (deneme sunucusu, kafedeki başka bilgisayar) */
 function localHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, '').toLowerCase();
@@ -193,6 +189,10 @@ function localHost(host: string): boolean {
   return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
 }
 
+/**
+ * Yazılacak değerin denetimi: boş değer "kaldır" demektir (null). Satır sonu, boşluk ve tırnak kabul edilmez (dosyada tek
+ * satır kalmalı, sunucunun okuyucusu tırnağı soyar). Adres http(s) olmalı. Hata Türkçe mesaj, yoksa temiz değer
+ */
 export function checkConnValue(field: ConnField, raw: string): { value: string | null } | { error: string } {
   const value = raw.trim();
   if (!value) return { value: null };
