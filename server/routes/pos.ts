@@ -308,8 +308,10 @@ posRoutes.post('/orders/:id/payments', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   const res = write((t, fx) => orders.addPayment(t, actor, fx, c.req.param('id'), input));
-  // Kaydedilen tutar ve pay da döner: kör kasada kapanan adisyonun ödeme dökümü gizlidir, ekran bunu gösterir
-  return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change, amount: res.amount, share: res.share });
+  // Kaydedilen tutar ve pay da döner: kör kasada kapanan adisyonun ödeme dökümü gizlidir, ekran bunu gösterir. Bu
+  // isteğin ödemesi de (`payment`): kasiyer az önce kendisi aldı, fişi bununla basılır. Kör kasiyerde adisyonu kapatan
+  // ödemede fiş hiç çıkmıyordu (ekran yeni ödemeyi gizlenen dökümde arıyordu; inceleme, 23 Kas 2026)
+  return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change, amount: res.amount, share: res.share, payment: res.payment });
 });
 
 /**
@@ -361,15 +363,22 @@ posRoutes.post('/orders/:id/cancel', async (c) => {
   return c.json(dto(c, id));
 });
 
-/** Kalem kalem iade (orders.refundItems): seçilen adetler iade, kalan aynı ödeme türleriyle; büyük iptal bildirimi */
+/**
+ * Kalem kalem iade (orders.refundItems): seçilen adetler iade, kalan aynı ödeme türleriyle; büyük iptal bildirimi.
+ * Geri verilen tutar ve ödeme türü dökümü de döner: kör kasada kapanan adisyonun ödemeleri gizlidir, kasiyer kasadan
+ * ne kadar nakit vereceğini buradan görür
+ */
 posRoutes.post('/orders/:id/refund-items', async (c) => {
-  const input = await body(c, z.object({ items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).min(1).max(100), reason, ...approver }));
+  const input = await body(
+    c,
+    z.object({ items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).min(1).max(100), reason, expectTotal: kurus.nullish(), ...approver }),
+  );
   const actor = actorFrom(c, input.approverPin);
   const id = c.req.param('id');
   const before = lossOf('iptal', id).value;
-  write((t, fx) => orders.refundItems(t, actor, fx, id, { items: input.items, reason: input.reason }));
+  const res = write((t, fx) => orders.refundItems(t, actor, fx, id, { items: input.items, reason: input.reason, expectTotal: input.expectTotal }));
   afterLoss('iptal', id, before, actor.user.id);
-  return c.json(dto(c, id));
+  return c.json({ order: dto(c, id), refunded: res.refunded, methods: res.methods });
 });
 
 /** Kapanmış siparişi iptal: ödemeler iptal, adisyon iptal (orders.cancelClosedOrder); büyük iptal bildirimi */

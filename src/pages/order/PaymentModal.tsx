@@ -378,7 +378,7 @@ export function PaymentModal({
     const requestId = attempt.current.id;
     const res = await act(async (pin) => {
       try {
-        return await post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
+        return await post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null; payment?: { id: string; methodName: string; amount: number; tip: number } }>(`/orders/${order.id}/payments`, {
           methodId: method.id,
           amount,
           tip,
@@ -398,10 +398,9 @@ export function PaymentModal({
     setBusy(false);
     if (!res) return;
     attempt.current = null;
-    // İşyeri nüshası (ve yazarkasasız kurulumda bilgi fişi): bu ödemenin kayıtları, her ödeme bir kez
-    const before = new Set(order.payments.map((p) => p.id));
-    const fresh = res.order.payments.filter((p) => !before.has(p.id) && !p.refundedAt).map((p) => p.id);
-    if (fresh.length) printAfterPayment({ key: `odeme:${fresh.join(',')}`, boot, order: res.order, paymentIds: fresh });
+    // Müşteri ve işyeri nüshası: bu isteğin ödemesi (sunucunun yanıtından), her ödeme bir kez. Adisyonun dökümünde
+    // aranmaz: kör kasada kapanan adisyonun ödemeleri gelmez, adisyonu kapatan ödemede iki fiş de çıkmıyordu
+    if (res.payment) printAfterPayment({ key: `odeme:${res.payment.id}`, boot, order: res.order, payments: [res.payment] });
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
     prefillAmount(res.order.total - res.order.paid);
     setSelection({});

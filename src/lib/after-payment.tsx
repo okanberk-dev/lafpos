@@ -35,13 +35,14 @@ export function deviceCopyHere(boot: BootstrapDTO): boolean {
  * ve yazarkasasız kurulumda müşteriye bilgi fişi. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey olmaz.
  * `key` her ödeme için tektir (ödeme kimlikleri). Cihaz ödemesinin nüshası ayrı yoldan: `useDeviceCopies`
  */
-export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order: OrderDTO; paymentIds: string[] }) {
-  const { boot, order } = opts;
+export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order: OrderDTO; payments: { id: string; methodName: string; amount: number; tip: number }[] }) {
+  const { boot, order, payments } = opts;
   const plan = plannedPrints(boot, false);
   if (!plan.storeCopy && !plan.infoSlip) return;
   if (!once(opts.key)) return;
-  const payments = order.payments.filter((p) => opts.paymentIds.includes(p.id));
-  const cashier = payments.find((p) => p.userName)?.userName ?? useAuth.getState().me?.name ?? null;
+  // Ödemeyi bu ekrandaki kişi aldı. Ödemeler adisyonun dökümünden değil sunucunun yanıtından gelir: kör kasada
+  // (kasa rakamlarını görmeyen kasiyer) kapanan adisyonun dökümü boştur
+  const cashier = useAuth.getState().me?.name ?? null;
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
   // Önce müşteri nüshası (büyük sipariş no), sonra işyeri nüshası (kalem dökümü; bar için): ayrı kâğıtlar
   void printEach([

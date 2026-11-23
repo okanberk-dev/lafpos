@@ -337,6 +337,63 @@ export function unpaidLineAmount(totals: Pick<OrderTotals, 'lineNet'>, line: Ite
   return Math.min(amountForItems(totals, [line], [{ lineId: line.id, qty: line.qty - line.paidQty }]), Math.max(0, remaining));
 }
 
+export interface RefundCalc {
+  /** İade sonrası adisyon indirimi: tutar indirimi kalan kalemlerle orantılı küçülür, yüzde aynı kalır */
+  discount: OrderDiscount;
+  /** İade sonrası ödenecek toplam */
+  total: Kurus;
+  /** Müşteriye geri verilecek tutar: önceki toplam eksi yeni toplam */
+  refund: Kurus;
+}
+
+/**
+ * Kapanmış adisyonda kalem iadesinin hesabı: sunucu yazarken, ekran onaydan önce aynı hesabı yapar (kasiyerin gördüğü
+ * tutar ile kasadan çıkan tutar tutsun; ekran adet × liste fiyatı gösteriyordu, %20 indirimli lattede ₺39 fazla).
+ * İade edilen adetler çıkar, adisyon indirimi kalan kalemlerde oranını korur. Yüzde indirim kendiliğinden korunur; tutar
+ * indirimi kalanın ara toplamıyla orantılı küçülür: ₺195 indirimli 3 lattede (latte başına ₺130 ödendi) 1 latte iade
+ * edilince ₺130 geri verilir. İndirim aynı kalsaydı ₺195 geri verilir, iki lattelik adisyonda tek latte iadesi
+ * adisyonun tamamını sıfırlardı. Ödemeler iade sırasında iptal edildiği için satırlar ödenmemiş sayılır; kalem indirimi
+ * `splitLineDiscount` ile bölünür (sunucunun kalemi böldüğü hesap).
+ */
+export function refundCalc(input: CalcInput, selection: readonly { lineId: string; qty: number }[]): RefundCalc {
+  const before = calcOrder(input);
+  const lines = input.lines.map((l) => ({ ...l }));
+  for (const s of selection) {
+    const line = lines.find((l) => l.id === s.lineId);
+    if (!line || line.voided || line.complimentary || s.qty <= 0) continue;
+    if (s.qty >= line.qty) {
+      line.voided = true;
+      continue;
+    }
+    const unpaid = lines.map((l) => ({ id: l.id, qty: l.qty, paidQty: 0, paidAmount: 0 }));
+    line.discount = splitLineDiscount({ ...input, lines }, unpaid, line.id, s.qty).kept;
+    line.qty -= s.qty;
+  }
+  let discount = input.discount ?? null;
+  if (discount?.type === 'amount') {
+    const was = before.gross - before.lineDiscounts;
+    const kept = calcOrder({ ...input, lines, discount: null });
+    const now = kept.gross - kept.lineDiscounts;
+    discount = { type: 'amount', value: allocate(before.orderDiscount, [now, Math.max(0, was - now)])[0] ?? 0 };
+  }
+  const after = calcOrder({ ...input, lines, discount });
+  return { discount, total: after.total, refund: before.total - after.total };
+}
+
+/**
+ * İade sonrası hangi ödeme ne kadar kalır: ödemeler alındıkları sırayla yeni toplamı karşılar, karşılanmayan kısım
+ * (son alınandan başlayarak) iade edilir. Dönen dizi ödemelerle aynı sırada kalan tutarlardır (0: tamamı iade). Ekran
+ * onaydan önce "Nakit ₺195 kasadan, Kart ₺195 banka POS'undan" diyebilsin diye sunucuyla ortak
+ */
+export function refundKeeps(payments: readonly { amount: Kurus }[], total: Kurus): Kurus[] {
+  let left = Math.max(0, total);
+  return payments.map((p) => {
+    const keep = Math.min(p.amount, left);
+    left -= keep;
+    return keep;
+  });
+}
+
 export interface PaymentLike {
   amount: Kurus;
   refunded?: boolean;

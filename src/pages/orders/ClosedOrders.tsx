@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CLOSED_PAGE_DEFAULT, type ClosedOrderDetailDTO, type ClosedOrderRow, type ClosedOrdersDTO, HISTORY_QUERY_MAX } from '@shared/history';
 import { tl } from '@shared/money';
+import { refundCalc, refundKeeps } from '@shared/order-calc';
 import type { OrderDTO } from '@shared/types';
 import { fmtTime } from '@shared/time';
 import { PlatformBadge } from '@/components/PlatformBadge';
@@ -423,9 +424,15 @@ function ClosedDetail({ id, today, onClose }: { id: string | null; today: string
   );
 }
 
+/** İadenin geri verildiği yol: nakit kasadan çıkar, kart banka POS'undan iade edilir; öteki türler kendi yolundan */
+const iadeYolu = (m: { name: string; zField: string; amount: number }) => `${m.name} ${tl(m.amount)}${m.zField === 'cash' ? ' kasadan' : m.zField === 'card' ? ' banka POS’undan' : ''}`;
+
 /**
  * Kalem kalem iade (sahip, 22 Kas 2026): kalemleri adetle seç, neden yaz; yetkili onayıyla tek işlemde iade
- * (`POST /orders/:id/refund-items`): kalan aynı ödeme türleriyle yeniden yazılır, nakit iade kasadan düşer
+ * (`POST /orders/:id/refund-items`): kalan aynı ödeme türleriyle yeniden yazılır, nakit iade kasadan düşer.
+ * Tutar ortak hesaptan (`refundCalc`, sunucunun yazdığıyla aynı): indirimler düşülmüş, müşterinin ödediği kadar.
+ * Ekran adet × liste fiyatı gösteriyordu: %20 indirimli lattede kasiyer ₺39 fazla veriyordu (inceleme, 23 Kas 2026).
+ * Birden çok ödeme türü varsa hangisinden ne kadar geri verileceği onaydan önce yazar (son alınan ödemeden başlar)
  */
 function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean; order: OrderDTO; fiscal: boolean; onClose: () => void; onDone: () => void }) {
   const [adet, setAdet] = useState<Record<string, number>>({});
@@ -433,16 +440,44 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
   const [busy, setBusy] = useState(false);
   const kalemler = order.items.filter((i) => !i.voided && !i.complimentary);
   const secili = kalemler.filter((i) => (adet[i.id] ?? 0) > 0);
-  const tutar = secili.reduce((a, i) => a + (adet[i.id] ?? 0) * i.unitPrice, 0);
+  const plan = refundCalc(
+    {
+      lines: order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
+      discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
+      serviceRate: order.serviceRate,
+    },
+    secili.map((i) => ({ lineId: i.id, qty: adet[i.id] ?? 0 })),
+  );
+  const tutar = plan.refund;
+  const liste = secili.reduce((a, i) => a + (adet[i.id] ?? 0) * i.unitPrice, 0);
+  // Ödeme türüne göre geri verilecek (kör kasada kapanan adisyonun ödemeleri gelmez: döküm iadeden sonra bildirimde)
+  const odemeler = order.payments.filter((p) => !p.refundedAt);
+  const kalan = refundKeeps(odemeler, plan.total);
+  const yollar = new Map<string, { name: string; zField: string; amount: number }>();
+  odemeler.forEach((p, i) => {
+    const geri = p.amount - (kalan[i] ?? 0);
+    if (geri <= 0) return;
+    const m = yollar.get(p.methodId) ?? { name: p.methodName, zField: p.zField, amount: 0 };
+    m.amount += geri;
+    yollar.set(p.methodId, m);
+  });
   const degis = (id: string, d: number, max: number) => setAdet((a) => ({ ...a, [id]: Math.max(0, Math.min(max, (a[id] ?? 0) + d)) }));
   const gonder = async () => {
     if (!secili.length) return toast.err('İade edilecek kalemi seçin');
     if (!neden.trim()) return toast.err('İade nedenini yazın');
     setBusy(true);
     try {
-      const done = await withApproval((pin) => post(`/orders/${order.id}/refund-items`, { items: secili.map((i) => ({ itemId: i.id, qty: adet[i.id] })), reason: neden.trim(), approverPin: pin }));
+      // expectTotal: yanıt kaybolur da yeniden basılırsa sunucu ikinci kez iade etmez (toplam değişmiştir)
+      const done = await withApproval((pin) =>
+        post<{ refunded: number; methods: { name: string; zField: string; amount: number }[] }>(`/orders/${order.id}/refund-items`, {
+          items: secili.map((i) => ({ itemId: i.id, qty: adet[i.id] })),
+          reason: neden.trim(),
+          expectTotal: order.total,
+          approverPin: pin,
+        }),
+      );
       if (done) {
-        toast.ok(`${tl(tutar)} iade edildi`);
+        toast.ok(`${tl(done.refunded)} iade edildi${done.methods.length ? `: ${done.methods.map(iadeYolu).join(', ')}` : ''}`);
         setAdet({});
         setNeden('');
         onDone();
@@ -458,7 +493,7 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
       open={open}
       onClose={onClose}
       title="Kalem iade et"
-      subtitle={fiscal ? 'Yazarkasada kesilen fişin iadesi cihazdan ayrıca yapılır; kart iadesi banka POS’undan' : 'Nakit iade kasadan çıkış sayılır'}
+      subtitle={fiscal ? 'Yazarkasada kesilen fişin iadesi cihazdan ayrıca yapılır; kart iadesi banka POS’undan' : 'Nakit iade kasadan çıkış sayılır; kart iadesi banka POS’undan yapılır'}
       footer={
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:justify-end">
           <Button onClick={onClose}>Vazgeç</Button>
@@ -484,6 +519,17 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
             </li>
           ))}
         </ul>
+        {secili.length > 0 && (
+          <div role="status" className="rounded-[var(--r-tile)] bg-surface-2 px-3 py-2.5 text-sm">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-ink-2">Geri verilecek</span>
+              <span className="tabular font-headline text-lg font-bold">{tl(tutar)}</span>
+            </div>
+            {/* İndirimli adisyon: liste fiyatı değil, müşterinin ödediği geri verilir */}
+            {tutar !== liste && <p className="mt-0.5 text-xs text-muted">Liste fiyatı {tl(liste)}; adisyondaki indirim düşüldü</p>}
+            {yollar.size > 0 && <p className="mt-1 text-[13px] font-medium text-ink">{[...yollar.values()].map(iadeYolu).join(' · ')}</p>}
+          </div>
+        )}
         <Input value={neden} onChange={(e) => setNeden(e.target.value)} maxLength={200} placeholder="İade nedeni (ör. müşteri vazgeçti)" aria-label="İade nedeni" />
       </div>
     </Modal>

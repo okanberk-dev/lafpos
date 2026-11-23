@@ -11,6 +11,8 @@ import {
   lineGross,
   type OrderTotals,
   type PaidItem,
+  refundCalc,
+  refundKeeps,
   splitAmountsError,
   splitLineDiscount,
   splitState,
@@ -671,10 +673,10 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
  * afterDelivery) ciro dışı kapanmaz: sıfırla kapanan adisyona platform ödemesi hiç yazılmaz, uyuşmazlık alarmı da
  * düşmezdi. İptal platformdan gelir; kendi kuryemizin kapıda aldığı siparişte ikram ve zayi serbesttir.
  */
-function assertNotPlatformCollected(t: Tx, o: OrderRow) {
+function assertNotPlatformCollected(t: Tx, o: OrderRow, message = 'Tahsilatı platformun yaptığı sipariş ciro dışı kapanmaz; iptal platformdan gelir') {
   if (!o.platform) return;
   const row = t.select({ payload: schema.platformOrders.payload }).from(schema.platformOrders).where(eq(schema.platformOrders.orderId, o.id)).get();
-  if (row?.payload.platformCollects) throw conflict('Tahsilatı platformun yaptığı sipariş ciro dışı kapanmaz; iptal platformdan gelir', 'platform_order');
+  if (row?.payload.platformCollects) throw conflict(message, 'platform_order');
 }
 
 /** Ödenmezin bağlanacağı kayıtlı kişi (istekte tür ve kimlik; ad sunucuda kayıttan okunur) */
@@ -1493,7 +1495,7 @@ export function addPayment(
   fx: Effects,
   orderId: string,
   input: PaymentInput,
-): { order: OrderRow; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null } {
+): { order: OrderRow; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null; payment: { id: string; methodName: string; amount: number; tip: number } } {
   needDirect(actor, 'odeme.al');
   // Yanıtı kaybolan istek yeniden geldiyse (kasiyer "Öde"ye tekrar bastı) ödeme ikinci kez yazılmaz: ilk sonuç döner.
   // Yoksa yarım ödeme iki kez yazılıp adisyon yarısı alınmış hâlde kapanıyordu (denetim, 26 Eki 2026)
@@ -1511,7 +1513,7 @@ export function addPayment(
       if (!sameRequest(prev, input)) throw conflict('Ödeme ekranı değişti; ekran yenilendi, ödemeyi yeniden alın', 'request_reused');
       const order = loadOrder(t, orderId);
       const share = prev.shareNo != null ? { no: prev.shareNo, of: prev.shareOf ?? prev.shareNo } : null;
-      return { order, closed: order.status === 'kapali', change: prev.change ?? 0, amount: prev.amount, share };
+      return { order, closed: order.status === 'kapali', change: prev.change ?? 0, amount: prev.amount, share, payment: { id: prev.id, methodName: prev.methodName, amount: prev.amount, tip: prev.tip } };
     }
   }
   const o = loadOrder(t, orderId);
@@ -1668,7 +1670,7 @@ export function addPayment(
   orderEvents(fx, updated, actor.user.id, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: actor.user.id });
   if (customerId) fx.emit({ topic: 'customers', kind: 'ledger', byUserId: actor.user.id });
-  return { order: updated, closed, change, amount, share };
+  return { order: updated, closed, change, amount, share, payment: { id: paymentId, methodName: method.name, amount, tip } };
 }
 
 /** Ödenecek tutarı sıfır olan (tamamı ikram/iptal) adisyonu kapatır. */
@@ -1820,6 +1822,8 @@ export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: str
   assertPosOrder(o);
   const day = requireOpenDay(t);
   if (o.dayId !== day.id) throw conflict('Önceki günün siparişi iptal edilemez', 'day_closed');
+  // Platformun tahsil ettiği sipariş kasadan iptal edilmez (ödemesi platformun; iptali platformdan gelir)
+  assertNotPlatformCollected(t, o, 'Tahsilatı platformun yaptığı sipariş kasadan iptal edilmez; iptal platformdan gelir');
   const why = reason.trim();
   if (!why) throw bad('İptal nedeni yazılmalı', 'reason_required');
   need(actor, 'odeme.iade', 'Kapanmış siparişi iptal etmek yetkili onayı gerektirir');
@@ -1832,47 +1836,107 @@ export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: str
 /** İade sonrası yeniden yazılan ödemenin notu: iade raporu net tutarı bununla bulur (`refundReport`) */
 export const REFUND_REWRITE = 'İade sonrası: ';
 
+export interface RefundItemsResult {
+  order: OrderRow;
+  /** Müşteriye geri verilen tutar (indirimler düşülmüş; ekran bunu gösterir) */
+  refunded: number;
+  /** Ödeme türüne göre geri verilen: nakit kasadan çıkar, kart banka POS'undan iade edilir */
+  methods: { methodId: string; name: string; zField: string; amount: number }[];
+}
+
 /**
  * Kalem kalem iade (sahip, 22 Kas 2026): bugünün kapanmış kasa siparişinde seçilen kalemler (adet seçerek) iade edilir.
  * Tek işlemde: alınan ödemeler iptal (adisyon açılır), seçilen adetler iptal (iade nedeniyle), kalan tutar aynı ödeme
  * türleriyle sırayla yeniden yazılır ve adisyon yeniden kapanır. Nakit iade böylece kasanın beklenen nakdinden düşer
  * (kasadan çıkış), kart iadesi raporda iade satırıdır. Yeniden yazılan ödeme iptal edilenin kimliğini notunda taşır:
  * iade raporu net iade tutarını gösterir. Yetkili onayı (ödeme iptali ve kalem iptali) ve zorunlu neden.
+ *
+ * Tutar ortak hesaptan (`refundCalc`): adisyon indirimi kalan kalemlerde oranını korur (tutar indirimi orantılı küçülür),
+ * ekranın onaydan önce gösterdiği tutarla aynıdır. İnceleme (23 Kas 2026):
+ * - Tahsilatı platformun yaptığı sipariş iade edilmez (iptali platformdan gelir).
+ * - Adet satırı aşamaz, ikram ve iptal kalem seçilemez (sessizce kırpılıyordu).
+ * - `expectTotal`: ekranın gördüğü toplam. Yanıtı kaybolan istek yeniden gelirse toplam değişmiştir, ikinci kez iade
+ *   edilmez (çok adetli satır kimliğini korur: aynı istek bir adet daha iade ediyordu).
+ * - Paylaşımlı hesap: paylaşım kalkar (kalan, payların ödemeleriyle yeniden yazılır; yoksa "Paylaş'tan alın" reddi).
+ * - Bahşiş kalan ödemede durur (bahşiş kalemin değil ödemenin; siliniyor, beklenen nakit ve Z bahşişi düşüyordu).
+ * - Yazarkasadan geçmiş ödemenin kalanı da geçmiş sayılır: fişin `paymentIds`'ine yeni kimlik eklenir (yoksa kalan
+ *   tutar "Yazarkasadan geçmeyen"e düşüyordu).
+ * - Sipariş yalnız hiç kalem kalmadıysa iptal olur; kalan toplam sıfırsa (geriye ikram kaldı) kapanır.
+ * - Özet denetim kaydı onaylayanla birlikte ve tam iadede de yazılır.
  */
-export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { items: { itemId: string; qty: number }[]; reason: string }): OrderRow {
+export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { items: { itemId: string; qty: number }[]; reason: string; expectTotal?: number | null }): RefundItemsResult {
   const o = loadOrder(t, orderId);
   if (o.status !== 'kapali') throw conflict('Yalnız kapanmış sipariş iade edilir');
   assertPosOrder(o);
+  assertNotPlatformCollected(t, o, 'Tahsilatı platformun yaptığı siparişin iadesi platformdan yapılır');
   const day = requireOpenDay(t);
   if (o.dayId !== day.id) throw conflict('Önceki günün siparişi iade edilemez', 'day_closed');
   const why = input.reason.trim();
   if (!why) throw bad('İade nedeni yazılmalı', 'reason_required');
-  if (!input.items.length) throw bad('İade edilecek kalemi seçin', 'items_required');
-  need(actor, 'odeme.iade', 'İade yetkili onayı gerektirir');
-  const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
-  for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: `İade: ${why}` });
-  if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, `İade: ${why}`);
-  for (const sel of input.items) voidItem(t, actor, fx, orderId, { itemId: sel.itemId, qty: sel.qty, reason: `İade: ${why}` });
-  let left = loadOrder(t, orderId).total;
-  for (const p of pays) {
-    if (left <= 0) break;
-    const amount = Math.min(p.amount, left);
-    addPayment(t, actor, fx, orderId, { methodId: p.methodId!, amount, tip: amount === p.amount ? p.tip : 0, customerId: p.customerId, note: `${REFUND_REWRITE}${p.id}` });
-    left -= amount;
+  if (input.expectTotal != null && input.expectTotal !== o.total) throw conflict('Sipariş değişti (iade yazılmış olabilir): dökümü yenileyip yeniden deneyin', 'order_changed');
+  const items = orderItems(t, orderId);
+  const selection = new Map<string, number>();
+  for (const s of input.items) selection.set(s.itemId, (selection.get(s.itemId) ?? 0) + s.qty);
+  if (!selection.size) throw bad('İade edilecek kalemi seçin', 'items_required');
+  for (const [itemId, qty] of selection) {
+    const it = items.find((i) => i.id === itemId);
+    if (!it || it.voided) throw conflict('Seçilen kalem bu siparişte yok ya da iptal edilmiş', 'refund_item');
+    if (it.complimentary) throw conflict(`${it.name} ikram: iade edilecek tutarı yok`, 'refund_item');
+    if (qty > it.qty) throw conflict(`${it.name}: en çok ${it.qty} adet iade edilir`, 'refund_qty');
   }
-  if (left > 0) throw conflict('İade sonrası kalan tutar ödemelerle karşılanamadı; işlem geri alındı', 'refund_mismatch');
-  const after = loadOrder(t, orderId);
-  // Hiç kalem kalmadıysa sipariş iptal olur (bütünü iade)
-  if (after.status === 'acik' && after.total === 0) return cancelOrder(t, actor, fx, orderId, `İade: ${why}`);
+  const approverId = need(actor, 'odeme.iade', 'İade yetkili onayı gerektirir');
+  const plan = refundCalc(
+    calcInputFor(o, items),
+    [...selection].map(([lineId, qty]) => ({ lineId, qty })),
+  );
+  const note = `İade: ${why}`;
+  const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
+  for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: note });
+  if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, note);
+  // Tutar indirimi kalemler çıkmadan yazılır: iptaller kalan kalemlerde indirimi büyütmüş sayılmasın (approveDiscountShrink)
+  t.update(schema.orders)
+    .set({ splitPeople: null, splitAmounts: null, ...(plan.discount?.type === 'amount' ? { discountValue: plan.discount.value } : {}) })
+    .where(eq(schema.orders.id, orderId))
+    .run();
+  for (const [itemId, qty] of selection) voidItem(t, actor, fx, orderId, { itemId, qty, reason: note });
+  const reduced = recalc(t, orderId);
+  // Güvenlik ağı: yazılan toplam ortak hesabı tutmuyorsa işlem geri alınır (ekranın gösterdiği tutar yanlış olurdu)
+  if (reduced.total !== plan.total) throw conflict('İade hesabı tutmadı; işlem geri alındı', 'refund_mismatch');
+  const keeps = refundKeeps(pays, reduced.total);
+  const methods = new Map<string, RefundItemsResult['methods'][number]>();
+  pays.forEach((p, i) => {
+    const keep = keeps[i] ?? 0;
+    if (p.amount > keep) {
+      const m = methods.get(p.methodId) ?? { methodId: p.methodId, name: p.methodName, zField: p.zField, amount: 0 };
+      m.amount += p.amount - keep;
+      methods.set(p.methodId, m);
+    }
+    if (keep <= 0) return;
+    const rewrite = `${REFUND_REWRITE}${p.id}`;
+    // Bahşiş sonradan kapatıldıysa (ayar) yeniden yazım reddedilmesin: o durumda bahşiş taşınmaz
+    addPayment(t, actor, fx, orderId, { methodId: p.methodId, amount: keep, tip: getSettings().tipsEnabled ? p.tip : 0, customerId: p.customerId, note: rewrite });
+    const fresh = orderPayments(t, orderId).find((x) => !x.refundedAt && x.note === rewrite);
+    if (!fresh) return;
+    for (const r of t.select({ id: schema.fiscalReceipts.id, paymentIds: schema.fiscalReceipts.paymentIds }).from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.orderId, orderId)).all()) {
+      if (r.paymentIds.includes(p.id)) t.update(schema.fiscalReceipts).set({ paymentIds: [...r.paymentIds, fresh.id] }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    }
+  });
+  const result = { refunded: plan.refund, methods: [...methods.values()] };
   fx.audit(t, {
     userId: actor.user.id,
+    approverId,
     action: 'order.refund_items',
     severity: 'alarm',
     orderId,
-    amount: o.total - after.total,
-    message: `${actor.user.name} #${o.no} siparişte ${tl(o.total - after.total)} iade etti (${why})`,
+    amount: plan.refund,
+    message: `${actor.user.name} #${o.no} siparişte ${tl(plan.refund)} iade etti (${why})${result.methods.length ? `: ${result.methods.map((m) => `${m.name} ${tl(m.amount)}`).join(', ')}` : ''}`,
+    data: { methods: result.methods.map((m) => ({ name: m.name, amount: m.amount })) },
   });
-  return after;
+  const after = loadOrder(t, orderId);
+  if (after.status !== 'acik') return { order: after, ...result };
+  // Hiç kalem kalmadıysa sipariş iptal olur (bütünü iade); geriye ücretsiz kalem (ikram) kaldıysa adisyon kapanır
+  const anyLeft = orderItems(t, orderId).some((i) => !i.voided);
+  return { order: anyLeft ? closeOrder(t, actor, fx, orderId) : cancelOrder(t, actor, fx, orderId, note), ...result };
 }
 
 // ─── Bar / mutfak durumları ──────────────────────────────────────────────────

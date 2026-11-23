@@ -16,7 +16,7 @@ import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { trainingMode } from '../lib/settings';
 import { addonCostOf, addonSiteIds, costMap, costsAt } from '../sync/lafmaliyet';
 import { deviceReceipts, onlineCounted } from './days';
-import { getOpenDay } from './orders';
+import { getOpenDay, REFUND_REWRITE } from './orders';
 
 /**
  * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Ciro yalnız LafPOS'ta tahsil edilen
@@ -619,9 +619,11 @@ export function refundReport(range: Range) {
   const ds = load(range);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
-  // Kalem iadesinde ödeme iptal edilip kalan aynı türle yeniden yazılır (orders.refundItems): iade tutarı net gösterilir
+  // Kalem iadesinde ödeme iptal edilip kalan aynı türle yeniden yazılır (orders.refundItems): iade tutarı net gösterilir.
+  // Yeniden yazılan ödeme sonradan kendisi de iptal edilmiş olabilir (ikinci iade, ardından siparişin iptali): o da
+  // öncekinin netini düşer, kendi satırında kendi neti görünür (yalnız canlı olanlar sayılınca ilk iade brüt çıkıyordu)
   const rewritten = new Map<string, number>();
-  for (const p of ds.payments) if (!p.refundedAt && p.note?.startsWith('İade sonrası: ')) rewritten.set(p.note.slice('İade sonrası: '.length), p.amount);
+  for (const p of ds.payments) if (p.note?.startsWith(REFUND_REWRITE)) rewritten.set(p.note.slice(REFUND_REWRITE.length), p.amount);
   const rows = ds.payments
     .filter((p) => p.refundedAt && p.amount - (rewritten.get(p.id) ?? 0) > 0)
     .map((p) => ({
