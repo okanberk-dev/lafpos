@@ -2057,6 +2057,7 @@ html[class~='dark'] {
   .lp-name,
   .lp-sub,
   .lp-leaf,
+  .lp-body > .lp-side-extra,
   .lp-enter > *,
   .lp-band,
   .lp-dial .draw,
