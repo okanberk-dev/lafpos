@@ -109,12 +109,22 @@ export function pavo(): PavoClient | null {
 export function reconfigurePavo() {
   client = undefined;
   lastAsked.clear();
+  failedSince.clear();
 }
 /** Testler için: ortam değişince istemci yeniden kurulur */
 export function resetPavo(next?: PavoClient | null) {
   client = next === undefined ? undefined : next;
   outcomes.clear();
   lastAsked.clear();
+  failedSince.clear();
+}
+
+/**
+ * Cihazda banka gün sonu bu süreçte sürüyor mu (`/PerformEOD`, en çok 3 dk). İstemci kurulmamışsa sürmüyordur: gün
+ * sonu istemciyle gönderilir. Güncelleyici bunu "meşgul" sayar (lib/mesgul.ts)
+ */
+export function pavoEodRunning(): boolean {
+  return !!client && client.busyWith === PAVO_EOD;
 }
 
 /** LafPOS'un sepet kimliğinden cihazın sipariş no'su (16 karakter; aynı sepet hep aynı no) */
@@ -431,10 +441,12 @@ export function eodAfter(device: Pick<PavoEodSummary, 'batchNo' | 'deviceDateTim
 /**
  * Bekleme süreleri (testler kısaltır). `sendWaitMs`: gönderimin ilk saniyeleri beklenir, cihaz satışı hemen
  * reddederse (KDV grubu, eşleştirme) kasiyer görür · `askEveryMs`: cihaz tek istek işler, sonuç sorgusu bekleyen
- * sepet başına en sık bu aralıkla · `eodMs`: banka gün sonunun yanıtı en çok bu kadar beklenir (bankalara bağlanır,
- * dakikalar sürebilir) · `eodCopyMs`: son gün sonunun bilgisi (doğrulama ve gün sonundan hemen önceki taban)
+ * sepet başına en sık bu aralıkla · `failConfirmMs`: sonuç sorgusu "başarısız" derse satış ancak bu kadar sonraki bir
+ * sorguda da aynısı gelince cihazdan düşmüş sayılır (tek okuma isteğin reddi olabilir, satış hakkında bir şey
+ * söylemez; ask) · `eodMs`: banka gün sonunun yanıtı en çok bu kadar beklenir (bankalara bağlanır, dakikalar
+ * sürebilir) · `eodCopyMs`: son gün sonunun bilgisi (doğrulama ve gün sonundan hemen önceki taban)
  */
-export const pavoTiming = { sendWaitMs: 6_000, askEveryMs: 5_000, eodMs: 180_000, eodCopyMs: 30_000 };
+export const pavoTiming = { sendWaitMs: 6_000, askEveryMs: 5_000, failConfirmMs: 15_000, eodMs: 180_000, eodCopyMs: 30_000 };
 
 /** Cihaz meşgulken verilecek ret: süren gün sonu ya da cihazın ekranındaki satış */
 export function busyMessage(c: PavoClient, then: string): string | null {
@@ -445,6 +457,11 @@ export function busyMessage(c: PavoClient, then: string): string | null {
 /** Satış isteğinin yanıtı (sepet kimliğiyle); sorgu döngüsü alıp işler */
 const outcomes = new Map<string, PavoResponse | PavoError>();
 const lastAsked = new Map<string, number>();
+/**
+ * Sonuç sorgusunun "başarısız" okumasının art arda ilk görüldüğü an (sepet başına). Satış ancak bu okuma en az
+ * `failConfirmMs` sonraki bir sorguda da gelirse cihazdan düşmüş sayılır; arada gelen başka her okuma sıfırlar
+ */
+const failedSince = new Map<string, number>();
 
 function cancelledResult(res: PavoResponse | null): FiscalResult {
   return { status: 'cancelled', docKind: null, zNo: null, receiptNo: null, docId: null, payments: [], raw: res };
@@ -456,11 +473,27 @@ async function ask(c: PavoClient, receiptId: string, orderNo: string): Promise<P
   const res = await c.saleResult(orderNo);
   const reading = readSale(res);
   if (reading.kind === 'paid' || reading.kind === 'cancelled') return { kind: 'result', result: reading.result };
+  if (reading.kind === 'failed' && pairingLost(reading.code)) {
+    // Eşleştirme bozuk (73, 74): cihaz isteği reddetti, satış hakkında bir şey söylemedi. Sepet bekler: müşteri cihazda
+    // ödemiş olabilir, iptal sayılsa yeniden gönderim kartı ikinci kez çekerdi (inceleme, 23 Kas 2026). Kasiyer
+    // eşleştirme mesajını görür ("Son hata"da "Yeniden eşleştir"); eşleşince sorgu sonucu getirir
+    failedSince.delete(receiptId);
+    throw new PavoError(reading.message, reading.code, false, res);
+  }
   // Cihaz bu satışla meşgul değilken "satış yok / başarısız" diyorsa (kart reddedildi, satış cihazdan düştü) satış
   // bitmiştir: sepet vazgeçildi sayılır, ödeme penceresi yeniden göndermeye hazır olur. Sahada (22 Kas 2026) kart reddinden
   // sonra sepet "Cihazda ödeme bekleniyor"da kalıyor, kasiyer elle iptal edip yeniden gönderiyordu. Belge kesilmişse yanıt
-  // "ödendi" okunur (yukarıda); ağ hatası buraya gelmez (istek fırlatır, sepet bekler)
-  if (reading.kind === 'failed' && c.busyWith !== orderNo) return { kind: 'result', result: cancelledResult(res) };
+  // "ödendi" okunur (yukarıda); ağ hatası buraya gelmez (istek fırlatır, sepet bekler). Cihazın "satış yok" kodu
+  // bilinmiyor: tek "başarısız" okuma isteğin geçici reddi de olabilir (cihaz meşgul), satış ancak okuma `failConfirmMs`
+  // sonra da aynıysa düşmüş sayılır (inceleme, 23 Kas 2026). Sonuçta cihazın ham yanıtı saklanır: kod sahada öğrenilir
+  if (reading.kind === 'failed' && c.busyWith !== orderNo) {
+    const now = Date.now();
+    const since = failedSince.get(receiptId) ?? now;
+    failedSince.set(receiptId, since);
+    if (now - since >= pavoTiming.failConfirmMs) return { kind: 'result', result: cancelledResult(res) };
+    return { kind: 'pending', locked: false, lockedBy: null };
+  }
+  failedSince.delete(receiptId);
   return { kind: 'pending', locked: false, lockedBy: null };
 }
 
@@ -556,16 +589,22 @@ export const pavoProvider: FiscalProvider = {
     if (c.busyWith === PAVO_EOD) throw new PavoError('Cihazda gün sonu sürüyor; bitince yeniden deneyin', 'EOD_BUSY');
     if (outcomes.has(r.id)) throw new PavoError('Cihazın yanıtı geldi, işleniyor; birkaç saniye sonra yeniden deneyin');
     // Cihazda ödenmiş satış silinmez (sonucu işlenir); ödenmemiş satış cihazda kalmaz, silinecek bir şey yok
-    const reading = readSale(await c.saleResult(orderNo));
+    const res = await c.saleResult(orderNo);
+    const reading = readSale(res);
     if (reading.kind === 'paid') throw new PavoError('Bu satış cihazda ödenmiş; sonuç adisyona işleniyor');
+    // Eşleştirme bozuksa (73, 74) yanıt satış hakkında değil: ödenip ödenmediği bilinmez, sepet "cihaza ulaşılamadı"
+    // gibi yalnız yetkili onayıyla iptal sayılır (inceleme, 23 Kas 2026)
+    if (reading.kind === 'failed' && pairingLost(reading.code)) throw new PavoError(reading.message, reading.code, false, res);
     lastAsked.delete(r.id);
+    failedSince.delete(r.id);
   },
   async poll(r: PendingReceipt): Promise<PollOutcome> {
     const out = await pollOnce(r);
-    // Sonuçlanan sepetin izi tutulmaz: sorgu zamanı ve gelen yanıt yalnız bekleyen sepet için
+    // Sonuçlanan sepetin izi tutulmaz: sorgu zamanı, gelen yanıt ve "başarısız" okuması yalnız bekleyen sepet için
     if (out.kind !== 'pending') {
       lastAsked.delete(r.id);
       outcomes.delete(r.id);
+      failedSince.delete(r.id);
     }
     return out;
   },

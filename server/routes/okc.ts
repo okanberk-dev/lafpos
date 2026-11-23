@@ -108,7 +108,7 @@ okcRoutes.post('/eod', async (c) => {
 
 /**
  * Cihazda alınan son banka gün sonunun kâğıdı (fiş yazıcısı): batch başına bir kez, yalnız ilk soran kasa ekranına
- * verilir; basılacak bir şey yoksa `slip: null`
+ * verilir; basılacak bir şey yoksa `slip: null`. Kapanan günün Z'si kasa uçlarının kuralıyla (kör kasada `z: null`)
  */
 okcRoutes.post('/eod/slip', (c) => {
   requirePermission(c.get('user'), 'odeme.al');

@@ -139,6 +139,12 @@ describe('uç: POST /api/kasa/fis', () => {
     expect((await req('/kasa/fis', { who: 'kasa', body: { ...slip(3), height: 4 } })).status).toBe(422);
     expect((await req('/kasa/fis', { who: 'kasa', body: { ...slip(), width: 384 } })).status).toBe(422);
     expect((await req('/kasa/fis', { who: 'kasa', body: { width: 576, height: 20000, data: '' } })).status).toBe(422);
+    // Biçime uyan ama çözülemeyen base64: beklenmeyen hata (500) değil, geçersiz görüntü (422)
+    for (const data of ['A', 'AAAAA']) {
+      const r = await req('/kasa/fis', { who: 'kasa', body: { width: 576, height: 1, data } });
+      expect(r.status).toBe(422);
+      expect(((await r.json()) as { code: string }).code).toBe('validation');
+    }
   });
 
   it('düşme: yazıcıya ulaşılamazsa 502, ağ adresi yoksa 409 (arayüz tarayıcıdan basar)', async () => {
@@ -156,6 +162,12 @@ describe('uç: POST /api/kasa/fis', () => {
     const r2 = await req('/kasa/fis', { who: 'kasa', body: slip() });
     expect(r2.status).toBe(409);
     expect(((await r2.json()) as { code: string }).code).toBe('no_printer_address');
+    // Adres yokken gövde okunmaz: bozuk görüntü de doğrulanmadan 409 alır (arayüz hemen tarayıcıdan basar)
+    for (const body of [{ width: 576, height: 1, data: 'A' }, { width: 1 }]) {
+      const r3 = await req('/kasa/fis', { who: 'kasa', body });
+      expect(r3.status).toBe(409);
+      expect(((await r3.json()) as { code: string }).code).toBe('no_printer_address');
+    }
     warn.mockRestore();
   });
 

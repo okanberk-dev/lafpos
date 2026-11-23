@@ -7,6 +7,7 @@ import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
+import { zSummaryFor } from '../lib/kor-kasa';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
@@ -1241,8 +1242,10 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
   let reading: EodReading;
   try {
     const res = await pavo()!.performEod({
-      // Gün sonunda (gün kapanınca ya da elle) cihaz kendi gün sonu slibini bir kez basar (sahibin isteği; ayar okcPavoEodFis). Doğrulama (eodCopy) basmaz
-      print: opts.print ?? getSettings().okcPavoEodFis,
+      // Gün sonunda (gün kapanınca ya da elle) cihaz kendi gün sonu slibini bir kez basar (sahibin isteği, #154, #157).
+      // `okcPavoEodFis` yalnız fiş yazıcısının kâğıdını açıp kapatır: kapalıyken cihaz da basmıyordu, "yalnız cihazdan
+      // çıkacak" diyen ayar hiç kâğıt bırakmıyordu (inceleme, 23 Kas 2026). Doğrulama (eodCopy) basmaz
+      print: opts.print ?? true,
       timeoutMs: pavoTiming.eodMs,
       before: async () => {
         stage = 'baseline';
@@ -1421,20 +1424,26 @@ export interface PavoEodSlip {
   acquirers: PavoEodSummary['acquirers'];
   /** LafPOS'un kıyas tutarı (kapanan günün kart toplamı); kayıt kâğıdı olduğundan kör kasada da basılır */
   dayCardKurus: number | null;
-  /** Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır); gün kapalı değilse null */
+  /**
+   * Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır). Gün kapalı değilse ya da
+   * isteyen kasa rakamlarını görmüyorsa (kör kasa) null: kâğıt yalnız banka kısmıyla basılır
+   */
   z: { date: string; zNo: number; closedAt: number | null; summary: ZSummary } | null;
   trigger: 'otomatik' | 'elle';
   at: number;
 }
 
-function zOf(dayId: string | null): PavoEodSlip['z'] {
+/** Kapanan günün Z'si isteyenin gözüyle: kasa uçlarıyla aynı süzgeç (lib/kor-kasa.ts) */
+function zOf(user: AuthUser, dayId: string | null): PavoEodSlip['z'] {
   if (!dayId) return null;
   const d = db
     .select({ date: schema.businessDays.date, zNo: schema.businessDays.zNo, closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary })
     .from(schema.businessDays)
     .where(eq(schema.businessDays.id, dayId))
     .get();
-  return d?.closedAt && d.summary && d.zNo != null ? { date: d.date, zNo: d.zNo, closedAt: d.closedAt, summary: d.summary } : null;
+  if (!d?.closedAt || d.zNo == null) return null;
+  const summary = zSummaryFor(user, d.summary);
+  return summary ? { date: d.date, zNo: d.zNo, closedAt: d.closedAt, summary } : null;
 }
 
 /** Bu süreden eski gün sonunun kâğıdı basılmaz (kasa ekranı ertesi gün açıldığında eski kâğıt çıkmasın) */
@@ -1442,10 +1451,12 @@ const EOD_SLIP_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Son başarılı banka gün sonunun kâğıdı: batch başına bir kez, ilk soran ekrana (iki sekme ya da iki kasa ekranı
- * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Tutarlar cihazın kendi
- * slibindekilerle aynı; LafPOS kıyası yalnız kasa rakamlarını görene
+ * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Banka tutarları cihazın
+ * kendi slibindekilerle aynı; Pavo - LafPOS kart kıyası (`dayCardKurus`) kayıt kâğıdı olduğundan herkese, kör kasada da
+ * basılır (sahibin isteği, #154). LafPOS'un Z'si kasa uçlarındaki kuralla: kasa rakamlarını görmeyene hiç gitmez
+ * (beklenen nakit, sayılan, fark), personel tutarları yalnız maliyet yetkisi olana (inceleme, 23 Kas 2026)
  */
-export function takeEodSlip(_user: AuthUser, now = Date.now()): PavoEodSlip | null {
+export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | null {
   const s = getSettings();
   if (s.okcProvider !== 'pavo' || !s.okcPavoEodFis) return null;
   const rec = getSyncState<PavoEodRecord>(EOD_LAST);
@@ -1460,6 +1471,6 @@ export function takeEodSlip(_user: AuthUser, now = Date.now()): PavoEodSlip | nu
     dayCardKurus: rec.dayCardKurus,
     trigger: rec.trigger,
     at: rec.at,
-    z: zOf(rec.dayId),
+    z: zOf(user, rec.dayId),
   };
 }

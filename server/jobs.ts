@@ -22,7 +22,7 @@ import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
 import { startMerkez } from './sync/merkez';
 import { startPlatformKeys } from './sync/platform-anahtar';
-import { startNotices } from './sync/bildirim';
+import { afterDeviceEod, startNotices } from './sync/bildirim';
 import { afterDailyBackup } from './sync/yedek';
 import { startCatchUp } from './sync/catch-up';
 
@@ -185,18 +185,21 @@ async function backupTick() {
 
 let lastAutoWarn = 0;
 
-/** Otomatik gün sonu: ayarlanan saatte açık POS adisyonu yoksa günü sayımsız kapatır (föy sonra girilir). */
-function autoDayEndTick() {
+/**
+ * Otomatik gün sonu: ayarlanan saatte açık POS adisyonu yoksa günü sayımsız kapatır (föy sonra girilir). `now`
+ * testler için (zamanlayıcı şimdiki anla çağırır)
+ */
+export function autoDayEndTick(now = Date.now()) {
   const s = getSettings();
   if (!s.autoDayEnd) return;
-  const p = istanbulParts(Date.now());
+  const p = istanbulParts(now);
   // Saat yarımlı olabilir (22.5 = 22:30): o dakikadan sonraki 15 dakikada
   const hour = Math.floor(s.autoDayEndHour);
   const minute = Math.round((s.autoDayEndHour - hour) * 60);
   if (p.hour !== hour || p.minute < minute || p.minute > minute + 15) return;
   const day = getOpenDay(db);
   // Yeni açılmış (ya da gün sonundan sonra yeniden açılmış) gün hemen kapatılmaz
-  if (!day || Date.now() - Math.max(day.openedAt, day.reopenedAt ?? 0) < 3 * 3600_000) return;
+  if (!day || now - Math.max(day.openedAt, day.reopenedAt ?? 0) < 3 * 3600_000) return;
   // Boş adisyonlar (satış sonrası açılan yeni tezgâh gibi) engel değil: gün sonu onları kapatır
   const open = db
     .select({ id: schema.orders.id })
@@ -206,8 +209,8 @@ function autoDayEndTick() {
     .filter((o) => !isEmptyOrder(db, o.id));
   const fx = new Effects();
   if (open.length) {
-    if (Date.now() - lastAutoWarn > 30 * 60_000) {
-      lastAutoWarn = Date.now();
+    if (now - lastAutoWarn > 30 * 60_000) {
+      lastAutoWarn = now;
       fx.audit(db, { action: 'day.auto_skip', severity: 'uyari', message: `Otomatik gün sonu alınamadı: ${open.length} açık adisyon var` });
       fx.flush();
     }
@@ -216,8 +219,12 @@ function autoDayEndTick() {
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
   afterDayClosed(closed.id);
-  // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)
-  void deviceEndOfDay(closed.id, null).catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
+  // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5).
+  // Alınamaz ya da belirsiz kalırsa kasadan alınan gün sonundaki gibi patronun telefonuna (routes/cash.ts); otomatik
+  // gün sonunda bildirim hiç gitmiyordu (inceleme, 23 Kas 2026)
+  void deviceEndOfDay(closed.id, null)
+    .then(afterDeviceEod)
+    .catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
 }
 
 /** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi (site o an uyanık; gece de) */
@@ -275,7 +282,7 @@ export function startJobs() {
   timers.push(setInterval(() => void flushOutbox(), 60_000));
   // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
-  timers.push(setInterval(autoDayEndTick, 60_000));
+  timers.push(setInterval(() => autoDayEndTick(), 60_000));
   timers.push(setInterval(platformTick, 30_000));
   // Canlı platform bağlantısı: yoklama (Trendyol Go) ve bekleyen aşama bildirimleri; anahtar yokken hiç istek yok
   timers.push(setTimeout(() => void liveTick(), 15_000));
