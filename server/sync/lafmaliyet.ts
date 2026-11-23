@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzl
 import { z } from 'zod';
 import { compReasonText } from '@shared/comp';
 import { allocate } from '@shared/money';
-import { calcOrder } from '@shared/order-calc';
+import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { PLATFORM_FEE_POS_NAME, posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
 import { addDays, businessDate, isCalendarDate } from '@shared/time';
 import type { SelectedOption } from '@shared/types';
@@ -15,7 +15,8 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { computeSummary, lafmaliyetZ } from '../services/days';
+import { computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
+import { REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 
 /**
  * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
@@ -31,7 +32,11 @@ export interface SaleLine {
   qty: number;
   /** kuruş, KDV dahil */
   revenue: number;
+  /** kuruş: satırın liste değeri, indirim öncesi (mutlu saat birim fiyata işlenmiş); servis satırında servis ücreti */
+  gross: number;
   isService: boolean;
+  /** Birleşen satırda ek parçası var (EXTRA SHOT, SYRUP, ALTERNATIF SÜT: içeceğin seçeneğinden gelen) */
+  isAddon: boolean;
 }
 
 type ItemRow = typeof schema.orderItems.$inferSelect;
@@ -115,10 +120,12 @@ interface Part {
   /** kuruş: satışta net ciro, ikramda menü değeri */
   value: number;
   isService: boolean;
+  /** Ekin parçası (kalemin seçeneğinden ayrılan EXTRA SHOT, SYRUP, ALTERNATIF SÜT) */
+  isAddon: boolean;
 }
 
 /** Kalemin değerini ana ürün ve ekleri arasında liste fiyatları oranında böler (satışta ve ikramda aynı oran) */
-function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
+function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'size' | 'posName' | 'name' | 'isService' | 'extProductId' | 'qty'>, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
   const addons = addonsOf(i.options);
   const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
   const shares = allocate(value, weights);
@@ -127,7 +134,7 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
   // Platform ücreti hizmettir (mal maliyeti yok, KDV hizmet oranıyla); ürünün işareti oda sayacı için bilerek kapalı
   const isService = i.isService || posNameKey(posName) === posNameKey(PLATFORM_FEE_POS_NAME);
   return [
-    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService },
+    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService, isAddon: false },
     ...addons.map((op, k) => ({
       posName: ADDON_NAMES[op.key],
       siteMenuId: addonIds[op.key],
@@ -135,6 +142,7 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
       qty: i.qty * op.qty,
       value: shares[k + 1] ?? 0,
       isService: false,
+      isAddon: true,
     })),
   ];
 }
@@ -146,7 +154,7 @@ const partKey = (p: Pick<Part, 'posName' | 'siteMenuId' | 'slot'>) => `${posName
  * `parsePosDay`) sağlar: aynı ad iki farklı kaleme / boya düşerse ikinciye boy eki, yine çakışırsa site kimliği
  * eklenir. Siteye bağlı satır kalemiyle eşleştiği için ad yalnız bağsız üründe önemlidir; bağsız satır adını korur.
  */
-function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, string> } {
+function mergeParts(parts: (Part & { gross: number })[]): { lines: SaleLine[]; names: Map<string, string> } {
   const groups = new Map<string, SaleLine>();
   for (const p of parts) {
     const k = partKey(p);
@@ -154,7 +162,9 @@ function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, stri
     if (cur) {
       cur.qty += p.qty;
       cur.revenue += p.value;
-    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, isService: p.isService });
+      cur.gross += p.gross;
+      cur.isAddon ||= p.isAddon;
+    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, gross: p.gross, isService: p.isService, isAddon: p.isAddon });
   }
   const suffix = getSettings().posSizeSuffix;
   const rank = (l: SaleLine) => (l.siteMenuId ? 1 : 0);
@@ -195,14 +205,16 @@ function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
   const saleIds = db.select({ id: schema.orders.id }).from(schema.orders).where(closedPosWhere(dayIds));
   const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, saleIds)).all();
   const totals = new Map(orders.map((o) => [o.id, o.totals ?? calcOrder({ lines: [] })]));
-  const parts: Part[] = [];
+  const parts: (Part & { gross: number })[] = [];
   for (const i of items) {
     if (i.voided || i.complimentary) continue;
-    parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds));
+    // Liste değeri aynı oranla bölünür (indirim öncesi): satırın liste − ciro farkı indirim payıdır
+    const gross = itemParts(i, i.qty * i.unitPrice, addonIds);
+    parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds).map((p, k) => ({ ...p, gross: gross[k]?.value ?? 0 })));
   }
   // Servis ücreti ayrı hizmet satırı, adedi servis ücretli adisyon sayısı
   for (const t of totals.values()) {
-    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, isService: true });
+    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, gross: t.service, isService: true, isAddon: false });
   }
   return mergeParts(parts);
 }
@@ -236,6 +248,64 @@ export function salesCsv(from: string, to: string): string {
 
 const toTL = (k: number) => Math.round(k) / 100;
 
+/** Gövdedeki serbest metin (neden) en çok 200 karakter (docs/03-ENTEGRASYON.md §4) */
+const cap = (text: string | null | undefined) => (text == null ? null : text.slice(0, 200));
+/** `refunds[]` ve `iptal[]` en çok bu kadar satır (gövde büyümesin; lafmaliyet de aynı sınırla okur) */
+const LIST_MAX = 2000;
+
+/** İkram türü: eski kayıtta boş = ikram */
+const compKindOf = (k: string | null): 'ikram' | 'odenmez' | 'zayi' => (k === 'odenmez' || k === 'zayi' ? k : 'ikram');
+
+/**
+ * Ödenmezin kişi türü (kişinin kendisi, adı ve kimliği gitmez; KVKK): kayıtlı müşteri `musteri`, personelden patron rolü
+ * `patron`, öteki personel `personel`. Kişisiz ödenmez ve ikram, zayi null
+ */
+function personKindOf(i: Pick<ItemRow, 'compKind' | 'compPersonKind' | 'compPersonId'>, roles: Map<string, string>): 'personel' | 'musteri' | 'patron' | null {
+  if (i.compKind !== 'odenmez' || !i.compPersonKind) return null;
+  if (i.compPersonKind === 'customer') return 'musteri';
+  return i.compPersonId && roles.get(i.compPersonId) === 'patron' ? 'patron' : 'personel';
+}
+
+/**
+ * Gönderim sırası: bu günün (aynı tarih) lafmaliyet'ten 200 almış kayıt sayısı + 1. Tarihe ya da saate bağlı değil
+ * (altın gövde sabit kalır); bekleyen kayıt yenisiyle değişince sıra artmaz
+ */
+function revisionOf(date: string): number {
+  const sent = db
+    .select({ id: schema.outbox.id })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, `gun:${date}`), isNotNull(schema.outbox.sentAt)))
+    .all();
+  return sent.length + 1;
+}
+
+/**
+ * Günün son düzeltmesi: kapandıktan sonra kaydedilmiş sayımı değiştirmek (`recount`) ya da günü yeniden açmak
+ * (`reopen`). Yeniden açılış sayım düzeltmesini siler: ikisi de varsa sayım yeniden açılıştan sonradır. Pavo'nun gün
+ * sonu sonucuyla yeniden gönderim düzeltme değildir (alan yalnız günün kendi durumundan)
+ */
+function correctionOf(day: { reopenedAt: number | null; reopenReason: string | null; recountReason: string | null }) {
+  if (day.recountReason) return { kind: 'recount' as const, reason: cap(day.recountReason)! };
+  if (day.reopenedAt != null) return { kind: 'reopen' as const, reason: cap(day.reopenReason) ?? '' };
+  return null;
+}
+
+/**
+ * Günün iadeleri (iptal edilen ödemeler): kalem iadesinde iptal edilip kalanı yeniden yazılan ödemenin yeniden yazılan
+ * kısmı düşer, iade raporundaki gibi (reports.ts `refundReport`). Ad ödeme türünün adıdır, kişi değil
+ */
+function refundsOf(dayId: string) {
+  const pays = db.select().from(schema.payments).where(eq(schema.payments.dayId, dayId)).orderBy(asc(schema.payments.createdAt), asc(schema.payments.id)).all();
+  const channels = new Map(db.select({ id: schema.paymentMethods.id, channel: schema.paymentMethods.channel }).from(schema.paymentMethods).all().map((m) => [m.id, m.channel]));
+  const rewritten = new Map<string, number>();
+  for (const p of pays) if (p.note?.startsWith(REFUND_REWRITE)) rewritten.set(p.note.slice(REFUND_REWRITE.length), p.amount);
+  return pays
+    .filter((p) => p.refundedAt != null && p.amount - (rewritten.get(p.id) ?? 0) > 0)
+    .sort((a, b) => a.refundedAt! - b.refundedAt! || a.id.localeCompare(b.id))
+    .slice(0, LIST_MAX)
+    .map((p) => ({ amount: toTL(p.amount - (rewritten.get(p.id) ?? 0)), zField: p.zField, name: p.methodName, channel: channels.get(p.methodId) ?? null, reason: cap(p.refundReason) }));
+}
+
 /** Sözleşme §4: bir iş gününün paketi (tutarlar TL) */
 export function buildDayPayload(dayId: string) {
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
@@ -250,6 +320,34 @@ export function buildDayPayload(dayId: string) {
   const comps = closedIds.length
     ? db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, closedIds), eq(schema.orderItems.complimentary, true), eq(schema.orderItems.voided, false))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all()
     : [];
+  // İptaller: günün bütün kasa adisyonlarından (kapanmış, açık, iptal edilmiş; Z'nin iptal toplamı gibi), online hariç
+  const posIds = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.source, 'pos')));
+  const voids = db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, posIds), eq(schema.orderItems.voided, true))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all();
+  const roles = new Map(db.select({ id: schema.users.id, role: schema.users.role }).from(schema.users).all().map((u) => [u.id, u.role as string]));
+  const compTotal = (kind: 'ikram' | 'odenmez' | 'zayi') => comps.filter((i) => compKindOf(i.compKind) === kind).reduce((a, i) => a + i.qty * i.unitPrice, 0);
+  const ikramTotal = compTotal('ikram');
+  const odenmezTotal = compTotal('odenmez');
+  // Yazarkasadan geçmeyen: eski Z'de yok, ödemelerden yeniden hesaplanır (kural tek: shared/order-calc.ts)
+  const offDevice =
+    summary.offDevice ??
+    offDeviceTotals(
+      db.select().from(schema.payments).where(and(eq(schema.payments.dayId, day.id), isNull(schema.payments.refundedAt))).all(),
+      deviceReceipts(db, [day.id]),
+    );
+  // Yazarkasanın (ÖKC) mali Z'si: günün en son tamamlanan cihaz fişinden; Pavo satış sonucunda Z yok (boş)
+  const okc = db
+    .select({ zNo: schema.fiscalReceipts.zNo })
+    .from(schema.fiscalReceipts)
+    .where(
+      and(
+        inArray(schema.fiscalReceipts.orderId, db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, day.id))),
+        eq(schema.fiscalReceipts.status, 'tamamlandi'),
+        isNotNull(schema.fiscalReceipts.zNo),
+      ),
+    )
+    .orderBy(desc(schema.fiscalReceipts.completedAt), desc(schema.fiscalReceipts.id))
+    .get();
+  const correction = correctionOf(day);
   // Banka POS'unun gördüğü ama Z'nin kart alanına girmeyen tutarlar (lafmaliyet kart farkını bunlarla açıklar)
   const cardPays = db
     .select({ orderId: schema.payments.orderId, amount: schema.payments.amount, tip: schema.payments.tip })
@@ -265,6 +363,7 @@ export function buildDayPayload(dayId: string) {
     grandTotalKurus: number | null;
     dayCardKurus: number | null;
     message: string | null;
+    errorCode?: string | null;
     acquirers: { name: string; count: number | null; totalKurus: number | null }[];
   }>(`pavo.eod.${day.id}`);
   // 'running' (cihazda gün sonu sürüyor) sözleşmede yok: lafmaliyet bilinmeyen durumu sessizce atardı. Gün sonu bitince
@@ -280,11 +379,16 @@ export function buildDayPayload(dayId: string) {
           diff: eod.grandTotalKurus != null && eod.dayCardKurus != null ? toTL(eod.grandTotalKurus - eod.dayCardKurus) : null,
           acquirers: eod.acquirers.map((a) => ({ name: a.name, count: a.count, total: a.totalKurus != null ? toTL(a.totalKurus) : null })),
           message: eod.message,
+          // Cihazın hata kodu (alınamayan gün sonu, ör. 5085); alındıysa boş
+          errorCode: eod.errorCode ?? null,
         }
       : null;
   return {
     version: 1,
     source: 'lafpos',
+    // Bu günün kaçıncı gönderimi (lafmaliyet sürüm geçmişini tutar) ve varsa düzeltmenin türü ve nedeni
+    revision: revisionOf(day.date),
+    ...(correction ? { correction } : {}),
     ...(bankPos ? { bankPos } : {}),
     // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel yalnız kendi şubesinin (marina) gününü alır, başkasına 409
     // wrong_branch (docs/03-ENTEGRASYON.md §4). Gönderirken güncel ayardan yeniden yazılır (sendDue)
@@ -312,8 +416,19 @@ export function buildDayPayload(dayId: string) {
       // Kartla bahşiş ve kartla cari tahsilatı: banka POS'unda var, Z'nin `card` alanında yok (isteğe bağlı alanlar)
       cardTips: toTL(cardPays.reduce((a, p) => a + (p.orderId ? p.tip : 0), 0)),
       cardCollections: toTL(cardPays.reduce((a, p) => a + (p.orderId ? 0 : p.amount), 0)),
+      // Hesap sözleşmesi §5 (docs/hesap-sozlesmesi.md): liste değeri = satılan + ikram + ödenmez (servis dahil, zayi
+      // hariç); ciro = liste − indirim − ikram − ödenmez; ikram + ödenmez + zayi = offRevenue
+      listValue: toTL(lines.reduce((a, l) => a + l.gross, 0) + ikramTotal + odenmezTotal),
+      ikramTotal: toTL(ikramTotal),
+      odenmezTotal: toTL(odenmezTotal),
+      zayiTotal: toTL(compTotal('zayi')),
+      // Günün KDV'si LafPOS'un dökümü (adisyon başına yuvarlanmış, oran başına toplam); lafmaliyet yeniden hesaplamaz
+      vat: (summary.kdv ?? []).map((k) => ({ rate: k.rate, base: toTL(k.base), vat: toTL(k.kdv) })),
+      openedAt: new Date(day.openedAt).toISOString(),
+      closedAt: day.closedAt != null ? new Date(day.closedAt).toISOString() : null,
+      okcZNo: okc?.zNo != null ? String(okc.zNo) : null,
     },
-    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), isService: l.isService })),
+    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon })),
     ikram: comps.flatMap((i) =>
       itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
         // Satış satırı yeniden adlandırıldıysa (aynı ad iki kaleme düştü) ikram da aynı adı taşır
@@ -322,11 +437,33 @@ export function buildDayPayload(dayId: string) {
         slot: p.slot,
         qty: p.qty,
         menuValue: toTL(p.value),
-        // Sözleşmede tür alanı yok (docs/03-ENTEGRASYON.md): ödenmez ve zayi nedenin başında yazılır
+        // Ödenmez ve zayi nedenin başında da yazılır (`kind`'ı bilmeyen eski lafmaliyet buradan okur)
         reason: compReasonText(i.compKind, i.compReason),
+        kind: compKindOf(i.compKind),
+        personKind: personKindOf(i, roles),
       })),
     ),
     payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
+    // Mali fişi yazarkasada kesilmeyen satış ödemeleri (bahşiş hariç): banka POS'u ve ÖKC kıyasında açıklanır
+    offDevice: { card: toTL(offDevice.card), cash: toTL(offDevice.cash) },
+    refunds: refundsOf(day.id),
+    // İptal edilen kalemler ana ürün ve ek parçalarına bölünür (satır anahtarıyla). Hazırlanmış: bar ya da mutfak
+    // başlamıştı (`startedAt`) ya da hazırdı (`readyAt`); "bara gönderildi" hazırlandı demek değil. Kalem iadesi
+    // (`İade: `) `refunds[]`'ta da görünür
+    iptal: voids
+      .flatMap((i) =>
+        itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
+          posName: names.get(partKey(p)) ?? p.posName,
+          siteMenuId: p.siteMenuId,
+          slot: p.slot,
+          qty: p.qty,
+          listValue: toTL(p.value),
+          prepared: i.startedAt != null || i.readyAt != null,
+          reason: cap(i.voidReason),
+          refund: !!i.voidReason?.startsWith(REFUND_VOID),
+        })),
+      )
+      .slice(0, LIST_MAX),
   };
 }
 

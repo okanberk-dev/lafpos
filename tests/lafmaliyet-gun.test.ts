@@ -30,16 +30,22 @@ beforeAll(async () => {
 });
 afterAll(() => h.cleanup());
 
-type Line = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; revenue: number; isService: boolean };
-type Ikram = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; menuValue: number; reason: string | null };
+type Line = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; revenue: number; gross: number; isService: boolean; isAddon: boolean };
+type Ikram = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; menuValue: number; reason: string | null; kind: string; personKind: string | null };
 type Payload = {
+  revision: number;
+  correction?: { kind: string; reason: string };
+  bankPos?: Record<string, unknown>;
   /** Kasanın şubesi (docs/03-ENTEGRASYON.md §4) */
   sube: string;
   date: string;
-  z: Record<string, number | null>;
+  z: Record<string, number | null> & { vat?: { rate: number; base: number; vat: number }[]; okcZNo?: string | null; openedAt?: string; closedAt?: string | null };
   lines: Line[];
   ikram: Ikram[];
   payments: { name: string; zField: string; channel: string | null; count: number; amount: number }[];
+  offDevice: { card: number; cash: number };
+  refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
+  iptal: { posName: string; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
 };
 
 const product = (name: string) => {
@@ -59,8 +65,10 @@ async function sell(items: Pick[], type: 'tezgah' | 'masa' = 'tezgah', tableId?:
 }
 const pay = (o: OrderDTO, methodName: string, extra: Record<string, unknown> = {}) =>
   h.ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method(methodName).id, amount: o.total - o.paid, ...extra });
-const comp = (o: OrderDTO, itemName: string, reason: string) =>
-  h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${o.items.find((i) => i.name === itemName && !i.complimentary)!.id}/comp`, { reason });
+const comp = (o: OrderDTO, itemName: string, reason: string, extra: Record<string, unknown> = {}) =>
+  h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${o.items.find((i) => i.name === itemName && !i.complimentary)!.id}/comp`, { reason, ...extra });
+const itemOf = (o: OrderDTO, name: string) => o.items.find((i) => i.name === name && !i.voided && !i.complimentary)!;
+const voidItem = (o: OrderDTO, name: string, reason: string) => h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${itemOf(o, name).id}/void`, { reason });
 
 function openDayRow() {
   const { db, schema } = modules;
@@ -81,7 +89,7 @@ async function freshDay() {
 }
 const payloadOf = (dayId: string) => h.ok<Payload>('patron', 'GET', `/sync/lafmaliyet/gun/${dayId}`);
 
-describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş)', () => {
+describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, iptal, ödenmez, zayi, iade, yazarkasa, yeniden açılış)', () => {
   it('tohumlanmış günün paketi dosyayla bayt bayt aynı', async () => {
     const { db, schema } = modules;
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 150000 });
@@ -128,12 +136,62 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş)', () => {
     iptal = await comp(iptal, 'Mocha', 'Tadım');
     await h.ok('mudur', 'POST', `/orders/${iptal.id}/cancel`, { reason: 'Vazgeçti' });
 
+    // Faz 2 alanları (docs/hesap-sozlesmesi.md): adisyon indirimi; bar başladıktan sonra iptal (hazırlanmış) ve
+    // başlamadan iptal; kartla
+    let indirimli = await sell([{ name: 'Cappuccino', size: 'M' }, { name: 'Filtre Kahve', size: 'M' }, { name: 'Cool Lime', size: 'M' }, { name: 'Soda' }]);
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: [itemOf(indirimli, 'Cool Lime').id], status: 'hazirlaniyor' });
+    indirimli = await voidItem(indirimli, 'Cool Lime', 'Yanlış ürün');
+    indirimli = await voidItem(indirimli, 'Soda', 'Fazla yazıldı');
+    indirimli = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${indirimli.id}/discount`, { type: 'amount', value: 3600, reason: 'Müdavim' });
+    await pay(indirimli, 'Kredi kartı');
+    // Kişili ödenmez (personel yemeği, patronun ürün denemesi) ve zayi; satılan Çay nakit
+    let odenmez = await sell([{ name: 'Türk Kahvesi' }, { name: 'Brownie' }, { name: 'Su' }, { name: 'Çay', size: 'M' }]);
+    const user = (name: string) => h.boot.users.find((u) => u.name === name)!;
+    odenmez = await comp(odenmez, 'Türk Kahvesi', 'Personel yemeği', { kind: 'odenmez', person: { kind: 'user', id: user('Garson').id } });
+    odenmez = await comp(odenmez, 'Brownie', 'Deneme', { kind: 'odenmez', person: { kind: 'user', id: user('Patron').id } });
+    odenmez = await comp(odenmez, 'Su', 'Döküldü', { kind: 'zayi' });
+    expect((await pay(odenmez, 'Nakit')).closed).toBe(true);
+    // Kalem iadesi (kartla ödenen iki Latte'den biri; kalan yeniden yazılır) ve ödeme iptali (nakit → kart)
+    const iade = await sell([{ name: 'Latte', size: 'M', qty: 2 }]);
+    await pay(iade, 'Kredi kartı');
+    await h.ok('mudur', 'POST', `/orders/${iade.id}/refund-items`, { items: [{ itemId: iade.items[0]!.id, qty: 1 }], reason: 'Soğuk geldi' });
+    const tur = await sell([{ name: 'Su' }]);
+    await pay(tur, 'Nakit');
+    const turPaid = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${tur.id}`);
+    await pay(await h.ok<OrderDTO>('mudur', 'POST', `/orders/${tur.id}/payments/${turPaid.payments[0]!.id}/refund`, { reason: 'Kartla ödeyecek' }), 'Kredi kartı');
+    // Yazarkasadan (eğitim cihazı) geçen kart satışı: öteki ödemeler yazarkasadan geçmeyen
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik' });
+    const cihaz = await sell([{ name: 'Tiramisu' }]);
+    const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${cihaz.id}/send`, { items: null });
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
+
+    // Gün kapandı, geç gelen müşteri için yeniden açıldı (neden gövdenin düzeltmesi), bir satış daha
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    await h.ok('mudur', 'POST', `/cash/days/${day.id}/reopen`, { reason: 'Geç gelen masa' });
+    expect((await pay(await sell([{ name: 'Espresso', size: 'L' }]), 'Nakit')).closed).toBe(true);
+
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 12000, description: 'Buz' });
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
     // Paket tarihi saatten bağımsız olsun: satışlar bugünün gününe yazılır (eski güne satış engeli), gün kapanmadan
     // hemen önce sabit bir iş gününe alınır. Gün sonu eski günde de alınır; kapanış ve paket bu tarihi görür.
     db.update(schema.businessDays).set({ date: GOLDEN_DATE }).where(eq(schema.businessDays.id, day.id)).run();
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash - 1000 });
+    // Açılış ve kapanış anı ile banka gün sonu saatten bağımsız: sabit anlar (gövde bayt bayt aynı kalsın)
+    db.update(schema.businessDays)
+      .set({ openedAt: Date.parse('2026-10-26T07:58:00+03:00'), closedAt: Date.parse('2026-10-27T00:12:00+03:00') })
+      .where(eq(schema.businessDays.id, day.id))
+      .run();
+    const { setSyncState } = await import('../server/lib/settings');
+    setSyncState(`pavo.eod.${day.id}`, {
+      status: 'failed',
+      batchNo: null,
+      at: Date.parse('2026-10-27T00:14:00+03:00'),
+      grandTotalKurus: null,
+      dayCardKurus: null,
+      message: 'Gün sonu alınamadı',
+      errorCode: '5085',
+      acquirers: [],
+    });
 
     const payload = await payloadOf(day.id);
     if (process.env.LAFPOS_GOLDEN === '1') {
@@ -143,11 +201,36 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş)', () => {
     expect(existsSync(GOLDEN)).toBe(true);
     expect(`${JSON.stringify(payload, null, 2)}\n`).toBe(readFileSync(GOLDEN, 'utf8'));
 
-    // Altın gövdenin kendi tutarlılığı (lafmaliyet'in kuralları)
+    // Altın gövdenin kendi tutarlılığı (lafmaliyet'in kuralları; docs/hesap-sozlesmesi.md §5, §6, §11)
+    const z = payload.z;
     const names = payload.lines.map((l) => l.posName);
     expect(new Set(names).size).toBe(names.length);
-    expect(payload.lines.reduce((a, l) => a + l.revenue, 0)).toBeCloseTo(payload.z.zTotal!, 2);
-    expect(payload.ikram.reduce((a, l) => a + l.menuValue, 0)).toBeCloseTo(payload.z.offRevenue!, 2);
+    expect(payload.lines.reduce((a, l) => a + l.revenue, 0)).toBeCloseTo(z.zTotal!, 2);
+    expect(payload.lines.reduce((a, l) => a + (l.gross - l.revenue), 0)).toBeCloseTo(z.discounts!, 2);
+    expect(z.discounts).toBe(36);
+    expect(z.ikramTotal! + z.odenmezTotal! + z.zayiTotal!).toBeCloseTo(z.offRevenue!, 2);
+    expect(z.listValue! - z.discounts! - z.ikramTotal! - z.odenmezTotal!).toBeCloseTo(z.zTotal!, 2);
+    expect(z.vat!.reduce((a, v) => a + v.base + v.vat, 0)).toBeCloseTo(z.zTotal!, 2);
+    expect(z.cash! + z.card! + z.mealCard! + z.online! + z.other!).toBeCloseTo(z.zTotal!, 2);
+    expect(payload.ikram.reduce((a, l) => a + l.menuValue, 0)).toBeCloseTo(z.offRevenue!, 2);
+    // Yeni alanlar boş değil: sıra, düzeltme, kişi türü (kişi gitmez), iptal (hazırlanmış ve hazırlanmamış, iade),
+    // iadeler, yazarkasadan geçen ve geçmeyen, banka gün sonunun hata kodu
+    expect(payload.revision).toBe(1);
+    expect(payload.correction).toEqual({ kind: 'reopen', reason: 'Geç gelen masa' });
+    expect(payload.ikram.map((i) => [i.kind, i.personKind])).toEqual(expect.arrayContaining([['ikram', null], ['odenmez', 'personel'], ['odenmez', 'patron'], ['zayi', null]]));
+    expect(new Set(payload.iptal.map((i) => i.prepared))).toEqual(new Set([true, false]));
+    expect(payload.iptal.some((i) => i.refund)).toBe(true);
+    expect(payload.refunds.map((r) => [r.amount, r.zField])).toEqual([
+      [195, 'card'],
+      [60, 'cash'],
+    ]);
+    expect(payload.lines.some((l) => l.isAddon)).toBe(true);
+    expect(payload.offDevice.card).toBeGreaterThan(0);
+    expect(payload.offDevice.cash).toBeGreaterThan(0);
+    expect(payload.offDevice.card).toBeLessThan(z.card!);
+    expect(z.okcZNo).toBe('1');
+    expect(payload.bankPos).toMatchObject({ status: 'failed', errorCode: '5085' });
+    expect(JSON.stringify(payload)).not.toMatch(/Garson|Altın Gövde/);
     expect(payload.ikram.some((i) => i.reason === 'Tadım')).toBe(false);
     expect(payload.z.cardTips).toBe(25);
     expect(payload.z.cardCollections).toBe(400);

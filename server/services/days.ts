@@ -340,7 +340,22 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
     throw conflict('Yalnız bugünün son gün sonu yeniden açılabilir', 'day_not_reopenable');
   }
   t.update(schema.businessDays)
-    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null, trainingDay: null, reopenedAt: Date.now() })
+    .set({
+      closedAt: null,
+      closedBy: null,
+      countedCash: null,
+      cashCounts: null,
+      expectedCash: null,
+      cashDiff: null,
+      summary: null,
+      exportedAt: null,
+      trainingDay: null,
+      reopenedAt: Date.now(),
+      // lafmaliyet'e giden gövdenin düzeltmesi (`correction`): neden saklanır; önceki sayım düzeltmesi yeni kapanışın
+      // sayımıyla geçersiz
+      reopenReason: reason.trim().slice(0, 200),
+      recountReason: null,
+    })
     .where(eq(schema.businessDays.id, dayId))
     .run();
   // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
@@ -626,7 +641,9 @@ export function recordCount(
   for (const [k, v] of Object.entries(input.methodCounts ?? {})) counts[`m:${k}`] = Math.max(0, Math.trunc(v));
   // Not gönderilmezse (ya da null) kalır; gönderilen metin yerine geçer, boş metin notu siler (föy kayıtlı notla açılır)
   const note = input.note == null ? day.note : input.note.trim() || null;
-  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note }).where(eq(schema.businessDays.id, dayId)).run();
+  // Kaydedilmiş sayımın değişmesi lafmaliyet'e giden günün düzeltmesidir (`correction` recount); ilk sayım değil
+  const recountReason = day.countedCash != null ? `Kasa sayımı değiştirildi: ${tl(day.countedCash)} → ${tl(counted)}` : day.recountReason;
+  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note, recountReason }).where(eq(schema.businessDays.id, dayId)).run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
     userId: actor.user.id,

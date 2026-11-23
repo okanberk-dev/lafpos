@@ -1,0 +1,431 @@
+{
+  "version": 1,
+  "source": "lafpos",
+  "revision": 1,
+  "bankPos": {
+    "status": "ok",
+    "batchNo": "0001",
+    "at": "2026-11-22T21:26:00.000Z",
+    "pavoCard": 4160,
+    "lafposCard": 4160,
+    "diff": 0,
+    "acquirers": [
+      {
+        "name": "Garanti BBVA",
+        "count": 16,
+        "total": 4160
+      }
+    ],
+    "message": null,
+    "errorCode": null
+  },
+  "sube": "marina",
+  "date": "2026-11-22",
+  "z": {
+    "zNo": 11,
+    "receipts": 26,
+    "zTotal": 6285,
+    "cash": 1255,
+    "card": 5030,
+    "mealCard": 0,
+    "online": 0,
+    "other": 0,
+    "offRevenue": 1065,
+    "discounts": 90,
+    "openingCash": 1120,
+    "cashOut": 800,
+    "countedCash": 1279.5,
+    "handedOver": 0,
+    "cashDiff": -295.5,
+    "cashIn": 0,
+    "expectedCash": 1575,
+    "cardTips": 0,
+    "cardCollections": 0,
+    "listValue": 7440,
+    "ikramTotal": 130,
+    "odenmezTotal": 935,
+    "zayiTotal": 0,
+    "vat": [
+      {
+        "rate": 10,
+        "base": 5713.64,
+        "vat": 571.36
+      }
+    ],
+    "openedAt": "2026-11-22T05:02:00.000Z",
+    "closedAt": "2026-11-22T21:24:00.000Z",
+    "okcZNo": "11"
+  },
+  "lines": [
+    {
+      "posName": "ÇAY MEDIUM",
+      "siteMenuId": "mnu-0042",
+      "slot": "M",
+      "qty": 21,
+      "revenue": 1260,
+      "gross": 1260,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "TÜRK KAHVESİ MEDIUM",
+      "siteMenuId": "mnu-0019",
+      "slot": "M",
+      "qty": 5,
+      "revenue": 635,
+      "gross": 650,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "LATTE MEDIUM",
+      "siteMenuId": "mnu-0007",
+      "slot": "M",
+      "qty": 3,
+      "revenue": 570,
+      "gross": 585,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "KARABUĞDAY SİMİT",
+      "siteMenuId": "mnu-0073",
+      "slot": "M",
+      "qty": 5,
+      "revenue": 450,
+      "gross": 450,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "ESPRESSO MEDIUM",
+      "siteMenuId": "mnu-0005",
+      "slot": "M",
+      "qty": 4,
+      "revenue": 440,
+      "gross": 440,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SU",
+      "siteMenuId": "mnu-0036",
+      "slot": "M",
+      "qty": 7,
+      "revenue": 420,
+      "gross": 420,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SODA",
+      "siteMenuId": "mnu-0035",
+      "slot": "M",
+      "qty": 5,
+      "revenue": 400,
+      "gross": 400,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "ROSBEEF SANDVİÇ",
+      "siteMenuId": "mnu-0074",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 375,
+      "gross": 390,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "HİNDİ FÜMELİ SANDVİÇ",
+      "siteMenuId": "mnu-0075",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 350,
+      "gross": 350,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SAN SEBASTİAN",
+      "siteMenuId": "mnu-0058",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 290,
+      "gross": 290,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "BROWNİE",
+      "siteMenuId": "mnu-0070",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 280,
+      "gross": 280,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "LATTE LARGE",
+      "siteMenuId": "mnu-0007",
+      "slot": "L",
+      "qty": 1,
+      "revenue": 194.25,
+      "gross": 210,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "CAPPUCCİNO MEDIUM",
+      "siteMenuId": "mnu-0010",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 187.5,
+      "gross": 195,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "FLAT WHİTE MEDIUM",
+      "siteMenuId": "mnu-0008",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 175.75,
+      "gross": 190,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "AMERİCANO MEDIUM",
+      "siteMenuId": "mnu-0006",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 165,
+      "gross": 165,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SYRUP",
+      "siteMenuId": "mnu-0080",
+      "slot": "M",
+      "qty": 2,
+      "revenue": 92.5,
+      "gross": 100,
+      "isService": false,
+      "isAddon": true
+    }
+  ],
+  "ikram": [
+    {
+      "posName": "TÜRK KAHVESİ MEDIUM",
+      "siteMenuId": "mnu-0019",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 130,
+      "reason": "Müdavim",
+      "kind": "ikram",
+      "personKind": null
+    },
+    {
+      "posName": "ÇAY MEDIUM",
+      "siteMenuId": "mnu-0042",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 60,
+      "reason": "Ödenmez: Şikâyet",
+      "kind": "odenmez",
+      "personKind": "musteri"
+    },
+    {
+      "posName": "ROSBEEF SANDVİÇ",
+      "siteMenuId": "mnu-0074",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 390,
+      "reason": "Ödenmez: Personel yemeği",
+      "kind": "odenmez",
+      "personKind": "personel"
+    },
+    {
+      "posName": "LATTE MEDIUM",
+      "siteMenuId": "mnu-0007",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 195,
+      "reason": "Ödenmez: Personel yemeği",
+      "kind": "odenmez",
+      "personKind": "personel"
+    },
+    {
+      "posName": "SAN SEBASTİAN",
+      "siteMenuId": "mnu-0058",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 290,
+      "reason": "Ödenmez: Deneme",
+      "kind": "odenmez",
+      "personKind": "patron"
+    }
+  ],
+  "payments": [
+    {
+      "name": "Kredi kartı",
+      "zField": "card",
+      "channel": null,
+      "count": 19,
+      "amount": 5030
+    },
+    {
+      "name": "Nakit",
+      "zField": "cash",
+      "channel": null,
+      "count": 7,
+      "amount": 1255
+    }
+  ],
+  "offDevice": {
+    "card": 870,
+    "cash": 200
+  },
+  "refunds": [
+    {
+      "amount": 50,
+      "zField": "card",
+      "name": "Kredi kartı",
+      "channel": null,
+      "reason": "Yanlış tutar girildi"
+    },
+    {
+      "amount": 45,
+      "zField": "card",
+      "name": "Kredi kartı",
+      "channel": null,
+      "reason": "Kart reddedildi"
+    }
+  ],
+  "iptal": [
+    {
+      "posName": "ESPRESSO MEDIUM",
+      "siteMenuId": "mnu-0005",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 110,
+      "prepared": true,
+      "reason": "Yanlış sipariş",
+      "refund": false
+    },
+    {
+      "posName": "TÜRK KAHVESİ MEDIUM",
+      "siteMenuId": "mnu-0019",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 130,
+      "prepared": false,
+      "reason": "Vazgeçti",
+      "refund": false
+    },
+    {
+      "posName": "BROWNİE",
+      "siteMenuId": "mnu-0070",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 280,
+      "prepared": true,
+      "reason": "Yanlış ürün",
+      "refund": false
+    },
+    {
+      "posName": "ROSBEEF SANDVİÇ",
+      "siteMenuId": "mnu-0074",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 390,
+      "prepared": false,
+      "reason": "Vazgeçti",
+      "refund": false
+    },
+    {
+      "posName": "ÇAY MEDIUM",
+      "siteMenuId": "mnu-0042",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 60,
+      "prepared": false,
+      "reason": "Fazla yazıldı",
+      "refund": false
+    },
+    {
+      "posName": "SU",
+      "siteMenuId": "mnu-0036",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 60,
+      "prepared": false,
+      "reason": "Fazla yazıldı",
+      "refund": false
+    },
+    {
+      "posName": "MOCHA MEDIUM",
+      "siteMenuId": "mnu-0009",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 245,
+      "prepared": true,
+      "reason": "Müşteri gitti",
+      "refund": false
+    },
+    {
+      "posName": "LATTE MEDIUM",
+      "siteMenuId": "mnu-0007",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 195,
+      "prepared": true,
+      "reason": "Müşteri gitti",
+      "refund": false
+    },
+    {
+      "posName": "EXTRA SHOT",
+      "siteMenuId": "mnu-0081",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 50,
+      "prepared": true,
+      "reason": "Müşteri gitti",
+      "refund": false
+    },
+    {
+      "posName": "CAPPUCCİNO MEDIUM",
+      "siteMenuId": "mnu-0010",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 195,
+      "prepared": false,
+      "reason": "Müşteri gitti",
+      "refund": false
+    },
+    {
+      "posName": "SAN SEBASTİAN",
+      "siteMenuId": "mnu-0058",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 290,
+      "prepared": false,
+      "reason": "Müşteri gitti",
+      "refund": false
+    },
+    {
+      "posName": "ROSBEEF SANDVİÇ",
+      "siteMenuId": "mnu-0074",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 390,
+      "prepared": true,
+      "reason": "Müşteri gitti",
+      "refund": false
+    }
+  ]
+}
