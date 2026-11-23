@@ -627,6 +627,13 @@ lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire
 kaynağı lafmaliyet'te ModPOS kalır): geçiş gününden önce o sayılır, sonra LafPOS'un günü; ModPOS'unki saklanır ama
 hesaba girmez. Tuzla da LafPOS'a geçince lafmaliyet'te LafPOS'un şubesi listeye döner (ayrı iş).
 
+**Şube kilidi (23 Kasım 2026).** lafmaliyet bu kasanın bir gününü kabul ettikten (200) sonra şube kimliği kilitlidir:
+yanlış değişiklik sonraki günleri başka şubeye yazdırır ya da 409 `wrong_branch` ile biriktirir. `PUT
+/api/admin/settings` `branchId` değişince 409 `branch_locked` döner; patron gövdeye `confirmBranchChange: true`
+koyarsa değişir (onay ayar değildir, saklanmaz). Denetimde `settings.branchId` uyarı önemiyle, `data.locked: true`.
+Yönetim › Ayarlar ve yedek › Şube kimliği kilidi alanın altında yazar (`GET /api/admin/settings/branch-lock`
+`{ locked, branchId }`) ve kayıtta onay sorar. Hiç gün kabul edilmemişse (ya da deneme bitince) kilit yoktur.
+
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
 x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYNC_SECRET, LafPOS'ta LAFMALIYET_SYNC_SECRET)
@@ -948,7 +955,7 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
 | Birleşti | laffogato#279 + lafpos | Site şubeli; LafPOS her imzalı istekte şubesini söyler, başka şubenin listesini ve kaydını yazmaz (§2 "Şube") |
 | Birleşti | laffogato#298, #299 + lafpos#160, #163 | Panel siparişinde `paidAtTill`, `lines[].index` ve yanıtta `closed` (§2.3 "Sözleşme eklemeleri"); şubenin sürüm sinyali ve menü işareti, `?branch=`; şubede kapalı ürünün Tükendi kilidi (`onMenu`, 409 `site_closed`) |
-| Açık | lafpos + lafmaliyet (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart |
+| Açık | lafpos + lafmaliyet (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

@@ -28,7 +28,7 @@ import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
 import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
-import { reservedPosName } from '../sync/lafmaliyet';
+import { branchLocked, reservedPosName } from '../sync/lafmaliyet';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
@@ -966,6 +966,15 @@ adminRoutes.get('/settings/z', (c) => {
   return c.json({ lastZ: lastZ || null, nextZ: nextZNo(lastZ, getSettings().zNoStart) });
 });
 
+/**
+ * Şube kimliğinin kilidi (Ayarlar › Şube kimliği'nin altındaki not ve kayıttaki onay adımı): lafmaliyet bu kasanın bir
+ * gününü kabul ettiyse kimlik yalnız patronun ayrıca onayıyla değişir (PUT /settings `confirmBranchChange`)
+ */
+adminRoutes.get('/settings/branch-lock', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json({ locked: branchLocked(), branchId: getSettings().branchId });
+});
+
 const settingsShape = patchOf(
   z.object({
     businessName: z.string().max(60),
@@ -1049,7 +1058,8 @@ const PATRON_SETTINGS = ['branchId', 'zNoStart', 'autoDayEnd', 'demoMode', 'remo
 adminRoutes.put('/settings', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
-  const input = await body(c, settingsShape);
+  // `confirmBranchChange`: kilitli şube kimliğini değiştirmenin onayı (ayar değil, saklanmaz)
+  const { confirmBranchChange, ...input } = await body(c, settingsShape.extend({ confirmBranchChange: z.boolean().optional() }));
   if (input.menuAutoSync !== undefined || input.onlineOrdersSync !== undefined) requirePermission(user, 'senkron.yonet');
   const prev = getSettings();
   // Bar fişi alarmı uyarıdan uzun olmalı: bar ekranı önce alarma bakar, kısa ya da eşit alarmda fiş amberi hiç
@@ -1067,6 +1077,16 @@ adminRoutes.put('/settings', async (c) => {
   const patronChanged = PATRON_SETTINGS.filter((k) => sent0[k] !== undefined && !sameSetting(sent0[k], was0[k]));
   if (patronChanged.length && user.role !== 'patron') {
     throw new HttpError(403, `${patronChanged.map(settingLabel).join(', ')} yalnız patron değiştirir`, 'patron_only');
+  }
+  // Şube kimliği lafmaliyet bir günü kabul ettikten sonra kilitli: yanlış değişiklik sonraki günleri başka şubeye
+  // yazdırır (ya da 409 wrong_branch ile biriktirir). Patron ayrıca onaylarsa değişir (Yönetim › Ayarlar'da onay adımı)
+  const branchLock = patronChanged.includes('branchId') && branchLocked();
+  if (branchLock && confirmBranchChange !== true) {
+    throw new HttpError(
+      409,
+      `Şube kimliği kilitli: lafmaliyet bu kasanın günlerini "${prev.branchId}" şubesine kaydetti. "${String(input.branchId)}" yapmak patronun ayrıca onayını ister; sonraki günler o şubeye gider`,
+      'branch_locked',
+    );
   }
   const before = serviceModeOf(prev);
   const zFrom = prev.zNoStart;
@@ -1107,8 +1127,8 @@ adminRoutes.put('/settings', async (c) => {
         severity: 'uyari',
         entity: 'settings',
         entityId: k,
-        message: `${user.name} ${settingLabel(k)} ayarını değiştirdi: ${show(was0[k])} → ${show(sent0[k])}`,
-        data: { from: was0[k] ?? null, to: sent0[k] ?? null },
+        message: `${user.name} ${settingLabel(k)} ayarını değiştirdi: ${show(was0[k])} → ${show(sent0[k])}${k === 'branchId' && branchLock ? " (kilitliydi: lafmaliyet'e gün gönderilmişti, patron onayladı)" : ''}`,
+        data: { from: was0[k] ?? null, to: sent0[k] ?? null, ...(k === 'branchId' && branchLock ? { locked: true } : {}) },
       });
     }
     if (zChanged) {

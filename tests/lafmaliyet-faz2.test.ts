@@ -10,7 +10,8 @@ import { type Harness, startApp } from './harness';
  * ek işareti, Z'nin liste değeri, ikram/ödenmez/zayi toplamları, KDV dökümü, açılış ve kapanış anı, yazarkasanın Z'si;
  * ikramın türü ve ödenmezin kişi türü (kişi gitmez), iptaller (hazırlandı mı, iade mi), iadeler (yeniden yazılan
  * ödeme düşülür), yazarkasadan geçmeyen, gönderim sırası (`revision`) ve düzeltme (`correction`), banka gün sonunun
- * hata kodu. Eski Z (ödenmez, zayi, yazarkasadan geçmeyen yok) yine geçerli gövde verir.
+ * hata kodu. Eski Z (ödenmez, zayi, yazarkasadan geçmeyen yok) yine geçerli gövde verir. Şube kimliği ilk başarılı
+ * gönderimden sonra kilitlenir.
  */
 
 interface Line { posName: string; siteMenuId: string | null; slot: string | null; qty: number; revenue: number; gross: number; isService: boolean; isAddon: boolean }
@@ -276,5 +277,41 @@ describe('eski Z', () => {
     expect(p.offDevice).toEqual({ card: 195, cash: 0 });
     expect(p.z).toMatchObject({ zayiTotal: 60, odenmezTotal: 0, ikramTotal: 0, offRevenue: 60, listValue: 195, zTotal: 195 });
     await retire(dayId);
+  });
+});
+
+describe('şube kimliği kilidi', () => {
+  it('lafmaliyet bir günü kabul ettikten sonra şube kimliği yalnız patronun onayıyla değişir; denetimde uyarı', async () => {
+    const m = await mods();
+    // Önceki testlerde günler 200 aldı: kilitli; Yönetim › Ayarlar kilidi alanın altında gösterir
+    expect(await h.ok('mudur', 'GET', '/admin/settings/branch-lock')).toEqual({ locked: true, branchId: 'marina' });
+    const locked = await h.call<{ code: string; error: string }>('patron', 'PUT', '/admin/settings', { branchId: 'tuzla' });
+    expect(locked.status).toBe(409);
+    expect(locked.json.code).toBe('branch_locked');
+    expect(locked.json.error).toContain('marina');
+    expect(m.settings.getSettings().branchId).toBe('marina');
+    // Aynı değeri yeniden göndermek (bütün form) serbest
+    expect((await h.call('patron', 'PUT', '/admin/settings', { branchId: 'marina', businessName: "L'Affogato" })).status).toBe(200);
+    // Müdür onaylasa da değiştiremez (patron ayarı)
+    expect((await h.call('mudur', 'PUT', '/admin/settings', { branchId: 'tuzla', confirmBranchChange: true })).status).toBe(403);
+    const ok = await h.call<{ branchId: string }>('patron', 'PUT', '/admin/settings', { branchId: 'tuzla', confirmBranchChange: true });
+    expect(ok.status).toBe(200);
+    expect(ok.json.branchId).toBe('tuzla');
+    const audit = (await h.ok<{ action: string; severity: string; message: string; data: Record<string, unknown> | null }[]>('patron', 'GET', '/admin/audit?severity=tum&limit=50')).find((a) => a.action === 'settings.branchId')!;
+    expect(audit).toMatchObject({ severity: 'uyari', data: { from: 'marina', to: 'tuzla', locked: true } });
+    // Onay alanı ayar olarak saklanmaz, denetimde ayar adı olarak geçmez
+    expect(JSON.stringify(m.settings.getSettings())).not.toContain('confirmBranchChange');
+    m.settings.updateSettings({ branchId: 'marina' });
+  });
+
+  it('hiç gün gönderilmemişse kilit yok', async () => {
+    const m = await mods();
+    m.db.delete(m.schema.outbox).run();
+    m.settings.setSyncState('lafmaliyet.push', {});
+    expect(await h.ok('patron', 'GET', '/admin/settings/branch-lock')).toEqual({ locked: false, branchId: 'marina' });
+    // Kilit durumu yalnız ayar yetkisiyle (kasiyer ayar ekranını görmez)
+    expect((await h.call('kasa', 'GET', '/admin/settings/branch-lock')).status).toBe(403);
+    expect((await h.call('patron', 'PUT', '/admin/settings', { branchId: 'tuzla' })).status).toBe(200);
+    m.settings.updateSettings({ branchId: 'marina' });
   });
 });

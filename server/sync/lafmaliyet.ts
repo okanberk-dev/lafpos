@@ -746,6 +746,19 @@ export async function pushDayNow(dayId: string) {
   return { ...total, answer: (row.response as DayAnswer | null) ?? null };
 }
 
+/**
+ * Şube kimliği kilitli mi: lafmaliyet bu kasanın bir gününü kabul etti (200). Kimlik bundan sonra değişirse sonraki
+ * günler başka şubeye yazılır ya da 409 wrong_branch alır; Yönetim › Ayarlar yalnız patronun ayrıca onayıyla değiştirir
+ */
+export function branchLocked(): boolean {
+  if (getSyncState<PushState>('lafmaliyet.push')?.lastSuccessAt) return true;
+  return !!db
+    .select({ id: schema.outbox.id })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
+    .get();
+}
+
 /** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */
 export function lastDayAnswer(): DayAnswer | null {
   return getSyncState<PushState>('lafmaliyet.push')?.lastAnswer ?? null;

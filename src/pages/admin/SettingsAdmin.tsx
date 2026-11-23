@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Armchair, BellRing, Check, DatabaseBackup, FolderOpen, HandPlatter, HardDrive, Loader2, type LucideIcon, QrCode, Save } from 'lucide-react';
+import { Armchair, BellRing, Check, DatabaseBackup, FolderOpen, HandPlatter, HardDrive, Loader2, Lock, type LucideIcon, QrCode, Save } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { parseTL, tlCompact } from '@shared/money';
 import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
 import { fmtDateTime } from '@shared/time';
 import { nextZNo, zStartPlaceholder } from '@shared/z-no';
 import { Button } from '@/components/ui/Button';
+import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
@@ -14,7 +15,7 @@ import { branchSlug } from '@shared/baglanti';
 import { CloudBackupCard } from '@/components/admin/CloudBackupCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { PrinterCard } from '@/components/admin/PrinterCard';
-import { errorMessage, get, post, put } from '@/lib/api';
+import { ApiError, errorMessage, get, post, put } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -185,6 +186,8 @@ export default function SettingsAdmin() {
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
   // Z zinciri `cash` altında: gün açılıp kapanınca ve ayar kaydedilince canlı akış kendiliğinden yeniler
   const zChain = useQuery({ queryKey: ['cash', 'z-chain'], queryFn: () => get<{ lastZ: number | null; nextZ: number }>('/admin/settings/z') });
+  // Şube kimliğinin kilidi `sync` altında: lafmaliyet ilk günü kabul edince canlı akış kendiliğinden yeniler
+  const branchLock = useQuery({ queryKey: ['sync', 'branch-lock'], queryFn: () => get<{ locked: boolean; branchId: string }>('/admin/settings/branch-lock') });
   const [s, setS] = useState<Settings | null>(null);
   const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
   const [saving, setSaving] = useState(false);
@@ -286,6 +289,19 @@ export default function SettingsAdmin() {
       toast.err('Şube kimliği geçersiz: harfle başlamalı, küçük harf, rakam ve tire');
       return;
     }
+    // Kilitli şube kimliği (lafmaliyet bu kasanın gününü kabul etti) patronun ayrıca onayıyla değişir: onay ayar değil,
+    // yalnız bu kayıtla gider. Patron dışındakine sunucu zaten "yalnız patron" der
+    const branchChange = typeof rest.branchId === 'string' ? { from: was?.branchId ?? '', to: rest.branchId } : null;
+    if (branchChange && patron && branchLock.data?.locked) {
+      const ok = await confirmDialog({
+        title: 'Şube kimliği değişsin mi',
+        body: `lafmaliyet bu kasanın günlerini “${branchChange.from}” şubesine kaydetti. Kaydederseniz bundan sonraki günler “${branchChange.to}” şubesine gider; gönderilmiş günler yerinde kalır`,
+        confirmLabel: 'Şube kimliğini değiştir',
+        tone: 'danger',
+      });
+      if (!ok) return;
+      rest.confirmBranchChange = true;
+    }
     setSaving(true);
     try {
       const sent = s;
@@ -299,7 +315,10 @@ export default function SettingsAdmin() {
       qc.setQueryData(['admin', 'settings'], saved);
       setS((cur) => (cur ? rebaseDraft(sent, cur, saved) : saved));
       void qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      if (branchChange) void qc.invalidateQueries({ queryKey: ['sync', 'branch-lock'] });
     } catch (e) {
+      // Kilit sayfa açıldıktan sonra kondu (ilk gün o arada kabul edildi): not alanın altında belirir, Kaydet onay sorar
+      if (e instanceof ApiError && e.code === 'branch_locked') void branchLock.refetch();
       toast.err(errorMessage(e));
     } finally {
       setSaving(false);
@@ -479,20 +498,32 @@ export default function SettingsAdmin() {
                   </Select>
                 </label>
               </div>
-              <Field
-                label="Şube kimliği"
-                hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır; sitenin online siparişleri, masa çağrıları ve Tükendi'si bu şube adına okunur ve yazılır. Paneldeki kimliğin aynısı olmalı (bugün marina)"
-                error={branchError}
-              >
-                <Input
-                  value={s.branchId}
-                  onChange={(e) => set({ branchId: branchSlug(e.target.value) })}
-                  placeholder="marina"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="sm:max-w-60"
-                />
-              </Field>
+              <div>
+                <Field
+                  label="Şube kimliği"
+                  hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır; sitenin online siparişleri, masa çağrıları ve Tükendi'si bu şube adına okunur ve yazılır. Paneldeki kimliğin aynısı olmalı (bugün marina)"
+                  error={branchError}
+                >
+                  <Input
+                    value={s.branchId}
+                    onChange={(e) => set({ branchId: branchSlug(e.target.value) })}
+                    placeholder="marina"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-describedby={branchLock.data?.locked ? 'branch-lock-info' : undefined}
+                    className="sm:max-w-60"
+                  />
+                </Field>
+                {/* lafmaliyet bir günü kabul ettiyse: yanlış değişiklik sonraki günleri başka şubeye yazar. Kayıtta onay sorulur */}
+                {branchLock.data?.locked && (
+                  <p id="branch-lock-info" className="mt-1.5 flex items-start gap-1.5 text-xs text-muted">
+                    <Lock aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                    <span>
+                      Kilitli: lafmaliyet bu kasanın günlerini “{branchLock.data.branchId}” şubesine kaydetti. Değiştirmek patronun ayrıca onayını ister
+                    </span>
+                  </p>
+                )}
+              </div>
               <div>
                 <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
                   <Input
