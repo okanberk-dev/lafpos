@@ -18,6 +18,7 @@ import {
   refundReport,
   reportToday,
   staffReport,
+  storedHistory,
   summaryReport,
 } from '../services/reports';
 
@@ -45,9 +46,10 @@ reportRoutes.use('*', async (c, next) => {
   return next();
 });
 
-reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c))));
+// Raporlar ekranı LafPOS öncesi günleri de görür (Merkez'den gelen geçmiş ciro; Uzaktan'ın kuralı)
+reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c), Date.now(), storedHistory())));
 reportRoutes.get('/products', (c) => c.json(productReport(range(c), can(c.get('user'), 'rapor.maliyet'))));
-reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c))));
+reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c), { history: storedHistory() })));
 reportRoutes.get('/prep', (c) => c.json(prepReport(range(c))));
 reportRoutes.get('/staff', (c) => {
   requirePermission(c.get('user'), 'rapor.maliyet');

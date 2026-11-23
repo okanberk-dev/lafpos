@@ -94,6 +94,45 @@ function groupBy<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
 }
 
 const dayOf = (ds: Dataset) => new Map(ds.days.map((d) => [d.id, d.date]));
+
+/** Veri kümesinden verilen tarihlerin günleri, adisyonları, kalemleri ve ödemeleri çıkar (geçmiş ciro o günlerin yerine geçer) */
+function withoutDates(ds: Dataset, skip: Set<string>): Dataset {
+  if (!skip.size) return ds;
+  const days = ds.days.filter((d) => !skip.has(d.date));
+  const dayIds = new Set(days.map((d) => d.id));
+  const orders = ds.orders.filter((o) => dayIds.has(o.dayId));
+  const orderIds = idsOf(orders);
+  return { days, orders, items: ds.items.filter((i) => orderIds.has(i.orderId)), payments: ds.payments.filter((p) => p.dayId != null && dayIds.has(p.dayId)) };
+}
+
+/** Kasadaki geçmiş ciro (Merkez'den; LafPOS öncesi günler, shared/gecmis.ts) */
+export const storedHistory = (): HistoryDay[] | null => getSyncState<{ gunler: HistoryDay[] }>(GECMIS_KEY)?.gunler ?? null;
+
+/**
+ * Dönemde geçmişin geçeceği günler (Uzaktan'ın kuralı, shared/gecmis.ts fillHistory): bugünden önce, LafPOS'ta o gün
+ * yoksa ya da LafPOS'un kapanmış satışı geçmişten küçükse (geçiş günlerinde LafPOS'ta yalnız deneme satışı vardır). İki
+ * kaynak toplanmaz
+ */
+function historyDays(ds: Dataset, range: Range, history: HistoryDay[] | null, today: string): HistoryDay[] {
+  if (!history?.length) return [];
+  const dates = dayOf(ds);
+  const own = new Map<string, number>();
+  for (const o of ds.orders) {
+    if (!isSale(o)) continue;
+    const date = dates.get(o.dayId);
+    if (date) own.set(date, (own.get(date) ?? 0) + totalsOf(o).total);
+  }
+  return history.filter((h) => h.date >= range.from && h.date <= range.to && h.date < today && (own.get(h.date) ?? 0) < h.ciro);
+}
+
+/** Geçmiş günün kesime kadarki cirosu ve adisyonu (kıyasın "aynı saate kadar"ı); kapanışı bilinmeyen gün bütün günüyle */
+function historyUntil(h: HistoryDay, cutoffMs: number | null): { ciro: number; adisyon: number } {
+  if (cutoffMs == null || !h.closes.length) return { ciro: h.ciro, adisyon: h.adisyon };
+  const minute = Math.floor((cutoffMs - businessDayStartMs(h.date)) / 60_000);
+  if (minute >= 1440) return { ciro: h.ciro, adisyon: h.adisyon };
+  const upTo = h.closes.filter((c) => c[0] <= minute);
+  return { ciro: upTo.reduce((a, c) => a + c[1], 0), adisyon: upTo.reduce((a, c) => a + c[2], 0) };
+}
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 const change = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
@@ -128,8 +167,13 @@ export function comparison(r: Range, nowMs = Date.now(), today = businessDate(no
 
 // ─── Ciro ───────────────────────────────────────────────────────────────────
 
-export function summaryReport(range: Range, nowMs = Date.now()) {
-  const ds = load(range);
+export function summaryReport(range: Range, nowMs = Date.now(), history: HistoryDay[] | null = null) {
+  // Geçmiş ciro (yalnız Raporlar ekranı: Z, patron özeti ve Uzaktan'a giden günlük özet geçmişi katmaz; Uzaktan kendisi
+  // katar): geçmişin geçtiği günlerin LafPOS satışı (deneme) sayılmaz, yerine geçmişin cirosu, adisyonu ve ödemeleri
+  const today = reportToday(nowMs);
+  const loaded = load(range);
+  const fromHistory = historyDays(loaded, range, history, today);
+  const ds = withoutDates(loaded, new Set(fromHistory.map((h) => h.date)));
   const dates = dayOf(ds);
   const closed = ds.orders.filter(isSale);
   const closedIds = idsOf(closed);
@@ -151,6 +195,19 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     row.count += 1;
     payMap.set(p.methodName, row);
   }
+  // Geçmiş günler: ciro, adisyon ve ödeme türü (ürün, KDV, indirim ve tür kırılımı geçmişte yok)
+  const histRevenue = fromHistory.reduce((a, h) => a + h.ciro, 0);
+  const histReceipts = fromHistory.reduce((a, h) => a + h.adisyon, 0);
+  const histPaid = fromHistory.reduce((a, h) => a + h.pay.reduce((b, p) => b + p[2], 0), 0);
+  for (const h of fromHistory) {
+    byDay.set(h.date, { date: h.date, netSales: h.ciro, receipts: h.adisyon });
+    for (const [name, zField, amount, count] of h.pay) {
+      const row = payMap.get(name) ?? { name, zField, amount: 0, count: 0 };
+      row.amount += amount;
+      row.count += count;
+      payMap.set(name, row);
+    }
+  }
   // Türe göre: adisyon sayısı "Adisyon" kutusuyla aynı ölçütle (tutarı olan adisyon; tamamı ikram edilen sayılmaz)
   const types = new Map<string, { type: string; orders: number; amount: number }>();
   for (const o of closed) {
@@ -163,14 +220,21 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
   // Online sipariş sitede ödenmiş gelir, X/Z gibi her aşamada (hazırlanan da) sayılır; ciroya girmez. Sitede iptal ya da
   // iade edildiği ya da kasada ödendiği bilinen girmez (Z'nin kuralı)
   const online = ds.orders.filter(onlineCounted);
-  const cmp = comparison(range, nowMs, reportToday(nowMs));
-  const prev = load(cmp.range, ORDERS_ONLY);
+  const cmp = comparison(range, nowMs, today);
+  const prevLoaded = load(cmp.range, ORDERS_ONLY);
+  const prevHistory = historyDays(prevLoaded, cmp.range, history, today);
+  const prev = withoutDates(prevLoaded, new Set(prevHistory.map((h) => h.date)));
   const prevClosed = prev.orders.filter((o) => isSale(o) && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
-  const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0);
-  const prevReceipts = prevClosed.filter((o) => o.total > 0).length;
+  // Kıyas dönemindeki geçmiş günler: "aynı saate kadar" kesimi kapanış dakikasıyla (bilinmiyorsa bütün gün)
+  const prevHist = prevHistory.map((h) => historyUntil(h, cmp.cutoffMs));
+  const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0) + prevHist.reduce((a, h) => a + h.ciro, 0);
+  const prevReceipts = prevClosed.filter((o) => o.total > 0).length + prevHist.reduce((a, h) => a + h.adisyon, 0);
   // Satılan ürün: ürün raporunun adedi (ikram satılmadı, ayrı sayılır)
   const itemsSold = ds.items.filter((i) => !i.voided && !i.complimentary && closedIds.has(i.orderId)).reduce((a, i) => a + i.qty, 0);
   const totalPaid = [...payMap.values()].reduce((a, p) => a + p.amount, 0);
+  // Dönemin cirosu ve adisyonu geçmiş günlerle; döküm, KDV, ikram, indirim ve ödeme mutabakatı yalnız LafPOS günlerinin
+  const allNet = netSales + histRevenue;
+  const allReceipts = receipts + histReceipts;
   // Ciro dökümü: liste değeri − ikram − indirim (+ servis) = ciro (KDV dahil); − KDV = net satış (KDV hariç)
   const kdvByRate = new Map<number, { rate: number; gross: number; base: number; kdv: number }>();
   for (const o of closed) {
@@ -208,26 +272,31 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     /** Masa adisyonlarının cirosu (kişi başının payı; LafPOS Uzaktan günleri toplarken oranı yeniden kurar) */
     tableSales,
     perGuest: tableGuests ? Math.round(tableSales / tableGuests) : null,
-    days: ds.days.length,
-    netSales,
-    gross: sum((o) => totalsOf(o).gross),
+    days: ds.days.length + fromHistory.length,
+    netSales: allNet,
+    gross: sum((o) => totalsOf(o).gross) + histRevenue,
     discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
     complimentary: sum((o) => totalsOf(o).complimentary),
     odenmez: compKindOf(ds, closedIds, 'odenmez'),
     zayi: compKindOf(ds, closedIds, 'zayi'),
     voided: voidedItems(ds).reduce((a, i) => a + i.qty * i.unitPrice, 0),
-    receipts,
-    avgCheck: receipts ? Math.round(netSales / receipts) : 0,
+    receipts: allReceipts,
+    avgCheck: allReceipts ? Math.round(allNet / allReceipts) : 0,
     guests: closed.filter((o) => o.type === 'masa').reduce((a, o) => a + o.guests, 0),
     itemsSold,
     tips: salesPays.reduce((a, p) => a + p.tip, 0),
     /** Yazarkasadan geçmeyen kart ve nakit (bahşiş hariç); rapor gören kasa rakamlarını da görür (`seesCashNumbers`) */
     offDevice,
-    byDay: [...byDay.values()],
+    byDay: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    /**
+     * Geçmiş ciro (LafPOS öncesi kasa programı, Merkez'den): kaç gün ve ne kadar ciro ondan geldi. Bu günlerin yalnız
+     * cirosu, adisyonu ve ödeme türü bilinir; döküm, KDV, ikram, indirim, tür ve ürün yalnız LafPOS günlerinindir
+     */
+    history: fromHistory.length ? { days: fromHistory.length, revenue: histRevenue, paid: histPaid, dates: fromHistory.map((h) => h.date) } : null,
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort((a, b) => b.amount - a.amount),
     online: { orders: online.length, amount: online.reduce((a, o) => a + (o.extTotal ?? 0), 0) },
-    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(allNet, prevNet), historyDays: prevHistory.length },
   };
 }
 
@@ -352,8 +421,11 @@ function hourMemo() {
  * sabahının 06'sına karışmaz, gecenin ardından çizilir. Çok günlük dönemde satır günün saatidir (dağılım), 24 satır.
  * Adisyon sayısı Adisyon kutusuyla aynı ölçütle: tutarı olan adisyon (tamamı ikram edilen ₺0 adisyon sayılmaz).
  */
-export function hourlyReport(range: Range, opts: { rawWeek?: boolean } = {}) {
-  const ds = load(range, ORDERS_ONLY);
+export function hourlyReport(range: Range, opts: { rawWeek?: boolean; history?: HistoryDay[] | null; nowMs?: number } = {}) {
+  // Geçmiş ciro (yalnız Raporlar ekranı, summaryReport'un kuralı): geçen günün LafPOS satışı yerine kapanış dakikaları
+  const loaded = load(range, ORDERS_ONLY);
+  const fromHistory = historyDays(loaded, range, opts.history ?? null, reportToday(opts.nowMs ?? Date.now()));
+  const ds = withoutDates(loaded, new Set(fromHistory.map((h) => h.date)));
   const closed = ds.orders.filter(isSale);
   const hourOf = hourMemo();
   const dates = dayOf(ds);
@@ -371,6 +443,14 @@ export function hourlyReport(range: Range, opts: { rawWeek?: boolean } = {}) {
     row.revenue += totalsOf(o).total;
     if (o.total > 0) row.orders += 1;
   }
+  // Geçmiş günün kapanışları (dakika iş gününün başından; 24 saat içinde): kapanışı bilinmeyen gün saate dağılmaz
+  for (const h of fromHistory) {
+    for (const [min, rev, n] of h.closes) {
+      const row = hours[Math.floor(min / 60) % 24]!;
+      row.revenue += rev;
+      row.orders += n;
+    }
+  }
   const total = hours.reduce((a, h) => a + h.revenue, 0);
   const active = hours.filter((h) => h.orders > 0);
   // Haftanın günü × saat: iş gününün (gece yarısından sonraki satış o güne yazılır) haftanın günü, adisyonun açıldığı
@@ -385,6 +465,12 @@ export function hourlyReport(range: Range, opts: { rawWeek?: boolean } = {}) {
     const date = dates.get(o.dayId);
     if (date) week[weekdayOf(date) - 1].hours[hourOf(o.openedAt)] += totalsOf(o).total;
   }
+  for (const h of fromHistory) {
+    if (!h.closes.length) continue;
+    const w = week[weekdayOf(h.date) - 1]!;
+    w.days += 1;
+    for (const [min, rev] of h.closes) w.hours[(Math.floor(min / 60) + DAY_ROLLOVER_HOUR) % 24] += rev;
+  }
   // `rawWeek`: ortalamaya bölünmeden toplam (LafPOS Uzaktan günlük özetleri toplayıp kendisi böler)
   if (!opts.rawWeek) for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
@@ -395,7 +481,7 @@ export function hourlyReport(range: Range, opts: { rawWeek?: boolean } = {}) {
   return {
     range,
     total,
-    days: ds.days.length,
+    days: ds.days.length + fromHistory.length,
     hours,
     parts,
     // Eşit cirolu saatlerde en yoğun ilki, en sakin sonuncusu: aktif saatlerin hepsi eşitse ikisi aynı saati göstermez

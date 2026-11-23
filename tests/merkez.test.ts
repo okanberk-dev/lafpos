@@ -448,6 +448,59 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(after.stats.days[dun]).toBeUndefined();
   });
 
+  it('geçmiş ciro kasadaki Raporlar\'da da görünür: geçen haftanın günleri, ödeme türü, saatlik ve kıyas (sahibin isteği, 23 Kas 2026)', async () => {
+    const { merkezBeat, identity } = await import('../server/sync/merkez');
+    const { addDays } = await import('@shared/time');
+    const id = identity().id;
+    const today = (await h.ok<{ date: string }>('patron', 'GET', '/reports/patron')).date;
+    const d8 = addDays(today, -8);
+    const d9 = addDays(today, -9);
+    const up = await panel('POST', 'merkez/gecmis', {
+      id,
+      kaynak: 'ModPOS',
+      gunler: [
+        { date: d9, ciro: 100000, adisyon: 10, kart: [60000, 6], nakit: [40000, 4] },
+        { date: d8, ciro: 46205, adisyon: 3, closes: [[300, 6205, 1], [600, 40000, 2]], kart: [46205, 3] },
+      ],
+    });
+    expect(up.status).toBe(200);
+    await merkezBeat();
+    interface S {
+      netSales: number;
+      receipts: number;
+      days: number;
+      byDay: { date: string; netSales: number; receipts: number }[];
+      payments: { name: string; amount: number; count: number }[];
+      history: { days: number; revenue: number } | null;
+      previous: { netSales: number; receipts: number };
+      reconciliation: { paidClosed: number; difference: number };
+    }
+    const s = await h.ok<S>('patron', 'GET', `/reports/summary?from=${d9}&to=${d8}`);
+    expect(s).toMatchObject({ netSales: 146205, receipts: 13, days: 2, history: { days: 2, revenue: 146205 } });
+    expect(s.byDay).toEqual([
+      { date: d9, netSales: 100000, receipts: 10 },
+      { date: d8, netSales: 46205, receipts: 3 },
+    ]);
+    expect(s.payments.find((p) => p.name === 'Kredi kartı')).toMatchObject({ amount: 106205, count: 9 });
+    expect(s.payments.find((p) => p.name === 'Nakit')).toMatchObject({ amount: 40000, count: 4 });
+    // Mutabakat yalnız LafPOS günlerinin: geçmiş "fark" göstermez
+    expect(s.reconciliation).toMatchObject({ paidClosed: 0, difference: 0 });
+    // Saatlik: tek geçmiş gün kapanış dakikalarıyla (05:00 + 300 dk = 10:00, 600 dk = 15:00)
+    const hr = await h.ok<{ total: number; hours: { hour: number; revenue: number; orders: number }[] }>('patron', 'GET', `/reports/hourly?from=${d8}&to=${d8}`);
+    expect(hr.total).toBe(46205);
+    expect(hr.hours.find((x) => x.hour === 10)).toMatchObject({ revenue: 6205, orders: 1 });
+    expect(hr.hours.find((x) => x.hour === 15)).toMatchObject({ revenue: 40000, orders: 2 });
+    // Kıyas: bir hafta sonraki tek gün geçen haftanın geçmiş gününe kıyaslanır
+    const next = await h.ok<S>('patron', 'GET', `/reports/summary?from=${addDays(d8, 7)}&to=${addDays(d8, 7)}`);
+    expect(next.previous).toMatchObject({ netSales: 46205, receipts: 3 });
+    // Z, patron özeti ve Uzaktan'a giden günlük özet geçmişi katmaz (yalnız Raporlar ekranı)
+    const { summaryReport } = await import('../server/services/reports');
+    expect(summaryReport({ from: d9, to: d8 }).netSales).toBe(0);
+    await panel('POST', 'merkez/gecmis', { id, gunler: [] });
+    await merkezBeat();
+    expect((await h.ok<S>('patron', 'GET', `/reports/summary?from=${d9}&to=${d8}`)).history).toBeNull();
+  });
+
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {
     const { merkezBeat, identity } = await import('../server/sync/merkez');
     const id = identity().id;

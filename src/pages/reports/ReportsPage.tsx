@@ -423,6 +423,8 @@ interface Summary {
   previous: { netSales: number | null; receipts: number | null; change: number | null; label: string; range?: { from: string; to: string }; unavailable?: boolean };
   /** Uzakta: dönemin bir kısmı saklanmıyor, en eski gün */
   availableFrom?: string;
+  /** Kasada: LafPOS öncesi kasa programından (Merkez'den yüklenen geçmiş ciro) gelen günler */
+  history?: { days: number; revenue: number } | null;
   asOf: number;
   waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
   kdv: { rate: number; gross: number; base: number; kdv: number }[];
@@ -570,6 +572,13 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
         ];
         return (
           <div className="space-y-4">
+            {/* LafPOS öncesi günler (ModPOS'tan yüklenen geçmiş ciro): yalnız ciro, adisyon ve ödeme türü bilinir */}
+            {s.history && (
+              <Notice tone="info" role="status" className="text-[13px]">
+                {single ? 'Bu gün' : `${fmtN(s.history.days)} gün`} LafPOS öncesi kasadan (geçmiş ciro, {tlShort(s.history.revenue)}): ciro, adisyon ve ödeme türü sayıldı; ürün,
+                KDV, indirim ve ikram kırılımı yalnız LafPOS günlerinin
+              </Notice>
+            )}
             <KpiStrip cells={cells} />
             <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
               <Card flush title={single ? 'Saatlik ciro' : 'Günlük ciro'}>
