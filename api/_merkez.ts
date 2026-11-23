@@ -146,11 +146,26 @@ const writeInstall = (deps: Pick<MerkezDeps, 'redis'>, i: Install) => deps.redis
  * ancak o uygulanınca işler); Merkez'in düğmesinde null. Kurulum yoksa false. Kasa bir sonraki nabızda alır; yeni sürüm
  * gün kapalıyken kurulur, gün açıkken asla (server/sync/merkez.ts takeRemoteUpdate)
  */
-export async function requestUpdateNow(redis: MerkezDeps['redis'], id: string, now: number, release: Release | null, komut: string | null = null): Promise<boolean> {
+export async function requestUpdateNow(redis: MerkezDeps['redis'], id: string, now: number, release: Release | null, komut: string | null = null): Promise<UpdateAsk | null> {
   const inst = await readInstall({ redis }, id);
-  if (!inst) return false;
+  if (!inst) return null;
+  const ask = updateAskFor(inst, release);
+  if (ask !== 'istendi') return ask;
   await writeInstall({ redis }, { ...inst, guncelleIstek: now, guncelleKomut: komut, ...(release ? { hedef: release.build, gonderildi: now } : {}) });
-  return true;
+  return 'istendi';
+}
+
+/** "Şimdi güncelle"nin sonucu: istendi ya da kasa zaten en güncel derlemede (gönderilmez) */
+export type UpdateAsk = 'istendi' | 'guncel';
+
+/**
+ * Güncelleme yeniden istenir mi (sahibin isteği, 23 Kas 2026: güncel sürüm kuruluysa tekrar tekrar gönderilmesin). Kurulu
+ * derleme kanalın son derlemesi ya da daha yenisiyse `guncel`: istek ve hedef yazılmaz. Kanal okunamadıysa (release
+ * null) karar verilemez: istenir, kasa kendisi denetler. Bekleyen isteğin üstüne yeniden istemek serbesttir (Merkez'in
+ * düğmesi gün sonuna bağlı isteği bağsız yapar; Merkez'de bekleyen satırın düğmesi zaten kapalı)
+ */
+export function updateAskFor(i: Pick<Install, 'build'>, release: Release | null): UpdateAsk {
+  return release && i.build != null && i.build >= release.build ? 'guncel' : 'istendi';
 }
 
 /**
@@ -506,20 +521,31 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // Şimdi güncelle (requestUpdateNow): hedef kanalın son derlemesi ve kasaya "hemen denetle" isteği
     if (path === 'merkez/simdi-guncelle') {
       let asked = 0;
-      for (const id of ids) if (await requestUpdateNow(deps.redis, id, now, release)) asked++;
-      return json({ ok: true, istenen: asked, build: release?.build ?? null });
+      let current = 0;
+      for (const id of ids) {
+        const r = await requestUpdateNow(deps.redis, id, now, release);
+        if (r === 'istendi') asked++;
+        else if (r === 'guncel') current++;
+      }
+      return json({ ok: true, istenen: asked, guncel: current, build: release?.build ?? null, surum: release?.version ?? null });
     }
 
     // Güncelleme gönder: seçilen dükkânların hedefi kanalın son derlemesi
     if (!release) return fail(503, 'Güncelleme kanalı okunamadı; biraz sonra yeniden deneyin', 'no_release');
     let sent = 0;
+    let current = 0;
     for (const id of ids) {
       const inst = await readInstall(deps, id);
       if (!inst) continue;
+      // En güncel derleme kuruluysa yeniden gönderilmez ("Gönderildi" adımı açılmaz)
+      if (updateAskFor(inst, release) === 'guncel') {
+        current++;
+        continue;
+      }
       await writeInstall(deps, { ...inst, hedef: release.build, gonderildi: now });
       sent++;
     }
-    return json({ ok: true, gonderilen: sent, build: release.build });
+    return json({ ok: true, gonderilen: sent, guncel: current, build: release.build, surum: release.version });
   }
 
   return fail(404, "Merkez'de böyle bir uç yok", 'not_found');
