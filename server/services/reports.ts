@@ -292,11 +292,11 @@ export function summaryReport(range: Range, nowMs = Date.now(), history: History
      * Geçmiş ciro (LafPOS öncesi kasa programı, Merkez'den): kaç gün ve ne kadar ciro ondan geldi. Bu günlerin yalnız
      * cirosu, adisyonu ve ödeme türü bilinir; döküm, KDV, ikram, indirim, tür ve ürün yalnız LafPOS günlerinindir
      */
-    history: fromHistory.length ? { days: fromHistory.length, revenue: histRevenue, paid: histPaid, dates: fromHistory.map((h) => h.date) } : null,
+    ...(fromHistory.length ? { history: { days: fromHistory.length, revenue: histRevenue, paid: histPaid, dates: fromHistory.map((h) => h.date) } } : {}),
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort((a, b) => b.amount - a.amount),
     online: { orders: online.length, amount: online.reduce((a, o) => a + (o.extTotal ?? 0), 0) },
-    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(allNet, prevNet), historyDays: prevHistory.length },
+    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(allNet, prevNet), ...(prevHistory.length ? { historyDays: prevHistory.length } : {}) },
   };
 }
 

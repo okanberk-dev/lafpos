@@ -471,7 +471,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
       days: number;
       byDay: { date: string; netSales: number; receipts: number }[];
       payments: { name: string; amount: number; count: number }[];
-      history: { days: number; revenue: number } | null;
+      history?: { days: number; revenue: number };
       previous: { netSales: number; receipts: number };
       reconciliation: { paidClosed: number; difference: number };
     }
@@ -498,7 +498,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(summaryReport({ from: d9, to: d8 }).netSales).toBe(0);
     await panel('POST', 'merkez/gecmis', { id, gunler: [] });
     await merkezBeat();
-    expect((await h.ok<S>('patron', 'GET', `/reports/summary?from=${d9}&to=${d8}`)).history).toBeNull();
+    expect((await h.ok<S>('patron', 'GET', `/reports/summary?from=${d9}&to=${d8}`)).history).toBeUndefined();
   });
 
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {
