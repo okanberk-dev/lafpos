@@ -260,6 +260,21 @@ describe('gönderim sırası ve düzeltme', () => {
     expect(fourth.bankPos).toMatchObject({ status: 'failed', errorCode: '5085' });
     await retire(dayId);
   });
+
+  it('aynı tutarla yeniden kaydedilen sayım (yalnız föy notu ya da döküm) düzeltme değil; önceki düzeltme kalır', async () => {
+    const m = await mods();
+    const dayId = await openDay();
+    await pay(await sell([{ name: 'Espresso' }]), 'Nakit');
+    await close(60000);
+    // Föyün notu sayımla birlikte kaydedilir: tutar aynıyken lafmaliyet'e giden gün düzeltilmiş sayılmaz
+    await h.ok('mudur', 'POST', `/cash/days/${dayId}/count`, { countedCash: 60000, note: 'Föy notu' });
+    expect(m.lm.buildDayPayload(dayId)).not.toHaveProperty('correction');
+    // Gerçek değişiklikten sonra aynı tutarla yeniden kaydetmek onun nedenini ezmez
+    await h.ok('mudur', 'POST', `/cash/days/${dayId}/count`, { countedCash: 61000 });
+    await h.ok('mudur', 'POST', `/cash/days/${dayId}/count`, { countedCash: 61000, note: 'İkinci not' });
+    expect(m.lm.buildDayPayload(dayId).correction).toEqual({ kind: 'recount', reason: 'Kasa sayımı değiştirildi: ₺600,00 → ₺610,00' });
+    await retire(dayId);
+  });
 });
 
 describe('eski Z', () => {

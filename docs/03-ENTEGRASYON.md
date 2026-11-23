@@ -772,8 +772,10 @@ kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondal
   kaydı sayısı + 1, gövde kurulurken. Saate bağlı değil; bekleyen kayıt yenisiyle değişince sıra artmaz.
 - `correction`: `{ kind: "reopen" | "recount", reason }`, yalnız gün düzeltildiyse. `reopen`: kapanmış gün yeniden
   açıldı, `reason` açarken yazılan neden (`business_days.reopenReason`). `recount`: kapandıktan sonra kaydedilmiş
-  kasa sayımı değiştirildi (yetkili onayıyla; ilk sayım düzeltme değil), `reason` "Kasa sayımı değiştirildi: ₺600,00 →
-  ₺610,00" (`business_days.recountReason`). Yeniden açılış önceki sayım düzeltmesini siler. Pavo'nun gün sonu
+  kasa sayımı değiştirildi (yetkili onayıyla; ilk sayım düzeltme değil, aynı tutarla yeniden kaydetmek de değil:
+  föyün notu ya da dökümü), `reason` "Kasa sayımı değiştirildi: ₺600,00 → ₺610,00" (`business_days.recountReason`).
+  Yeniden açılış önceki sayım düzeltmesini siler. Gün yeniden açılıp ya da sayımı değiştirilip bir kez düzeltildiyse
+  sonraki her gönderimde `correction` kalır (günün son düzeltmesi). Pavo'nun gün sonu
   sonucuyla yeniden gönderim yeni `revision`dır ama düzeltme değildir.
 - `offDevice`: `{ card, cash }`, mali fişi yazarkasada kesilmeyen satış ödemeleri (bahşiş hariç; tanım
   `shared/order-calc.ts` `offDeviceTotals`, Z'deki "Yazarkasadan geçmeyen" ile aynı).

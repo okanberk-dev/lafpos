@@ -641,8 +641,9 @@ export function recordCount(
   for (const [k, v] of Object.entries(input.methodCounts ?? {})) counts[`m:${k}`] = Math.max(0, Math.trunc(v));
   // Not gönderilmezse (ya da null) kalır; gönderilen metin yerine geçer, boş metin notu siler (föy kayıtlı notla açılır)
   const note = input.note == null ? day.note : input.note.trim() || null;
-  // Kaydedilmiş sayımın değişmesi lafmaliyet'e giden günün düzeltmesidir (`correction` recount); ilk sayım değil
-  const recountReason = day.countedCash != null ? `Kasa sayımı değiştirildi: ${tl(day.countedCash)} → ${tl(counted)}` : day.recountReason;
+  // Kaydedilmiş sayımın değişmesi lafmaliyet'e giden günün düzeltmesidir (`correction` recount); ilk sayım değil, aynı
+  // tutarla yeniden kaydetmek de değil (föyün notu ya da dökümü sayımla birlikte kaydedilir): önceki neden kalır
+  const recountReason = day.countedCash != null && day.countedCash !== counted ? `Kasa sayımı değiştirildi: ${tl(day.countedCash)} → ${tl(counted)}` : day.recountReason;
   t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note, recountReason }).where(eq(schema.businessDays.id, dayId)).run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
