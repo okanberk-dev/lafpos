@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { and, gte, isNull, lt, lte } from 'drizzle-orm';
+import { historyReport } from '@shared/gecmis';
 import type { ItemListRow } from '@shared/remote-calc';
 import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
@@ -11,6 +12,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
+import { historyFor } from '../services/gecmis';
 import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListReport, platformReport, prepRaw, productReport, refundReport, reportToday, staffReport, summaryReport } from '../services/reports';
 import { cloudEnabled, patronSeesCash } from './cloud';
 
@@ -26,6 +28,12 @@ import { cloudEnabled, patronSeesCash } from './cloud';
  * - İnternet yokken gidemeyen günler kuyrukta (`queue`) bekler; internet dönünce catch-up (server/sync/catch-up.ts)
  *   onları bir kez gönderir. Gönderilen günün içerik özeti saklanır: aynı gün iki kez gitmez.
  * Gitmeyen: maliyet ve kâr (ürün raporu maliyetsiz kurulur), PIN, müşteri adı ve telefonu (raporlarda yok).
+ *
+ * Geçmiş ciro (LafPOS öncesi, ModPOS; server/services/gecmis.ts `historyFor`): LafPOS'ta gerçek iş günü olmayan
+ * tarihlerin geçmiş günü de gün raporu olarak gider (`historyReport`: kaynak adı, ModPOS Z'si, indirim, ciro dışı, KDV).
+ * Böylece Uzaktan, geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da o günleri bu
+ * kasanın dükkânında gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an). Kayıt
+ * değişince (`historyAt`) bütün geçmiş günlerine bir kez bakılır, yalnız içeriği değişen gün gider.
  */
 export const LIVE_MIN_MS = 5 * 60_000;
 export const BACKFILL_MS = 60_000;
@@ -47,6 +55,8 @@ interface State {
   sweptAt: number;
   /** Gönderimin dükkân kimliği; değişince (kasa Merkez'e bağlandı) geçmiş yeni kimlikle baştan gider */
   shop: string;
+  /** Uzaktan'a son bakılan geçmiş ciro kaydının anı (server/services/gecmis.ts); değişince geçmiş günlerine yeniden bakılır */
+  historyAt?: number;
 }
 
 const emptyState = (): State => ({ sent: {}, queue: [], cursor: null, sweptAt: 0, shop: remoteShop() });
@@ -320,12 +330,17 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     }
     const liveDates = live ? [today, addDays(today, -1), ...st.queue] : [];
     if (live) lastLiveAt = now;
-    const dates = [...new Set([...liveDates, ...batch])].filter((d) => d >= oldest && d <= today);
+    // Geçmiş ciro günleri (ModPOS): LafPOS'ta gerçek iş günü olmayan tarihte gün raporu onlardan kurulur
+    const hist = historyFor({ from: oldest, to: addDays(today, -1) }, today);
+    const histByDate = new Map((hist?.days ?? []).map((d) => [d.date, d]));
+    const histDue = hist && st.historyAt !== hist.at ? [...histByDate.keys()] : [];
+    const dates = [...new Set([...liveDates, ...batch, ...histDue])].filter((d) => d >= oldest && d <= today);
     // Boş tur (canlı bakışın sırası gelmedi, tarama bitti): veritabanına yazılmaz
     if (!dates.length && st.sweptAt === sweptBefore) return { sent: 0, queued: st.queue.length };
     const changed: { date: string; hash: string; report: RemoteDayReport }[] = [];
     for (const date of dates) {
-      const report = buildDayReport(date, now);
+      const h = histByDate.get(date);
+      const report = h ? { ...historyReport(h, hist!.kaynak), at: now } : buildDayReport(date, now);
       if (!report) continue;
       const hash = dayHash(report);
       if (st.sent[date] !== hash) changed.push({ date, hash, report });
@@ -354,6 +369,8 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
       st.cursor = batch[0]!;
       st.sweptAt = sweptBefore;
     }
+    // Geçmiş günlerinden biri gidemediyse kayıt yeniden bakılmak üzere bekler (gitmiş olanın özeti aynı, yeniden gitmez)
+    if (hist && histDue.length && !histDue.some((d) => failed.has(d))) st.historyAt = hist.at;
     if (live) st.queue = liveDates.filter((d, i) => failed.has(d) && liveDates.indexOf(d) === i);
     else st.queue = [...new Set([...st.queue, ...[...failed].filter((d) => !batch.includes(d))])];
     for (const d of Object.keys(st.sent)) if (d < oldest) delete st.sent[d];

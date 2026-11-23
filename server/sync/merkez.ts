@@ -149,7 +149,18 @@ export function takeHistory(json: unknown) {
   const ok = (d: unknown): d is HistoryDay =>
     isRecord(d) && typeof d.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && Number.isInteger(d.ciro) && Number.isInteger(d.adisyon) && Array.isArray(d.closes) && Array.isArray(d.pay);
   const gunler = g.gunler.filter(ok).slice(0, 800);
-  setSyncState(GECMIS_KEY, { at: g.at as number, gunler });
+  // Kaynağın adı ("ModPOS"): kasanın Raporlar'ı günleri onunla etiketler; eski Merkez göndermez
+  const kaynak = typeof g.kaynak === 'string' && g.kaynak.trim() ? g.kaynak.trim().slice(0, 40) : null;
+  setSyncState(GECMIS_KEY, { at: g.at as number, gunler, ...(kaynak ? { kaynak } : {}) });
+}
+
+/**
+ * Nabızda söylenen geçmiş ciro anı: elimizdeki kayıt kaynağın adını taşımıyorsa (bu sürümden önce alınmış) 0 söylenir,
+ * Merkez kaydı bir kez adıyla yeniden gönderir
+ */
+export function historyAtForBeat(): number {
+  const g = getSyncState<{ at?: number; kaynak?: string; gunler?: unknown[] }>(GECMIS_KEY);
+  return g?.gunler?.length && !g.kaynak ? 0 : (g?.at ?? 0);
 }
 
 export function parseBeat(json: unknown, now: number): MerkezLast | null {
@@ -343,7 +354,7 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
       // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın
       kesinHedef: true,
       // Elimizdeki geçmiş cironun anı (Merkez yalnız değiştiyse gönderir; shared/gecmis.ts)
-      gecmisAt: getSyncState<{ at: number }>(GECMIS_KEY)?.at ?? 0,
+      gecmisAt: historyAtForBeat(),
       // Uzaktan yönetim: özetin parmak izi, gerekince özet ve sonuçlar (eski bulut alanı görmez)
       ...(kontrol ? { kontrol: kontrol.giden } : {}),
     };

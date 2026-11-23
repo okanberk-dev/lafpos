@@ -23,7 +23,7 @@ import { merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
-import { fillHistory, type HistoryDay, historyFlag, historyKey, historyReport, historyStatsDay, mergeHistoryStats, readHistory } from '../shared/gecmis.js';
+import { fillHistory, type HistoryDay, historyFlag, historyKey, type HistoryProducts, historyProductsShown, historyProductsView, historyReport, historySpan, historyStatsDay, mergeHistoryStats, readHistory, readHistoryStore } from '../shared/gecmis.js';
 import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
@@ -891,8 +891,18 @@ export function salesUntil(d: DayRep, cutoffMs: number | null): { netSales: numb
   return { netSales, receipts };
 }
 
-/** Raporlar › Ciro (`summaryReport`) günlük özetlerden. `prev`: kıyas döneminin günleri */
-export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], nowMs: number, today: string) {
+/**
+ * Geçmiş cironun dönem ürün listesi (shared/gecmis.ts `HistoryStore.urunler`) ve raporda nasıl görüneceği: `tam` blok
+ * olarak, `kismi` not olarak (dönem bloğun yalnız bir kısmını kapsıyor ya da bloğun bir günü LafPOS günüyle değişti)
+ */
+export interface HistoryBlock {
+  kaynak: string;
+  block: HistoryProducts;
+  shown: 'tam' | 'kismi';
+}
+
+/** Raporlar › Ciro (`summaryReport`) günlük özetlerden. `prev`: kıyas döneminin günleri; `hist`: geçmişin ürün listesi */
+export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], nowMs: number, today: string, hist: HistoryBlock | null = null) {
   const sum = (f: (d: DayRep) => number) => days.reduce((a, d) => a + f(d), 0);
   const netSales = sum((d) => d.s.rev);
   const receipts = sum((d) => d.s.receipts);
@@ -955,11 +965,14 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
     receipts,
     avgCheck: receipts ? Math.round(netSales / receipts) : 0,
     guests,
-    itemsSold: sum((d) => d.s.items),
+    // Geçmiş cironun ürün listesi dönemin hepsini kapsıyorsa satılan ürüne o da girer (Ürünler sekmesinin ayrı bloğu)
+    itemsSold: sum((d) => d.s.items) + (hist?.shown === 'tam' ? historyProductsView(hist.block, hist.kaynak).qty : 0),
     tips: sum((d) => d.s.tips),
     ...(offDevice ? { offDevice } : {}),
-    // Satışı olmayan (yalnız platform kaydı taşıyan, `n: 0`) gün kasadaki gibi gün listesine girmez
-    byDay: days.filter((d) => d.n > 0).map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed })),
+    // Satışı olmayan (yalnız platform kaydı taşıyan, `n: 0`) gün kasadaki gibi gün listesine girmez. Geçmiş ciro günü
+    // (ModPOS) kaynağın adı ve önceki programın Z numarasıyla
+    byDay: days.filter((d) => d.n > 0).map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed, ...(d.kaynak ? { kaynak: d.kaynak, zText: d.zText ?? null } : {}) })),
+    ...historyNote(days),
     payments: [...pays.values()].sort(byAmount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort(byAmount),
     online: { orders: sum((d) => d.s.onlineOrders), amount: sum((d) => d.s.onlineAmount) },
@@ -970,6 +983,12 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
     ...(range.from < oldestRemoteDay(today) ? { availableFrom: oldestRemoteDay(today) } : {}),
   };
 }
+
+/** Dönemde geçmiş ciro günü varsa sayfanın notu: kaynak, gün sayısı, ilk ve son gün */
+const historyNote = (days: DayRep[]) => {
+  const span = historySpan(days);
+  return span ? { history: span } : {};
+};
 
 /** Uzakta saklanan en eski gün: kasa yalnız son 400 günü iter (server/sync/cloud-reports.ts ile aynı sınır) */
 export const oldestRemoteDay = (today: string) => addDays(today, -(REPORT_MAX_DAYS - 1));
@@ -1024,8 +1043,11 @@ export function sumHourly(range: Range, days: DayRep[]) {
   };
 }
 
-/** Raporlar › Ürünler (`productReport`, maliyetsiz): kategori ve personel adı en yeni günden */
-export function sumProducts(range: Range, days: DayRep[], cat?: Record<string, string>) {
+/**
+ * Raporlar › Ürünler (`productReport`, maliyetsiz): kategori ve personel adı en yeni günden. Geçmiş cironun ürün listesi
+ * LafPOS ürünlerine karışmaz (indirim öncesi, dönem bloğu): ayrı `history` alanında
+ */
+export function sumProducts(range: Range, days: DayRep[], cat?: Record<string, string>, hist: HistoryBlock | null = null) {
   const rows = new Map<string, { key: string; name: string; size: string; category: string; qty: number; revenue: number; complimentary: number; voided: number }>();
   for (const d of days) {
     for (const [key, name, size, category, qty, revenue, comp, voided] of d.prod) {
@@ -1057,7 +1079,15 @@ export function sumProducts(range: Range, days: DayRep[], cat?: Record<string, s
       .sort((a, b) => b.revenue - a.revenue)
       .map((r) => ({ ...r, share: pct(r.revenue, total), avgPrice: r.qty ? Math.round(r.revenue / r.qty) : 0, cost: null, margin: null })),
     categories: [...cats.values()].sort((a, b) => b.revenue - a.revenue).map((c) => ({ ...c, share: pct(c.revenue, total) })),
+    ...historyProducts(hist),
   };
+}
+
+/** Ürünler'in geçmiş bloğu: dönemi kapsıyorsa satırlarıyla, yalnız bir kısmını kapsıyorsa not (blok günlere bölünemez) */
+export function historyProducts(hist: HistoryBlock | null) {
+  if (!hist) return {};
+  if (hist.shown === 'tam') return { history: { ...historyProductsView(hist.block, hist.kaynak), covered: true } };
+  return { history: { kaynak: hist.kaynak, from: hist.block.from, to: hist.block.to, covered: false } };
 }
 
 /** Raporlar › Personel (`staffReport`) */
@@ -1130,7 +1160,11 @@ function validDay(d: unknown): d is DayRep {
     typeof x.n === 'number' &&
     !!x.s &&
     typeof x.s.rev === 'number' &&
-    ['pay', 'types', 'kdv', 'closes', 'prod', 'hours', 'clock', 'staff', 'z'].every((k) => Array.isArray((x as Record<string, unknown>)[k]))
+    ['pay', 'types', 'kdv', 'closes', 'prod', 'hours', 'clock', 'staff', 'z'].every((k) => Array.isArray((x as Record<string, unknown>)[k])) &&
+    // Geçmiş ciro günü (kasanın ittiği ModPOS günü): kaynak adı ve önceki programın Z numarası kısa metin
+    (x.kaynak === undefined || (typeof x.kaynak === 'string' && x.kaynak.length > 0 && x.kaynak.length <= 40)) &&
+    (x.zText === undefined || (typeof x.zText === 'string' && x.zText.length <= 40)) &&
+    (x.indirimBilinmiyor === undefined || x.indirimBilinmiyor === true)
   );
 }
 
@@ -1215,9 +1249,14 @@ async function viewer(req: Request, path: string, url: URL, versions: () => Prom
 /** Koşullu yanıtın sürüm etiketi; biçim değişirse ETAG_V artar (eski etiketler tutmaz) */
 const ETAG_V = 1;
 const LIVE_TAGGED = /^(reports\/patron|floor|kitchen|kitchen\/board|orders\/[A-Za-z0-9]+)$/;
-/** Canlı ucun etiketi: özetin sürümü; açılış verisinin kendi içerik özeti (menü, masa ve gün değişmedikçe aynı) */
-export function liveTag(path: string, shop: string, v: SnapVersion): string | null {
+/**
+ * Canlı ucun etiketi: özetin sürümü; açılış verisinin kendi içerik özeti (menü, masa ve gün değişmedikçe aynı). Patron
+ * panelinin kıyası geçmiş ciroyu da okur (`withStats`): etiket geçmişin yükleme anını taşır, yeni yükleme 304'ün
+ * arkasında kalmaz
+ */
+export function liveTag(path: string, shop: string, v: SnapVersion, history?: number): string | null {
   if (path === 'bootstrap') return `"${ETAG_V}.${shop}.${v.b ? `b${v.b}` : `a${v.at}`}"`;
+  if (path === 'reports/patron' && history) return `"${ETAG_V}.${shop}.${v.at}.g${history}"`;
   return LIVE_TAGGED.test(path) ? `"${ETAG_V}.${shop}.${v.at}"` : null;
 }
 const notModified = (req: Request, tag: string) =>
@@ -1233,7 +1272,7 @@ const notModified = (req: Request, tag: string) =>
 async function serveLive(req: Request, path: string, url: URL, shop: string, vs: Versions): Promise<Response> {
   const v = vs.legacy ? null : (vs.map[shop] ?? null);
   if (path === 'uzaktan/durum' && v) return json({ at: v.at, demo: false });
-  const tag = v ? liveTag(path, shop, v) : null;
+  const tag = v ? liveTag(path, shop, v, vs.gecmis?.[shop]) : null;
   if (tag && notModified(req, tag)) return new Response(null, { status: 304, headers: { etag: tag, 'cache-control': 'no-store' } });
   const snap = vs.legacy && shop === REPORT_SHOP && vs.snap ? vs.snap : await snapshot(shop);
   if (!snap && v) await redis('HDEL', VERSIONS_KEY, shop);
@@ -1378,25 +1417,51 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
     // Geçmiş ciro (LafPOS'tan önceki günler; shared/gecmis.ts): aynı MGET'te, ek komut yok
     historyKey(shop),
   ]);
-  const history = readHistory(raws.pop());
+  const store = readHistoryStore(raws.pop());
+  const history = store?.gunler ?? null;
+  const make = (d: HistoryDay) => historyReport(d, store!.kaynak);
   if (explicit) live = readMeta(raws.shift());
   const { nowMs, today } = clock(explicit ? await pulseP : pulse);
-  const days = byDate(fillHistory(dates, parsed<DayRep>(raws.slice(0, dates.length)), history, today, historyReport));
-  const prev = byDate(fillHistory(prevDates, parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)), history, today, historyReport));
+  const days = byDate(fillHistory(dates, parsed<DayRep>(raws.slice(0, dates.length)), history, today, make));
+  const prev = byDate(fillHistory(prevDates, parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)), history, today, make));
   const extras = parsed<RemoteDayExtra>(raws.slice(dates.length + prevDates.length));
-  return reportOf(kind, url, r, days, prev, extras, nowMs, today, live?.cat, true);
+  return reportOf(kind, url, r, days, prev, extras, nowMs, today, live?.cat, true, historyBlock(r, days, store?.urunler ? store : null, today));
 }
 
-function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>, remote = false): Response {
+/**
+ * Geçmiş cironun ürün listesi bu dönemde nasıl görünür. Blok, kasanın ittiği ModPOS günlerinden (kaynak adı taşıyan gün
+ * raporu) ya da buluttaki elle yüklenmiş kayıttan gelir; bloğun günlerinin hepsi raporda geçmiş günü olarak duruyorsa
+ * tam, değilse not
+ */
+function historyBlock(r: Range, days: DayRep[], store: { kaynak: string; gunler: HistoryDay[]; urunler?: HistoryProducts } | null, today: string): HistoryBlock | null {
+  if (!store?.urunler) return null;
+  const shown = historyProductsShown(store.urunler, r, store.gunler.filter((d) => d.date < today), days);
+  return shown ? { kaynak: store.kaynak, block: store.urunler, shown } : null;
+}
+
+function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>, remote = false, hist: HistoryBlock | null = null): Response {
   // Dönemin bir kısmı uzakta saklanmıyor (kasa yalnız son 400 günü iter): her JSON yanıt en eski günü taşır, sayfa
   // "uzakta yalnız … sonrası var" der. 422 değil: dönemin kalan kısmı yine işe yarar
   const avail = remote && r.from < oldestRemoteDay(today) ? oldestRemoteDay(today) : null;
   const out = (data: object) => json(avail ? { ...data, availableFrom: avail } : data);
-  if (kind === 'summary') return out(sumSummary(r, days, prev, nowMs, today));
+  if (kind === 'summary') return out(sumSummary(r, days, prev, nowMs, today, hist));
   if (kind === 'hourly') return out(sumHourly(r, days));
-  if (kind === 'products') return out(sumProducts(r, days, cat));
+  if (kind === 'products') return out(sumProducts(r, days, cat, hist));
   if (kind === 'staff') return out(sumStaff(r, days));
   return serveExtra(kind, url, r, days, extras, cat, out);
+}
+
+/**
+ * Geçmiş ciro günlerinin (ModPOS) indirimi ve ciro dışı tutarı kalem kalem bilinmez: İndirim ve İkram listeleri o
+ * günleri toplamıyla not olarak söyler (Ciro dökümüyle çelişmesin)
+ */
+export function historyItems(kind: string, days: DayRep[]): { history?: { kaynak: string; days: number; amount: number; indirimBilinmiyor?: number } } {
+  if (kind !== 'indirim' && kind !== 'ikram') return {};
+  const hist = days.filter((d) => d.kaynak);
+  const amount = hist.reduce((a, d) => a + (kind === 'indirim' ? d.s.disc : d.s.comp), 0);
+  // İndirimi bilinmeyen (yalnız föyden gelen) gün de söylenir: liste o günlerde indirim yok demez
+  const unknown = kind === 'indirim' ? hist.filter((d) => d.indirimBilinmiyor).length : 0;
+  return hist.length && (amount > 0 || unknown) ? { history: { kaynak: hist[0]!.kaynak!, days: hist.length, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } } : {};
 }
 
 const PLATFORM_ORDER = ['yemeksepeti', 'getir', 'trendyol', 'migros'];
@@ -1414,7 +1479,7 @@ function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: Re
     const cut = extras.map((x) => x.cut?.[k]).filter((c) => c != null);
     const total = rows.reduce((a, x) => a + x.value, 0) + cut.reduce((a, c) => a + c.value, 0);
     const count = rows.length + cut.reduce((a, c) => a + c.count, 0);
-    return { range: r, total, count, rows, odenmezPeople: k === 'ikram' ? mergeOdenmez(extras.map((x) => x.odenmez ?? [])) : [], ...(cut.length ? { truncated: true } : {}) };
+    return { range: r, total, count, rows, odenmezPeople: k === 'ikram' ? mergeOdenmez(extras.map((x) => x.odenmez ?? [])) : [], ...(cut.length ? { truncated: true } : {}), ...historyItems(k, days) };
   };
   const checks = (limit: number | null) => {
     const merged = mergeChecks(extras.map((x) => (x.checks ?? []) as CheckRow[]), limit, days.flatMap((d) => d.xpay ?? []));

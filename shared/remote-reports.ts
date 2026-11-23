@@ -76,6 +76,12 @@ export interface RemoteDayReport {
   staff: [string, string, number, number, number, number, number, number, number, number, number][];
   /** Gün aşırı ödemeler (shared/remote-calc.ts `CrossPay`); eski kasanın özetinde yok */
   xpay?: CrossPay[];
+  /** Geçmiş ciro günü (shared/gecmis.ts `historyReport`): önceki kasa programının adı ("ModPOS"); LafPOS gününde yok */
+  kaynak?: string;
+  /** Geçmiş gündeki önceki programın Z numarası ("Z-2026-002"); LafPOS'un Z'si `z`'de, sayı */
+  zText?: string;
+  /** Geçmiş gününün indirimi bilinmiyor (yalnız ModPOS föyünden): `s.disc` 0 ama raporlar onu bilinen sıfır saymaz */
+  indirimBilinmiyor?: true;
   /** Ek sekmeler (hazırlama, adisyonlar, kalem listeleri, iadeler, platformlar): bulutta ayrı anahtarda tutulur */
   x?: RemoteDayExtra;
 }

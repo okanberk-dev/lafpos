@@ -442,6 +442,17 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const p = await h.ok<{ stats: { days: Record<string, { closes: number[][] }>; daily: [string, number, number][] } }>('patron', 'GET', '/reports/patron');
     expect(p.stats.days[dun]!.closes).toEqual([[300, 6205, 1], [600, 40000, 2]]);
     expect(p.stats.daily).toContainEqual([dun, 46205, 3]);
+    // Kaynağın adı da gelir (kasanın Raporlar'ı günleri "ModPOS" diye etiketler); bu sürümden önce alınmış (adsız) kayıt
+    // için kasa nabızda 0 söyler, Merkez kaydı bir kez adıyla yeniden gönderir
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const { GECMIS_KEY } = await import('@shared/gecmis');
+    const got = getSyncState<{ at: number; kaynak?: string; gunler: unknown[] }>(GECMIS_KEY)!;
+    expect(got.kaynak).toBe('ModPOS');
+    setSyncState(GECMIS_KEY, { at: got.at, gunler: got.gunler });
+    await merkezBeat();
+    expect(getSyncState<{ at: number; kaynak?: string }>(GECMIS_KEY)).toMatchObject({ at: got.at, kaynak: 'ModPOS' });
+    const sum = await h.ok<{ byDay: { date: string; kaynak?: string }[] }>('patron', 'GET', `/reports/summary?from=${dun}&to=${dun}`);
+    expect(sum.byDay).toEqual([expect.objectContaining({ date: dun, kaynak: 'ModPOS', netSales: 46205 })]);
     await panel('POST', 'merkez/gecmis', { id, gunler: [] });
     await merkezBeat();
     const after = await h.ok<{ stats: { days: Record<string, unknown> } }>('patron', 'GET', '/reports/patron');

@@ -315,18 +315,39 @@ Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`,
 
 ## Geçmiş ciro (LafPOS'tan önceki kasa programı)
 
-Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o günlerin cirosu buluta bir kez yüklenir
-(`shared/gecmis.ts`, `POST merkez/gecmis`; yalnız panelin sahibi). Kayıt dükkân başına tek anahtarda durur
-(`lafpos:gecmis:<kurulum>`), kasaya gitmez. LafPOS Uzaktan'da:
+Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o günler raporlarda görünür
+(`shared/gecmis.ts`). İki kaynak var:
 
-- Patron panelinin kıyasları (dün, geçen hafta bugün, geçen ay bugün; hafta ve ay toplamı) ve Raporlar o günleri görür.
-- Gün yalnız ciro, adisyon, ödeme türü ve kapanış dakikasını taşır; ürün, personel ve KDV kırılımı yoktur.
-- Aynı tarihte LafPOS'un da gün raporu varsa cirosu büyük olan geçer (geçiş gününde LafPOS'ta yalnız deneme satışı
-  olur); iki kaynak toplanmaz.
-- Ek Redis komutu yok: kayıt gün raporlarıyla aynı MGET'te okunur; yeni kasanın özetinde yalnız geçmişi olan dükkânda,
-  işlev örneği başına bir kez.
+1. **lafmaliyet (asıl kaynak):** kasa ModPOS dönemini lafmaliyet'ten çeker (`GET /api/panel/pos/modpos-gunler`,
+   docs/03-ENTEGRASYON.md §4.5): ciro, ödeme türleri, indirim, ciro dışı (ödenmez ve ikram), KDV (oran oran, geldiği
+   gibi), ModPOS Z numarası ve dönemin ürün listesi. Yalnız föyden gelen günde indirim bilinmez: raporlar ₺0 değil
+   "N ModPOS gününde bilinmiyor" der. İş günü başına bir kez kendiliğinden, Yönetim › Site ve lafmaliyet › "ModPOS dönemini çek" ile
+   elle. Kasada `sync_state` `lafmaliyet.modpos`.
+2. **Merkez (elle yüklenen, eski yol):** `POST merkez/gecmis` (yalnız panelin sahibi; ekranı yok). Kayıt dükkân başına
+   tek anahtarda (`lafpos:gecmis:<kurulum>`); Merkez nabzıyla kasaya da gelir (yalnız değişince; kasa elindekinin anını
+   `gecmisAt` ile söyler, kaynağın adını taşımayan eski kopyası için 0 söyler, kayıt bir kez adıyla yeniden gelir),
+   kasada `sync_state` `merkez.gecmis`.
 
-Gövde: `{ id, kaynak, gunler: [{ date, ciro, adisyon, kart?: [tutar, adet], nakit?, yemek?, closes?: [[dakika, kuruş,
-adisyon]] }] }` (tutarlar kuruş, dakika 05:00'ten). Boş `gunler` kaydı siler. Kasanın kendi ekranındaki (kafe içi)
-patron paneli de bu günleri görür: kayıt Merkez nabzının yanıtıyla kasaya gelir (yalnız değişince; kasa elindekinin
-anını `gecmisAt` ile söyler), kasada `sync_state` `merkez.gecmis`'te durur ve `patronStats`'a katılır.
+Kasa ikisini birleştirir (aynı tarihte lafmaliyet'inki geçer; `mergeHistory`, `server/sync/modpos.ts` `historyStore`):
+
+- **Kasanın kendi ekranları:** patron panelinin kıyası ve Raporlar › Ciro, Ürünler, Saatlik o günleri görür. Günler
+  "ModPOS" etiketli (günlük grafiğin ipucunda ModPOS Z'siyle), ciro dökümüne indirimi, ciro dışı ve KDV'siyle girer;
+  ürün listesi Ürünler'de ayrı "ModPOS · indirim öncesi" kartı (yalnız dönemin hepsi seçiliyse; bir kısmı seçiliyse not;
+  LafPOS ürün cirosuna eklenmez); İndirim ve İkram listeleri ModPOS günlerinin toplamını not olarak söyler (kalem kaydı
+  yok). Geçmiş günü yalnız LafPOS'ta gerçek iş günü olmayan tarihte geçer; gerçek kullanımda deneme günlerinin yerine
+  geçer (`server/services/gecmis.ts` `historyFor`). Z raporu, Kasa › Geçmiş günler, iş günü, Z zinciri ve lafmaliyet'e
+  giden gün paketi geçmişi hiç görmez.
+- **LafPOS Uzaktan:** kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak iter (`server/sync/cloud-reports.ts`,
+  `historyReport`: kaynak ve `zText` alanlarıyla; bulut ikisini kısa metin olarak doğrular). Yalnız LafPOS'ta gerçek iş
+  günü olmayan tarihte ve içerik değişince gider (kayıt değişince bütün geçmiş günlerine bir kez bakılır, gün özeti aynıysa
+  gitmez). Böylece geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da "Geçen hafta"
+  ModPOS günlerini gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an).
+- **Buluttaki elle yüklenmiş kayıt** yine okunur: aynı tarihte LafPOS'un da gün raporu varsa cirosu büyük olan geçer
+  (geçiş gününde LafPOS'ta yalnız deneme satışı olur); iki kaynak toplanmaz. Ek Redis komutu yok: kayıt gün raporlarıyla
+  aynı MGET'te okunur; yeni kasanın özetinde yalnız geçmişi olan dükkânda, işlev örneği başına bir kez. Patron panelinin
+  ETag'i geçmişin yükleme anını taşır (yeni yükleme 304'ün arkasında kalmaz).
+
+Merkez gövdesi: `{ id, kaynak, gunler: [{ date, ciro, adisyon, kart?: [tutar, adet], nakit?, yemek?, indirim?, odenmez?,
+kdv?: [[oran, dahil, matrah, kdv]], z?, closes?: [[dakika, kuruş, adisyon]] }] }` (tutarlar kuruş, dakika 05:00'ten;
+KDV dahil toplamı ciroyu, matrah + KDV dahili tutmalı; KDV verilmezse %10 sayılır; Z en çok 40 karakter). Boş `gunler`
+kaydı siler.

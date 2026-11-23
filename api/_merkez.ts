@@ -27,7 +27,7 @@
 import { createHash } from 'node:crypto';
 import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS, updateLabel } from '../shared/lisans.js';
 import { fmtTime } from '../shared/time.js';
-import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory, readHistory } from '../shared/gecmis.js';
+import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory, readHistoryStore } from '../shared/gecmis.js';
 import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
 
 export interface Install {
@@ -416,11 +416,12 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
         await deps.notify({ kind: 'guncelleme', title: 'Güncelleme sorunu', body, at: now, shop: next.ad }).catch(() => undefined);
       }
     }
-    // Geçmiş ciro yalnız kasadakinden farklıysa gider (kasa elindekinin anını `gecmisAt` ile söyler); kayıt silindiyse null
-    const gecmisDays = readHistory(rawGecmis);
-    const gecmisAt = gecmisDays ? ((JSON.parse(rawGecmis!) as HistoryStore).at ?? 0) : null;
+    // Geçmiş ciro yalnız kasadakinden farklıysa gider (kasa elindekinin anını `gecmisAt` ile söyler); kayıt silindiyse null.
+    // Kaynağın adı da gider (kasanın Raporlar'ı günleri "ModPOS" diye etiketler)
+    const gecmisStore = readHistoryStore(rawGecmis);
+    const gecmisAt = gecmisStore ? gecmisStore.at : null;
     const kasaGecmisAt = intOrNull(body.gecmisAt);
-    const gecmis = (gecmisAt ?? 0) !== (kasaGecmisAt ?? 0) && 'gecmisAt' in body ? { gecmis: gecmisDays ? { at: gecmisAt, gunler: gecmisDays } : null } : {};
+    const gecmis = (gecmisAt ?? 0) !== (kasaGecmisAt ?? 0) && 'gecmisAt' in body ? { gecmis: gecmisStore ? { at: gecmisAt, kaynak: gecmisStore.kaynak, gunler: gecmisStore.gunler } : null } : {};
     // `guncelleKomut`: isteğin bağlı olduğu uzaktan gün sonu (eski kasa alanı görmez, isteği hemen işler)
     return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, guncelleKomut: next.guncelleKomut ?? null, at: now, ...gecmis, ...(kontrol ? { kontrol } : {}) });
   }

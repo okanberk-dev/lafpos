@@ -20,6 +20,7 @@ import {
   staffReport,
   summaryReport,
 } from '../services/reports';
+import { historyFor } from '../services/gecmis';
 
 export const reportRoutes = new Hono<AppEnv>();
 
@@ -45,9 +46,10 @@ reportRoutes.use('*', async (c, next) => {
   return next();
 });
 
-reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c))));
-reportRoutes.get('/products', (c) => c.json(productReport(range(c), can(c.get('user'), 'rapor.maliyet'))));
-reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c))));
+// Ciro, Ürünler ve Saatlik LafPOS öncesi geçmiş günlerini de gösterir (ModPOS; server/services/gecmis.ts): etiketli, Z yok
+reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c), Date.now(), { history: true })));
+reportRoutes.get('/products', (c) => c.json(productReport(range(c), can(c.get('user'), 'rapor.maliyet'), { history: true })));
+reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c), { history: true })));
 reportRoutes.get('/prep', (c) => c.json(prepReport(range(c))));
 reportRoutes.get('/staff', (c) => {
   requirePermission(c.get('user'), 'rapor.maliyet');
@@ -57,8 +59,21 @@ reportRoutes.get('/staff', (c) => {
 const staffFor = (c: Context<AppEnv>) => (userId: string) => seesStaffOf(c.get('user'), userId);
 reportRoutes.get('/items', (c) => {
   const kind = query(c, z.object({ kind: z.enum(['iptal', 'ikram', 'indirim', 'happy']) })).kind;
-  return c.json(itemListReport(range(c), kind, staffFor(c)));
+  const r = range(c);
+  return c.json({ ...itemListReport(r, kind, staffFor(c)), ...historyItems(r, kind) });
 });
+
+/**
+ * Geçmiş günlerinin (ModPOS) indirimi ve ciro dışı tutarı kalem kalem bilinmez: İndirim ve İkram listeleri o günleri
+ * toplamıyla not olarak söyler (Ciro dökümüyle çelişmesin; api/uzaktan.ts `historyItems` ile aynı)
+ */
+function historyItems(r: { from: string; to: string }, kind: string) {
+  if (kind !== 'indirim' && kind !== 'ikram') return {};
+  const hist = historyFor(r, reportToday());
+  const amount = (hist?.days ?? []).reduce((a, d) => a + ((kind === 'indirim' ? d.indirim : d.odenmez) ?? 0), 0);
+  const unknown = kind === 'indirim' ? (hist?.days ?? []).filter((d) => d.indirimBilinmiyor).length : 0;
+  return hist?.days.length && (amount > 0 || unknown) ? { history: { kaynak: hist.kaynak, days: hist.days.length, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } } : {};
+}
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
 /** Paket platformları: tahmini komisyon bir maliyettir, yalnız maliyet yetkisine gider */
 reportRoutes.get('/platforms', (c) => c.json(platformReport(range(c), can(c.get('user'), 'rapor.maliyet'))));

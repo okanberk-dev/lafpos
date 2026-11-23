@@ -444,7 +444,7 @@ const PARKED_MS = 365 * 86400_000;
 const RESEND = 'Kasa › Geçmiş günler › Z › Gönder';
 
 /** HTTP hatasının kısa açıklaması (gün sonu ve maliyet ortak): 401 ve 503'te neden ve ne yapılacağı */
-function httpErrorText(status: number, json: unknown): string {
+export function httpErrorText(status: number, json: unknown): string {
   const detail = errorDetail(json);
   const code = (json as { error?: unknown } | null)?.error;
   if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. LafPOS'taki LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)`;
