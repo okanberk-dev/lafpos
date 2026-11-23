@@ -642,6 +642,22 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   alanı atar (`z.object`), yani gönderim sırası serbesttir.
   İşletme bahşiş almaz (Ayarlar `tipsEnabled` varsayılan kapalı, ödeme `tip > 0` 400 `tip_disabled`): `cardTips`
   yalnız eski kayıtlarda 0'dan büyük olur.
+- `bankPos` (22 Kasım 2026, #154) isteğe bağlıdır: yazarkasa POS'unun (Pavo) banka gün sonu ve LafPOS kıyası. Yalnız
+  günün banka gün sonu denendiyse gider; Pavo yoksa ya da denenmediyse alan yoktur. Banka gün sonu çoğu zaman gün
+  kapandıktan sonra biter: sonucu gelince aynı gün yeniden gönderilir (`date` ve `zNo` aynı, idempotent). Okumayan
+  sürüm alanı atar (`z.object`).
+  ```
+  "bankPos": {
+    "status": "ok",                     // ok · failed · unknown (alındı mı bilinmiyor) · running (sürüyor)
+    "batchNo": "0042", "at": "2026-10-26T23:41:07.000Z",
+    "pavoCard": 29230.5,                // cihazın bankalara gönderdiği kart toplamı (TL); bilinmiyorsa null
+    "lafposCard": 29230.5,              // LafPOS'ta bankaya giden kart tutarı (kart ödemeleri ve kartla bahşiş, TL); aynı
+                                        // günün ikinci gün sonunda yalnız öncekinden sonra alınanlar; bilinmiyorsa null
+    "diff": 0,                          // pavoCard − lafposCard; ikisinden biri yoksa null
+    "acquirers": [{ "name": "Garanti BBVA", "count": 51, "total": 18120.5 }],
+    "message": null                     // başarısız ya da belirsizse cihazın ya da LafPOS'un açıklaması
+  }
+  ```
 - **Ekler** (süt, şurup, ekstra shot) içeceğin satırından ayrı satırdır: `ALTERNATIF SÜT`, `SYRUP`, `EXTRA SHOT`;
   kimlik önce sitenin sabit kalemleri (`mnu-0082`, `mnu-0080`, `mnu-0081`), yoksa `extras` kategorisinde ada göre.
   Seçim fiyata göre değil **koda göre**: `milk` kodu `normal` değilse (laktozsuz süt 0 TL'dir ama alternatif
