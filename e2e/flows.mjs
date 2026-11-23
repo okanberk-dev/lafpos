@@ -968,6 +968,44 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      // İnceleme (23 Kas 2026): iade tutarı ekranda indirim düşülmüş görünür, sunucunun yazdığıyla aynı; son alınan
+      // ödemeden (kart) geri verilir; kasiyerin yetkisi yok, müdür PIN'iyle onaylar
+      'Telefonda kasiyer: kapanmış siparişte kalem iadesi, ekrandaki tutar ve ödeme yolu sunucununkiyle aynı',
+      async () => {
+        const latte = seed.boot.products.find((p) => p.name === 'Latte');
+        const nakit = seed.boot.paymentMethods.find((m) => m.kind === 'nakit');
+        const kart = seed.boot.paymentMethods.find((m) => m.zField === 'card');
+        let o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah', reuse: null });
+        o = await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 3 }] });
+        o = await api.call('mudur', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Kampanya' });
+        const half = Math.floor(o.total / 2);
+        await api.call('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit.id, amount: half });
+        await api.call('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: kart.id, amount: o.total - half });
+        const expected = o.total - Math.round(latte.price * 2 * 0.9);
+        const money = (k) => `₺${(k / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        await withPage(ctx, 'telefon', 'kasa', async (page) => {
+          await go(ctx, page, '/siparisler');
+          await page.getByRole('tab', { name: /^Kapanan/ }).click();
+          await page.locator(`[data-order-card][data-order-id="${o.id}"]`).click();
+          await page.getByRole('button', { name: 'Kalem iade et', exact: true }).click();
+          const dialog = page.getByRole('dialog', { name: 'Kalem iade et' });
+          await dialog.getByRole('button', { name: /bir artır$/ }).first().click();
+          await dialog.getByText(money(expected), { exact: true }).first().waitFor();
+          await dialog.getByRole('textbox', { name: 'İade nedeni' }).fill('Soğuk geldi');
+          await dialog.getByRole('button', { name: `${money(expected)} iade et`, exact: true }).click();
+          const approval = page.getByRole('dialog', { name: 'Yetkili onayı' });
+          for (const d of PINS.mudur) await approval.getByRole('button', { name: d, exact: true }).click();
+          await approval.getByRole('button', { name: 'Onayla', exact: true }).click();
+          await page.getByText(`${money(expected)} iade edildi`, { exact: false }).first().waitFor({ timeout: 8000 });
+        }, [/istek 403: POST \/api\/orders\/[^/]+\/refund-items/, /konsol: Failed to load resource: .*403/]);
+        const done = await api.call('mudur', 'GET', `/orders/${o.id}`);
+        assert(done.status === 'kapali' && done.total === o.total - expected, `iade yazılmadı: ${done.status} ${done.total}`);
+        const live = done.payments.filter((p) => !p.refundedAt);
+        const byField = Object.fromEntries(live.map((p) => [p.zField, p.amount]));
+        assert(byField.cash === half && byField.card === o.total - half - expected, `geri verilen yol yanlış: ${JSON.stringify(byField)}`);
+      },
+    ],
+    [
       'Tablette müdür: ödeme ekranından dökülen siparişi zayi kapatır',
       async () => {
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
