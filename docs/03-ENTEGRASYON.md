@@ -866,7 +866,8 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
   karaoke); ciroyu kuruşu kuruşuna tutmuyorsa ya da yoksa rapor %10 sayar, %20 hiç varsayılmaz. Ödeme türünün adedi
   bilinmez (0). Geçiş günü ve LafPOS'un bugünü ile sonrası alınmaz.
 - **Ürün listesi:** dönem için tek blok, indirim öncesi; ad, boy (tek boyluda null), adet (ondalıklı olabilir) ve tutar.
-  Toplamı günlerin cirosuyla denetlenmez (lafmaliyet'in listesi kuruşu kuruşuna tutmayabilir); biçimi bozuksa alınmaz.
+  Toplamı günlerin cirosuyla denetlenmez (lafmaliyet'in listesi kuruşu kuruşuna tutmayabilir); bozuk satır (eksi ya da
+  sayı olmayan tutar) tek başına düşer, 120 karakterden uzun ad kısaltılır; zarfı bozuksa ya da satır kalmazsa alınmaz.
 - **Hoşgörülü okuma:** bilinmeyen alan yok sayılır, isteğe bağlı alan bozuksa yok sayılır, bozuk gün tek başına düşer;
   yalnız zarf bozuksa ya da gün geldiği hâlde hiçbiri okunamıyorsa çekim hata sayılır (önceki günler kalır).
 - **Saklama:** kasada `sync_state` `lafmaliyet.modpos` (shared/gecmis.ts `HistoryStore` biçimi, kaynak "ModPOS").
@@ -874,8 +875,9 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
   "ModPOS dönemi"nde görünür. Yalnız gün sayısı ve aralık görünür, tutar değil.
 - **Kullanım:** patron panelinin kıyası, kasadaki Raporlar (Ciro, Ürünler, Saatlik; "ModPOS" etiketli; Ürünler'de dönem
   bloğu yalnız dönemin hepsi seçiliyse) ve LafPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
-  iter (server/sync/cloud-reports.ts), yalnız LafPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince. İş günü, Z
-  zinciri ve lafmaliyet'e giden gün paketi (§4) bu günleri hiç görmez.
+  iter (server/sync/cloud-reports.ts), yalnız LafPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi
+  o günlerle gider, lafmaliyet'te silinen gün Uzaktan'da boşaltılır (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro"). İş günü,
+  Z zinciri ve lafmaliyet'e giden gün paketi (§4) bu günleri hiç görmez.
 - **Sıklık:** kendiliğinden iş günü başına bir kez (05:00'ten ya da kasa açıldıktan sonraki ilk tur), elle Yönetim ›
   Site ve lafmaliyet › "ModPOS dönemini çek" (`senkron.yonet`, denetim kaydı `sync.lafmaliyet_modpos`); ikisi de 5
   dakikadan sık değil (elle 429 `too_soon`). Bağlantı tanımlı değilse hiç istek yok. İmza vektörü (`?sube=marina`)
