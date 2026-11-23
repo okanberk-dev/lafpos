@@ -278,7 +278,7 @@ describe('kapanış sonucu (closed): iptal ve iade online toplamına girmez', ()
 });
 
 describe('menü: CDN bayatken yeniden açılan ürün eski fiyattan satılmaz', () => {
-  it('listede olmayan ürün panelden fiyat alır, ETag yazılmaz, eşitleme CDN bayatlığını söyler', async () => {
+  it('listede olmayan ürün panelden fiyat alır, eşitleme CDN bayatlığını söyler; ETag listenin kendisininki', async () => {
     const { db, schema, eq, settings } = await mod();
     const sync = await import('../server/sync/menu-sync');
     const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
@@ -300,8 +300,9 @@ describe('menü: CDN bayatken yeniden açılan ürün eski fiyattan satılmaz', 
     const r = await sync.runMenuSync({ apply: true, force: true });
     expect(r.cdnStale).toBe(true);
     expect(row()).toMatchObject({ active: true, price });
+    // ETag gelen listeninki (bayat da olsa): CDN yenilenince değişir, sonraki yoklama taze listeyi alır
     expect(settings.getSyncState<{ etag?: string }>('laffogato.menu')?.etag).toBe(etag);
-    // CDN yenilendi: bayatlık biter, ETag yazılır
+    // CDN yenilendi: bayatlık biter
     site.menu = full;
     const fresh = await sync.runMenuSync({ apply: true, force: true });
     expect(fresh.cdnStale).toBeUndefined();

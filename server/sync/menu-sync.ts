@@ -68,8 +68,11 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
           }
           return r;
         });
-        // CDN bayatsa ETag yazılmaz: sonraki yoklama (ya da kısa süre sonraki ETag'siz eşitleme) taze listeyi alır
-        recordMenuSync(warning ? { changes: preview.changes.length, error: warning } : { ...(stale ? {} : { etag: fetched.etag }), changes: preview.changes.length });
+        // ETag liste bayat görünse de yazılır: CDN yenilenince ETag değişir, sonraki yoklama taze listeyi alır (kısa süre
+        // sonra bir kez ETag'siz de eşitlenir). Herkese açık liste yalnız sitenin ana şubesinin (Tuzla) Satışta'sını
+        // gösterir: Marina'da satılan, Tuzla'da tükenen ürün listede yoktur ve "bayat" görünür; ETag yazılmasaydı her
+        // 15 dakikalık yoklama tam liste ve imzalı panel okuması isterdi (laffogato src/lib/mobile/menu.ts)
+        recordMenuSync(warning ? { changes: preview.changes.length, error: warning } : { etag: fetched.etag, changes: preview.changes.length });
         fx.emit({ topic: 'menu', kind: 'menu.synced' });
         fx.emit({ topic: 'sync', kind: 'menu.synced' });
         fx.flush();

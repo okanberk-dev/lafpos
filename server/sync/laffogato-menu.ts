@@ -103,8 +103,11 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
   return { status: 'yeni', menu, etag: res.headers.get('etag') };
 }
 
-/** İmzalı panelin kalemleri: sitedeki her kalem, Tükendi olanlar dahil, CDN önbelleği yok (laffogato `toPanelMenuItem`) */
-export type PanelMenu = Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }>;
+/**
+ * İmzalı panelin kalemleri: sitedeki her kalem, Tükendi olanlar dahil, CDN önbelleği yok (laffogato `toPanelMenuItem`).
+ * `isActive` bu şubede satılıyor mu, `onMenu` site kalemi menüden kaldırmadı mı (şube öncesi site göndermez)
+ */
+export type PanelMenu = Map<string, { isActive: boolean; onMenu?: boolean; priceMinor: number; priceMinorL: number }>;
 
 /**
  * İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde ve tanınmayan biçim
@@ -126,9 +129,12 @@ export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   const other = wrongSiteBranch(body.branch);
   if (other) throw new Error(`Panel menüsü başka şubenin (${other}); bu kasanın şubesi ${siteBranch()}`);
   return new Map(
-    (items as { id?: unknown; isActive?: unknown; priceMinor: number; priceMinorL: number }[])
+    (items as { id?: unknown; isActive?: unknown; onMenu?: unknown; priceMinor: number; priceMinorL: number }[])
       .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')
-      .map((i) => [i.id as string, i as { isActive: boolean; priceMinor: number; priceMinorL: number }]),
+      .map((i) => [
+        i.id as string,
+        { isActive: i.isActive as boolean, ...(typeof i.onMenu === 'boolean' ? { onMenu: i.onMenu } : {}), priceMinor: i.priceMinor, priceMinorL: i.priceMinorL },
+      ]),
   );
 }
 
@@ -157,12 +163,16 @@ export function shouldBeActive(p: LocalProduct, listed: boolean, panel: PanelMen
 type SoldOutBy = 'lafpos' | 'site';
 
 /**
- * Senkrondan sonra Tükendi'nin sahibi. Açılan üründe yok; zaten kapalı üründe kim kapattıysa o kalır (LafPOS'un
- * kendi Tükendi'si siteye yazılmış olsa da kasiyer onu açabilmeli), eski kayıtta (sahipsiz) site; yeni kapananda
- * porsiyon bittiyse LafPOS, değilse site.
+ * Senkrondan sonra Tükendi'nin sahibi. Açılan üründe yok. Site `onMenu` gönderiyorsa (şubeli site) kilit yalnız
+ * sitenin menüden kaldırdığı kalemde ('site'): site LafPOS'un onu açmasını 409 `site_closed` ile reddeder. Menüde olup
+ * yalnız bu şubede Tükendi olan kalemi (kasa ya da köşkün paneli kapattı) site LafPOS'tan açtırır: kasada açılır
+ * ('lafpos'). `onMenu` yoksa eski kural: zaten kapalı üründe kim kapattıysa o kalır, eski kayıtta (sahipsiz) site;
+ * yeni kapananda porsiyon bittiyse LafPOS, değilse site.
  */
-export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | null; portionsLeft: number | null }, active: boolean): SoldOutBy | null {
+export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | null; portionsLeft: number | null }, active: boolean, onMenu?: boolean): SoldOutBy | null {
   if (active) return null;
+  if (onMenu === false) return 'site';
+  if (onMenu === true) return 'lafpos';
   if (!p.active) return p.soldOutBy ?? 'site';
   return p.portionsLeft === 0 ? 'lafpos' : 'site';
 }
@@ -206,8 +216,9 @@ export function panelPrice(panel: PanelMenu | null, id: string): { price: number
 
 /**
  * CDN'deki herkese açık liste bayat mı: panelde satışta olan bağlı kalem herkese açık listede yok (liste yalnız satıştaki
- * kalemleri verir; sitede yeniden açılan ürün CDN'de 2 dakikaya kadar görünmez). Eşitleme ETag'i yazmaz, kısa süre
- * sonra bir kez ETag'siz yeniden eşitlenir: ad, KDV ve görsel de taze listeden gelsin (docs/03-ENTEGRASYON.md §2.1)
+ * kalemleri verir; sitede yeniden açılan ürün CDN'de 2 dakikaya kadar görünmez). Kısa süre sonra bir kez ETag'siz
+ * yeniden eşitlenir: ad, KDV ve görsel de taze listeden gelsin. Liste Tuzla'nın Satışta'sıdır: Marina'da Tuzla'da tükenen
+ * ürün de "bayat" görünür (docs/03-ENTEGRASYON.md §2.1)
  */
 export function cdnStale(local: { extId: string | null }[], menu: SiteMenu, panel: PanelMenu | null): boolean {
   if (!panel) return false;
@@ -379,7 +390,7 @@ export function applyMenu(
         const active = shouldBeActive(existing, true, panel, lastSync);
         if (existing.active && !active) deactivated++;
         if (!existing.active && active) reactivated++;
-        t.update(schema.products).set({ ...values, active, soldOutBy: soldOutByAfterSync(existing, active) }).where(eq(schema.products.id, existing.id)).run();
+        t.update(schema.products).set({ ...values, active, soldOutBy: soldOutByAfterSync(existing, active, panel?.get(i.id)?.onMenu) }).where(eq(schema.products.id, existing.id)).run();
       } else t.update(schema.products).set(values).where(eq(schema.products.id, existing.id)).run();
       productId = existing.id;
       updated++;
@@ -413,7 +424,7 @@ export function applyMenu(
       continue;
     }
     const active = shouldBeActive(p, false, panel, lastSync);
-    const soldOutBy = soldOutByAfterSync(p, active);
+    const soldOutBy = soldOutByAfterSync(p, active, panel?.get(p.extId!)?.onMenu);
     if (active === p.active && soldOutBy === p.soldOutBy && !price) continue;
     t.update(schema.products).set({ active, soldOutBy, ...(price ?? {}), updatedAt: now }).where(eq(schema.products.id, p.id)).run();
     if (p.active && !active) deactivated++;
