@@ -14,10 +14,10 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   receiptFooter: 'Bizi tercih ettiğiniz için teşekkürler\nlaffogato.net',
   // Fişte müşteri adı varsayılan kapalı: kişisel veri fişe ancak patron açınca yazılır
   receiptCustomerName: false,
-  // Ödemeden sonra fiş yazıcısından kısa işyeri nüshası (kalem dökümü yok); müşteriye bilgi fişi yalnız yazarkasasız
-  // kurulumda ve ayar açılınca (mali fişi yazarkasa basar)
+  // Ödemeden sonra fiş yazıcısından iki ayrı kâğıt, her biri kendi ayarıyla ve yazarkasa bağlıyken de
+  // (shared/odeme-fisi.ts): işyeri nüshası (kalem dökümü; bar ve hazırlık için)
   receiptStoreCopy: true,
-  // Varsayılan 2 nüsha: müşteri (büyük sipariş no) ve işyeri (kalem dökümü); yazarkasa bağlıyken de
+  // Müşteri nüshası (büyük sipariş no, çağrı için; "mali değeri yoktur")
   receiptInfoSlip: true,
   // Fiş, Z ve X ağdaki fiş yazıcısına doğrudan (ESC/POS): yazdırma penceresi açılmaz; olmazsa tarayıcıdan basılır
   receiptDirect: true,

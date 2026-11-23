@@ -124,34 +124,45 @@ Online ödenmiş sipariş cihaza gitmez ve tahsil edilmez; ikram, ödenmez ve za
 bugünkü gibi. Ayar kapalıysa ya da bağlantı masada ödemedeyse pencere bugünkü gibidir. Testler:
 `tests/yazarkasa-tek-dokunus.test.ts`, `tests/yazarkasa-tek-dokunus-pavo.test.ts`; e2e akışı eğitim cihazıyla.
 
-**Ödeme sonrası fişler.** Müşterinin fişini (mali belge) cihaz basar. Başarılı ödemeden sonra fiş yazıcısından kısa
-**işyeri nüshası** çıkar (adisyon no, masa ya da tür, tarih-saat, adisyon toplamı, ödeme türleri, yazarkasa fiş ve Z
-no'su varsa, kasiyer; kalem dökümü yok; `StoreCopyReceipt`, `src/lib/print.tsx`). Yazarkasasız kurulumda isteğe bağlı
-**müşteriye bilgi fişi** ("mali değeri yoktur") de basılır. Ayarlar Yönetim › Ayarlar ve yedek › Fiş yazıcısı kartında:
-"Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`, varsayılan açık), "Müşteriye bilgi fişi" (`receiptInfoSlip`,
-varsayılan kapalı). Her ödeme için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir
-fiş yazıcısı bildirdiyse (`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin nüshasını
-ödemeyi alan ekran basar.
+**Ödeme sonrası fişler.** Müşterinin mali fişini cihaz basar. Başarılı ödemeden sonra fiş yazıcısından iki ayrı kâğıt
+çıkar, yazarkasa bağlıyken de (`src/lib/after-payment.tsx`, `src/lib/print.tsx`): önce **müşteri nüshası** (sipariş
+numarası ya da masa çok büyük, çağrı için; kalemler; "mali değeri yoktur"; `BillReceipt`), sonra **işyeri nüshası** (bar
+ve hazırlık için: adisyon no, masa ya da tür, tarih-saat, kalemler ve seçenekler, ikram edilen kalemde tutar yerine türü,
+adisyon toplamı, ödeme türleri, yazarkasa fiş ve Z no'su varsa, kasiyer; `StoreCopyReceipt`). Ayarlar Yönetim › Ayarlar
+ve yedek › Fiş yazıcısı kartında, her kâğıt kendi ayarıyla: "Ödeme sonrası müşteri nüshası" (`receiptInfoSlip`) ve
+"Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`), ikisi de varsayılan açık (`shared/odeme-fisi.ts` ›
+`afterPaymentParts`). İkram, ödenmez ve zayi kapanışında da aynı iki kâğıt (işyeri nüshasında kapanış türü). Her ödeme
+için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir fiş yazıcısı bildirdiyse
+(`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin kâğıtlarını ödemeyi alan ekran basar.
+Her kâğıt ayrı yazdırma işi, yazıcı her birinin sonunda keser. Bütün çıktılar (nüshalar, Z, X, gün sonu kâğıdı, deneme
+fişi) tek sıradan geçer (`printQueue`, `tests/fis-sirasi.test.ts`): biri bitmeden (doğrudan basmada sunucunun yanıtı,
+tarayıcıda `afterprint`) öteki başlamaz; eskiden art arda iki ödemenin kâğıtları üst üste binince biri öbürünün fişini,
+öteki boş kâğıt basabiliyordu. Pavo'nun banka gün sonu kâğıdı (Z ve Pavo - LafPOS kıyası) bu iki ayara bağlı değil: fiş
+yazıcılı kasa ekranında, kendi ayarıyla (Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın";
+`shared/odeme-fisi.ts` › `bankEodSlipHere`).
 
 **Cihaz ödemesinin işyeri nüshası sunucuda bekler** (22 Kasım 2026; sunucu `server/okc/store-copy.ts`, ekran
 `src/lib/store-copies.ts`). Eskiden nüshayı yalnız canlı olay (`okc.paid`) bastırıyordu: ödeme anında kasa ekranı
 kapalıysa, yenileniyorsa, kilitliyse ya da canlı bağlantı (SSE) kopuksa nüsha hiç çıkmıyordu.
 
-- Sepeti nüsha basan kasa ekranı gönderirse (`POST /api/okc/orders/:id/send`, `storeCopy: true`) fişe "bekliyor"
-  yazılır (`fiscal_receipts.store_copy`). Telefondan ya da yazıcısız ekrandan giden sepetin nüshası yoktur (eskisi gibi).
+- Sepeti nüsha basan kasa ekranı (fiş yazıcısı var, iki nüshadan en az biri açık) gönderirse
+  (`POST /api/okc/orders/:id/send`, `storeCopy: true`) fişe "bekliyor" yazılır (`fiscal_receipts.store_copy`).
+  Telefondan ya da yazıcısız ekrandan giden sepetin nüshası yoktur (eskisi gibi).
 - Cihaz ödeyince `okc.paid` olayı fişin kimliğini (`receiptId`) taşır; kasa ekranı nüshayı bu kimlikle alır
   (`POST /api/okc/store-copies/:id/claim`), basar ve "basıldı" der (`…/printed`; denetim kaydı `okc.store_copy`,
   geç basıldıysa "ödemeden 12 dk sonra"). Fiş kimliği taşımayan eski olayda ekran bekleyenleri sorar.
 - Olay kaçtıysa kasa ekranı açılınca (giriş, sayfa yenileme) ve canlı bağlantı yeniden kurulunca bekleyenleri sorar
-  (`GET /api/okc/store-copies`) ve her birini basar; birden çoksa tek yazdırmada, aralarında kâğıt kesilir. Nüsha
-  ödemenin saatini yazar. Görünmeyen sekme (arkada ya da simge durumunda; tarayıcı orada yazdırmayı bekletir) nüsha
-  almaz, görünür olunca sorar.
+  (`GET /api/okc/store-copies`) ve her birini basar: her ödemenin müşteri ve işyeri nüshası (ayarı açık olanlar) ayrı
+  yazdırma işi. İşyeri nüshası ödemenin saatini yazar. Görünmeyen sekme (arkada ya da simge durumunda; tarayıcı orada
+  yazdırmayı bekletir) nüsha almaz, görünür olunca sorar.
 - Alma atomiktir: iki sekme ya da iki cihaz aynı nüshayı isterse yalnız biri alır, öbürü 409 `copy_taken` alır ve
   basmaz. Alınıp 2 dk içinde "basıldı" denmeyen nüsha (ekran basarken kapandı) yeniden verilir; denetim kaydı iki kez
   basılmış olabileceğini yazar.
-- Yalnız açık günün ödemeleri: gün kapanınca bekleyen nüsha basılmaz. "Ödeme sonrası işyeri nüshası" kapalıysa hiçbiri;
-  fişi iptal edilen ödemenin nüshası da basılmaz. Uçlar `odeme.al` ister. Kör kasada nüsha yine bu fişin ödemesini yazar
-  (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun öteki ödemeleri gitmez.
+- Yalnız açık günün ödemeleri: gün kapanınca bekleyen nüsha basılmaz. İki nüsha ayarı da kapalıysa hiçbiri; yalnız
+  müşteri nüshası açıksa nüsha yine bekler ve ekran yalnız onu basar (eskiden işyeri nüshası kapalıyken cihaz
+  ödemesinin müşteri nüshası hiç çıkmıyordu). Fişi iptal edilen ödemenin nüshası da basılmaz. Uçlar `odeme.al` ister.
+  Kör kasada nüsha yine bu fişin ödemesini yazar (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun
+  öteki ödemeleri gitmez.
 - Testler: `tests/isyeri-nushasi.test.ts`.
 
 ### 4.2 Yazarkasadan geçmeyen (X, Z, patron paneli, Uzaktan; Kasım 2026)

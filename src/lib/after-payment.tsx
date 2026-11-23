@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { COMP_LABEL } from '@shared/comp';
-import { afterPaymentPrints, isKasaHost, printOnce } from '@shared/odeme-fisi';
+import { afterPaymentParts, afterPaymentPrints, bankEodSlipHere, isKasaHost, printOnce } from '@shared/odeme-fisi';
 import type { BootstrapDTO, CompKind, OrderDTO } from '@shared/types';
 import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -13,42 +13,45 @@ const once = printOnce();
 
 const DOC_LABEL: Record<string, string> = { okc_fis: 'fiş', bilgi_fisi: 'bilgi fişi', e_arsiv: 'e-Arşiv', e_fatura: 'e-Fatura' };
 
-const plannedPrints = (boot: BootstrapDTO, viaDevice: boolean) =>
-  afterPaymentPrints({
-    settings: boot.settings,
-    printer: !!boot.integrations.receiptPrinter,
-    kasaScreen: isKasaHost(window.location.hostname),
-    provider: boot.integrations.okc.provider,
-    viaDevice,
-  });
+/**
+ * Bu ekranda ödemeden sonra basılacak kâğıtlar, sırayla (kasa ekranı ya da fiş yazıcısı yoksa hiçbiri): müşteri nüshası
+ * (büyük sipariş no; çağrı için), işyeri nüshası (kalem dökümü; bar için)
+ */
+const plannedParts = (boot: BootstrapDTO) =>
+  afterPaymentParts(afterPaymentPrints({ settings: boot.settings, printer: !!boot.integrations.receiptPrinter, kasaScreen: isKasaHost(window.location.hostname) }));
 
 /**
- * Bu ekran cihaz ödemesinin işyeri nüshasını basar mı (kasa ekranı, fiş yazıcısı, ayar açık). Sepet cihaza
- * gönderilirken sunucuya söylenir (`storeCopy`): cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
+ * Bu ekran cihaz ödemesinin nüshalarını basar mı: kasa ekranı, fiş yazıcısı ve iki nüshadan (müşteri, işyeri) en az
+ * birinin ayarı açık. Sepet cihaza gönderilirken sunucuya söylenir (`storeCopy`): cihaz ödeyince nüsha sunucuda bekler,
+ * bir kasa ekranı tam bir kez basar
  */
 export function deviceCopyHere(boot: BootstrapDTO): boolean {
-  return plannedPrints(boot, true).storeCopy;
+  return plannedParts(boot).length > 0;
 }
 
 /**
- * LafPOS'ta alınan ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): kısa işyeri nüshası
- * ve yazarkasasız kurulumda müşteriye bilgi fişi. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey olmaz.
- * `key` her ödeme için tektir (ödeme kimlikleri). Cihaz ödemesinin nüshası ayrı yoldan: `useDeviceCopies`
+ * LafPOS'ta alınan ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): müşteri nüshası ve
+ * işyeri nüshası, her biri kendi ayarıyla ve ayrı kâğıt. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey
+ * olmaz. `key` her ödeme için tektir (ödeme kimlikleri). Cihaz ödemesinin nüshası ayrı yoldan: `useDeviceCopies`
  */
 export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order: OrderDTO; payments: { id: string; methodName: string; amount: number; tip: number }[] }) {
   const { boot, order, payments } = opts;
-  const plan = plannedPrints(boot, false);
-  if (!plan.storeCopy && !plan.infoSlip) return;
+  const parts = plannedParts(boot);
+  if (!parts.length) return;
   if (!once(opts.key)) return;
   // Ödemeyi bu ekrandaki kişi aldı. Ödemeler adisyonun dökümünden değil sunucunun yanıtından gelir: kör kasada
   // (kasa rakamlarını görmeyen kasiyer) kapanan adisyonun dökümü boştur
   const cashier = useAuth.getState().me?.name ?? null;
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
-  // Önce müşteri nüshası (büyük sipariş no), sonra işyeri nüshası (kalem dökümü; bar için): ayrı kâğıtlar
-  void printEach([
-    ...(plan.infoSlip ? [<BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />] : []),
-    ...(plan.storeCopy ? [<StoreCopyReceipt key="i" order={order} boot={boot} payments={payments} cashier={cashier} />] : []),
-  ]).catch(() => undefined);
+  void printEach(
+    parts.map((p) =>
+      p === 'musteri' ? (
+        <BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />
+      ) : (
+        <StoreCopyReceipt key="i" order={order} boot={boot} payments={payments} cashier={cashier} />
+      ),
+    ),
+  ).catch(() => undefined);
 }
 
 /**
@@ -57,38 +60,49 @@ export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order
  */
 export function printAfterComp(opts: { boot: BootstrapDTO; order: OrderDTO; kind: CompKind }) {
   const { boot, order } = opts;
-  const plan = plannedPrints(boot, false);
-  if (!plan.storeCopy && !plan.infoSlip) return;
+  const parts = plannedParts(boot);
+  if (!parts.length) return;
   if (!once(`ciro-disi:${order.id}:${order.closedAt ?? ''}`)) return;
   const cashier = useAuth.getState().me?.name ?? null;
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
-  void printEach([
-    ...(plan.infoSlip ? [<BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />] : []),
-    ...(plan.storeCopy ? [<StoreCopyReceipt key="i" order={order} boot={boot} payments={[]} cashier={cashier} comp={COMP_LABEL[opts.kind]} />] : []),
-  ]).catch(() => undefined);
+  void printEach(
+    parts.map((p) =>
+      p === 'musteri' ? (
+        <BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />
+      ) : (
+        <StoreCopyReceipt key="i" order={order} boot={boot} payments={[]} cashier={cashier} comp={COMP_LABEL[opts.kind]} />
+      ),
+    ),
+  ).catch(() => undefined);
 }
 
 /**
- * Sunucudan alınan cihaz ödemesi nüshaları tek yazdırmada (aralarında kâğıt kesilir). Fiş ve Z no'su cihazdan, saat
- * ödemenin anı (nüsha geç basılsa da), kasiyer ödemeyi alan kişi (görünmüyorsa bu ekrandaki kişi)
+ * Sunucudan alınan cihaz ödemesi nüshaları: her ödemenin müşteri ve işyeri nüshası (ayarı açık olanlar) ayrı yazdırma
+ * işi, yazıcı her birinin sonunda keser. Fiş ve Z no'su cihazdan, saat ödemenin anı (nüsha geç basılsa da), kasiyer
+ * ödemeyi alan kişi (görünmüyorsa bu ekrandaki kişi)
  */
 export function printStoreCopies(boot: BootstrapDTO, copies: ClaimedStoreCopy[]): Promise<void> {
   const me = useAuth.getState().me?.name ?? null;
-  const info = plannedPrints(boot, true).infoSlip;
-  // Her nüsha ayrı yazdırma işi: yazıcı her birinin sonunda keser (müşteri nüshası, sonra işyeri nüshası)
+  const parts = plannedParts(boot);
+  const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
   return printEach(
-    copies.flatMap((c) => [
-      ...(info ? [<BillReceipt key={`${c.receiptId}-m`} order={c.order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} copy />] : []),
-      <StoreCopyReceipt
-        key={`${c.receiptId}-i`}
-        order={c.order}
-        boot={boot}
-        payments={c.payments}
-        device={{ receiptNo: c.device.receiptNo, zNo: c.device.zNo, docId: c.device.docId, docLabel: c.device.docKind ? (DOC_LABEL[c.device.docKind] ?? null) : null }}
-        cashier={c.payments.find((p) => p.userName)?.userName ?? me}
-        at={c.at}
-      />,
-    ]),
+    copies.flatMap((c) =>
+      parts.map((p) =>
+        p === 'musteri' ? (
+          <BillReceipt key={`${c.receiptId}-m`} order={c.order} boot={boot} sizeLabel={sizeLabel} copy />
+        ) : (
+          <StoreCopyReceipt
+            key={`${c.receiptId}-i`}
+            order={c.order}
+            boot={boot}
+            payments={c.payments}
+            device={{ receiptNo: c.device.receiptNo, zNo: c.device.zNo, docId: c.device.docId, docLabel: c.device.docKind ? (DOC_LABEL[c.device.docKind] ?? null) : null }}
+            cashier={c.payments.find((x) => x.userName)?.userName ?? me}
+            at={c.at}
+          />
+        ),
+      ),
+    ),
   );
 }
 
@@ -116,9 +130,10 @@ const storeCopyApi: StoreCopyApi = {
 };
 
 /**
- * Uygulama düzeyinde (AppShell) cihaz ödemelerinin işyeri nüshası: yalnız nüsha basan kasa ekranında ve ödeme alabilen
- * kişide. Ödeme penceresi ya da adisyon ekranı kapanmış olsa da basılır; olay kaçtıysa (ekran kapalı, yenileniyor,
- * kilitli ya da canlı bağlantı kopuk) açılışta ve bağlantı yeniden kurulunca (`src/lib/store-copies.ts`)
+ * Uygulama düzeyinde (AppShell) cihaz ödemelerinin nüshaları (müşteri ve işyeri, ayarı açık olanlar): yalnız nüsha
+ * basan kasa ekranında (`deviceCopyHere`) ve ödeme alabilen kişide. Ödeme penceresi ya da adisyon ekranı kapanmış olsa
+ * da basılır; olay kaçtıysa (ekran kapalı, yenileniyor, kilitli ya da canlı bağlantı kopuk) açılışta ve bağlantı
+ * yeniden kurulunca (`src/lib/store-copies.ts`)
  */
 export function useDeviceCopies(boot: BootstrapDTO) {
   const canTake = useAuth((s) => !!s.me?.permissions.includes('odeme.al'));
@@ -151,13 +166,15 @@ export function useDeviceCopies(boot: BootstrapDTO) {
 }
 
 /**
- * Pavo'da banka gün sonu alınınca (gün kapanınca ya da elle) fiş yazıcısından gün sonu kâğıdı: işyeri nüshası basan
- * kasa ekranında. Sunucu kâğıdı batch başına bir kez, ilk soran ekrana verir; olay kaçtıysa açılışta, bağlantı yeniden
- * kurulunca ve sekme görünür olunca sorulur. Ayar: Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın"
+ * Pavo'da banka gün sonu alınınca (gün kapanınca ya da elle) fiş yazıcısından gün sonu kâğıdı: fiş yazıcılı kasa
+ * ekranında (`bankEodSlipHere`; ödeme sonrası nüsha ayarlarına bağlı değil). Sunucu kâğıdı batch başına bir kez, ilk
+ * soran ekrana verir; olay kaçtıysa açılışta, bağlantı yeniden kurulunca ve sekme görünür olunca sorulur. Ayar: Yönetim ›
+ * Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın" (kapalıysa sunucu kâğıt vermez)
  */
 export function useBankEodSlip(boot: BootstrapDTO) {
   const canTake = useAuth((s) => !!s.me?.permissions.includes('odeme.al'));
-  const active = canTake && deviceCopyHere(boot);
+  const active =
+    canTake && bankEodSlipHere({ printer: !!boot.integrations.receiptPrinter, kasaScreen: isKasaHost(window.location.hostname), provider: boot.integrations.okc.provider });
   const ref = useRef(boot);
   useEffect(() => {
     ref.current = boot;

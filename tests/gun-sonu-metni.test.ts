@@ -24,4 +24,13 @@ describe('gün sonu WhatsApp metni', () => {
     expect(t).toContain('1. LATTE · 6 adet');
     expect(t).not.toContain('Yazarkasadan geçmeyen');
   });
+
+  it('fiş ortalaması kuruşa para kuralıyla yuvarlanır (shared/money.ts roundHalfUp: yarım-yukarı, sıfırdan uzağa)', () => {
+    const base = { discounts: 0, complimentary: 0, voided: 0, payments: [], expectedCash: 0, countedCash: null, cashDiff: null, topProducts: [] };
+    const avg = (netSales: number, receipts: number) => dayText({ branch: 'Marina', date: '2026-11-22', zNo: 2, s: { ...base, netSales, receipts } as unknown as ZSummary }).split('\n')[4];
+    expect(avg(1001, 2)).toBe('🧾 2 fiş · ortalama ₺5,01');
+    // Kural her tutarda aynı: Math.round eksi yarımı sıfıra doğru yuvarlardı (-2,5 → -2), para kuralı -3 der
+    expect(avg(-5, 2)).toBe('🧾 2 fiş · ortalama -₺0,03');
+    expect(avg(0, 0)).toBe('🧾 0 fiş · ortalama —');
+  });
 });

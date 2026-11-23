@@ -2206,12 +2206,6 @@ html[class~='dark'] {
 .rc-foot-note {
   margin-top: 1mm;
 }
-/* İki fiş tek yazdırmada (işyeri nüshası, bilgi fişi): yazıcı arada keser */
-.rc-cut {
-  break-after: page;
-  page-break-after: always;
-  height: 0;
-}
 
 /*
  * Doğrudan basma için ekran dışında çizilen fiş (src/lib/print.tsx `directPrint`): basılabilir alan kadar (72 mm ≈ 272
@@ -2256,8 +2250,10 @@ html[class~='dark'] {
   }
   /*
    * Fiş alanı akışta (mutlak konumda değil): Chrome mutlak konumlu kutuyu sayfalara bölmez, ilk sayfadan taşan kısmı
-   * keserdi. İki nüsha tek yazdırmada arada sayfa sonuyla (.rc-cut) basılır; ikinci window.print() kiosk Chrome'da
-   * yutuluyordu (saha, 22 Kas 2026). Uygulamanın geri kalanı yazdırmada display ile kaldırılır, önüne boş sayfa düşmez
+   * keserdi. Alanda hep tek fiş var: iki nüsha (müşteri, işyeri) ayrı yazdırma işleri olarak sırayla basılır, yazıcı her
+   * işin sonunda keser (src/lib/print.tsx `printEach`, `printQueue`; tek işte sayfa sonuyla iki nüsha tek uzun fiş
+   * çıkıyor ya da ikincisi basılmıyordu, saha, 22 Kas 2026). Uygulamanın geri kalanı yazdırmada display ile kaldırılır,
+   * önüne boş sayfa düşmez
    */
   .print-area {
     position: static;

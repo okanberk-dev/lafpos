@@ -3,7 +3,7 @@
  * günler'de tek dokunuşla panoya alınan, başlıklı ve emojili düz metin. Saf işlev (ekran ve test). Mail sürümü ladmin'de
  * (lafmaliyet): LafPOS'un gün sonu ona gidince kendiliğinden gönderilir.
  */
-import { tl } from './money';
+import { roundHalfUp, tl } from './money';
 import type { ZSummary } from './types';
 
 const Z_GROUP: Record<string, string> = { cash: 'Nakit', card: 'Kart', meal_card: 'Yemek kartı' };
@@ -38,7 +38,8 @@ export function dayText(i: DayTextInput): string {
   lines.push(`📅 ${i.date.split('-').reverse().join('.')} · Z ${i.zNo}`);
   lines.push('');
   lines.push(`💰 *Ciro: ${tl(s.netSales)}*`);
-  lines.push(`🧾 ${s.receipts} fiş · ortalama ${s.receipts ? tl(Math.round(s.netSales / s.receipts)) : '—'}`);
+  // Ortalama kuruşa para kuralıyla yuvarlanır (shared/money.ts, yarım-yukarı): ekrandaki "ort." ile aynı rakam
+  lines.push(`🧾 ${s.receipts} fiş · ortalama ${s.receipts ? tl(roundHalfUp(s.netSales / s.receipts)) : '—'}`);
   if (i.yesterday != null || i.lastWeek != null) {
     if (i.yesterday != null) lines.push(`↔️ Dün: ${tl(i.yesterday)}${pct(s.netSales, i.yesterday)}`);
     if (i.lastWeek != null) lines.push(`↔️ Geçen hafta: ${tl(i.lastWeek)}${pct(s.netSales, i.lastWeek)}`);

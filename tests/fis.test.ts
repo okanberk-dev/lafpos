@@ -89,3 +89,28 @@ describe('fiş başlığı ve X/Z', () => {
     expect(renderToStaticMarkup(createElement(TestReceipt, { boot: h.boot, printer: 'XP-80C' }))).toContain('DENEME FİŞİ');
   });
 });
+
+describe('işyeri nüshasında ikram edilen kalem', () => {
+  it('tutar yerine türü yazar (adisyondaki gibi): kalemler adisyon toplamını tutar', async () => {
+    const { StoreCopyReceipt, BillReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props>; BillReceipt: FC<Props> };
+    const { tlPlain } = await import('@shared/money');
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    const kahve = h.boot.products.find((p) => p.name === 'Türk Kahvesi')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 2 }, { productId: kahve.id, qty: 1 }] });
+    const comped = o.items.find((i) => i.name === 'Türk Kahvesi')!;
+    o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${comped.id}/comp`, { reason: 'Müdavim' });
+    const paid = o.items.find((i) => i.name === 'Latte')!;
+    // Toplam ikramı saymaz: yalnız Latte'ler
+    expect(o.total).toBe(paid.qty * paid.unitPrice);
+    const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
+    const html = renderToStaticMarkup(createElement(StoreCopyReceipt, { order: o, boot, payments: [], cashier: 'Ayşe', at: 0 }));
+    // Eskiden ikram edilen kalem liste fiyatıyla basılıyordu: kalemler toplamın üstünde kalıyordu
+    const compLine = /Türk Kahvesi[^<]*<\/span><span class="rc-r">İKRAM<\/span>/;
+    expect(html).toMatch(compLine);
+    expect(html).toContain(`Latte Orta</span><span class="rc-r">${tlPlain(o.total)}</span>`);
+    expect(html).toContain(`Adisyon toplamı</span><span class="rc-r">${tlPlain(o.total)}</span>`);
+    // Adisyondaki (müşteri nüshası) satırla aynı
+    expect(renderToStaticMarkup(createElement(BillReceipt, { order: o, boot, sizeLabel: (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s, copy: true }))).toMatch(compLine);
+  });
+});

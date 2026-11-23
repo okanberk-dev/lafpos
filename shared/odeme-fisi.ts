@@ -101,20 +101,38 @@ export function isKasaHost(host: string): boolean {
 }
 
 /**
- * Ödemeden sonra kendiliğinden basılacaklar. Yalnız kasa ekranında ve fiş yazıcısı bulunmuşken (yoksa sessizce atlanır):
- * kısa işyeri nüshası (ayar, varsayılan açık) ve yazarkasasız kurulumda müşteriye bilgi fişi (ayar, varsayılan kapalı;
- * yazarkasa bağlıyken müşterinin fişini cihaz basar)
+ * Ödemeden sonra kendiliğinden basılacaklar. Yalnız kasa ekranında ve fiş yazıcısı bulunmuşken (yoksa sessizce atlanır),
+ * her kâğıt kendi ayarıyla (ikisi de varsayılan açık): müşteri nüshası (sipariş no büyük, kalemler, "mali değeri
+ * yoktur") ve işyeri nüshası (bar ve hazırlık için kalemli kâğıt). Ödeme LafPOS'ta da alınsa cihazda da aynı
  */
 export function afterPaymentPrints(i: {
   settings: Pick<PublicSettings, 'receiptStoreCopy' | 'receiptInfoSlip'>;
   printer: boolean;
   kasaScreen: boolean;
-  provider: Provider;
-  viaDevice: boolean;
 }): { storeCopy: boolean; infoSlip: boolean } {
   if (!i.printer || !i.kasaScreen) return { storeCopy: false, infoSlip: false };
   // Müşteri nüshası yazarkasa bağlıyken de (saha, 22 Kas 2026: sipariş numarası çağrı için; "mali değeri yoktur" yazar)
   return { storeCopy: !!i.settings.receiptStoreCopy, infoSlip: !!i.settings.receiptInfoSlip };
+}
+
+/**
+ * Bir ödemenin kâğıtları basılış sırasıyla, her biri ayrı yazdırma işi (yazıcı her birinin sonunda keser): önce müşteri
+ * nüshası, sonra işyeri nüshası; yalnız ayarı açık olanlar. Ekran cihaz ödemesinin nüshasını, buradan en az bir kâğıt
+ * çıkıyorsa sunucudan alır (sunucu da aynı kuralla bekletir: server/okc/store-copy.ts). Eskiden yalnız işyeri nüshasına
+ * bakılıyordu: o kapalıyken cihaz ödemesinin müşteri nüshası hiç basılmıyordu (inceleme, 23 Kas 2026)
+ */
+export function afterPaymentParts(plan: { storeCopy: boolean; infoSlip: boolean }): ('musteri' | 'isyeri')[] {
+  return [...(plan.infoSlip ? (['musteri'] as const) : []), ...(plan.storeCopy ? (['isyeri'] as const) : [])];
+}
+
+/**
+ * Pavo'nun banka gün sonu kâğıdını (Z ve Pavo - LafPOS kıyası) bu ekran basar mı: kasa ekranı, fiş yazıcısı ve Pavo
+ * bağlantısı. Kendi ayarını (Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın") sunucu denetler
+ * (`takeEodSlip`). Ödeme sonrası nüsha ayarlarına bağlı değil: eskiden işyeri nüshası kapalıyken gün sonu kâğıdı da hiç
+ * çıkmıyordu (inceleme, 23 Kas 2026)
+ */
+export function bankEodSlipHere(i: { printer: boolean; kasaScreen: boolean; provider: Provider }): boolean {
+  return i.printer && i.kasaScreen && i.provider === 'pavo';
 }
 
 /** Her ödeme için tam bir kez: aynı anahtar (cihaz fişi ya da ödeme kimliği) ikinci kez basılmaz */
