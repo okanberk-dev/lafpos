@@ -663,7 +663,9 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ${input.refund ? 'iade etti' : 'iptal etti'} (${tl(value)}, ${reason})${afterBill ? ', hesap yazdırıldıktan sonra' : ''}`,
     data: { afterSend, fresh, ...(input.refund ? { refund: true } : {}) },
   });
-  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
+  // İadede indirimi iade hesabı oranını koruyarak yeniden yazar (refundItems, `refundCalc`): büyüme denetimi iadenin
+  // ara adımını görüp "indirim %22 iken %33 oldu" diye yanlış kayıt yazıyor, onaylayanda indirim yetkisi arıyordu
+  if (!input.refund) approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
   releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
   // Teslim edilmiş kalemin iptali (çoğu zaman iade) bar için iş değil: zil çalmaz (bar listesinde de görünmez, floor.ts)
@@ -1900,7 +1902,8 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
   const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
   for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: note });
   if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, note);
-  // Tutar indirimi kalemler çıkmadan yazılır: iptaller kalan kalemlerde indirimi büyütmüş sayılmasın (approveDiscountShrink)
+  // Paylaşım kalkar (kalan, payların ödemeleriyle yeniden yazılır); tutar indirimi iade hesabının küçülttüğü değere iner.
+  // İadenin kalem iptalleri indirim büyümesi sayılmaz (voidItem `refund`): oran `refundCalc`'ta korunur
   t.update(schema.orders)
     .set({ splitPeople: null, splitAmounts: null, ...(plan.discount?.type === 'amount' ? { discountValue: plan.discount.value } : {}) })
     .where(eq(schema.orders.id, orderId))

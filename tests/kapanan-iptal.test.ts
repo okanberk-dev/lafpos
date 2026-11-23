@@ -134,6 +134,9 @@ describe('kalem iadesinin hesabı', () => {
     expect(half.json.refunded).toBe(unit / 2);
     expect(half.json.order.status).toBe('kapali');
     expect(half.json.order.items.filter((i) => !i.voided)).toHaveLength(1);
+    // Oran korunur: iadenin iptalleri "indirim büyüdü" kaydı yazmaz (yanlış alarm; onaylayanda indirim yetkisi aranmaz)
+    const log = await h.ok<{ action: string; orderId: string | null }[]>('patron', 'GET', '/admin/audit?limit=200');
+    expect(log.filter((r) => r.action === 'order.discount' && (r.orderId === o.id || r.orderId === two.id))).toHaveLength(2);
   });
 
   it('karışık ödemede hangi türden ne kadar geri verildiği döner (son alınan ödemeden başlar)', async () => {
