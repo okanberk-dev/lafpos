@@ -234,3 +234,54 @@ describe('ödeme yanıtı fişi basılacak ödemeyi taşır', () => {
     expect(full.payments.map((p) => p.id)).toEqual([paid.payment.id]);
   });
 });
+
+/**
+ * İade, alınmış ödemenin ve teslim edilmiş kalemin sonradan geri verilmesidir (inceleme, 23 Kas 2026): bara iş olarak
+ * dönmez, zil çalmaz; patron panelinde "Hesap yazdırıldıktan sonra iptal" sayılmaz (kendi alarmı var); kalan ödeme asıl
+ * ödemenin saatinde ve alan kişisinde, sipariş asıl kapanış anında kalır
+ */
+describe('iade bar ekranına ve uyarılara karışmaz', () => {
+  it('teslim edilmiş kalemin iadesi: zil yok, bar listesinde yok, hesap sonrası iptal sayılmaz; saatler korunur', async () => {
+    const { bus } = await import('../server/lib/events');
+    const masa = h.boot.tables.filter((t) => t.kind === 'masa')[5]!;
+    const o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: masa.id });
+    const withItems = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 2 }] });
+    const item = withItems.items[0]!;
+    expect(item.stationId).toBeTruthy();
+    await h.ok('mudur', 'POST', '/kitchen/status', { itemIds: [item.id], status: 'hazir' });
+    await h.ok('mudur', 'POST', '/kitchen/status', { itemIds: [item.id], status: 'servis' });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/bill`, {});
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('nakit').id, amount: withItems.total });
+    const paid = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
+    expect(paid.status).toBe('kapali');
+    const original = paid.payments[0]!;
+    const alarmsBefore = (await h.ok<{ anomalies: { title: string; detail: string }[] }>('patron', 'GET', '/reports/patron')).anomalies.find((a) => a.title === 'Hesap yazdırıldıktan sonra iptal');
+
+    const events: { topic: string; kind: string; orderId?: string }[] = [];
+    const listen = (e: { topic: string; kind: string; orderId?: string }) => events.push(e);
+    bus.on('event', listen);
+    try {
+      await new Promise((r) => setTimeout(r, 5));
+      const res = await h.ok<Refund>('mudur', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi' });
+      expect(res.order.status).toBe('kapali');
+    } finally {
+      bus.off('event', listen);
+    }
+    expect(events.filter((e) => e.topic === 'kitchen' && e.kind === 'ticket.void' && e.orderId === o.id)).toEqual([]);
+    const kitchen = await h.ok<{ tickets?: { orderId: string; items: { id: string; voided?: boolean }[] }[] } | { orderId: string; items: { voided?: boolean }[] }[]>('mudur', 'GET', '/kitchen');
+    expect(JSON.stringify(kitchen)).not.toContain(o.id);
+    const alarmsAfter = (await h.ok<{ anomalies: { title: string; detail: string }[] }>('patron', 'GET', '/reports/patron')).anomalies.find((a) => a.title === 'Hesap yazdırıldıktan sonra iptal');
+    expect(alarmsAfter?.detail ?? null).toBe(alarmsBefore?.detail ?? null);
+    const log = await h.ok<{ action: string; orderId: string | null; severity: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=50');
+    const voidRow = log.find((r) => r.action === 'item.void' && r.orderId === o.id)!;
+    expect(voidRow.severity).toBe('uyari');
+    expect(voidRow.message).toContain('iade etti');
+
+    const after = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
+    const live = after.payments.filter((p) => !p.refundedAt);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.createdAt).toBe(original.createdAt);
+    expect(live[0]!.userName).toBe(original.userName);
+    expect(after.closedAt).toBe(paid.closedAt);
+  });
+});

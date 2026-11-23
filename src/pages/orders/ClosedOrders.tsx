@@ -262,6 +262,7 @@ function ClosedDetail({ id, today, onClose }: { id: string | null; today: string
   const qc = useQueryClient();
   const [iade, setIade] = useState(false);
   const boot = useBoot();
+  const can = useCan();
   const mode = useServiceMode();
   const navigate = useNavigate();
   const detail = useQuery({ queryKey: ['orders', 'kapanan', 'detay', id], queryFn: () => get<ClosedOrderDetailDTO>(`/history/orders/${id}`), enabled: !!id });
@@ -289,7 +290,8 @@ function ClosedDetail({ id, today, onClose }: { id: string | null; today: string
             <Button variant="primary" className="flex-1" icon={<Printer className="size-4" />} onClick={() => printNow(<BillReceipt order={o} boot={boot} sizeLabel={sizeLabel} />)}>
               Hesabı yeniden yazdır
             </Button>
-            {d && d.date === today && o.status === 'kapali' && o.source === 'pos' && !o.extPaid && (
+            {/* İade kalanı aynı türle yeniden yazar: ödeme alamayan (garson) yetkili onayıyla da yapamaz, düğme görünmez */}
+            {d && d.date === today && o.status === 'kapali' && o.source === 'pos' && !o.extPaid && can('odeme.al') && (
               <Button variant="secondary" className="basis-full" icon={<Undo2 className="size-4" />} onClick={() => setIade(true)}>
                 Kalem iade et
               </Button>

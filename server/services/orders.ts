@@ -611,7 +611,12 @@ function releasePortions(t: Tx, fx: Effects, userId: string, lines: { productId:
   }
 }
 
-export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string }): OrderRow {
+/**
+ * Kalem iptali. `refund`: kapanmış siparişte kalem iadesinin parçası (refundItems): denetimde "iade etti", hesap
+ * yazdırıldıktan sonra iptal sayılmaz (iade zaten yetkili onaylı ve kendi kaydıyla; patron panelinin "Hesap
+ * yazdırıldıktan sonra iptal" uyarısı her iadede yanıyordu; inceleme, 23 Kas 2026)
+ */
+export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string; refund?: boolean }): OrderRow {
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -639,28 +644,30 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidApprovedBy: approverId,
     voidedAt: now,
     voidAfterSend: afterSend,
-    // Hesap iptalden önce yazdırılmış mı: iptal anında (adisyonun yazdırma zamanı sonradan da dolar)
-    voidAfterBill: !!o.billPrintedAt,
+    // Hesap iptalden önce yazdırılmış mı: iptal anında (adisyonun yazdırma zamanı sonradan da dolar). İade sayılmaz
+    voidAfterBill: !input.refund && !!o.billPrintedAt,
   });
   if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
   // Bekleyen son bar kalemi iptal edilince gel-al siparişi kalanların durumuna geçer (hepsi hazırsa "Hazır")
   const updated = it.stationId ? syncPickupDelivery(t, actor, fx, recalc(t, orderId)) : recalc(t, orderId);
+  const afterBill = !input.refund && !!o.billPrintedAt;
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
     action: 'item.void',
-    severity: fresh ? 'info' : o.billPrintedAt ? 'alarm' : 'uyari',
+    severity: fresh ? 'info' : afterBill ? 'alarm' : 'uyari',
     orderId,
     entity: 'order_item',
     entityId: it.id,
     amount: value,
-    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} iptal etti (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
-    data: { afterSend, fresh },
+    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ${input.refund ? 'iade etti' : 'iptal etti'} (${tl(value)}, ${reason})${afterBill ? ', hesap yazdırıldıktan sonra' : ''}`,
+    data: { afterSend, fresh, ...(input.refund ? { refund: true } : {}) },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
   releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
-  if (it.stationId && !it.held) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
+  // Teslim edilmiş kalemin iptali (çoğu zaman iade) bar için iş değil: zil çalmaz (bar listesinde de görünmez, floor.ts)
+  if (it.stationId && !it.held && it.status !== 'servis') fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
   return updated;
 }
 
@@ -1898,7 +1905,7 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
     .set({ splitPeople: null, splitAmounts: null, ...(plan.discount?.type === 'amount' ? { discountValue: plan.discount.value } : {}) })
     .where(eq(schema.orders.id, orderId))
     .run();
-  for (const [itemId, qty] of selection) voidItem(t, actor, fx, orderId, { itemId, qty, reason: note });
+  for (const [itemId, qty] of selection) voidItem(t, actor, fx, orderId, { itemId, qty, reason: note, refund: true });
   const reduced = recalc(t, orderId);
   // Güvenlik ağı: yazılan toplam ortak hesabı tutmuyorsa işlem geri alınır (ekranın gösterdiği tutar yanlış olurdu)
   if (reduced.total !== plan.total) throw conflict('İade hesabı tutmadı; işlem geri alındı', 'refund_mismatch');
@@ -1917,6 +1924,9 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
     addPayment(t, actor, fx, orderId, { methodId: p.methodId, amount: keep, tip: getSettings().tipsEnabled ? p.tip : 0, customerId: p.customerId, note: rewrite });
     const fresh = orderPayments(t, orderId).find((x) => !x.refundedAt && x.note === rewrite);
     if (!fresh) return;
+    // Kalan, alınan ödemenin devamıdır: saati ve alan kişi asıl ödemeninki (saatlik satış, "aynı saate kadar" kıyası,
+    // "alan" kişi iade anına ve iadeyi yapana kaymasın)
+    t.update(schema.payments).set({ createdAt: p.createdAt, userId: p.userId }).where(eq(schema.payments.id, fresh.id)).run();
     for (const r of t.select({ id: schema.fiscalReceipts.id, paymentIds: schema.fiscalReceipts.paymentIds }).from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.orderId, orderId)).all()) {
       if (r.paymentIds.includes(p.id)) t.update(schema.fiscalReceipts).set({ paymentIds: [...r.paymentIds, fresh.id] }).where(eq(schema.fiscalReceipts.id, r.id)).run();
     }
@@ -1932,11 +1942,18 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
     message: `${actor.user.name} #${o.no} siparişte ${tl(plan.refund)} iade etti (${why})${result.methods.length ? `: ${result.methods.map((m) => `${m.name} ${tl(m.amount)}`).join(', ')}` : ''}`,
     data: { methods: result.methods.map((m) => ({ name: m.name, amount: m.amount })) },
   });
-  const after = loadOrder(t, orderId);
-  if (after.status !== 'acik') return { order: after, ...result };
-  // Hiç kalem kalmadıysa sipariş iptal olur (bütünü iade); geriye ücretsiz kalem (ikram) kaldıysa adisyon kapanır
-  const anyLeft = orderItems(t, orderId).some((i) => !i.voided);
-  return { order: anyLeft ? closeOrder(t, actor, fx, orderId) : cancelOrder(t, actor, fx, orderId, note), ...result };
+  let after = loadOrder(t, orderId);
+  if (after.status === 'acik') {
+    // Hiç kalem kalmadıysa sipariş iptal olur (bütünü iade); geriye ücretsiz kalem (ikram) kaldıysa adisyon kapanır
+    const anyLeft = orderItems(t, orderId).some((i) => !i.voided);
+    after = anyLeft ? closeOrder(t, actor, fx, orderId) : cancelOrder(t, actor, fx, orderId, note);
+  }
+  // Yeniden kapanan sipariş asıl kapanış anında ve asıl kapatanla kalır (kapananlar listesi ve günün saatleri kaymaz)
+  if (after.status === 'kapali' && o.closedAt != null) {
+    t.update(schema.orders).set({ closedAt: o.closedAt, closedBy: o.closedBy }).where(eq(schema.orders.id, orderId)).run();
+    after = loadOrder(t, orderId);
+  }
+  return { order: after, ...result };
 }
 
 // ─── Bar / mutfak durumları ──────────────────────────────────────────────────
