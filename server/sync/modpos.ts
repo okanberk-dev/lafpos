@@ -57,12 +57,19 @@ const modposDay = z.object({
   // Günün lafmaliyet'teki kaynağı (bilgi): kasa raporu ya da yalnız ModPOS föyü; eski lafmaliyet göndermez
   kaynak: z.enum(['kasa_raporu', 'foy']).optional().catch(undefined),
 });
-const modposProducts = z.object({
-  from: date,
-  to: date,
-  // `adet` lafmaliyet'te ondalıklı olabilir; `boy` tek boylu ya da eşlenmemiş satırda null
-  rows: z.array(z.object({ ad: z.string().min(1).max(120), boy: z.string().max(12).nullable().optional().catch(null), adet: amount, tutar: amount })).max(HISTORY_MAX_PRODUCTS),
-});
+// `adet` lafmaliyet'te ondalıklı olabilir; `boy` tek boylu ya da eşlenmemiş satırda null; uzun ad kısaltılır
+const modposProductRow = z.object({ ad: z.string().trim().min(1).transform((s) => s.slice(0, 120)), boy: z.string().max(12).nullable().optional().catch(null), adet: amount, tutar: amount });
+type ModposProductRow = z.infer<typeof modposProductRow>;
+/** Dönemin ürün listesi: bozuk satır (eksi ya da sayı olmayan tutar) tek başına düşer, liste kalır; hiç satır kalmazsa liste yok */
+const modposProducts = z
+  .object({ from: date, to: date, rows: z.array(z.unknown()).max(HISTORY_MAX_PRODUCTS) })
+  .transform((u) => ({
+    ...u,
+    rows: u.rows.flatMap((r): ModposProductRow[] => {
+      const one = modposProductRow.safeParse(r);
+      return one.success ? [one.data] : [];
+    }),
+  }));
 const modposBody = z.object({
   version: z.literal(1),
   sube: z.string().min(1).max(40),
@@ -137,7 +144,7 @@ export function modposDays(body: ModposBody, today: string): { gunler: HistoryDa
   const u = body.urunler;
   // Adet ondalıklı gelebilir (lafmaliyet'te çift duyarlıklı): binde bire yuvarlanır. Toplam günlerin cirosuyla denetlenmez
   // (lafmaliyet'in listesi kuruşu kuruşuna tutmayabilir); yalnız biçimi bozuksa düşer
-  const urunler = u ? validProducts({ from: u.from, to: u.to, rows: u.rows.map((r) => [r.ad.trim(), r.boy ?? '', Math.round(r.adet * 1000) / 1000, kurus(r.tutar)]) }) : null;
+  const urunler = u?.rows.length ? validProducts({ from: u.from, to: u.to, rows: u.rows.map((r) => [r.ad, r.boy ?? '', Math.round(r.adet * 1000) / 1000, kurus(r.tutar)]) }) : null;
   return { gunler: [...out.values()].sort((a, b) => (a.date < b.date ? -1 : 1)), ...(urunler ? { urunler } : {}) };
 }
 
@@ -177,6 +184,7 @@ async function pull(now: number, actor?: { id: string | null }): Promise<ModposP
   } catch (e) {
     saveFailure(now, `ModPOS dönemi alınamadı: ${networkErrorText(e)}`);
   }
+  if (res.status === 400 && (res.json as { field?: unknown } | null)?.field === 'sube') saveFailure(now, `ModPOS dönemi alınamadı: bu kasanın şube kimliği ("${sube}") lafmaliyet'in beklediği biçimde değil (küçük harf, rakam ve tire; Yönetim › Ayarlar ve yedek › Şube kimliği)`);
   if (res.status === 409) saveFailure(now, `ModPOS dönemi alınamadı: lafmaliyet bu kasayı başka bir şubeye bağlı görüyor (şube kimliği "${sube}"; Yönetim › Ayarlar ve yedek › Şube kimliği)`);
   if (res.status === 404) saveFailure(now, `ModPOS dönemi alınamadı (HTTP 404): lafmaliyet bu ucu henüz sunmuyor ya da adres yanlış; lafmaliyet güncellenince yeniden çekin`);
   if (res.status !== 200) saveFailure(now, `ModPOS dönemi alınamadı (${httpErrorText(res.status, res.json)})`);

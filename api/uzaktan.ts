@@ -23,7 +23,7 @@ import { merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
-import { fillHistory, type HistoryDay, historyFlag, historyKey, type HistoryProducts, historyProductsShown, historyProductsView, historyReport, historySpan, historyStatsDay, mergeHistoryStats, readHistory, readHistoryStore } from '../shared/gecmis.js';
+import { fillHistory, type HistoryDay, historyFlag, historyKey, type HistoryProducts, historyProductsShown, historyProductsView, historyReport, historySpan, historyStatsDay, mergeHistoryStats, readHistory, readHistoryStore, validPushedProducts } from '../shared/gecmis.js';
 import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
@@ -1000,9 +1000,14 @@ const PARTS = [
   { key: 'gece', label: 'Gece', from: 22, to: 30 },
 ];
 
-/** Raporlar › Saatlik (`hourlyReport`): tek günde gün başından geçen saat (ertesi gün sonda), çok günde 24 saat */
+/**
+ * Raporlar › Saatlik (`hourlyReport`): tek günde gün başından geçen saat (ertesi gün sonda), çok günde 24 saat. Kapanış
+ * dakikası olmayan geçmiş ciro günü (ModPOS, yalnız gün toplamı) saatlere girmez, gün sayısına ve haftanın günü
+ * ortalamasına da girmez (kasadaki `hourlyReport` gibi)
+ */
 export function sumHourly(range: Range, days: DayRep[]) {
   const single = range.from === range.to;
+  const counted = (d: DayRep) => (d.kaynak && !d.hours.length ? 0 : d.n);
   const offsets = new Map<number, { revenue: number; orders: number }>();
   for (const d of days) {
     for (const [raw, revenue, orders] of d.hours) {
@@ -1021,7 +1026,7 @@ export function sumHourly(range: Range, days: DayRep[]) {
   const week = Array.from({ length: 7 }, (_, i) => ({ weekday: i + 1, days: 0, hours: Array.from({ length: 24 }, () => 0) }));
   for (const d of days) {
     const w = week[weekdayOf(d.date) - 1]!;
-    w.days += d.n;
+    w.days += counted(d);
     for (const [hour, v] of d.clock) w.hours[hour] = (w.hours[hour] ?? 0) + v;
   }
   for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
@@ -1033,7 +1038,7 @@ export function sumHourly(range: Range, days: DayRep[]) {
   return {
     range,
     total,
-    days: days.reduce((a, d) => a + d.n, 0),
+    days: days.reduce((a, d) => a + counted(d), 0),
     hours,
     parts,
     busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
@@ -1164,7 +1169,9 @@ function validDay(d: unknown): d is DayRep {
     // Geçmiş ciro günü (kasanın ittiği ModPOS günü): kaynak adı ve önceki programın Z numarası kısa metin
     (x.kaynak === undefined || (typeof x.kaynak === 'string' && x.kaynak.length > 0 && x.kaynak.length <= 40)) &&
     (x.zText === undefined || (typeof x.zText === 'string' && x.zText.length <= 40)) &&
-    (x.indirimBilinmiyor === undefined || x.indirimBilinmiyor === true)
+    (x.indirimBilinmiyor === undefined || x.indirimBilinmiyor === true) &&
+    // Geçmiş gününün taşıdığı dönem ürün listesi (kasanın lafmaliyet'ten aldığı ModPOS listesi)
+    (x.urunler === undefined || (x.kaynak !== undefined && validPushedProducts(x.urunler)))
   );
 }
 
@@ -1429,14 +1436,31 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
 }
 
 /**
- * Geçmiş cironun ürün listesi bu dönemde nasıl görünür. Blok, kasanın ittiği ModPOS günlerinden (kaynak adı taşıyan gün
- * raporu) ya da buluttaki elle yüklenmiş kayıttan gelir; bloğun günlerinin hepsi raporda geçmiş günü olarak duruyorsa
- * tam, değilse not
+ * Geçmiş cironun ürün listesi bu dönemde nasıl görünür. Blok önce kasanın ittiği ModPOS günlerinden (lafmaliyet'in
+ * listesi, `pushedHistoryBlock`), yoksa buluttaki elle yüklenmiş kayıttan gelir; bloğun günlerinin hepsi raporda geçmiş
+ * günü olarak duruyorsa tam, değilse not
  */
 function historyBlock(r: Range, days: DayRep[], store: { kaynak: string; gunler: HistoryDay[]; urunler?: HistoryProducts } | null, today: string): HistoryBlock | null {
+  const pushed = pushedHistoryBlock(r, days);
+  if (pushed) return pushed;
   if (!store?.urunler) return null;
   const shown = historyProductsShown(store.urunler, r, store.gunler.filter((d) => d.date < today), days);
   return shown ? { kaynak: store.kaynak, block: store.urunler, shown } : null;
+}
+
+/**
+ * Kasanın ittiği geçmiş günlerinin dönem ürün listesi (server/sync/cloud-reports.ts `historyDayReport`): bloğun
+ * dönemindeki her geçmiş günü bloğu ve dönemin geçmiş günü sayısını (`n`) taşır. En yeni günün bloğu geçer; seçilen dönem
+ * bloğun hepsini kapsıyor ve aynı bloğu taşıyan `n` gün raporda duruyorsa tam (biri gidemediyse, LafPOS günüyle ya da
+ * buluttaki elle yüklenmiş günle değiştiyse blok o günü de sayardı: not). Dönemde bloğu taşıyan gün yoksa null
+ */
+export function pushedHistoryBlock(r: Range, days: DayRep[]): HistoryBlock | null {
+  let latest: DayRep | null = null;
+  for (const d of days) if (d.kaynak && d.urunler && (!latest || d.at > latest.at)) latest = d;
+  if (!latest?.urunler) return null;
+  const { from, to, n, rows } = latest.urunler;
+  const carriers = days.filter((d) => d.kaynak && d.urunler?.from === from && d.urunler.to === to).length;
+  return { kaynak: latest.kaynak!, block: { from, to, rows }, shown: r.from <= from && r.to >= to && carriers >= n ? 'tam' : 'kismi' };
 }
 
 function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>, remote = false, hist: HistoryBlock | null = null): Response {
@@ -1452,16 +1476,24 @@ function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep
 }
 
 /**
- * Geçmiş ciro günlerinin (ModPOS) indirimi ve ciro dışı tutarı kalem kalem bilinmez: İndirim ve İkram listeleri o
- * günleri toplamıyla not olarak söyler (Ciro dökümüyle çelişmesin)
+ * Geçmiş ciro günlerinin (ModPOS) kalem kaydı yoktur, yalnız gün toplamları: kalem listeleri o günleri not olarak söyler.
+ * İndirim ve İkram listesi toplamıyla (Ciro dökümüyle çelişmesin; indirimi bilinmeyen föy günü de sayılır), İptal ve
+ * Happy hour tutarsız. Dönemde geçmiş günü yoksa not yok (kasadaki server/routes/reports.ts `historyItems` ile aynı)
  */
-export function historyItems(kind: string, days: DayRep[]): { history?: { kaynak: string; days: number; amount: number; indirimBilinmiyor?: number } } {
-  if (kind !== 'indirim' && kind !== 'ikram') return {};
-  const hist = days.filter((d) => d.kaynak);
+export function historyItems(kind: string, days: DayRep[]): { history?: { kaynak: string; days: number; amount?: number; indirimBilinmiyor?: number } } {
+  const hist = days.filter((d) => d.kaynak && d.n > 0);
+  if (!hist.length) return {};
+  const base = { kaynak: hist[0]!.kaynak!, days: hist.length };
+  if (kind !== 'indirim' && kind !== 'ikram') return { history: base };
   const amount = hist.reduce((a, d) => a + (kind === 'indirim' ? d.s.disc : d.s.comp), 0);
-  // İndirimi bilinmeyen (yalnız föyden gelen) gün de söylenir: liste o günlerde indirim yok demez
   const unknown = kind === 'indirim' ? hist.filter((d) => d.indirimBilinmiyor).length : 0;
-  return hist.length && (amount > 0 || unknown) ? { history: { kaynak: hist[0]!.kaynak!, days: hist.length, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } } : {};
+  return { history: { ...base, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } };
+}
+
+/** Adisyonlar: geçmiş ciro günlerinin fişi listede yok, sayısı notta (Ciro'nun adisyon sayısıyla çelişmesin) */
+export function historyChecks(days: DayRep[]): { history?: { kaynak: string; days: number; receipts: number } } {
+  const hist = days.filter((d) => d.kaynak && d.n > 0);
+  return hist.length ? { history: { kaynak: hist[0]!.kaynak!, days: hist.length, receipts: hist.reduce((a, d) => a + d.s.receipts, 0) } } : {};
 }
 
 const PLATFORM_ORDER = ['yemeksepeti', 'getir', 'trendyol', 'migros'];
@@ -1484,7 +1516,7 @@ function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: Re
   const checks = (limit: number | null) => {
     const merged = mergeChecks(extras.map((x) => (x.checks ?? []) as CheckRow[]), limit, days.flatMap((d) => d.xpay ?? []));
     const cut = extras.reduce((a, x) => a + (x.cut?.checks ?? 0), 0);
-    return { range: r, ...merged, count: merged.count + cut, ...(cut ? { truncated: true } : {}) };
+    return { range: r, ...merged, count: merged.count + cut, ...(cut ? { truncated: true } : {}), ...historyChecks(days) };
   };
   const platforms = () => {
     const cross = crossPayIn(days.flatMap((d) => d.xpay ?? []), r.from, r.to).byPlatform;
@@ -1494,7 +1526,8 @@ function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: Re
       const label = lists.flat().find((x) => x.platform === platform)?.label ?? platform;
       return { platform, label, orders: 0, revenue: 0, discounts: 0, platformDiscount: 0, collectedByPlatform: v.platform, collectedAtCounter: v.counter, open: { orders: 0, amount: 0 }, missed: { orders: 0, amount: 0, rejected: 0, expired: 0, cancelled: 0, unrecorded: 0 } };
     });
-    const netSales = days.reduce((a, d) => a + d.s.rev, 0);
+    // Platformun payı LafPOS günlerinin cirosundan: geçmiş ciro gününün (ModPOS) platform kaydı yok (kasadaki gibi)
+    const netSales = days.filter((d) => !d.kaynak).reduce((a, d) => a + d.s.rev, 0);
     const pending = extras.reduce((a, x) => a + (x.plat?.pending ?? 0), 0);
     return { range: r, ...mergePlatforms([...lists, extra], netSales, pending, PLATFORM_ORDER) };
   };

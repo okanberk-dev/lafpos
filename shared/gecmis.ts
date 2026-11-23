@@ -6,9 +6,9 @@
  *   gelir: `sync_state` `merkez.gecmis`).
  * Kasa ikisini birleştirir (`mergeHistory`, server/sync/modpos.ts `historyStore`): patron panelinin kıyasları, kasadaki
  * Raporlar (Ciro, Saatlik, Ürünler; günler kaynağın adıyla "ModPOS") ve LafPOS Uzaktan o günleri görür. Uzaktan'a kasa o
- * günleri kendi dükkân kimliğiyle gün raporu olarak iter (server/sync/cloud-reports.ts): geçmiş bulutta başka anahtarda
- * dursa ya da hiç yüklenmemiş olsa da "Geçen hafta" ModPOS günlerini gösterir. İş günü, Z zinciri ve lafmaliyet giden
- * kutusu geçmişi hiç görmez (tests/modpos-gecmis.test.ts).
+ * günleri (dönemin ürün listesiyle) kendi dükkân kimliğiyle gün raporu olarak iter (server/sync/cloud-reports.ts):
+ * geçmiş bulutta başka anahtarda dursa ya da hiç yüklenmemiş olsa da "Geçen hafta" ModPOS günlerini gösterir. İş günü, Z
+ * zinciri ve lafmaliyet giden kutusu geçmişi hiç görmez (tests/modpos-kasa.test.ts).
  *
  * Kural (bulut, `fillHistory`): bir tarih için hem geçmiş hem LafPOS'un gün raporu varsa cirosu büyük olan geçer (geçiş
  * günlerinde LafPOS'ta yalnız deneme satışı vardır; gerçek satış eski programdadır). İki kaynak toplanmaz: aynı satış iki
@@ -66,6 +66,12 @@ export interface HistoryProducts {
   to: string;
   rows: [string, string, number, number][];
 }
+
+/**
+ * Uzaktan'a giden geçmiş gününün taşıdığı dönem ürün listesi (`RemoteDayReport.urunler`): blok ve bloğun dönemindeki
+ * geçmiş günü sayısı (`n`). Bulut bloğu ancak bu kadar gün raporda geçmiş günü olarak duruyorsa tam gösterir
+ */
+export type PushedHistoryProducts = HistoryProducts & { n: number };
 
 export interface HistoryStore {
   v: 1;
@@ -263,6 +269,12 @@ export function validProducts(u: unknown): HistoryProducts | null {
   // Adet ondalıklı olabilir (lafmaliyet'in listesi), tutar kuruş
   const ok = b.rows.every((r) => Array.isArray(r) && r.length === 4 && typeof r[0] === 'string' && typeof r[1] === 'string' && Number.isFinite(r[2]) && r[2] >= 0 && r[2] < 1e9 && nat(r[3]));
   return ok ? { from: b.from, to: b.to, rows: b.rows } : null;
+}
+
+/** Gün raporundaki dönem bloğunun biçimi (kasanın ittiği; api/uzaktan.ts doğrular): blok ve 1-800 arası gün sayısı */
+export function validPushedProducts(u: unknown): u is PushedHistoryProducts {
+  const n = (u as { n?: unknown } | null)?.n;
+  return Number.isInteger(n) && (n as number) >= 1 && (n as number) <= HISTORY_MAX_DAYS && validProducts(u) !== null;
 }
 
 /** Raporlara giden dönem ürün listesi: başlık, toplamlar ve satırlar (en çok satan önce) */

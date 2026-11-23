@@ -64,22 +64,34 @@ reportRoutes.get('/items', (c) => {
 });
 
 /**
- * Geçmiş günlerinin (ModPOS) indirimi ve ciro dışı tutarı kalem kalem bilinmez: İndirim ve İkram listeleri o günleri
- * toplamıyla not olarak söyler (Ciro dökümüyle çelişmesin; api/uzaktan.ts `historyItems` ile aynı)
+ * Geçmiş günlerinin (ModPOS) kalem kaydı yoktur, yalnız gün toplamları: kalem listeleri o günleri not olarak söyler.
+ * İndirim ve İkram listesi toplamıyla (Ciro dökümüyle çelişmesin; indirimi bilinmeyen föy günü de sayılır), İptal ve
+ * Happy hour tutarsız (api/uzaktan.ts `historyItems` ile aynı)
  */
 function historyItems(r: { from: string; to: string }, kind: string) {
-  if (kind !== 'indirim' && kind !== 'ikram') return {};
   const hist = historyFor(r, reportToday());
-  const amount = (hist?.days ?? []).reduce((a, d) => a + ((kind === 'indirim' ? d.indirim : d.odenmez) ?? 0), 0);
-  const unknown = kind === 'indirim' ? (hist?.days ?? []).filter((d) => d.indirimBilinmiyor).length : 0;
-  return hist?.days.length && (amount > 0 || unknown) ? { history: { kaynak: hist.kaynak, days: hist.days.length, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } } : {};
+  if (!hist?.days.length) return {};
+  const base = { kaynak: hist.kaynak, days: hist.days.length };
+  if (kind !== 'indirim' && kind !== 'ikram') return { history: base };
+  const amount = hist.days.reduce((a, d) => a + ((kind === 'indirim' ? d.indirim : d.odenmez) ?? 0), 0);
+  const unknown = kind === 'indirim' ? hist.days.filter((d) => d.indirimBilinmiyor).length : 0;
+  return { history: { ...base, amount, ...(unknown ? { indirimBilinmiyor: unknown } : {}) } };
+}
+
+/** Adisyonlar: geçmiş günlerinin fişi listede yok, sayısı notta (api/uzaktan.ts `historyChecks` ile aynı) */
+function historyChecks(r: { from: string; to: string }) {
+  const hist = historyFor(r, reportToday());
+  return hist?.days.length ? { history: { kaynak: hist.kaynak, days: hist.days.length, receipts: hist.days.reduce((a, d) => a + d.adisyon, 0) } } : {};
 }
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
 /** Paket platformları: tahmini komisyon bir maliyettir, yalnız maliyet yetkisine gider */
 reportRoutes.get('/platforms', (c) => c.json(platformReport(range(c), can(c.get('user'), 'rapor.maliyet'))));
 /** Garsona göre toplanan adisyon listesi personel tutarıdır: maliyet yetkisi olmayana yalnız kendi adisyonlarının garsonu */
 const waiterFor = (c: Context<AppEnv>) => (waiterId: string | null) => seesStaffOf(c.get('user'), waiterId);
-reportRoutes.get('/checks', (c) => c.json(checksReport(range(c), 300, waiterFor(c))));
+reportRoutes.get('/checks', (c) => {
+  const r = range(c);
+  return c.json({ ...checksReport(r, 300, waiterFor(c)), ...historyChecks(r) });
+});
 /** Yazarkasadan geçmeyen tutar kasa rakamıdır: kör kasada (patron paneli verilmiş olsa da) gitmez */
 reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user')))));
 

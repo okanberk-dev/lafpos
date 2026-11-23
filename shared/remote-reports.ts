@@ -8,6 +8,7 @@
  */
 
 import type { CheckRow, CrossPay, ItemListRow, OdenmezPersonRow, PlatformDayRow, PrepDone } from './remote-calc';
+import type { PushedHistoryProducts } from './gecmis';
 
 /** Merkez'e bağlı olmayan eski kasanın dükkânı; bağlı kasada kurulum kimliği (`lafpos:rapor:<dükkân>:gun:<tarih>`) */
 export const REMOTE_SHOP = 'default';
@@ -82,6 +83,12 @@ export interface RemoteDayReport {
   zText?: string;
   /** Geçmiş gününün indirimi bilinmiyor (yalnız ModPOS föyünden): `s.disc` 0 ama raporlar onu bilinen sıfır saymaz */
   indirimBilinmiyor?: true;
+  /**
+   * Geçmiş cironun dönem ürün listesi (shared/gecmis.ts `PushedHistoryProducts`, indirim öncesi): kasa bloğun dönemindeki
+   * her geçmiş gününe koyar, `n` o dönemin geçmiş günü sayısıdır. Uzaktan bloğu yalnız seçilen dönem bloğu kapsıyor ve
+   * bloğu taşıyan `n` günün hepsi raporda duruyorsa ürün ürün gösterir (api/uzaktan.ts `pushedHistoryBlock`)
+   */
+  urunler?: PushedHistoryProducts;
   /** Ek sekmeler (hazırlama, adisyonlar, kalem listeleri, iadeler, platformlar): bulutta ayrı anahtarda tutulur */
   x?: RemoteDayExtra;
 }

@@ -237,11 +237,17 @@ describe('ModPOS dönemi lafmaliyet\'ten (GET /api/panel/pos/modpos-gunler)', ()
     expect(modposStatus()).toMatchObject({ days: 9, error: { message: expect.stringMatching(/HTTP 500/) } });
     ladminAnswer = () => Response.json(ladminBody({ sube: 'tuzla' }));
     await expect(pullModposNow({ id: null }, t0 + 6 * 60_000)).rejects.toThrow(/"tuzla" şubesinin/);
+    // lafmaliyet'in şube retleri (CONTRACT §5.1): biçimi bozuk şube 400, başka şube 409; ikisi de ne yapılacağını söyler
+    ladminAnswer = () => Response.json({ error: 'invalid', field: 'sube' }, { status: 400 });
+    await expect(pullModposNow({ id: null }, t0 + 12 * 60_000)).rejects.toThrow(/şube kimliği \("marina"\) lafmaliyet'in beklediği biçimde değil/);
+    ladminAnswer = () => Response.json({ error: 'wrong_branch', sube: 'marina', expected: 'tuzla' }, { status: 409 });
+    await expect(pullModposNow({ id: null }, t0 + 18 * 60_000)).rejects.toThrow(/başka bir şubeye bağlı/);
+    expect(modposState()!.gunler).toEqual(before);
     ladminAnswer = () => Response.json({ ...ladminBody(), days: [{ date: 'x' }] });
-    await expect(pullModposNow({ id: null }, t0 + 12 * 60_000)).rejects.toThrow(/beklenen biçimde değil/);
+    await expect(pullModposNow({ id: null }, t0 + 24 * 60_000)).rejects.toThrow(/beklenen biçimde değil/);
     expect(modposState()!.gunler).toEqual(before);
     ladminAnswer = () => Response.json(ladminBody());
-    await pullModposNow({ id: null }, t0 + 18 * 60_000);
+    await pullModposNow({ id: null }, t0 + 30 * 60_000);
     expect(modposStatus()).toMatchObject({ days: 9, error: null, products: 31 });
   });
 });
@@ -259,10 +265,14 @@ describe('lafmaliyet\'in yanıtı hoşgörüyle okunur', () => {
         (b.days[2] as Record<string, unknown>).kdv = 'bozuk';
         (b.days[2] as Record<string, unknown>).yeniAlan = 1;
         b.urunler.rows[0]!.adet = 7.5;
+        // Bozuk satır (eksi tutar) tek başına düşer, liste kalır; uzun ad kısaltılır
+        b.urunler.rows.push({ ad: 'İADE', boy: null as unknown as string, adet: 1, tutar: -50 });
+        b.urunler.rows[1]!.ad = `UZUN ${'A'.repeat(200)}`;
         return Response.json(b);
       };
       const r = await pullModposNow({ id: null }, t0);
       expect(r).toMatchObject({ days: 8, products: 31 });
+      expect(modposState()!.urunler!.rows.find((x) => x[0].startsWith('UZUN'))![0]).toHaveLength(120);
       const s = modposState()!;
       expect(s.gunler.map((d) => d.date)).not.toContain(dateOf(1));
       expect(s.gunler.find((d) => d.date === dateOf(2))).toMatchObject({ ciro: 575300, indirim: 51700 });
@@ -357,6 +367,10 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
     expect(ind.history).toEqual({ kaynak: 'ModPOS', days: 9, amount: 206625 });
     const ikr = await h.ok<any>('patron', 'GET', `/reports/items?kind=ikram&${range()}`);
     expect(ikr.history).toEqual({ kaynak: 'ModPOS', days: 9, amount: 150000 });
+    const ipt = await h.ok<any>('patron', 'GET', `/reports/items?kind=iptal&${range()}`);
+    expect(ipt.history).toEqual({ kaynak: 'ModPOS', days: 9 });
+    const chk = await h.ok<any>('patron', 'GET', `/reports/checks?${range()}`);
+    expect(chk.history).toEqual({ kaynak: 'ModPOS', days: 9, receipts: 135 });
     // lafmaliyet'ten gelen gün kapanış dakikası taşımaz: saatlik yalnız LafPOS'un (boş)
     const hr = await h.ok<any>('patron', 'GET', `/reports/hourly?${range()}`);
     expect(hr.total).toBe(0);
@@ -445,6 +459,154 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
     } finally {
       vi.stubGlobal('fetch', real);
       ladminAnswer = () => Response.json(ladminBody());
+    }
+  });
+
+  it('dönemin ürün listesi de gider: Uzaktan Ürünler\'de ModPOS bloğu bulutta elle yüklenmiş kayıt olmadan da görünür; kısmi dönemde not', async () => {
+    const { reportTick } = await import('../server/sync/cloud-reports');
+    const { pullModposNow, modposState } = await import('../server/sync/modpos');
+    await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
+    await reportTick({ backfill: true });
+    // Bu dükkânın bulutta elle yüklenmiş geçmişi yok: blok yalnız kasanın ittiği günlerden gelir
+    expect(store.has(historyKey('default'))).toBe(false);
+    const p = await remote<any>(`reports/products?from=${dateOf(0)}&to=${dateOf(8)}`);
+    expect(p.history).toMatchObject({ kaynak: 'ModPOS', from: dateOf(0), to: dateOf(8), covered: true, qty: 240, amount: 2941500 });
+    expect(p.history.rows).toHaveLength(31);
+    expect(p.total).toBe(0);
+    const s = await remote<any>(`reports/summary?from=${dateOf(0)}&to=${dateOf(8)}`);
+    expect(s.itemsSold).toBe(240);
+    const part = await remote<any>(`reports/products?from=${dateOf(3)}&to=${dateOf(8)}`);
+    expect(part.history).toEqual({ kaynak: 'ModPOS', from: dateOf(0), to: dateOf(8), covered: false });
+    const partSum = await remote<any>(`reports/summary?from=${dateOf(3)}&to=${dateOf(8)}`);
+    expect(partSum.itemsSold).toBe(0);
+    // Bloğun bir günü bulutta yoksa (gidemedi ya da başka kaynak) blok o günü de sayardı: tam değil, not
+    const missing = store.get(`lafpos:rapor:default:gun:${dateOf(4)}`)!;
+    store.delete(`lafpos:rapor:default:gun:${dateOf(4)}`);
+    try {
+      const gap = await remote<any>(`reports/products?from=${dateOf(0)}&to=${dateOf(8)}`);
+      expect(gap.history).toMatchObject({ covered: false });
+    } finally {
+      store.set(`lafpos:rapor:default:gun:${dateOf(4)}`, missing);
+    }
+  });
+
+  it('lafmaliyet\'te silinen ModPOS günü Uzaktan\'da kalmaz (yerine boş gün raporu gider); geri gelince yeniden gider', async () => {
+    const { reportTick } = await import('../server/sync/cloud-reports');
+    const { pullModposNow, modposState } = await import('../server/sync/modpos');
+    const range = `reports/summary?from=${dateOf(0)}&to=${dateOf(8)}`;
+    // Elle yüklenmiş (Merkez) geçmiş o günü doldurmasın: yalnız lafmaliyet'in günleri (sözleşme: lafmaliyet'te olmayan
+    // tarihte elle yüklenen gün kalır)
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const manual = getSyncState(GECMIS_KEY);
+    setSyncState(GECMIS_KEY, { at: 0, gunler: [] });
+    try {
+      // Sahip lafmaliyet'te yanlış güne girilmiş kasa raporunu sildi: o gün artık ModPOS dönemi değil
+      ladminAnswer = () => {
+        const b = ladminBody();
+        b.days.splice(6, 1);
+        return Response.json(b);
+      };
+      await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
+      await reportTick({ backfill: true });
+      const s = await remote<any>(range);
+      expect(s.byDay.map((d: { date: string }) => d.date)).not.toContain(dateOf(6));
+      expect(s.netSales).toBe(2734875 - 253575);
+      expect(s.history).toMatchObject({ days: 8 });
+      expect(JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(6)}`)!)).toMatchObject({ n: 0, s: { rev: 0 } });
+    } finally {
+      ladminAnswer = () => Response.json(ladminBody());
+      await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
+      await reportTick({ backfill: true });
+      setSyncState(GECMIS_KEY, manual);
+    }
+    const back = await remote<any>(range);
+    expect(back.netSales).toBe(2734875);
+    expect(back.byDay).toHaveLength(9);
+  });
+});
+
+describe('Uzaktan\'a giden ModPOS günleri: kurulum modundan çıkış', () => {
+  it('"Denemeyi bitir"den sonra yalnız deneme günü olan tarih Uzaktan\'da ModPOS gününe döner (kayıt değişmese de)', async () => {
+    const { reportTick } = await import('../server/sync/cloud-reports');
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const { getSettings, updateSettings } = await import('../server/lib/settings');
+    const before = getSettings().demoMode;
+    const key = `lafpos:rapor:default:gun:${dateOf(2)}`;
+    // Kurulum modu: o tarihte kasada kapanmış bir deneme günü var, deneme günleri kendi aralarında sayılır
+    updateSettings({ demoMode: true });
+    db.insert(schema.businessDays)
+      .values({ id: 'deneme-kurulum', date: dateOf(2), zNo: 950, trainingDay: true, openedAt: Date.parse(`${dateOf(2)}T09:00:00+03:00`), closedAt: Date.parse(`${dateOf(2)}T23:00:00+03:00`), openingCash: 0 })
+      .run();
+    try {
+      await reportTick({ backfill: true });
+      expect(JSON.parse(store.get(key)!)).not.toHaveProperty('kaynak');
+      // Gerçek kullanım: deneme gününün yerine ModPOS günü geçer; lafmaliyet'in kaydı aynı, yine de gider
+      updateSettings({ demoMode: false });
+      await reportTick({ backfill: true });
+      expect(JSON.parse(store.get(key)!)).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-004', s: { rev: 575300 } });
+    } finally {
+      db.delete(schema.businessDays).where(eq(schema.businessDays.id, 'deneme-kurulum')).run();
+      updateSettings({ demoMode: before });
+    }
+  });
+});
+
+describe('kabul: Uzaktan Kasım raporu kasanın ittiği günlerden (§6, 13-22 Kasım: 9 ModPOS günü ve LafPOS kabul günü)', () => {
+  it('Ciro dökümü, ödemeler, KDV, adisyon ve ürün bloğu sözleşmenin rakamlarını kuruşu kuruşuna verir; "Geçen hafta" 7 günün hepsini gösterir', async () => {
+    const { reportTick } = await import('../server/sync/cloud-reports');
+    const { pullModposNow, modposState } = await import('../server/sync/modpos');
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    // ModPOS dönemi bir gün geride: 9 ModPOS günü bugünden 10-2 gün önce, dün LafPOS'a geçiş (kabul) günü
+    const yesterday = addDays(today, -1);
+    const shift = (i: number) => addDays(today, -(10 - i));
+    const manual = getSyncState(GECMIS_KEY);
+    setSyncState(GECMIS_KEY, { at: 0, gunler: [] });
+    ladminAnswer = () => {
+      const b = ladminBody({ switchDay: yesterday });
+      b.days.forEach((d, i) => (d.date = shift(i)));
+      b.urunler = { ...b.urunler, from: shift(0), to: shift(8) };
+      return Response.json(b);
+    };
+    try {
+      await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
+      await reportTick({ backfill: true });
+      // Kabul günü kasanın kendi gün raporu (tests/fixtures/kabul-gunu-2026-11-22.json'un Uzaktan özeti; o günün kendisi LP-A'da)
+      const lafpos: RemoteDayReport = {
+        ...staleTraining(yesterday),
+        at: Date.now(),
+        z: [1],
+        s: { list: 744000, gross: 637500, comp: 106500, disc: 9000, svc: 0, rev: 628500, odenmez: 93500, zayi: 0, voided: 239500, receipts: 26, items: 58, tips: 0, guests: 0, tableSales: 0, paidClosed: 628500, paidOpen: 0, onlineOrders: 0, onlineAmount: 0 },
+        pay: [
+          ['Kredi kartı', 'card', 503000, 20],
+          ['Nakit', 'cash', 125500, 6],
+        ],
+        kdv: [[10, 628500, 571364, 57136]],
+        closes: [[600, 628500, 26]],
+        prod: [['latte|M', 'LATTE', 'M', 'Kahve', 58, 628500, 0, 0]],
+      };
+      store.set(`lafpos:rapor:default:gun:${yesterday}`, JSON.stringify(lafpos));
+      const s = await remote<any>(`reports/summary?from=${shift(0)}&to=${yesterday}`);
+      expect(s.waterfall).toEqual({ list: 3835500, complimentary: 256500, discounts: 215625, service: 0, revenue: 3363375, kdv: 305760, netExKdv: 3057615 });
+      expect(s.receipts).toBe(161);
+      expect(s.payments.map((p: { name: string; amount: number }) => [p.name, p.amount])).toEqual([
+        ['Kredi kartı', 2477425],
+        ['Nakit', 885950],
+      ]);
+      expect(s.kdv).toEqual([{ rate: 10, gross: 3363375, base: 3057615, kdv: 305760 }]);
+      expect(s.byDay).toHaveLength(10);
+      expect(s.byDay.filter((d: { kaynak?: string }) => d.kaynak === 'ModPOS')).toHaveLength(9);
+      expect(s.history).toEqual({ kaynak: 'ModPOS', days: 9, from: shift(0), to: shift(8) });
+      expect(s.itemsSold).toBe(58 + 240);
+      const p = await remote<any>(`reports/products?from=${shift(0)}&to=${yesterday}`);
+      expect(p.history).toMatchObject({ covered: true, qty: 240, amount: 2941500 });
+      expect(p.total).toBe(628500);
+      // Geçen hafta: 6 ModPOS günü ve kabul günü
+      const week = await remote<any>(`reports/summary?from=${addDays(yesterday, -6)}&to=${yesterday}`);
+      expect(week.byDay.map((d: { date: string }) => d.date)).toEqual([3, 4, 5, 6, 7, 8].map(shift).concat(yesterday));
+    } finally {
+      ladminAnswer = () => Response.json(ladminBody());
+      setSyncState(GECMIS_KEY, manual);
     }
   });
 });

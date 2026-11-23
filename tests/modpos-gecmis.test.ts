@@ -214,6 +214,15 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     expect(p.history).toEqual({ kaynak: 'ModPOS', from: '2026-11-13', to: '2026-11-21', covered: false });
   });
 
+  it('Saatlik: kapanış dakikası olmayan ModPOS günü saatlere girmez, gün sayısını ve haftanın ortalamasını da bölmez (kasadaki gibi)', async () => {
+    const h = await view('reports/hourly?from=2026-11-13&to=2026-11-22');
+    expect(h.total).toBe(628500);
+    expect(h.days).toBe(1);
+    expect(h.week.reduce((a: number, w: { days: number }) => a + w.days, 0)).toBe(1);
+    // 22 Kasım'ın haftanın günü satırı yalnız onun saatini taşır (15 Kasım'ın ModPOS günü ortalamayı yarıya indirmez)
+    expect(h.week.find((w: { days: number }) => w.days === 1).hours[15]).toBe(628500);
+  });
+
   it('Ürünler: ModPOS listesi kendi bloğunda (indirim öncesi), LafPOS ürün cirosuna karışmaz', async () => {
     const p = await view('reports/products?from=2026-11-13&to=2026-11-22');
     expect(p.total).toBe(57000);
@@ -230,21 +239,39 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     const shop = 'c'.repeat(24);
     const good = { ...historyReport(days()[0]!, 'ModPOS'), at: 10 };
     const bad = { ...historyReport(days()[1]!, 'ModPOS'), at: 10, kaynak: 5 };
-    const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-23', at: 10, days: [good, bad] })).toString('base64') });
+    // Dönem ürün listesi: biçimi ve gün sayısı denetlenir; bozuk blok taşıyan gün saklanmaz
+    const withBlock = { ...historyReport(days()[2]!, 'ModPOS'), at: 10, urunler: { ...URUNLER, n: 9 } };
+    const badBlock = { ...historyReport(days()[3]!, 'ModPOS'), at: 10, urunler: { ...URUNLER, n: 0 } };
+    const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-23', at: 10, days: [good, bad, withBlock, badBlock] })).toString('base64') });
     const res = await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/rapor`, { method: 'POST', body, headers: signedHeaders('g'.repeat(40), 'POST', new URL(`${CLOUD}/api/uzaktan/rapor`), body) }));
-    expect(await res.json()).toMatchObject({ ok: true, stored: 1 });
+    expect(await res.json()).toMatchObject({ ok: true, stored: 2 });
     expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-13`)!)).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-002', s: { rev: 39000 } });
     expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-14`)).toBe(false);
+    expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-15`)!).urunler).toMatchObject({ from: '2026-11-13', to: '2026-11-21', n: 9 });
+    expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-16`)).toBe(false);
   });
 
-  it('İndirim ve ikram listeleri: ModPOS günlerinin toplamı not olarak (kalem kaydı yok)', async () => {
+  it('ek sekmeler: İndirim ve ikram listesi ModPOS günlerinin toplamını, öbür listeler ve Adisyonlar ModPOS notunu taşır', async () => {
     const d = await view('reports/items?kind=indirim&from=2026-11-13&to=2026-11-22');
     expect(d.total).toBe(9000);
     expect(d.history).toEqual({ kaynak: 'ModPOS', days: 9, amount: 206625 });
     const k = await view('reports/items?kind=ikram&from=2026-11-13&to=2026-11-22');
     expect(k.total).toBe(13000);
     expect(k.history).toEqual({ kaynak: 'ModPOS', days: 9, amount: 150000 });
+    // İptal ve happy hour: ModPOS'tan kalem kaydı gelmez, tutar yok; liste yalnız LafPOS günlerinin
     const v = await view('reports/items?kind=iptal&from=2026-11-13&to=2026-11-22');
-    expect(v).not.toHaveProperty('history');
+    expect(v.history).toEqual({ kaynak: 'ModPOS', days: 9 });
+    expect((await view('reports/items?kind=happy&from=2026-11-13&to=2026-11-22')).history).toEqual({ kaynak: 'ModPOS', days: 9 });
+    // Adisyonlar: ModPOS günlerinin fişi listede yok, sayısı notta (Ciro'nun 161 fişiyle çelişmesin)
+    const c = await view('reports/checks?from=2026-11-13&to=2026-11-22');
+    expect(c.history).toEqual({ kaynak: 'ModPOS', days: 9, receipts: 135 });
+    // Dönemde ModPOS günü yoksa not yok
+    expect(await view('reports/items?kind=iptal&from=2026-11-22&to=2026-11-22')).not.toHaveProperty('history');
+    expect(await view('reports/checks?from=2026-11-22&to=2026-11-22')).not.toHaveProperty('history');
+  });
+
+  it('Paket platformları: platformun payı LafPOS günlerinin cirosundan (ModPOS günlerinin platform kaydı yok; kasadaki gibi)', async () => {
+    const p = await view('reports/platforms?from=2026-11-13&to=2026-11-22');
+    expect(p.netSales).toBe(628500);
   });
 });
