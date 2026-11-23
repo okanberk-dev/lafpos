@@ -1,6 +1,8 @@
 import {
   durumGecerli,
   type GecmisDurumu,
+  GUN_SONU_OMRU_MS,
+  KOMUT_OMRU_MS,
   KONTROL_SURUM,
   komutOzeti,
   type KomutTuru,
@@ -97,7 +99,8 @@ export function islemNedeni(p: Panel, tur: KomutTuru, hedefRoller: (Role | undef
   if (!d.turler.includes(tur)) return p.ben.rol === 'sahip' ? 'Kasanın sürümü bu işlemi bilmiyor: Merkez’den güncelleme gönderin' : 'Kasanın sürümü bu işlemi bilmiyor: güncelleme için panelin sahibine haber verin';
   // Anahtar yok ya da bulut doğrulayamadı (kasanın imzası tutmadı): PIN şifrelenmez
   if ((tur === 'personel.ekle' || tur === 'personel.pin') && !d.anahtar) return 'Kasanın PIN anahtarı henüz gelmedi ya da doğrulanamadı; kasa bir sonraki bağlantısında yeniler';
-  if (!uyeYapabilir(p.ben.rol, tur, hedefRoller)) return tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirir' : 'Patron hesabına yalnız sahip dokunur';
+  // Gün sonunun nedeni bulut ve kasanınkiyle aynı (yöneticiye "patron hesabı" deniyordu; inceleme, 23 Kas 2026)
+  if (!uyeYapabilir(p.ben.rol, tur, hedefRoller)) return tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirir' : tur === 'gun.sonu' ? 'Gün sonunu uzaktan yalnız sahip alır' : 'Patron hesabına yalnız sahip dokunur';
   return null;
 }
 
@@ -258,6 +261,30 @@ export function kimEtiketi(kim: string, ben: string | null): string {
 
 /** Kasa çevrimiçi mi: nabız 5 dakikada bir, 10 dakikadır ses yoksa değil */
 export const kasaCevrimici = (sonGorulme: number | null | undefined, simdi: number) => sonGorulme != null && simdi - sonGorulme <= REMOTE_STALE_MS;
+
+/**
+ * "Gün sonu al ve güncelle" kapalıysa nedeni (düğmenin yanında yazılır); yoksa null. İşlemin nedeni (rol, kasa durumu),
+ * sırada bekleyen gün sonu (ikinci istek gün kapandıktan sonra reddedilip güncellemeyi de düşürürdü) ve kasa çevrimdışı
+ * (bulut da kuyruğa almaz: saatler sonra ulaşan istek o arada açılan günü kapatırdı; inceleme, 23 Kas 2026). Gün
+ * kapalıysa düğme ayrıca kapanır, kartın alt başlığı söyler
+ */
+export function gunSonuNedeni(p: Panel & { bekleyen?: Pick<KontrolGecmisi, 'tur'>[] }, simdi: number): string | null {
+  const neden = islemNedeni(p, 'gun.sonu');
+  if (neden) return neden;
+  if (p.bekleyen?.some((b) => b.tur === 'gun.sonu')) return 'Gün sonu isteği sırada: kasa alınca sonucu Geçmiş’te görünür';
+  if (!kasaCevrimici(p.kasa?.sonGorulme, simdi)) return 'Kasa çevrimdışı: gün sonu yalnız kasa bağlıyken uzaktan alınır';
+  return null;
+}
+
+/**
+ * İşlem sıraya girince duyurulan metin. Kasa çevrimdışıyken "5 dakikada" sözü verilmez: işlem kasa açılınca uygulanır
+ * (24 saat içinde); gün sonu ise yalnız `GUN_SONU_OMRU_MS` içinde (kasa eskisini reddeder)
+ */
+export function siraMetni(tur: KomutTuru, cevrimici: boolean): { ton: 'ok' | 'warn'; metin: string } {
+  if (cevrimici) return { ton: 'ok', metin: 'Sıraya alındı; kasa en geç 5 dakikada uygular' };
+  if (tur === 'gun.sonu') return { ton: 'warn', metin: `Sıraya alındı. Kasa şu an çevrimdışı: gün sonu ancak kasa ${GUN_SONU_OMRU_MS / 60_000} dakika içinde bağlanırsa alınır` };
+  return { ton: 'warn', metin: `Sıraya alındı. Kasa şu an çevrimdışı: açılınca uygulanır (${KOMUT_OMRU_MS / 3_600_000} saat içinde)` };
+}
 
 /** Son görülme: "az önce", "12 dk önce", "3 sa önce", bir günden eskisi tarih ve saat */
 export function gorulmeMetni(at: number | null | undefined, simdi: number): string {

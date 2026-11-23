@@ -233,6 +233,12 @@ adminRoutes.patch('/products/:id', async (c) => {
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
   }
+  // Görsel de sitenin: menü eşitlemesi siteden gelen ürünün görselini her seferinde yeniden yazar, kasada verilen görsel
+  // (uzaktan `urun.gorsel`) "Uygulandı" deyip sonraki eşitlemede siliniyordu. Yönetim ekranı görsel göndermez (inceleme,
+  // 23 Kas 2026)
+  if (synced && input.image !== undefined) {
+    throw conflict('Bu ürünün görseli siteden gelir: sitede değiştirin (laffogato yönetim paneli). Kasada görsel yalnız sitede olmayan ürüne verilir', 'synced_field');
+  }
   // Yalnız lafmaliyet adı değişiyorsa denetlenir: eski bir çakışma istasyon ya da renk kaydını engellemesin
   const next = { ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName !== undefined ? input.posName : p.posName };
   const suffix = getSettings().posSizeSuffix;

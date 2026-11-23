@@ -4,11 +4,11 @@
  * kasaya teslim ve sonuç Merkez nabzında (`nabizKontrol`, api/_merkez.ts). Sözleşme shared/kontrol.ts.
  *
  * Komut: üyenin rolü (`uyeYapabilir`; patron hesabına ve rol yetkilerine yalnız sahip), kasanın son özeti (sözleşme
- * sürümü, desteklediği türler, uzaktan yönetim açık mı), `komutDogrula`, kuyruk ve üye başına saat sınırı. Geçen komut
- * kasadaki adlarla özetlenir, kurulum ve üyenin rolüyle birlikte kafenin ortak anahtarıyla (LAFPOS_CLOUD_SECRET)
- * imzalanır ve kuyruğa girer: Redis'e yazabilen biri anahtarı bilmeden kasaya komut sokamaz, bir şubenin komutunu
- * başkasına taşıyamaz, rolü değiştiremez. Kasa rolü ve hedefin gerçek rolünü yeniden denetler (bulutun özeti eski
- * olabilir). Panel yalnız satırları görür; komutun verisi (şifreli PIN) ve imzası dönmez.
+ * sürümü, desteklediği türler, uzaktan yönetim açık mı), `komutDogrula`, gün sonunda kasa çevrimiçi mi, kuyruk ve üye
+ * başına saat sınırı. Geçen komut kasadaki adlarla özetlenir, kurulum ve üyenin rolüyle birlikte kafenin ortak
+ * anahtarıyla (LAFPOS_CLOUD_SECRET) imzalanır ve kuyruğa girer: Redis'e yazabilen biri anahtarı bilmeden kasaya komut
+ * sokamaz, bir şubenin komutunu başkasına taşıyamaz, rolü değiştiremez. Kasa rolü ve hedefin gerçek rolünü yeniden
+ * denetler (bulutun özeti eski olabilir). Panel yalnız satırları görür; komutun verisi (şifreli PIN) ve imzası dönmez.
  *
  * Redis, kurulum kimliğiyle: `lafpos:kontrol:komut:<id>` (HASH, kimlik → KomutKaydi), `…:var:<id>` (kuyrukta komut var),
  * `…:teslim:<id>` (kasaya giden son komutun anı: kasaya ulaşan komut iptal edilmez), `…:durum:<id>` (kasanın son özeti),
@@ -52,6 +52,7 @@ import {
   uyeYapabilir,
   type UzaktanUye,
 } from '../shared/kontrol.js';
+import { ONLINE_MS } from '../shared/lisans.js';
 import { ROLE_DEFAULTS, ROLES, type Role } from '../shared/permissions.js';
 
 type Redis = (...cmd: (string | number)[]) => Promise<unknown>;
@@ -78,6 +79,11 @@ export interface KontrolDeps {
   sahipler: string[];
   /** Üye kaydı değişti ya da silindi: oturum önbelleğinden düşsün */
   uyeDegisti?: (eposta: string) => void;
+  /**
+   * "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"si (api/_merkez.ts requestUpdateNow; kanalın son derlemesiyle),
+   * `komut` gün sonuna bağlı. api/uzaktan.ts verir: Merkez nabız için bu dosyayı içe aktarır, burası onu aktarmaz (döngü)
+   */
+  guncelleIste?: (kurulum: string, now: number, komut: string) => Promise<unknown>;
   now?: () => number;
 }
 
@@ -376,6 +382,14 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   if (!uyeYapabilir(ben.rol, d.tur, hedefRoller)) {
     return fail(403, d.tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirebilir' : d.tur === 'gun.sonu' ? 'Gün sonunu uzaktan yalnız sahip alır' : 'Patron hesabına yalnız sahip dokunabilir', 'not_allowed');
   }
+  // Gün sonu yalnız kasa bağlıyken (son nabız Merkez'in "çevrimiçi" süresinde): çevrimdışı kasanın kuyruğunda bekleyen
+  // istek saatler sonra o arada açılan günü kapatırdı. Kasa da eski ya da günü değişmiş isteği reddeder (inceleme, 23 Kas
+  // 2026)
+  if (d.tur === 'gun.sonu') {
+    const [rawKurulum, rawNabiz] = ((await deps.redis('MGET', ...merkezKeys(id))) as unknown[] | null) ?? [];
+    const son = kasaBilgisi(rawKurulum, rawNabiz)?.sonGorulme ?? null;
+    if (son == null || now - son > ONLINE_MS) return fail(409, 'Kasa şu an çevrimdışı: gün sonu yalnız kasa bağlıyken uzaktan alınır. Kasa yeniden bağlanınca deneyin', 'kasa_cevrimdisi');
+  }
 
   // Kuyruğun son payı sahibin: yönetici kuyruğu doldurup sahibin acil işlemini bekletemez
   const kuyrukSiniri = ben.rol === 'sahip' ? KUYRUK_EN_COK : KUYRUK_EN_COK - SAHIP_PAYI;
@@ -395,13 +409,9 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.secret, temel) };
   await deps.redis('HSET', komutKey(id), kayit.id, JSON.stringify(kayit));
   await deps.redis('SET', varKey(id), '1');
-  // "Gün sonu al ve güncelle": gün kapanınca yeni sürüm hemen kurulsun diye Merkez'in "Şimdi güncelle" isteği de yazılır
-  // (kurulum kaydının yalnız `guncelleIstek` alanı; kasa bir sonraki nabızda alır, gün kapalıyken kurar)
-  if (d.tur === 'gun.sonu' && body.guncelle === true) {
-    const k = `lafpos:merkez:kurulum:${id}`;
-    const inst = parse<Record<string, unknown>>(await deps.redis('GET', k));
-    if (inst && typeof inst === 'object') await deps.redis('SET', k, JSON.stringify({ ...inst, guncelleIstek: now }));
-  }
+  // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı yol (hedef, gönderim anı ve istek), bu gün sonuna
+  // bağlı: kasa güncellemeyi ancak gün sonu uygulanınca ister, reddedilen gün sonunun güncellemesi kurulmaya kalkmaz
+  if (d.tur === 'gun.sonu' && body.guncelle === true) await deps.guncelleIste?.(id, now, kayit.id);
   return json({ ok: true, komut: satir(kayit) } satisfies KomutYaniti);
 }
 

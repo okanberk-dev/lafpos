@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bildirim, broadcast } from './_bildirim.js';
 import { yedek } from './_yedek.js';
-import { merkez, type Release } from './_merkez.js';
+import { merkez, type Release, requestUpdateNow } from './_merkez.js';
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
@@ -1602,6 +1602,8 @@ async function handle(req: Request): Promise<Response> {
       secret: secret(),
       sahipler: members,
       uyeDegisti: (email) => memberCache.delete(email),
+      // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı kayıt (hedef, gönderim, istek), gün sonuna bağlı
+      guncelleIste: async (kurulum, at, komut) => requestUpdateNow(redis, kurulum, at, await latestRelease(url.origin), komut),
     });
   }
   // Gerçek oturumun jetonu (kafe anahtarıyla imzalı) demoya düşmez: kafe bağlıyken verilmiştir, kapı Redis'e sormaz

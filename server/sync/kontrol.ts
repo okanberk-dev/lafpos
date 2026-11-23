@@ -4,6 +4,7 @@ import {
   anahtarImzaMetni,
   type AyarServis,
   durumParmakIzi,
+  GUN_SONU_OMRU_MS,
   imzaMetni,
   KOMUT_ID_RE,
   KOMUT_OMRU_MS,
@@ -46,6 +47,7 @@ import { internalActors, isValidPin, remoteActor } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH } from '../lib/signature';
+import { getOpenDay } from '../services/orders';
 import { identity } from './merkez';
 
 /**
@@ -55,11 +57,12 @@ import { identity } from './merkez';
  *
  * Her komut sırayla: doğrulama (`komutDogrula`, alanlar sabit sırayla yeniden kurulur) → imza (doğrulanmış veriden
  * `imzaMetni`, bu kurulumun kimliği ve üyenin rolüyle, kafenin ortak anahtarıyla HMAC-SHA256, sabit zamanlı
- * karşılaştırma) → daha önce işlendi mi (son 500 kimlik; daha eskisi için alt sınır) → süre (`KOMUT_OMRU_MS`,
- * gelecekten `SAAT_PAYI_MS`) → kasada uzaktan yönetim açık mı → üyenin rolü bu işlemi verebilir mi (hedefin kasadaki
- * gerçek rolüyle: `uyeYapabilir`) → PIN'i özel anahtarla çözer → kasanın yönetim ekranının kullandığı uca süreç içi
- * istek (yönetici patron olmayan kimlikle: remoteActor). Yetki, doğrulama, denetim kaydı ve canlı olaylar o uçtadır;
- * burada ayrı iş kuralı yok. Açık PIN hiçbir günlüğe, sonuca, denetim kaydına ya da sync state'e yazılmaz.
+ * karşılaştırma) → daha önce işlendi mi (son 500 kimlik; daha eskisi için alt sınır) → süre (`KOMUT_OMRU_MS`; gün sonu
+ * `GUN_SONU_OMRU_MS` ve istekten sonra açılan gün; gelecekten `SAAT_PAYI_MS`) → kasada uzaktan yönetim açık mı → üyenin
+ * rolü bu işlemi verebilir mi (hedefin kasadaki gerçek rolüyle: `uyeYapabilir`) → PIN'i özel anahtarla çözer → kasanın
+ * yönetim ekranının kullandığı uca süreç içi istek (yönetici patron olmayan kimlikle: remoteActor). Yetki, doğrulama,
+ * denetim kaydı ve canlı olaylar o uçtadır; burada ayrı iş kuralı yok. Açık PIN hiçbir günlüğe, sonuca, denetim kaydına
+ * ya da sync state'e yazılmaz.
  *
  * Tarayıcı demosunda yüklenmez: modülü yalnız Merkez açıkken nabız tembel yükler, demoda Merkez hiç açılmaz (RSA'nın
  * demo karşılığı yok; demo/shims/crypto.ts adları yalnız derleme için verir).
@@ -155,6 +158,12 @@ export function kontrolDurumu(now = Date.now()): KontrolDurumu {
 
 const islenenler = () => getSyncState<Islenen[]>(ISLENEN) ?? [];
 const bekleyenler = () => getSyncState<KomutSonucu[]>(SONUCLAR) ?? [];
+
+/**
+ * İşlenmiş komutun sonucu (son 500 içinde); kasa henüz görmediyse null. "Gün sonu al ve güncelle"de Merkez'in güncelleme
+ * isteği bu gün sonunun sonucuna bağlıdır (sync/merkez.ts takeRemoteUpdate). Yarıda kalan işlem reddedilmiş sayılır
+ */
+export const komutDurumu = (id: string): SonucDurumu | null => islenenler().find((x) => x.id === id)?.durum ?? null;
 
 /**
  * Nabız isteğine eklenen kısım: özetin parmak izi her zaman; özetin kendisi yalnız bulut istediyse ya da son iletilenden
@@ -477,6 +486,13 @@ async function komutIsle(raw: unknown, now: number): Promise<Islem> {
   // Listeden düşmüş (500'den eski) komut yeniden gelirse: tekrar sayılır
   if (when <= taban()) return red('Bu işlem daha önce işlendi ya da çok eski');
   if (now - when > KOMUT_OMRU_MS) return red('Süresi doldu: 24 saat içinde kasaya ulaşmadı');
+  // Gün sonu yalnız taze gelirse ve istendiği gün hâlâ açıksa: çevrimdışı kasaya gece verilen istek ertesi sabah ulaşıp
+  // o arada açılan (ya da yeniden açılan) günü sayımsız kapatıyordu (inceleme, 23 Kas 2026). Açılış anı kasanın,
+  // isteğin anı bulutun saatinden: iki saat arasındaki fark kadar (birkaç dakika) belirsizlik kalır
+  if (d.tur === 'gun.sonu') {
+    const gun = getOpenDay(db);
+    if (now - when > GUN_SONU_OMRU_MS || (gun && Math.max(gun.openedAt, gun.reopenedAt ?? 0) > when)) return red('Gün sonu isteği eskidi: istekten sonra gün değişti ya da kasaya geç ulaştı');
+  }
   if (when - now > SAAT_PAYI_MS) return red('İşlemin zamanı ileride: kasanın saati yanlış olabilir');
   if (getSettings().remoteControl === false) return red('Kasada uzaktan yönetim kapalı');
   // Rol kapısı kasada da: bulutun gördüğü özet eski olabilir (kuyrukta bekleyen rol değişikliği, yeni patron). Hedefin

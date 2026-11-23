@@ -48,6 +48,8 @@ const ciphers: string[] = [];
  * an). Döndüğü true ise bir kez çalışmış sayılır ve silinir
  */
 let araya: ((cmd: string[]) => boolean) | null = null;
+/** Güncelleme kanalının son derlemesi (surum.json); null: kanal okunamıyor (çoğu testte) */
+let kanal: Record<string, unknown> | null = null;
 const ENV = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UYE_EPOSTA', 'LAFPOS_UYE_DAVET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI'];
 const saved: Record<string, string | undefined> = {};
 
@@ -72,7 +74,8 @@ beforeAll(() => {
       if (araya?.(cmd)) araya = null;
       return new Response(JSON.stringify({ result }));
     }
-    // Güncelleme kanalı (Merkez nabzı sorar): bu testte yok
+    // Güncelleme kanalı (Merkez nabzı ve "Şimdi güncelle" sorar): yalnız `kanal` verilince
+    if (url === `${ORIGIN}/guncelleme/surum.json` && kanal) return Response.json(kanal);
     return new Response('yok', { status: 404 });
   });
 });
@@ -649,6 +652,68 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     // Geçmişte yalnız özet: şifreli PIN de yok
     const history = store.get(`lafpos:kontrol:gecmis:${kasaId}`) ?? '';
     for (const c of ciphers) expect(history.includes(c)).toBe(false);
+  });
+});
+
+describe('uzaktan gün sonu ve güncelleme', () => {
+  const kurulum = () => JSON.parse(store.get(`lafpos:merkez:kurulum:${kasaId}`)!) as Record<string, unknown>;
+  const merkezSatiri = async () => (await call<{ kurulumlar: Record<string, unknown>[] }>('GET', 'merkez/kurulumlar', { token: sahip })).body.kurulumlar.find((x) => x.id === kasaId)!;
+  afterEach(async () => {
+    kanal = null;
+    (await api()).resetReleaseCache();
+  });
+
+  it('yalnız sahip: yönetici 403 (kasa ve panelle aynı neden), izleyici 403; hiçbir şey yazılmaz', async () => {
+    await sifirla();
+    const y = await komut(yonetici, 'gun.sonu', { not: '' }, { guncelle: true });
+    expect([y.status, y.body.code, y.body.error]).toEqual([403, 'not_allowed', 'Gün sonunu uzaktan yalnız sahip alır']);
+    const i = await komut(izleyici, 'gun.sonu', { not: '' }, { guncelle: true });
+    expect([i.status, i.body.code]).toEqual([403, 'remote_readonly']);
+    expect(Object.keys(queueOf())).toHaveLength(0);
+    expect(kurulum().guncelleIstek).toBeUndefined();
+  });
+
+  it('kasa çevrimdışıyken gün sonu kuyruğa girmez (saatler sonra o arada açılan günü kapatırdı); öteki işlem girer', async () => {
+    await sifirla();
+    const k = `lafpos:merkez:durum:${kasaId}`;
+    store.set(k, JSON.stringify({ ...JSON.parse(store.get(k)!), lastSeen: Date.now() - 11 * 60_000 }));
+    const off = await komut(sahip, 'gun.sonu', { not: '' }, { guncelle: true });
+    expect([off.status, off.body.code, off.body.error]).toEqual([409, 'kasa_cevrimdisi', 'Kasa şu an çevrimdışı: gün sonu yalnız kasa bağlıyken uzaktan alınır. Kasa yeniden bağlanınca deneyin']);
+    expect(Object.keys(queueOf())).toHaveLength(0);
+    expect(kurulum().guncelleIstek).toBeUndefined();
+    expect([...store.keys()].some((x) => x.startsWith('lafpos:kontrol:sayac:'))).toBe(false);
+    // Öteki işlemler kasa açılınca (24 saat içinde) uygulanmak üzere sıraya girer
+    expect((await komut(sahip, 'ayar.servis', { mod: 'self' })).status).toBe(200);
+    await sifirla();
+  });
+
+  it('"Gün sonu al ve güncelle" Merkez’in "Şimdi güncelle"siyle aynı kaydı yazar, gün sonuna bağlı; kasa nabızla ikisini birlikte alır', async () => {
+    await sifirla();
+    kanal = { v: 1, version: '0.5.0', build: 2000, date: '2026-11-23T10:00:00.000Z', not: 'Yeni sürüm' };
+    (await api()).resetReleaseCache();
+    // Güncellemesiz gün sonu Merkez kaydına dokunmaz
+    expect((await komut(sahip, 'gun.sonu', { not: '' })).status).toBe(200);
+    expect(kurulum().guncelleIstek).toBeUndefined();
+    await sifirla();
+    const sent = await komut(sahip, 'gun.sonu', { not: '' }, { guncelle: true });
+    expect(sent.status).toBe(200);
+    const { id, at } = sent.body.komut as KontrolGecmisi;
+    // Hedef ve gönderim anı da yazılır: Merkez satırı adımları gösterir, kasa sürümü Merkez'den gönderilmiş sayar
+    // (kasiyere sorulmaz), güncelleyicinin Merkez sınırı gönderilene ayarlı kalır
+    expect(kurulum()).toMatchObject({ guncelleIstek: at, guncelleKomut: id, hedef: 2000, gonderildi: at });
+    expect(await merkezSatiri()).toMatchObject({ hedef: 2000, istekBekliyor: true, gonderim: { etiket: expect.stringMatching(/^Gönderildi \d{2}:\d{2}$/) } });
+    const beat = await nabiz({ kontrol: { ozet: durumParmakIzi(durumOrnek()) } });
+    expect(beat).toMatchObject({ guncelleIstek: at, guncelleKomut: id, hedef: 2000 });
+    expect(beat.kontrol!.komutlar.map((x) => x.id)).toEqual([id]);
+
+    // Merkez'in kendi düğmesi aynı yoldan, bağsız
+    await new Promise((r) => setTimeout(r, 5));
+    const asked = await call('POST', 'merkez/simdi-guncelle', { token: sahip, body: { ids: [kasaId] } });
+    expect(asked.body).toMatchObject({ ok: true, istenen: 1, build: 2000 });
+    expect(kurulum()).toMatchObject({ guncelleKomut: null, hedef: 2000 });
+    expect(kurulum().guncelleIstek).toBeGreaterThan(at);
+    expect(await nabiz({ kontrol: { ozet: durumParmakIzi(durumOrnek()) } })).toMatchObject({ guncelleKomut: null });
+    await sifirla();
   });
 });
 

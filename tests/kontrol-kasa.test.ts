@@ -1,8 +1,11 @@
 import { createHmac, createPublicKey } from 'node:crypto';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   anahtarImzaMetni,
   durumGecerli,
+  GUN_SONU_OMRU_MS,
   HIZLI_NABIZ_MS,
   HIZLI_SURE_MS,
   imzaMetni,
@@ -32,9 +35,13 @@ const YENI_PIN = '739153';
 const GARSON_PIN = '864209';
 let h: Harness;
 
-/** Sahte Merkez: her nabzın gövdesi `gelen`e; yanıtın `kontrol`ü `siradaki`nden (boşsa komutsuz) */
+/**
+ * Sahte Merkez: her nabzın gövdesi `gelen`e; yanıtın `kontrol`ü `siradaki`nden (boşsa komutsuz); `ekYanit` yanıta eklenir
+ * (güncelleme isteği ve bağlı olduğu gün sonu)
+ */
 const gelen: { kontrol?: NabizKontrol }[] = [];
 let siradaki: Partial<NabizKontrolYaniti>[] = [];
+let ekYanit: Record<string, unknown> = {};
 let eskiBulut = false;
 let hepDurumIste = false;
 /** Şifreli PIN'ler (kasada da hiçbir yerde saklanmamalı) */
@@ -54,7 +61,7 @@ beforeAll(async () => {
     if (url === `${CLOUD}/api/merkez/nabiz`) {
       gelen.push(JSON.parse(String(init?.body ?? '{}')));
       const kontrol = eskiBulut ? undefined : { durumIste: hepDurumIste, komutlar: [], ...(siradaki.shift() ?? {}) };
-      return Response.json({ ok: true, lisans: { durum: 'aktif' }, mod: 'elle', ...(kontrol ? { kontrol } : {}) });
+      return Response.json({ ok: true, lisans: { durum: 'aktif' }, mod: 'elle', ...ekYanit, ...(kontrol ? { kontrol } : {}) });
     }
     return realFetch(input, init);
   });
@@ -389,6 +396,61 @@ describe('Uzaktan yönetim: kasa', () => {
     const [ok] = await uygula(komut('gun.sonu', { not: '' }));
     expect(ok, JSON.stringify(ok)).toMatchObject({ durum: 'uygulandi' });
     expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(409);
+    // Denetim kaydı isteyenin adıyla ve `uzaktan` kimliğiyle (otomatik gün sonu sanılmasın); kapanışı yapan personel
+    // alanı boş kalır (personel tablosuna bağlı)
+    expect((await audits('day.close')).at(-1)).toMatchObject({ userId: 'uzaktan', message: expect.stringMatching(new RegExp(`^Uzaktan \\(${KIM}\\) gün sonu aldı \\(Z \\d+\\): ciro .+, kasa farkı sayılmadı$`)) });
+    const { db, schema } = await import('../server/db/client');
+    const { desc } = await import('drizzle-orm');
+    expect(db.select().from(schema.businessDays).orderBy(desc(schema.businessDays.zNo)).get()).toMatchObject({ closedBy: null, note: 'Uzaktan gün sonu' });
+  });
+
+  it('gun.sonu: 30 dakikadan eski ya da istekten sonra açılan (yeniden açılan) güne gelen istek reddedilir, gün açık kalır', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const ESKIDI = 'Gün sonu isteği eskidi: istekten sonra gün değişti ya da kasaya geç ulaştı';
+    const acikGun = async () => (await h.ok<{ day: { id: string } | null }>('kasa', 'GET', '/cash/day')).day;
+    // İstek verildi (kasa çevrimdışı), sonra kasada gün sonu alınıp gün yeniden açıldı: istek o günü kapatmaz
+    const { closedToday } = await h.ok<{ closedToday: { id: string } | null }>('kasa', 'GET', '/cash/day');
+    const istek = komut('gun.sonu', { not: '' }, { at: Date.now() - 60_000 });
+    await h.ok('mudur', 'POST', `/cash/days/${closedToday!.id}/reopen`, { reason: 'Geç gelen müşteri' });
+    const [sonra] = await uygula(istek);
+    expect(sonra).toMatchObject({ durum: 'reddedildi', mesaj: ESKIDI });
+    expect(await acikGun()).not.toBeNull();
+    // Gün istekten önce açık ama istek 30 dakikadan eski (gece verildi, kasa sabah bağlandı)
+    db.update(schema.businessDays).set({ openedAt: Date.now() - 3 * 3_600_000, reopenedAt: null }).where(eq(schema.businessDays.id, closedToday!.id)).run();
+    const [eski] = await uygula(komut('gun.sonu', { not: '' }, { at: Date.now() - GUN_SONU_OMRU_MS - 60_000 }));
+    expect(eski).toMatchObject({ durum: 'reddedildi', mesaj: ESKIDI });
+    expect(await acikGun()).not.toBeNull();
+    expect((await audits('uzaktan.red')).at(-1)!.message).toBe(`Uzaktan (${KIM}) isteği reddedildi: Gün sonu (Z) al. Neden: ${ESKIDI}`);
+    // Taze istek, gün istekten önce açılmış: uygulanır
+    const [taze] = await uygula(komut('gun.sonu', { not: '' }, { at: Date.now() - 5 * 60_000 }));
+    expect(taze).toMatchObject({ durum: 'uygulandi' });
+    expect(await acikGun()).toBeNull();
+  });
+
+  it('urun.gorsel: siteden gelen ürünün görseli sitenin (ret, nedeniyle); kasaya özel ürüne görsel verilir', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const urun = (id: string) => db.select().from(schema.products).where(eq(schema.products.id, id)).get()!;
+    const latte = urun(h.boot.products.find((p) => p.name === 'Latte')!.id);
+    const bardak = urun(h.boot.products.find((p) => p.name === 'Yenilebilir bardak')!.id);
+    expect([latte.extSource, bardak.extSource]).toEqual(['laffogato', null]);
+    const gorsel = 'https://laffogato.net/gorsel/menu/mnu-0005?v=abc123';
+    const SITENIN = 'Bu ürünün görseli siteden gelir: sitede değiştirin (laffogato yönetim paneli). Kasada görsel yalnız sitede olmayan ürüne verilir';
+    // Menü eşitlemesi siteden gelen ürünün görselini her seferinde yeniden yazar: "Uygulandı" denip sonra silinmesin
+    const [site, yerel] = await uygula(komut('urun.gorsel', { id: latte.id, gorsel }), komut('urun.gorsel', { id: bardak.id, gorsel }));
+    expect(site).toMatchObject({ durum: 'reddedildi', mesaj: SITENIN, ozet: 'Görsel ekle: Latte' });
+    expect(urun(latte.id).image).toBe(latte.image);
+    expect(yerel).toMatchObject({ durum: 'uygulandi', ozet: 'Görsel ekle: Yenilebilir bardak' });
+    expect(urun(bardak.id).image).toBe(gorsel);
+    // Kural yönetimin ucunda (yönetim ekranı görsel göndermez): kasa alanı yine düzenlenir
+    const r = await h.call<{ code: string; error: string }>('patron', 'PATCH', `/admin/products/${latte.id}`, { image: null });
+    expect([r.status, r.json.code, r.json.error]).toEqual([409, 'synced_field', SITENIN]);
+    await h.ok('patron', 'PATCH', `/admin/products/${latte.id}`, { favorite: true });
+    await h.ok('patron', 'PATCH', `/admin/products/${latte.id}`, { favorite: latte.favorite });
+    const [kaldir] = await uygula(komut('urun.gorsel', { id: bardak.id, gorsel: null }));
+    expect(kaldir).toMatchObject({ durum: 'uygulandi', ozet: 'Görseli kaldır: Yenilebilir bardak' });
+    expect(urun(bardak.id).image).toBeNull();
   });
 
   it('kasada uzaktan yönetim kapalıyken her işlem reddedilir; anahtarı yalnız patron değiştirir, kayda düşer', async () => {
@@ -619,5 +681,68 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
     expect(gelen[0]!.kontrol).toMatchObject({ ozet: expect.any(String) });
     expect(merkezLast()).toMatchObject({ lisans: { durum: 'aktif' } });
     expect(merkezSyncState().lastError).toBeNull();
+  });
+
+  it('"Gün sonu al ve güncelle": güncelleme yalnız bağlı gün sonu uygulanınca istenir; reddedilirse istenmez, kayda düşer', async () => {
+    const { merkezBeat, merkezLast } = await import('../server/sync/merkez');
+    const { pendingUpdateRequest } = await import('../server/lib/surum');
+    const { getSyncState } = await import('../server/lib/settings');
+    const { env } = await import('../server/env');
+    const k = await kontrol();
+    const file = join(env.dataDir, 'guncelleme', 'istek.json');
+    // Önceki testlerin kapattığı gün yeniden açılır, içinde dolu bir adisyon: gün sonu reddedilir. Kasa ve garsonun
+    // oturumu önceki testlerde PIN değişince kapandı: patronla
+    const { closedToday } = await h.ok<{ closedToday: { id: string } | null }>('patron', 'GET', '/cash/day');
+    await h.ok('patron', 'POST', `/cash/days/${closedToday!.id}/reopen`, { reason: 'deneme' });
+    await new Promise((r) => setTimeout(r, 5));
+    const o = await h.ok<{ id: string }>('patron', 'POST', '/orders', { type: 'tezgah' });
+    await h.ok('patron', 'POST', `/orders/${o.id}/items`, { items: [{ productId: h.boot.products.find((p) => p.name === 'Latte')!.id, qty: 1 }] });
+    const bekciOnce = process.env.LAFPOS_STDIN_CONTROL;
+    // Windows güncelleyicisi var: istek yazılabilir (yazılmaması kurala bağlı olsun)
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    try {
+      const red = komut('gun.sonu', { not: '' });
+      siradaki = [{ komutlar: [red] }];
+      ekYanit = { guncelleIstek: red.at, guncelleKomut: red.id };
+      expect(await merkezBeat()).toBe(true);
+      expect(merkezLast()).toMatchObject({ guncelleIstek: red.at, guncelleKomut: red.id });
+      expect(k.komutDurumu(red.id)).toBe('reddedildi');
+      // Güncelleme istenmedi (gün açık kaldı, kasiyere de sorulmaz), istek işlendi sayılır ve kayda düşer
+      expect(existsSync(file)).toBe(false);
+      expect(getSyncState<number>('merkez.istek')).toBe(red.at);
+      expect((await audits('guncelleme')).at(-1)).toMatchObject({ message: "Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi", data: { komut: red.id, gunSonu: 'reddedildi' } });
+
+      // Adisyon kapandı, sahip yeniden istedi: gün sonu uygulanır, güncelleme aynı nabızda istenir (gün kapalı: hemen
+      // kurulur)
+      await h.ok('patron', 'POST', `/orders/${o.id}/cancel`, { reason: 'deneme' });
+      const ok = komut('gun.sonu', { not: '' });
+      siradaki = [{ komutlar: [ok] }];
+      ekYanit = { guncelleIstek: ok.at, guncelleKomut: ok.id };
+      expect(await merkezBeat()).toBe(true);
+      expect(k.komutDurumu(ok.id)).toBe('uygulandi');
+      expect(pendingUpdateRequest()).toMatchObject({ by: 'merkez', simdi: false });
+      expect(getSyncState<number>('merkez.istek')).toBe(ok.at);
+    } finally {
+      if (bekciOnce === undefined) delete process.env.LAFPOS_STDIN_CONTROL;
+      else process.env.LAFPOS_STDIN_CONTROL = bekciOnce;
+      ekYanit = {};
+      siradaki = [];
+      rmSync(file, { force: true });
+    }
+  });
+
+  it('bağlı gün sonu henüz kasaya gelmediyse güncelleme isteği bekler; 30 dakikada gelmezse güncelleme başlatmadan kapanır', async () => {
+    const { takeRemoteUpdate } = await import('../server/sync/merkez');
+    const { getSyncState } = await import('../server/lib/settings');
+    const istek = Date.now() + 1_000;
+    const gelmedi = { komut: 'k_gelmedi0000000000000000', durum: null };
+    expect(takeRemoteUpdate(istek, istek + 60_000, gelmedi)).toBe(false);
+    expect(getSyncState<number>('merkez.istek')).not.toBe(istek);
+    expect(takeRemoteUpdate(istek, istek + GUN_SONU_OMRU_MS, gelmedi)).toBe(true);
+    expect(getSyncState<number>('merkez.istek')).toBe(istek);
+    expect((await audits('guncelleme')).at(-1)!.message).toBe("Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu kasaya ulaşmadı");
+    // Merkez'in kendi "Şimdi güncelle"si (bağsız) hemen işlenir
+    expect(takeRemoteUpdate(istek + 1, istek + 1)).toBe(true);
+    expect((await audits('guncelleme')).at(-1)!.message).toMatch(/^Merkez'den \(LafPOS Uzaktan\) güncelleme istendi/);
   });
 });

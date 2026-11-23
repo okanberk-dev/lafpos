@@ -1,20 +1,26 @@
 import { useState } from 'react';
+import { GUN_SONU_OMRU_MS } from '@shared/kontrol';
 import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from '@shared/service-mode';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Badge, Card } from '@/components/ui/misc';
 import { errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { useTick } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
 import { BekliyorRozeti, KasaGuncelDegil, NEDEN, NOT, type SekmeProps } from './ortak';
+import { gunSonuNedeni } from './yardimci';
 
 /**
- * Kasa: servis modu (Yönetim › Ayarlar › Servis modu'nun uzaktaki hâli; `ayar.servis`). Seçim gönderilene dek yalnız
- * ekranda; bekleyen istek "Bekliyor" rozetiyle görünür, kasa uygulayınca özet yeni modu getirir
+ * Kasa: gün sonu ve güncelleme (`gun.sonu`, yalnız sahip ve kasa bağlıyken) ve servis modu (Yönetim › Ayarlar › Servis
+ * modu'nun uzaktaki hâli; `ayar.servis`). Seçim gönderilene dek yalnız ekranda; bekleyen istek "Bekliyor" rozetiyle
+ * görünür, kasa uygulayınca özet yeni modu getirir
  */
 export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: SekmeProps) {
   const [secim, setSecim] = useState<ServiceMode | null>(null);
   const [bekle, setBekle] = useState(false);
+  // Kasanın çevrimiçi olup olmadığı zamanla değişir: gün sonu düğmesi yoklama gelmeden de kapanır
+  const now = useTick(30_000);
   if (!durum) return <KasaGuncelDegil bagli={panel.kasa !== null} />;
   const isler = bekleyen.get('servis');
   const istenen = isler?.at(-1)?.hedef.mod;
@@ -44,19 +50,21 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
     }
   };
 
-  const gunKapali = neden('gun.sonu');
+  // Rol ve kasa durumu, sırada bekleyen gün sonu ve kasa çevrimdışı (bulut da reddeder); gün kapalıysa alt başlık söyler
+  const gunNeden = gunSonuNedeni(panel, now);
+  const gunKapali = panel.kasa?.gunAcik === false;
   const gunSonu = async () => {
     const ok = await confirmDialog({
       title: 'Gün sonu alınsın ve güncelleme kurulsun mu',
-      body: 'Kasa en geç 5 dakikada gün sonunu (Z) sayımsız alır: Pavo banka gün sonu, lafmaliyet ve e-postalar kendiliğinden gider. Açık adisyon varsa kasa reddeder, nedeni Geçmiş’te yazar. Gün kapanınca yeni sürüm kurulur (LafPOS bir dakika kadar kapanır). Kasa sayımını sonra Kasa › Geçmiş günler › Kasa föyü’nden girin',
+      body: `Kasa en geç 5 dakikada gün sonunu (Z) sayımsız alır: Pavo banka gün sonu, lafmaliyet ve e-postalar kendiliğinden gider. Gün kapanınca yeni sürüm kurulur (LafPOS bir dakika kadar kapanır). Açık adisyon varsa, istek kasaya ${GUN_SONU_OMRU_MS / 60_000} dakika içinde ulaşmazsa ya da bu arada kasada gün değişirse gün sonu alınmaz, nedeni Geçmiş’te yazar; güncelleme de o zaman hemen kurulmaz. Kasa sayımını sonra Kasa › Geçmiş günler › Kasa föyü’nden girin`,
       confirmLabel: 'Gün sonu al ve güncelle',
       tone: 'primary',
     });
     if (!ok) return;
     setBekle(true);
     try {
+      // Sıraya alındığını gonder duyurur (kasa çevrimdışıysa uyarıyla); burada ikinci kez duyurulmaz
       await gonder({ tur: 'gun.sonu', veri: { not: '' }, guncelle: true });
-      toast.ok('Gün sonu isteği kasaya gidiyor; en geç 5 dakikada uygulanır');
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
@@ -68,14 +76,15 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
     <>
     <Card
       title="Gün sonu ve güncelleme"
-      subtitle={panel.kasa?.gunAcik === false ? 'Gün kapalı' : 'Kasada gün açık'}
+      subtitle={gunKapali ? 'Gün kapalı' : 'Kasada gün açık'}
       actions={
-        <Button variant="primary" disabled={!!gunKapali || panel.kasa?.gunAcik === false} title={gunKapali ?? undefined} loading={bekle} onClick={() => void gunSonu()}>
+        <Button variant="primary" disabled={!!gunNeden || gunKapali} title={gunNeden ?? (gunKapali ? 'Kasada gün kapalı' : undefined)} loading={bekle} onClick={() => void gunSonu()}>
           Gün sonu al ve güncelle
         </Button>
       }
     >
-      <p className="px-5 py-4 text-sm text-muted">Kafede kimse gün sonu almadıysa buradan alınır; ardından yeni LafPOS sürümü kendiliğinden kurulur. Yalnız panelin sahibi.</p>
+      {gunNeden && gunNeden !== genel && <p className={cn('border-b border-[var(--admin-divider)] px-5 py-2.5', NEDEN)}>{gunNeden}</p>}
+      <p className="px-5 py-4 text-sm text-muted">Kafede kimse gün sonu almadıysa kasa bağlıyken buradan alınır; ardından yeni LafPOS sürümü kendiliğinden kurulur. Yalnız panelin sahibi.</p>
     </Card>
     <Card
       title="Servis modu"

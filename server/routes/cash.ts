@@ -143,10 +143,11 @@ cashRoutes.post('/day/close', async (c) => {
     z.object({ countedCash: kurus.nullable(), cashCounts: z.record(z.string(), z.number().int().min(0)).nullish(), note: z.string().max(500).nullish() }),
   );
   const actor = actorFrom(c);
-  // Uzaktan gün sonu (kontrol komutu `gun.sonu`): kasada kişi yok, sistem kapanışı gibi yazılır (otomatik gün sonuyla
-  // aynı; kim istediği notta ve uzaktan denetim kaydında)
+  // Uzaktan gün sonu (kontrol komutu `gun.sonu`): kasada kişi yok, kapanış sistem kapanışı gibi (closedBy boş: personel
+  // tablosuna bağlı). Denetim kaydı isteyenin adıyla, `uzaktan` kimliğiyle: otomatik gün sonuyla karışmasın (inceleme,
+  // 23 Kas 2026)
   const remote = actor.user.id === 'uzaktan';
-  const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input));
+  const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input, remote ? { userId: actor.user.id, name: actor.user.name } : undefined));
   // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
   afterDayClosed(day.id);
   // Kasa farkı eşiği geçtiyse patronun telefonuna
