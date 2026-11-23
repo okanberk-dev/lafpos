@@ -438,6 +438,7 @@ const iadeYolu = (m: { name: string; zField: string; amount: number }) => `${m.n
  * Birden çok ödeme türü varsa hangisinden ne kadar geri verileceği onaydan önce yazar (son alınan ödemeden başlar)
  */
 function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean; order: OrderDTO; fiscal: boolean; onClose: () => void; onDone: () => void }) {
+  const tipsOn = useBoot().settings.tipsEnabled;
   const [adet, setAdet] = useState<Record<string, number>>({});
   const [neden, setNeden] = useState('');
   const [busy, setBusy] = useState(false);
@@ -458,7 +459,9 @@ function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean
   const kalan = refundKeeps(odemeler, plan.total);
   const yollar = new Map<string, { name: string; zField: string; amount: number }>();
   odemeler.forEach((p, i) => {
-    const geri = p.amount - (kalan[i] ?? 0);
+    // Hiç kalmayan ödemenin bahşişi de geri verilir (sunucuyla aynı kural, orders.refundItems)
+    const keep = kalan[i] ?? 0;
+    const geri = p.amount - keep + (keep > 0 && tipsOn ? 0 : p.tip);
     if (geri <= 0) return;
     const m = yollar.get(p.methodId) ?? { name: p.methodName, zField: p.zField, amount: 0 };
     m.amount += geri;

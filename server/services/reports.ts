@@ -16,7 +16,7 @@ import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { trainingMode } from '../lib/settings';
 import { addonCostOf, addonSiteIds, costMap, costsAt } from '../sync/lafmaliyet';
 import { deviceReceipts, onlineCounted } from './days';
-import { getOpenDay, REFUND_REWRITE } from './orders';
+import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from './orders';
 
 /**
  * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Ciro yalnız LafPOS'ta tahsil edilen
@@ -543,7 +543,8 @@ function compKindOf(ds: { items: ItemRow[] }, closedIds: Set<string>, kind: Comp
  * `billPrintedAt`'i iptalden sonra yazdırılan hesapla da dolar, tek başına yetmez. Bayraktan önce iptal edilmiş kalemde
  * adisyonun son yazdırılması iptalden önceyse hesap kesin iptalden önce görülmüştür; sonraysa bilinmez, sayılmaz
  */
-const voidedAfterBill = (i: ItemRow, o: OrderRow) => i.voidAfterBill || (o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
+const voidedAfterBill = (i: ItemRow, o: OrderRow) =>
+  i.voidAfterBill || (!i.voidReason?.startsWith(REFUND_VOID) && o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
 
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
 export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy', showStaff: (userId: string) => boolean = () => true) {

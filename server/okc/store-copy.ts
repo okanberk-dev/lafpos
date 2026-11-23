@@ -164,7 +164,8 @@ function printable(actor: Actor, r: ReceiptRow, claim: string): ClaimedStoreCopy
     claim,
     order: blindOrder(actor.user, full),
     payments: full.payments
-      .filter((p) => r.paymentIds.includes(p.id))
+      // İade edilen ödeme yazılmaz: kalem iadesinde kalanı yeni kimlikle fişin ödemelerine eklenir (orders.refundItems)
+      .filter((p) => r.paymentIds.includes(p.id) && !p.refundedAt)
       .map((p) => ({ id: p.id, methodName: p.methodName, amount: p.amount, tip: p.tip, userName: staff ? p.userName : null })),
     device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: result?.docKind ?? null, docId: result?.docId ?? null },
     at: r.completedAt ?? Date.now(),

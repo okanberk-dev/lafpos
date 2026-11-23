@@ -297,6 +297,9 @@ describe('iade bar ekranına ve uyarılara karışmaz', () => {
     expect(alerts.map((a) => a.action)).toEqual(['order.refund_items']);
     expect(alerts[0]!.message).toContain('₺195,00 iade etti');
 
+    // Raporlar › İptal: iade hesaptan sonra iptal sayılmaz
+    const voids = await h.ok<{ rows: { orderNo: number | null; afterBill: boolean }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
+    expect(voids.rows.filter((r) => r.orderNo === o.no).map((r) => r.afterBill)).toEqual([false]);
     const after = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
     const live = after.payments.filter((p) => !p.refundedAt);
     expect(live).toHaveLength(1);

@@ -1852,6 +1852,8 @@ export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: str
 
 /** İade sonrası yeniden yazılan ödemenin notu: iade raporu net tutarı bununla bulur (`refundReport`) */
 export const REFUND_REWRITE = 'İade sonrası: ';
+/** Kalem iadesinin iptal nedeni öneki: iade hesaptan sonra iptal sayılmaz (raporlar `voidedAfterBill`) */
+export const REFUND_VOID = 'İade: ';
 
 export interface RefundItemsResult {
   order: OrderRow;
@@ -1908,7 +1910,7 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
   );
   // Tamamı indirimli kalemin geri verilecek parası yoktur: iade değil (ödeme iptali ve yeniden açılış kaydı bırakırdı)
   if (plan.refund <= 0) throw conflict('Seçilen kalemlerin geri verilecek tutarı yok', 'refund_zero');
-  const note = `İade: ${why}`;
+  const note = `${REFUND_VOID}${why}`;
   const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
   for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: note, partOfRefund: true });
   if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, note);
@@ -1924,17 +1926,21 @@ export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, i
   if (reduced.total !== plan.total) throw conflict('İade hesabı tutmadı; işlem geri alındı', 'refund_mismatch');
   const keeps = refundKeeps(pays, reduced.total);
   const methods = new Map<string, RefundItemsResult['methods'][number]>();
+  const tipsOn = getSettings().tipsEnabled;
   pays.forEach((p, i) => {
     const keep = keeps[i] ?? 0;
-    if (p.amount > keep) {
+    // Bahşiş kalan ödemede durur; ödeme hiç kalmıyorsa (ya da bahşiş sonradan kapatıldıysa) bahşiş de müşteriye geri
+    // verilir ve geri verilenin içinde yazılır: kasiyerin verdiği tutar beklenen nakdin düştüğü tutarla aynı olsun
+    const keptTip = keep > 0 && tipsOn ? p.tip : 0;
+    const back = p.amount - keep + (p.tip - keptTip);
+    if (back > 0) {
       const m = methods.get(p.methodId) ?? { methodId: p.methodId, name: p.methodName, zField: p.zField, amount: 0 };
-      m.amount += p.amount - keep;
+      m.amount += back;
       methods.set(p.methodId, m);
     }
     if (keep <= 0) return;
     const rewrite = `${REFUND_REWRITE}${p.id}`;
-    // Bahşiş sonradan kapatıldıysa (ayar) yeniden yazım reddedilmesin: o durumda bahşiş taşınmaz
-    addPayment(t, actor, fx, orderId, { methodId: p.methodId, amount: keep, tip: getSettings().tipsEnabled ? p.tip : 0, customerId: p.customerId, note: rewrite });
+    addPayment(t, actor, fx, orderId, { methodId: p.methodId, amount: keep, tip: keptTip, customerId: p.customerId, note: rewrite });
     const fresh = orderPayments(t, orderId).find((x) => !x.refundedAt && x.note === rewrite);
     if (!fresh) return;
     // Kalan, alınan ödemenin devamıdır: saati ve alan kişi asıl ödemeninki (saatlik satış, "aynı saate kadar" kıyası,

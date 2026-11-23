@@ -49,4 +49,32 @@ describe('kalem iadesi: yeniden yazılan ödeme öncekinin devamıdır', () => {
     expect(live.map((p) => [p.amount, p.tip])).toEqual([[2 * product('Latte').price, 2000]]);
     expect((await day()).tips).toBe(before.tips);
   });
+
+  it('ödeme hiç kalmıyorsa bahşişi de geri verilir ve geri verilenin içinde yazılır: kasadan çıkan beklenen nakdin düştüğü kadar', async () => {
+    const latte = product('Latte');
+    // Kart ₺195, sonra nakit ₺195 + ₺20 bahşiş; bir latte iadesi son alınan (nakit) ödemeyi bütünüyle geri verir
+    const o0 = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: null });
+    const o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o0.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 2 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('kart').id, amount: latte.price });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('nakit').id, amount: latte.price, tip: 2000 });
+    const cashBefore = (await h.ok<{ summary: { expectedCash: number } }>('patron', 'GET', '/cash/day')).summary.expectedCash;
+    const res = await h.ok<{ refunded: number; methods: { zField: string; amount: number }[] }>('mudur', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: o.items[0]!.id, qty: 1 }], reason: 'İade' });
+    expect(res.refunded).toBe(latte.price);
+    expect(res.methods).toEqual([expect.objectContaining({ zField: 'cash', amount: latte.price + 2000 })]);
+    const cashAfter = (await h.ok<{ summary: { expectedCash: number } }>('patron', 'GET', '/cash/day')).summary.expectedCash;
+    expect(cashBefore - cashAfter).toBe(latte.price + 2000);
+  });
+
+  it('cihazda ödenen satışın bekleyen işyeri nüshası iadeden sonra iade edilen ödemeyi yazmaz', async () => {
+    const o0 = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: null });
+    const o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o0.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }] });
+    const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null, storeCopy: true });
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
+    const after = await h.ok<{ order: OrderDTO }>('mudur', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: o.items[0]!.id, qty: 1 }], reason: 'İade' });
+    const copy = (await h.ok<{ id: string; orderId: string }[]>('kasa', 'GET', '/okc/store-copies')).find((c) => c.orderId === o.id);
+    expect(copy).toBeTruthy();
+    const claimed = await h.ok<{ payments: { amount: number }[] }>('kasa', 'POST', `/okc/store-copies/${copy!.id}/claim`);
+    expect(claimed.payments.reduce((x, p) => x + p.amount, 0)).toBe(after.order.total);
+  });
 });
+
