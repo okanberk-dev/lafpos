@@ -9,7 +9,7 @@ import { toast } from '@/lib/toast';
 
 /** GET /cash/days/:id `worked`: o gün çalışanlar (docs/03-ENTEGRASYON.md §4.8) */
 export interface WorkedDTO {
-  /** Geçerli liste: düzeltme varsa o, yoksa kayıtlardan */
+  /** Geçerli liste: kayıtlardan çıkan; düzeltme varsa onun eklediği katılır, çıkardığı düşer (kapanmış günde seçilenin tamamı) */
   ids: string[];
   /** Günün kayıtlarından çıkan (adisyon, kalem, ödeme, kasa hareketi, vardiya sayımı, günü açan ve kapatan) */
   derivedIds: string[];

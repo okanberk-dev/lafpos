@@ -1098,9 +1098,13 @@ ipucudur.
   kapatan, adisyonu açan, kapatan ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan
   ve devralan (`derivedWorkedUserIds`). Ortak girişle çalışan ya da hiç giriş yapmayan (bar) personel görünmez, yalnız
   günü kapatan yönetici görünür: **Kasa › Geçmiş günler › "Bugün çalışanlar" › Düzelt** (`rapor.gor`, yalnız kapanmış
-  gün; `PUT /api/cash/days/:id/worked { userIds: string[] | null }`) seçilen kişileri `business_days.workedUserIds`'e
-  yazar, kayıtlardan çıkanın yerine geçer; `null` kayıtlara döndürür, `[]` "kimse". Denetimde `day.worked_staff` uyarı
-  önemiyle (`data: { userIds, previous }`). Bağlı kullanıcı varsa gün yeniden kuyruğa girer (yeni `revision`, düzeltme
+  gün; `PUT /api/cash/days/:id/worked { userIds: string[] | null }`) seçilen kişiler o günün listesi olur; `null`
+  kayıtlara döndürür, `[]` "kimse". Düzeltme kayıtlardan çıkan listeye göre fark olarak saklanır
+  (`business_days.workedCorrection`, sütun `worked_user_ids`: `{ add, remove }`); geçerli liste kayıtlardan çıkan +
+  `add` − `remove`. Kapanmış günde bu seçilenin tamamıdır; gün yeniden açılıp kapanırsa düzeltmenin eklediği ve
+  çıkardığı kalır, yeniden açılıştan sonra iş yapan da listeye katılır (eski düzeltme onu dışarıda bırakmaz).
+  Denetimde `day.worked_staff` uyarı önemiyle (`data: { userIds, previous }`; `previous` önceki düzeltilmiş liste,
+  düzeltme yoksa `null`). Bağlı kullanıcı varsa gün yeniden kuyruğa girer (yeni `revision`, düzeltme
   değil). `GET /api/cash/days/:id` `worked: { ids, derivedIds, corrected, people[] }` verir (`people[].linked` bağlı mı;
   kimlik vermez).
 - **Gövde:** `workedStaffRefs` (§4 "Personel alanı") bağlı kullanıcıların kimliklerinden gönderim anında çözülür;

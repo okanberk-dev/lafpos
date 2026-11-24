@@ -327,6 +327,44 @@ describe('gün sonu gövdesi workedStaffRefs (gönderirken çözülür)', () => 
     expect((await h.ok<{ worked: { corrected: boolean } }>('mudur', 'GET', `/cash/days/${day.id}`)).worked.corrected).toBe(false);
   });
 
+  it('düzeltme gün yeniden açılıp kapanınca kalır: yeniden açılıştan sonra iş yapan katılır, düzeltmenin eklediği kalır, çıkardığı çıkmış kalır', async () => {
+    await setRef('Kasa', 's:12');
+    await setRef('Garson', 's:7');
+    await setRef('Müdür', 's:3');
+    await setRef('Patron', 's:5');
+    const { db, schema, lm } = await mod();
+    const { isNull } = await import('drizzle-orm');
+    const { ulid } = await import('../server/lib/ids');
+    // Bugünün gerçek günü: kasiyer açar, müdür kapatır (kayıtlardan: Kasa, Müdür)
+    await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    const id = db.select().from(schema.businessDays).where(isNull(schema.businessDays.closedAt)).get()!.id;
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    // Müdür yalnız günü kapattı, Patron giriş yapmadan çalıştı
+    await h.ok('mudur', 'PUT', `/cash/days/${id}/worked`, { userIds: [user('Kasa').id, user('Patron').id] });
+    await lm.flushOutbox();
+    expect(posts.at(-1)!.workedStaffRefs).toEqual(['s:5', 's:12']);
+    // Aynı gece geç gelen masa: gün yeniden açılır, Garson kasaya para girer, müdür yeniden kapatır
+    await h.ok('mudur', 'POST', `/cash/days/${id}/reopen`, { reason: 'Geç gelen masa' });
+    db.insert(schema.cashMovements).values({ id: ulid(), dayId: id, kind: 'giris', amount: 100, userId: user('Garson').id, createdAt: Date.now() }).run();
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    await lm.flushOutbox();
+    expect(posts.at(-1)!.workedStaffRefs).toEqual(['s:5', 's:7', 's:12']);
+    const detail = await h.ok<{ worked: { ids: string[]; derivedIds: string[]; corrected: boolean } }>('mudur', 'GET', `/cash/days/${id}`);
+    expect(detail.worked.corrected).toBe(true);
+    expect(new Set(detail.worked.ids)).toEqual(new Set([user('Kasa').id, user('Patron').id, user('Garson').id]));
+    // Yeniden kapanıştan sonraki düzeltme yine o anki listenin tamamıdır
+    await h.ok('mudur', 'PUT', `/cash/days/${id}/worked`, { userIds: [user('Garson').id] });
+    await lm.flushOutbox();
+    expect(posts.at(-1)!.workedStaffRefs).toEqual(['s:7']);
+    expect(await lastAudit('day.worked_staff')).toMatchObject({ data: { userIds: [user('Garson').id], previous: [user('Garson').id, user('Kasa').id, user('Patron').id].sort() } });
+    // Gün geçmişe alınır: sonraki test bugünün gününü açabilsin
+    const { eq } = await import('drizzle-orm');
+    const date = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, id)).get()!.date;
+    const past = addDays(businessDate(Date.now()), -30);
+    db.update(schema.businessDays).set({ date: past }).where(eq(schema.businessDays.id, id)).run();
+    db.update(schema.outbox).set({ dedupeKey: `gun:${past}` }).where(eq(schema.outbox.dedupeKey, `gun:${date}`)).run();
+  });
+
   it('açık gün düzeltilmez (409)', async () => {
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
     const { db, schema } = await mod();

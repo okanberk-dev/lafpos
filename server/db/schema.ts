@@ -370,11 +370,13 @@ export const businessDays = sqliteTable(
      */
     trainingDay: integer('training_day', { mode: 'boolean' }),
     /**
-     * "Bugün çalışanlar" düzeltmesi (Kasa › Geçmiş günler): yönetimin seçtiği personel kimlikleri. Doluysa günün
-     * kayıtlarından çıkarılan listenin yerine geçer (ortak girişle çalışan, hiç giriş yapmayan bar personeli); boşsa
-     * (null) liste kayıtlardan. Gövdenin `workedStaffRefs`'i gönderirken bundan çözülür (docs/03-ENTEGRASYON.md §4.8)
+     * "Bugün çalışanlar" düzeltmesi (Kasa › Geçmiş günler): yönetimin seçtiği liste, günün kayıtlarından çıkan listeye
+     * göre fark olarak (`add`: ortak girişle çalışan, hiç giriş yapmayan bar personeli; `remove`: yalnız günü kapatan
+     * yönetici). Geçerli liste kayıtlardan çıkan + `add` − `remove`: kapanmış günde seçilenin tamamıdır, gün yeniden
+     * açılıp kapanırsa sonradan kayıtlara giren de katılır (düzeltme eskiyip onu dışarıda bırakmaz). null: liste
+     * kayıtlardan. Gövdenin `workedStaffRefs`'i gönderirken bundan çözülür (docs/03-ENTEGRASYON.md §4.8)
      */
-    workedUserIds: text('worked_user_ids', { mode: 'json' }).$type<string[] | null>(),
+    workedCorrection: text('worked_user_ids', { mode: 'json' }).$type<WorkedCorrection | null>(),
   },
   (t) => [index('business_days_date_idx').on(t.date)],
 );
@@ -490,6 +492,12 @@ export const customerLedger = sqliteTable(
 );
 
 // ─── Adisyon ────────────────────────────────────────────────────────────────
+
+/** "Bugün çalışanlar" düzeltmesi: kayıtlardan çıkan listeye eklenen ve ondan çıkarılan kullanıcılar (sıralı) */
+export interface WorkedCorrection {
+  add: string[];
+  remove: string[];
+}
 
 export type OrderType = 'masa' | 'tezgah' | 'gelal' | 'paket' | 'online';
 export type OrderStatus = 'acik' | 'kapali' | 'iptal' | 'birlesti';

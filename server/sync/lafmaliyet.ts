@@ -15,7 +15,7 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
+import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ, workedUserIdsOf } from '../services/days';
 import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../services/devir';
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { dropPending, land, takeOff } from './outbox-flight';
@@ -502,33 +502,6 @@ export function buildDayPayload(dayId: string) {
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
-/**
- * Günün kayıtlarından o gün iş yapan LafPOS kullanıcıları (kimlik, sıralı): günü açan ve kapatan, adisyonu açan, kapatan
- * ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan ve devralan. Mesai kaydı yok (4
- * Kas 2026'da kaldırıldı): ortak girişle çalışan ya da hiç giriş yapmayan (bar) görünmez, yalnız günü kapatan yönetici
- * görünür; düzeltmesi "Bugün çalışanlar" (`business_days.workedUserIds`)
- */
-export function derivedWorkedUserIds(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy'>): string[] {
-  const ids = new Set<string>();
-  const add = (...vs: (string | null | undefined)[]) => vs.forEach((v) => v && ids.add(v));
-  add(day.openedBy, day.closedBy);
-  for (const o of db.select({ w: schema.orders.waiterId, o: schema.orders.openedBy, c: schema.orders.closedBy }).from(schema.orders).where(eq(schema.orders.dayId, day.id)).all()) add(o.w, o.o, o.c);
-  const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, day.id));
-  for (const i of db.selectDistinct({ u: schema.orderItems.createdBy }).from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all()) add(i.u);
-  for (const p of db.selectDistinct({ u: schema.payments.userId }).from(schema.payments).where(eq(schema.payments.dayId, day.id)).all()) add(p.u);
-  for (const m of db.selectDistinct({ u: schema.cashMovements.userId }).from(schema.cashMovements).where(eq(schema.cashMovements.dayId, day.id)).all()) add(m.u);
-  for (const sc of db.select({ u: schema.shiftCounts.userId, to: schema.shiftCounts.toUserId }).from(schema.shiftCounts).where(eq(schema.shiftCounts.dayId, day.id)).all()) add(sc.u, sc.to);
-  // Yalnız gerçek personel (sistem yazanları: site, platform, uzaktan kimlikleri düşer)
-  const known = new Set(db.select({ id: schema.users.id }).from(schema.users).all().map((u) => u.id));
-  return [...ids].filter((id) => known.has(id)).sort();
-}
-
-/** Günün çalışanları: "Bugün çalışanlar" düzeltmesi varsa o (kayıtlardan çıkanın yerine geçer), yoksa kayıtlardan */
-export function workedUserIdsOf(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedUserIds'>) {
-  const derived = derivedWorkedUserIds(day);
-  return { ids: day.workedUserIds ?? derived, derived, corrected: day.workedUserIds != null };
-}
-
 /** En az bir LafPOS kullanıcısı lafmaliyet personeline bağlı mı (yoksa gövde `workedStaffRefs` taşımaz) */
 export function anyStaffLinked(): boolean {
   return !!db.select({ id: schema.users.id }).from(schema.users).where(isNotNull(schema.users.staffRef)).get();
@@ -538,7 +511,7 @@ export function anyStaffLinked(): boolean {
  * Gövdenin `workedStaffRefs`'i: çalışanların lafmaliyet personel kimlikleri (`s:<id>`), tekil, sayı sırasıyla. Hiçbir
  * kullanıcı bağlı değilse alan yok (bilinmiyor; eski gövde bayt bayt aynı); bağlı var ama o gün çalışan yoksa boş dizi
  */
-function workedStaffField(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedUserIds'>): { workedStaffRefs?: string[] } {
+function workedStaffField(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedCorrection'>): { workedStaffRefs?: string[] } {
   const refs = new Map(
     db
       .select({ id: schema.users.id, staffRef: schema.users.staffRef })
@@ -548,7 +521,7 @@ function workedStaffField(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'wo
       .map((u) => [u.id, u.staffRef!]),
   );
   if (!refs.size) return {};
-  const worked = new Set(workedUserIdsOf(day).ids.flatMap((id) => refs.get(id) ?? []));
+  const worked = new Set(workedUserIdsOf(db, day).ids.flatMap((id) => refs.get(id) ?? []));
   return { workedStaffRefs: [...worked].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })) };
 }
 

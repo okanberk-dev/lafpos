@@ -27,9 +27,10 @@ import {
   setWorkedUsers,
   shiftCountsOf,
   shiftCountToDTO,
+  workedUserIdsOf,
 } from '../services/days';
 import { deviceEndOfDay } from '../okc/service';
-import { afterDayClosed, anyStaffLinked, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured, workedUserIdsOf } from '../sync/lafmaliyet';
+import { afterDayClosed, anyStaffLinked, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured } from '../sync/lafmaliyet';
 import { expectedOpening } from '../services/devir';
 import { onlineOrdersDayOpened } from '../sync/laffogato-orders';
 import { getOpenDay } from '../services/orders';
@@ -294,8 +295,8 @@ cashRoutes.get('/days/:id', (c) => {
  * (kapalı hesaplar yalnız listedeyse). `linked`: lafmaliyet personeline bağlı mı (kimlik gitmez; yemek kartı günü yalnız
  * bağlı kişide sayılır)
  */
-function workedFor(day: Parameters<typeof workedUserIdsOf>[0]) {
-  const w = workedUserIdsOf(day);
+function workedFor(day: Parameters<typeof workedUserIdsOf>[1]) {
+  const w = workedUserIdsOf(db, day);
   const listed = new Set([...w.ids, ...w.derived]);
   const people = db
     .select({ id: schema.users.id, name: schema.users.name, active: schema.users.active, staffRef: schema.users.staffRef })
