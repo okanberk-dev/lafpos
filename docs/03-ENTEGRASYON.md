@@ -660,7 +660,9 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "listValue": 46170.5, "ikramTotal": 260, "odenmezTotal": 320, "zayiTotal": 60,
     "vat": [{ "rate": 10, "base": 41100.45, "vat": 4110.05 }],
     "openedAt": "2026-10-26T04:58:00.000Z", "closedAt": "2026-10-26T21:12:00.000Z", "okcZNo": "1203",
-    "expectedOpening": 1400, "openingDiff": 100, "openingReason": "Sabah bozuk para eklendi"
+    "expectedOpening": 1400, "openingDiff": 100, "openingReason": "Sabah bozuk para eklendi",
+    "cashTips": 10, "closeNote": "Gün sonu notu",
+    "methodCounts": [{ "name": "Kredi kartı", "zField": "card", "channel": null, "counted": 995 }]
   },
   "lines": [
     { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0007", "slot": "M", "qty": 42, "revenue": 8190, "gross": 8190, "isService": false, "isAddon": false },
@@ -672,16 +674,23 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     { "posName": "ROSBEEF SANDVİÇ", "siteMenuId": "mnu-0074", "slot": "M", "qty": 1, "menuValue": 390, "reason": "Ödenmez: Personel yemeği", "kind": "odenmez", "personKind": "personel" }
   ],
   "payments": [
-    { "name": "Pluxee", "zField": "meal_card", "channel": "pluxee", "count": 7, "amount": 1850 }
+    { "name": "Pluxee", "zField": "meal_card", "channel": "pluxee", "count": 7, "amount": 1850, "kind": "yemek" }
   ],
-  "offDevice": { "card": 870, "cash": 200 },
+  "offDevice": { "card": 870, "cash": 200, "cardTips": 20 },
   "refunds": [{ "amount": 50, "zField": "card", "name": "Kredi kartı", "channel": null, "reason": "Yanlış tutar girildi" }],
   "iptal": [
     { "posName": "MOCHA MEDIUM", "siteMenuId": "mnu-0009", "slot": "M", "qty": 1, "listValue": 245, "prepared": true, "reason": "Müşteri gitti", "refund": false }
   ],
   "cashMoves": [
     { "id": "01M5WDWP40S3V9J8M2N4P6Q8T0", "kind": "harcama", "amount": 450, "description": "Buz", "at": "2026-10-26T15:40:00.000Z", "categoryId": 1 }
-  ]
+  ],
+  "okc": {
+    "provider": "pavo", "zReport": false, "docs": 4, "cash": 390, "card": 800, "mealCard": 0, "other": 0, "total": 1190,
+    "voided": { "count": 0, "cash": 0, "card": 0 }, "vat": [{ "rate": 10, "total": 890, "vat": 80.91 }, { "rate": 20, "total": 300, "vat": 50 }]
+  },
+  "collections": [{ "name": "Kredi kartı", "zField": "card", "channel": null, "kind": "kart", "count": 1, "amount": 195 }],
+  "shiftCounts": [{ "at": "2026-10-26T13:30:00.000Z", "counted": 1530, "expected": 1540, "diff": -10, "confirmed": false }],
+  "discountLines": [{ "scope": "order", "posName": null, "type": "percent", "value": 10, "amount": 32, "reason": "Müdavim indirimi" }]
 }
 ```
 
@@ -721,7 +730,12 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
     "diff": 0,                          // pavoCard − lafposCard; ikisinden biri yoksa null
     "acquirers": [{ "name": "Garanti BBVA", "count": 51, "total": 18120.5 }],
     "message": null,                    // başarısız ya da belirsizse cihazın ya da LafPOS'un açıklaması
-    "errorCode": null                   // cihazın hata kodu ("5085"); alındıysa ya da kod yoksa null
+    "errorCode": null,                  // cihazın hata kodu ("5085"); alındıysa ya da kod yoksa null
+    "batches": [                        // günün bütün başarılı banka gün sonları, eskiden yeniye (§4.9)
+      { "batchNo": "000278", "at": "2026-11-24T11:10:00.000Z", "total": 240, "trigger": "elle", "dayClosed": false },
+      { "batchNo": "000279", "at": "2026-11-24T21:31:00.000Z", "total": 755, "trigger": "elle", "dayClosed": true }
+    ],
+    "dayCard": 995                      // LafPOS'ta günün bankaya giden bütün kartı; gün açıkken null (§4.9)
   }
   ```
 - **Ekler** (süt, şurup, ekstra shot) içeceğin satırından ayrı satırdır: `ALTERNATIF SÜT`, `SYRUP`, `EXTRA SHOT`;
@@ -751,7 +765,8 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   eşlemesinden bulunur, bulunamazsa `posMatchKey(posName)` ile `pos_mappings`).
 - Kişisel veri: müşteri ve personel adı, LafPOS kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız
   kişinin türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Çalışan personelden ad
-  gitmez; yalnız ladmin personel kimliği (`workedStaffRefs`, §4.8). Serbest metin nedenler en çok 200
+  gitmez; yalnız ladmin personel kimliği (`workedStaffRefs`, §4.8). Tahsilatta müşteri, vardiya sayımında sayan ve
+devralan, indirimde indirimi yapan gitmez (§4.9). Serbest metin nedenler en çok 200
   karakter, önekiyle birlikte (`ikram[].reason`'ın "Ödenmez: " ve "Zayi: " öneki dahil; `iptal[].reason`'ın "İade: "
   öneki dahil).
 - lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
@@ -765,7 +780,9 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 - **Ortak örnek gövde:** `tests/fixtures/lafmaliyet-gun.golden.json` (iki boy, ek, ikram ve eki, karaoke, cari,
   kartla bahşiş ve tahsilat; 23 Kasım 2026'dan: adisyon indirimi, hazırlanmış ve hazırlanmamış iptal, kişili ödenmez,
   zayi, kalem iadesi ve ödeme iptali, yazarkasadan geçen ve geçmeyen ödeme, yeniden açılış, alınamayan banka gün
-  sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim ve giriş). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
+  sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim ve giriş; 24 Kasım 2026'dan gün sonu
+  tamlığıyla (§4.9): gün içinde elle alınmış önceki banka gün sonu, Pavo belgesi, nakit bahşiş, vardiya sayımı, föyde
+  yazılan kart slipi ve gün sonu notu). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
   aynı olduğunu sabitler; lafmaliyet aynı dosyayı kendi ayrıştırıcısıyla okur (B07). Gövde bilerek değişirse
   `LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
   aynı PR serisinde güncellenir. İkinci örnek `tests/fixtures/lafmaliyet-gun-personel.golden.json` aynı gündür, üç
@@ -776,7 +793,8 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 - **Kabul günü:** `tests/fixtures/kabul-gunu-2026-11-22.json`, Marina 22.11.2026'nın LafPOS günü (hesap sözleşmesinin
   örnek rakamları: liste 7.440,00, indirim 90,00, ikram 130,00, ödenmez 935,00, ciro 6.285,00, kart 5.030,00, nakit
   1.255,00, 26 fiş, KDV %10 matrah 5.713,64; tek harcama ₺800,00 "Diğer fatura dışı", fişsiz; sayılan ₺1.279,50, 23.11
-  açılışı ₺1.279,50 bekler). `tests/kabul-gunu.test.ts` günü kasada adisyonlarla kurar, gövdeyi
+  açılışı ₺1.279,50 bekler; Pavo'nun 22 belgesi: nakit 1.055,00 + kart 4.160,00 = Z − yazarkasadan geçmeyen, banka gün
+  sonu tek batch ₺4.160,00). `tests/kabul-gunu.test.ts` günü kasada adisyonlarla kurar, gövdeyi
   dosyayla bayt bayt karşılaştırır ve her rakamı ayrıca denetler; lafmaliyet aynı adlı dosyayı okur. Bilerek değişirse
   `LAFPOS_KABUL=1 npx vitest run tests/kabul-gunu.test.ts` ile yeniden üretilir, lafmaliyet'teki kopya aynı PR
   serisinde güncellenir.
@@ -1156,6 +1174,64 @@ ipucudur.
   `tests/signature.test.ts`'te; lafmaliyet `tests/lafpos.test.ts` aynısını sabitler. Testler `tests/personel-baglanti.test.ts`
   (sahte lafmaliyet sunucusuyla).
 
+### 4.9 Gün sonu tamlığı: kasa ve cihaz verisi eksiksiz (24 Kasım 2026)
+
+Sahibin isteği (24 Kasım 2026): LafPOS'a girilen her şey lafmaliyet'e eksiksiz gitsin; LafPOS günü kapatınca kasa raporu
+LafPOS'tan ve kasanın zaten bildiği cihaz (Pavo) verisinden tamamlansın; gün sonunda personelin ladmin'de yaptığı tek
+iş fotoğraf yüklemek olsun. Bunun için gövdeye aşağıdaki alanlar eklendi. Hepsi isteğe bağlı ve eklemelidir (`version` 1
+kalır); lafmaliyet her birini bozuk gelse de günü reddetmeyecek biçimde okur (`.optional().catch(undefined)`), eski
+LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitmez. lafmaliyet bunları gün özetinin
+(`dayHash`) dışında tutar: aynı günün yeniden gönderimi "Düzeltildi" e-postası açmaz.
+
+- `bankPos.batches[]`: `{ batchNo, at, total, trigger: "otomatik" | "elle", dayClosed }`, bu LafPOS gününe bağlı bütün
+  başarılı (`ok`) Pavo banka gün sonları, eskiden yeniye, en çok 20 (fazlası olursa yeniler kalır). Gün içinde elle
+  alınan gün sonu (`dayClosed: false`) ve kapanıştan sonrakiler; `at` LafPOS'un denediği an (ISO), `total` cihazın
+  `grandTotals` TL satırı (bilinmiyorsa `null`). `bankPos` varken hep var: hiçbiri alınamadıysa `[]` (ör. `failed`,
+  önceki batch yok). Denetimde gün içinde elle alınan batch 000278 (₺240,00) lafmaliyet'e hiç ulaşmıyordu, yalnız son
+  batch 000279 (₺755,00) gidiyordu; günün bankaya gideni ₺995,00'dı. `pavoCard`, `lafposCard` ve `diff` eski
+  anlamındadır (yalnız son batch).
+- `bankPos.dayCard`: LafPOS'ta günün bankaya giden bütün kartı (`cardBasis(gün, [])`: Z kartı + kart bahşişi + kartla
+  açık hesap tahsilatı − yazarkasadan geçmeyen kart, bahşişiyle − gün kapandıktan sonra cihazda fişi iptal edilen kart).
+  Gün açıkken ya da özetsiz `null`. lafmaliyet Banka POS'u Pavo'nun batch'lerinden doldurur ve bununla kıyaslar.
+  Kartla açık hesap tahsilatı Pavo'dan çekildi sayılır; başka POS'tan çekildiyse fark çıkar.
+- `okc`: yazarkasanın (ÖKC) kendi belgeleri: `{ provider: "pavo" | "tokenx", zReport, docs, cash, card, mealCard,
+  other, total, voided: { count, cash, card }, vat: [{ rate, total, vat }] | null }`. Gerçek cihazın (eğitim simülatörü
+  değil) belgesi varsa ya da yazarkasa Pavo veya Token'sa gider; cihaz yoksa alan yoktur (hiç `null` değil).
+  `provider` günün son gerçek belgesinin cihazı, yoksa ayardaki. `zReport` cihaz mali Z basar mı: Token `true`, Pavo
+  `false` (Marina'nın Pavo'su VUK 507, e-Arşiv; Z kâğıdı yok, `z.okcZNo` hep `null`: personelin fotoğrafı yalnız Pavo gün
+  sonu fişi). `docs` günün adisyonlarının tamamlanan (`tamamlandi`) cihaz belgeleri. `cash`, `card`, `mealCard`, `other`:
+  o belgelerden geçen, iade edilmemiş ödemeler, ödemenin Z alanına göre (online ve diğer `other`'da); `total` dördünün
+  toplamı. `voided`: gün kapandıktan sonra cihazda iptal edilen (`fis_iptal`) belgeler, yukarıdakilere girmez (aynı
+  gün iptal edilen belgenin ödemesi zaten iadedir, sayıya girer, tutara girmez). Böylece `okc.cash = z.cash −
+  offDevice.cash − voided.cash`, `okc.card = z.card − offDevice.card − voided.card`. Kapanmış günün fişi cihazda
+  iptal edilince (`okc.void_closed_day`) gün yeniden kuyruğa girer (yeni `revision`, düzeltme değil): `okc.voided`,
+  `okc.card` ve `bankPos.dayCard` lafmaliyet'e elle "Gönder" beklemeden ulaşır. `vat` tamamlanan belgelerin
+  sepetlerinden, oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır, cihaz gibi); sepet okunamazsa `null`.
+  lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ LafPOS kıyası böylece kendiliğinden tutar;
+  gerçek denetim personelin fotoğrafıdır).
+- `offDevice.cardTips`: yazarkasadan geçmeyen (hiçbir cihaz fişinde olmayan) iade edilmemiş kart satışlarının bahşişi
+  (`cardBasis`'in batch dışı kısmının bahşişi). `offDevice` ile hep gider. lafmaliyet bankaya beklenen kartı
+  (`card − offDevice.card + cardTips + cardCollections`) bununla düzeltir: yoksa yazarkasadan geçmeyen kartın bahşişi
+  yanlış bir fark gösterirdi.
+- `z.cashTips`: iade edilmemiş nakit satışların bahşişi; `z.cashIn`'in içinde kalır (ayrıca eklenmez). Hep gider (yoksa 0).
+- `z.closeNote`: gün sonu ya da föy notu (`business_days.note`, kırpılmış, en çok 200 karakter); boşsa `null`. lafmaliyet
+  otomatik raporun notuna ekler.
+- `z.methodCounts[]`: `{ name, zField, channel, counted }`, föyde ödeme türü başına yazılan tutarlar (banka POS slipi,
+  yemek kartı raporu; `cash_counts` `m:<tür>`). Hiçbiri yazılmadıysa alan yok. lafmaliyet yalnız bilgi olarak Banka POS ve
+  Yemek kartı'nın yanında gösterir; Banka POS'u bununla doldurmak sahibin kararıdır (varsayılan: hayır).
+- `payments[].kind`: ödeme türünün türü (`"nakit" | "kart" | "yemek" | "havale" | "cari" | "online" | "diger"`,
+  `payment_methods.kind`): "Diğer"deki açık hesap ile havale ada bakmadan ayrılır.
+- `collections[]`: `{ name, zField, channel, kind, count, amount }`, siparişsiz iade edilmemiş ödemeler (açık hesap
+  tahsilatı) ödeme türüne göre, en çok 200 satır. Hep gider (`[]`). Kart satırlarının toplamı `z.cardCollections`; nakit
+  tahsilat `z.cashIn`'in içindedir. Müşteri adı ve kimliği gitmez.
+- `shiftCounts[]`: `{ at, counted, expected, diff, confirmed }`, günün vardiya sayımları sırayla, en çok 50 (`diff`
+  işaretli; gün başından birikir). Hep gider (`[]`). Sayan ve devralan gitmez.
+- `discountLines[]`: `{ scope: "order" | "item", posName, type: "percent" | "amount", value, amount, reason }`,
+  kapanmış kasa adisyonlarının indirimleri (en çok 2000): adisyon indirimi türüyle (`value` yüzde ya da TL) ve kalem
+  indirimi (`posName` `lines` ile aynı ad; LafPOS kalem indirimini tutar olarak saklar: `type` hep `amount`). `amount`
+  uygulanan tutar; `Σ amount = z.discounts`. Hep gider (`[]`). İndirimi yapan gitmez.
+- Gövdenin sırası: yeni üst alanlar `cashMoves`'tan sonra, `workedStaffRefs`'ten (sonda kalır) önce.
+
 ## 5. Sıklık ve bütçe
 
 `.env`'de `LAFFOGATO_URL` yoksa aşağıdaki site işlerinin hiçbiri çalışmaz (§2).
@@ -1197,6 +1273,7 @@ ipucudur.
 | Açık | lafpos + lafmaliyet (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
 | Açık | lafpos + lafmaliyet (kasa zinciri, Faz 3) | Açılışta devir ve fark nedeni (§4.6), 200 yanıtında ve `GET /api/panel/pos/devir`'de `nextOpening`, kasa hareketleri satır satır ve gider kategorileri (§4.7) |
 | Açık | lafpos + lafmaliyet (personel bağlantısı) | Kullanıcının lafmaliyet personeline elle, onaylı bağlanması, `GET /api/panel/pos/personel`, gövdede `workedStaffRefs`, 200 yanıtında `staff`, "Bugün çalışanlar" düzeltmesi (§4.8) |
+| Açık | lafpos + lafmaliyet (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te LafPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

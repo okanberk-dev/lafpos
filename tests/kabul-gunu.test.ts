@@ -32,11 +32,15 @@ interface Payload {
   z: Record<string, number | null> & { vat: { rate: number; base: number; vat: number }[]; okcZNo: string | null; openedAt: string; closedAt: string | null };
   lines: Line[];
   ikram: { posName: string; qty: number; menuValue: number; reason: string | null; kind: string; personKind: string | null }[];
-  payments: { name: string; zField: string; channel: string | null; count: number; amount: number }[];
-  offDevice: { card: number; cash: number };
+  payments: { name: string; zField: string; channel: string | null; count: number; amount: number; kind?: string }[];
+  offDevice: { card: number; cash: number; cardTips: number };
   refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
   iptal: { posName: string; siteMenuId: string | null; slot: string | null; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
   cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[];
+  okc?: { provider: string; zReport: boolean; docs: number; cash: number; card: number; mealCard: number; other: number; total: number; voided: { count: number; cash: number; card: number }; vat: { rate: number; total: number; vat: number }[] | null };
+  collections: unknown[];
+  shiftCounts: unknown[];
+  discountLines: { scope: string; posName: string | null; type: string; value: number; amount: number; reason: string | null }[];
 }
 
 let h: Harness;
@@ -204,6 +208,10 @@ describe('kabul günü: Marina 22.11.2026', () => {
       .set({ openedAt: Date.parse('2026-11-22T08:02:00+03:00'), closedAt: Date.parse('2026-11-23T00:24:00+03:00') })
       .where(eq(schema.businessDays.id, dayId))
       .run();
+    // Marina'nın yazarkasası Pavo: eğitim cihazının kestiği fişler Pavo'nun belgesi (gövdede `okc`)
+    const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, dayId));
+    const { inArray } = await import('drizzle-orm');
+    db.update(schema.fiscalReceipts).set({ provider: 'pavo' }).where(inArray(schema.fiscalReceipts.orderId, orderIds)).run();
     // Banka gün sonu (Pavo): batch'te yalnız yazarkasadan geçen kart. LafPOS'un kıyas tutarı yazarkasadan geçmeyen
     // ₺870,00'ı beklemez (okc/service.ts cardBasis)
     const { cardBasis } = await import('../server/okc/service');
@@ -217,6 +225,9 @@ describe('kabul günü: Marina 22.11.2026', () => {
       message: null,
       errorCode: null,
       acquirers: [{ name: 'Garanti BBVA', count: 16, totalKurus: 416000 }],
+      trigger: 'otomatik',
+      dayClosed: true,
+      earlier: [],
     });
     orderDiscounts = db
       .select({ totals: schema.orders.totals })
@@ -291,7 +302,7 @@ describe('kabul günü: Marina 22.11.2026', () => {
   });
 
   it('yazarkasadan geçmeyen kart ₺870,00 ve nakit ₺200,00; iki kart ödemesi iptali ₺50,00 + ₺45,00', () => {
-    expect(p.offDevice).toEqual({ card: 870, cash: 200 });
+    expect(p.offDevice).toEqual({ card: 870, cash: 200, cardTips: 0 });
     expect(p.refunds).toEqual([
       { amount: 50, zField: 'card', name: 'Kredi kartı', channel: null, reason: 'Yanlış tutar girildi' },
       { amount: 45, zField: 'card', name: 'Kredi kartı', channel: null, reason: 'Kart reddedildi' },
@@ -334,5 +345,39 @@ describe('kabul günü: Marina 22.11.2026', () => {
   it("banka gün sonu: LafPOS yazarkasadan geçmeyen ₺870,00'ı Pavo'nun batch'inde beklemez (fark yok)", () => {
     expect(basis).toBe(416000);
     expect(p.bankPos).toMatchObject({ status: 'ok', pavoCard: 4160, lafposCard: 4160, diff: 0, errorCode: null });
+    // Günün tek banka gün sonu ve günün bütün kıyası (gün sonu tamlığı, §4.9)
+    expect(p.bankPos!.batches).toEqual([{ batchNo: '0001', at: '2026-11-22T21:26:00.000Z', total: 4160, trigger: 'otomatik', dayClosed: true }]);
+    expect(p.bankPos!.dayCard).toBe(4160);
+  });
+
+  it('yazarkasanın belgeleri (Pavo, mali Z yok): 22 belge, nakit ₺1.055,00 + kart ₺4.160,00 = Z − yazarkasadan geçmeyen', () => {
+    expect(p.okc).toEqual({
+      provider: 'pavo',
+      zReport: false,
+      docs: 22,
+      cash: 1055,
+      card: 4160,
+      mealCard: 0,
+      other: 0,
+      total: 5215,
+      voided: { count: 0, cash: 0, card: 0 },
+      vat: [{ rate: 10, total: 5215, vat: 474.09 }],
+    });
+    expect(p.okc!.cash).toBe(p.z.cash! - p.offDevice.cash);
+    expect(p.okc!.card).toBe(p.z.card! - p.offDevice.card);
+  });
+
+  it('nakit bahşiş, tahsilat, vardiya sayımı ve föy slipi yok; gün sonu notu yok; iki adisyon indirimi satır satır', () => {
+    expect(p.z).toMatchObject({ cashTips: 0, closeNote: null });
+    expect(p.z).not.toHaveProperty('methodCounts');
+    expect(p).toMatchObject({ collections: [], shiftCounts: [] });
+    expect(p.discountLines).toEqual([
+      { scope: 'order', posName: null, type: 'amount', value: 52.5, amount: 52.5, reason: 'Müdavim masası' },
+      { scope: 'order', posName: null, type: 'amount', value: 37.5, amount: 37.5, reason: 'Doğum günü' },
+    ]);
+    expect(p.payments.map((x) => [x.name, x.kind])).toEqual([
+      ['Kredi kartı', 'kart'],
+      ['Nakit', 'nakit'],
+    ]);
   });
 });

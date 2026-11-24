@@ -244,7 +244,7 @@ describe('iptaller, iadeler ve yazarkasadan geçmeyen', () => {
 
   it('yazarkasadan geçmeyen kart ve nakit (bahşiş hariç); yazarkasanın Z no metin', () => {
     // Cihazdan geçen San Sebastian dışındaki satışlar LafPOS'ta alındı
-    expect(p.offDevice).toEqual({ card: 195 + 60, cash: 110 });
+    expect(p.offDevice).toEqual({ card: 195 + 60, cash: 110, cardTips: 0 });
     expect(p.z.okcZNo).toEqual(expect.stringMatching(/^\d+$/));
   });
 });
@@ -297,6 +297,31 @@ describe('gönderim sırası ve düzeltme', () => {
     m.lm.enqueueDay(dayId);
     await m.lm.flushOutbox();
     expect(posts.filter((x) => x.date === first.date).at(-1)).not.toHaveProperty('correction');
+    await retire(dayId);
+  });
+
+  it('kapanmış günün fişi cihazda iptal edilince gün yeniden gider: okc.voided ve kart kıyası ladmin\'e ulaşır', async () => {
+    const m = await mods();
+    const dayId = await openDay();
+    const o = await sell([{ name: 'Latte', size: 'M' }]);
+    const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null });
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
+    // Belge gerçek cihazın (Pavo): okc gövdede
+    m.db.update(m.schema.fiscalReceipts).set({ provider: 'pavo' }).where(m.eq(m.schema.fiscalReceipts.id, sent.receipt.id)).run();
+    await close(50000);
+    await m.lm.flushOutbox();
+    const date = businessDate(Date.now());
+    const before = posts.filter((x) => x.date === date).at(-1) as Payload & { okc?: { card: number; voided: { count: number; card: number } } };
+    expect(before.okc).toMatchObject({ card: sent.receipt.amount / 100, voided: { count: 0, card: 0 } });
+    // Ertesi sabah fiş cihazda iptal edildi (okc.void_closed_day): LafPOS'ta ödeme kalır, gün yeniden kuyruğa girer
+    const { applyResult } = await import('../server/okc/service');
+    applyResult(sent.receipt.id, { status: 'voided', docKind: null, zNo: null, receiptNo: null, docId: null, payments: [] }, 'cihaz');
+    expect(m.db.select().from(m.schema.fiscalReceipts).where(m.eq(m.schema.fiscalReceipts.id, sent.receipt.id)).get()!.status).toBe('fis_iptal');
+    await m.lm.flushOutbox();
+    const after = posts.filter((x) => x.date === date).at(-1) as typeof before;
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after).not.toHaveProperty('correction');
+    expect(after.okc).toMatchObject({ card: 0, voided: { count: 1, card: sent.receipt.amount / 100 } });
     await retire(dayId);
   });
 
@@ -420,7 +445,7 @@ describe('eski Z', () => {
     const { odenmez: _o, zayi: _z, offDevice: _d, odenmezPeople: _p, ...old } = row.summary!;
     m.db.update(m.schema.businessDays).set({ summary: old as never }).where(m.eq(m.schema.businessDays.id, dayId)).run();
     const p = await payload(dayId);
-    expect(p.offDevice).toEqual({ card: 195, cash: 0 });
+    expect(p.offDevice).toEqual({ card: 195, cash: 0, cardTips: 0 });
     expect(p.z).toMatchObject({ zayiTotal: 60, odenmezTotal: 0, ikramTotal: 0, offRevenue: 60, listValue: 195, zTotal: 195 });
     await retire(dayId);
   });
