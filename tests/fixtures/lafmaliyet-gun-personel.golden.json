@@ -15,7 +15,17 @@
     "diff": null,
     "acquirers": [],
     "message": "Gün sonu alınamadı",
-    "errorCode": "5085"
+    "errorCode": "5085",
+    "batches": [
+      {
+        "batchNo": "000278",
+        "at": "2026-10-26T12:10:00.000Z",
+        "total": 240,
+        "trigger": "elle",
+        "dayClosed": false
+      }
+    ],
+    "dayCard": 680
   },
   "sube": "marina",
   "date": "2026-10-26",
@@ -32,11 +42,11 @@
     "discounts": 36,
     "openingCash": 1500,
     "cashOut": 120,
-    "countedCash": 1685,
+    "countedCash": 1690,
     "handedOver": 200,
     "cashDiff": -10,
-    "cashIn": 50,
-    "expectedCash": 1695,
+    "cashIn": 55,
+    "expectedCash": 1700,
     "cardTips": 25,
     "cardCollections": 400,
     "listValue": 4150,
@@ -60,7 +70,17 @@
     "okcZNo": "1",
     "expectedOpening": 1400,
     "openingDiff": 100,
-    "openingReason": "Sabah bozuk para eklendi"
+    "openingReason": "Sabah bozuk para eklendi",
+    "cashTips": 5,
+    "closeNote": "Geç kapanış",
+    "methodCounts": [
+      {
+        "name": "Kredi kartı",
+        "zField": "card",
+        "channel": null,
+        "counted": 1285
+      }
+    ]
   },
   "lines": [
     {
@@ -282,33 +302,38 @@
       "zField": "card",
       "channel": null,
       "count": 5,
-      "amount": 1789
+      "amount": 1789,
+      "kind": "kart"
     },
     {
       "name": "Açık hesap",
       "zField": "other",
       "channel": null,
       "count": 1,
-      "amount": 1000
+      "amount": 1000,
+      "kind": "cari"
     },
     {
       "name": "Nakit",
       "zField": "cash",
       "channel": null,
       "count": 3,
-      "amount": 465
+      "amount": 465,
+      "kind": "nakit"
     },
     {
       "name": "Pluxee",
       "zField": "meal_card",
       "channel": "pluxee",
       "count": 1,
-      "amount": 290
+      "amount": 290,
+      "kind": "yemek"
     }
   ],
   "offDevice": {
     "card": 1509,
-    "cash": 465
+    "cash": 465,
+    "cardTips": 25
   },
   "refunds": [
     {
@@ -392,6 +417,57 @@
       "description": "Bozuk para",
       "at": "2026-10-26T16:20:00.000Z",
       "categoryId": null
+    }
+  ],
+  "okc": {
+    "provider": "pavo",
+    "zReport": false,
+    "docs": 1,
+    "cash": 0,
+    "card": 280,
+    "mealCard": 0,
+    "other": 0,
+    "total": 280,
+    "voided": {
+      "count": 0,
+      "cash": 0,
+      "card": 0
+    },
+    "vat": [
+      {
+        "rate": 10,
+        "total": 280,
+        "vat": 25.45
+      }
+    ]
+  },
+  "collections": [
+    {
+      "name": "Kredi kartı",
+      "zField": "card",
+      "channel": null,
+      "kind": "kart",
+      "count": 1,
+      "amount": 400
+    }
+  ],
+  "shiftCounts": [
+    {
+      "at": "2026-10-26T16:30:00.000Z",
+      "counted": 1695,
+      "expected": 1700,
+      "diff": -5,
+      "confirmed": false
+    }
+  ],
+  "discountLines": [
+    {
+      "scope": "order",
+      "posName": null,
+      "type": "amount",
+      "value": 36,
+      "amount": 36,
+      "reason": "Müdavim"
     }
   ],
   "workedStaffRefs": [

@@ -244,7 +244,7 @@ describe('iptaller, iadeler ve yazarkasadan geçmeyen', () => {
 
   it('yazarkasadan geçmeyen kart ve nakit (bahşiş hariç); yazarkasanın Z no metin', () => {
     // Cihazdan geçen San Sebastian dışındaki satışlar LafPOS'ta alındı
-    expect(p.offDevice).toEqual({ card: 195 + 60, cash: 110 });
+    expect(p.offDevice).toEqual({ card: 195 + 60, cash: 110, cardTips: 0 });
     expect(p.z.okcZNo).toEqual(expect.stringMatching(/^\d+$/));
   });
 });
@@ -420,7 +420,7 @@ describe('eski Z', () => {
     const { odenmez: _o, zayi: _z, offDevice: _d, odenmezPeople: _p, ...old } = row.summary!;
     m.db.update(m.schema.businessDays).set({ summary: old as never }).where(m.eq(m.schema.businessDays.id, dayId)).run();
     const p = await payload(dayId);
-    expect(p.offDevice).toEqual({ card: 195, cash: 0 });
+    expect(p.offDevice).toEqual({ card: 195, cash: 0, cardTips: 0 });
     expect(p.z).toMatchObject({ zayiTotal: 60, odenmezTotal: 0, ikramTotal: 0, offRevenue: 60, listValue: 195, zTotal: 195 });
     await retire(dayId);
   });
