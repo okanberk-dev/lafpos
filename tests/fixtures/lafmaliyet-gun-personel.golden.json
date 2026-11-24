@@ -101,7 +101,13 @@
       "revenue": 585,
       "gross": 585,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 195,
+          "qty": 3
+        }
+      ]
     },
     {
       "posName": "SAN SEBASTİAN",
@@ -111,7 +117,13 @@
       "revenue": 290,
       "gross": 290,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 290,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "TİRAMİSU",
@@ -121,7 +133,13 @@
       "revenue": 280,
       "gross": 280,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 280,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "LATTE LARGE",
@@ -131,7 +149,13 @@
       "revenue": 210,
       "gross": 210,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 210,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "AMERİCANO LARGE",
@@ -141,7 +165,13 @@
       "revenue": 185,
       "gross": 185,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 185,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "CAPPUCCİNO MEDIUM",
@@ -151,7 +181,13 @@
       "revenue": 175.5,
       "gross": 195,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 195,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "FİLTRE KAHVE MEDIUM",
@@ -161,7 +197,13 @@
       "revenue": 148.5,
       "gross": 165,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 165,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "ESPRESSO LARGE",
@@ -171,7 +213,13 @@
       "revenue": 140,
       "gross": 140,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 140,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "TÜRK KAHVESİ MEDIUM",
@@ -181,7 +229,13 @@
       "revenue": 130,
       "gross": 130,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 130,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "SYRUP",
@@ -191,7 +245,13 @@
       "revenue": 100,
       "gross": 100,
       "isService": false,
-      "isAddon": true
+      "isAddon": true,
+      "listPrices": [
+        {
+          "price": 50,
+          "qty": 2
+        }
+      ]
     },
     {
       "posName": "YENİLEBİLİR BARDAK",
@@ -201,7 +261,13 @@
       "revenue": 80,
       "gross": 80,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 80,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "ÇAY MEDIUM",
@@ -211,7 +277,13 @@
       "revenue": 60,
       "gross": 60,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 60,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "SU",
@@ -221,7 +293,13 @@
       "revenue": 60,
       "gross": 60,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 60,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "ALTERNATIF SÜT",
@@ -231,7 +309,17 @@
       "revenue": 50,
       "gross": 50,
       "isService": false,
-      "isAddon": true
+      "isAddon": true,
+      "listPrices": [
+        {
+          "price": 0,
+          "qty": 1
+        },
+        {
+          "price": 25,
+          "qty": 2
+        }
+      ]
     },
     {
       "posName": "EXTRA SHOT",
@@ -241,7 +329,13 @@
       "revenue": 50,
       "gross": 50,
       "isService": false,
-      "isAddon": true
+      "isAddon": true,
+      "listPrices": [
+        {
+          "price": 50,
+          "qty": 1
+        }
+      ]
     }
   ],
   "ikram": [

@@ -33,7 +33,7 @@ beforeAll(async () => {
 });
 afterAll(() => h.cleanup());
 
-type Line = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; revenue: number; gross: number; isService: boolean; isAddon: boolean };
+type Line = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; revenue: number; gross: number; isService: boolean; isAddon: boolean; listPrices?: { price: number; qty: number }[] };
 type Ikram = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; menuValue: number; reason: string | null; kind: string; personKind: string | null };
 type Payload = {
   revision: number;
@@ -275,6 +275,9 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
       [60, 'cash'],
     ]);
     expect(payload.lines.some((l) => l.isAddon)).toBe(true);
+    // Şube fiyatı: satılan her ürün satırı dondurulan liste fiyatlarını taşır; hizmet satırı (oda, servis) taşımaz
+    expect(payload.lines.filter((l) => !l.isService).every((l) => l.listPrices?.length)).toBe(true);
+    expect(payload.lines.filter((l) => l.isService).map((l) => 'listPrices' in l)).toEqual([false]);
     expect(payload.offDevice.card).toBeGreaterThan(0);
     expect(payload.offDevice.cash).toBeGreaterThan(0);
     expect(payload.offDevice.card).toBeLessThan(z.card!);
@@ -475,6 +478,61 @@ describe('gün paketi: satırlar ve ikram', () => {
     const z = (await payloadOf(day.id)).z;
     expect(z.cardTips).toBe(15.5);
     expect(z.cardCollections).toBe(250.5);
+  });
+});
+
+describe('lines[].listPrices: satılan kalemin dondurulan liste fiyatları (şube fiyatı, docs/03-ENTEGRASYON.md §4)', () => {
+  it('birleşen satırda iki fiyat ayrı adetleriyle (gün içinde fiyat değişti); ek kendi fiyatıyla; indirim liste fiyatını değiştirmez', async () => {
+    const { db, schema } = modules;
+    const day = await freshDay();
+    const latte = product('Latte');
+    const row = () => db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()!;
+    const old = row().price;
+    const vanilla = option('syrup', 'vanilla');
+    let a = await sell([{ name: 'Latte', size: 'M', options: [{ itemId: vanilla.id }] }]);
+    a = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${a.id}/discount`, { type: 'amount', value: 1000, reason: 'Müdavim' });
+    await pay(a, 'Nakit');
+    // Marina'nın yeni fiyatı gün içinde yürürlüğe girdi (sitenin `nextPriceAt` anında eşitlendi): yeni kalem yeni fiyatla
+    db.update(schema.products).set({ price: old + 1500 }).where(eq(schema.products.id, latte.id)).run();
+    try {
+      await pay(await sell([{ name: 'Latte', size: 'M', qty: 2 }]), 'Kredi kartı');
+    } finally {
+      db.update(schema.products).set({ price: old }).where(eq(schema.products.id, latte.id)).run();
+    }
+    const p = await payloadOf(day.id);
+    const line = p.lines.find((l) => l.posName === 'LATTE MEDIUM')!;
+    expect(line.qty).toBe(3);
+    expect(line.listPrices).toEqual([
+      { price: old / 100, qty: 1 },
+      { price: (old + 1500) / 100, qty: 2 },
+    ]);
+    // Mutlu saat yokken ana parçanın liste değeri fiyat × adet toplamıdır
+    expect(line.listPrices!.reduce((s, x) => s + x.price * x.qty, 0)).toBeCloseTo(line.gross, 2);
+    expect(p.lines.find((l) => l.posName === 'SYRUP')!.listPrices).toEqual([{ price: vanilla.price / 100, qty: 1 }]);
+    // Ad ya da kişi yok: yalnız fiyat ve adet
+    expect(Object.keys(line.listPrices![0]!)).toEqual(['price', 'qty']);
+  });
+
+  it('en çok 20 fiyat: en çok satılanlar kalır, fiyat sırasıyla', async () => {
+    const { db, schema } = modules;
+    const day = await freshDay();
+    const su = product('Su');
+    const old = db.select().from(schema.products).where(eq(schema.products.id, su.id)).get()!.price;
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    let last = o;
+    try {
+      for (let i = 0; i <= 20; i++) {
+        db.update(schema.products).set({ price: old + i * 100 }).where(eq(schema.products.id, su.id)).run();
+        last = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: su.id, qty: i === 20 ? 2 : 1 }] });
+      }
+    } finally {
+      db.update(schema.products).set({ price: old }).where(eq(schema.products.id, su.id)).run();
+    }
+    await pay(last, 'Nakit');
+    const line = (await payloadOf(day.id)).lines.find((l) => l.siteMenuId === su.extId)!;
+    expect(line.qty).toBe(22);
+    const kept = [...Array.from({ length: 19 }, (_, i) => old + i * 100), old + 2000];
+    expect(line.listPrices).toEqual(kept.map((k) => ({ price: k / 100, qty: k === old + 2000 ? 2 : 1 })));
   });
 });
 

@@ -80,7 +80,13 @@
       "revenue": 1260,
       "gross": 1260,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 60,
+          "qty": 21
+        }
+      ]
     },
     {
       "posName": "TÜRK KAHVESİ MEDIUM",
@@ -90,7 +96,13 @@
       "revenue": 635,
       "gross": 650,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 130,
+          "qty": 5
+        }
+      ]
     },
     {
       "posName": "LATTE MEDIUM",
@@ -100,7 +112,13 @@
       "revenue": 570,
       "gross": 585,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 195,
+          "qty": 3
+        }
+      ]
     },
     {
       "posName": "KARABUĞDAY SİMİT",
@@ -110,7 +128,13 @@
       "revenue": 450,
       "gross": 450,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 90,
+          "qty": 5
+        }
+      ]
     },
     {
       "posName": "ESPRESSO MEDIUM",
@@ -120,7 +144,13 @@
       "revenue": 440,
       "gross": 440,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 110,
+          "qty": 4
+        }
+      ]
     },
     {
       "posName": "SU",
@@ -130,7 +160,13 @@
       "revenue": 420,
       "gross": 420,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 60,
+          "qty": 7
+        }
+      ]
     },
     {
       "posName": "SODA",
@@ -140,7 +176,13 @@
       "revenue": 400,
       "gross": 400,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 80,
+          "qty": 5
+        }
+      ]
     },
     {
       "posName": "ROSBEEF SANDVİÇ",
@@ -150,7 +192,13 @@
       "revenue": 375,
       "gross": 390,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 390,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "HİNDİ FÜMELİ SANDVİÇ",
@@ -160,7 +208,13 @@
       "revenue": 350,
       "gross": 350,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 350,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "SAN SEBASTİAN",
@@ -170,7 +224,13 @@
       "revenue": 290,
       "gross": 290,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 290,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "BROWNİE",
@@ -180,7 +240,13 @@
       "revenue": 280,
       "gross": 280,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 280,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "LATTE LARGE",
@@ -190,7 +256,13 @@
       "revenue": 194.25,
       "gross": 210,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 210,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "CAPPUCCİNO MEDIUM",
@@ -200,7 +272,13 @@
       "revenue": 187.5,
       "gross": 195,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 195,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "FLAT WHİTE MEDIUM",
@@ -210,7 +288,13 @@
       "revenue": 175.75,
       "gross": 190,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 190,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "AMERİCANO MEDIUM",
@@ -220,7 +304,13 @@
       "revenue": 165,
       "gross": 165,
       "isService": false,
-      "isAddon": false
+      "isAddon": false,
+      "listPrices": [
+        {
+          "price": 165,
+          "qty": 1
+        }
+      ]
     },
     {
       "posName": "SYRUP",
@@ -230,7 +320,13 @@
       "revenue": 92.5,
       "gross": 100,
       "isService": false,
-      "isAddon": true
+      "isAddon": true,
+      "listPrices": [
+        {
+          "price": 50,
+          "qty": 2
+        }
+      ]
     }
   ],
   "ikram": [
