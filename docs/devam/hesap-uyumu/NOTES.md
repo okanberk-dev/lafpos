@@ -65,3 +65,22 @@ Depolar:
 - Dalga 2 başladı: wf_e7b5f94e-50f (görev w724suuun), LP-B (lafpos claude/kasa-zinciri, taban claude/sleepy-knuth-144kr7 @61aff3b) + LM-2 (lafmaliyet claude/lafpos-gun-alanlari, taban claude/hesap-uyumu-faz1 @c8559b8). Betik /home/user/wt/scripts/wave2.js.
 - Açık PR'lar: laffogato#301 (LF-1), lafmaliyet#123 (LM-M+LM-M2), lafmaliyet#124 (LM-1), lafpos#167 (LP-A). LP-D son kontrolde (wl71dutnj).
 - LP-D bitti → PR https://github.com/okanberk-dev/lafpos/pull/168 (taslak, izleniyor). İlk turun 5 paketi de PR'da: laffogato#301, lafmaliyet#123, #124, lafpos#167, #168.
+
+## Devam turu 2 (24.11 02:55 UTC, limit yenilendi; 5s %3, haftalık %67)
+- Ortam yerinde, dallar uzakla eşit, Postgres başlatıldı; 5 PR'ın CI'ı yeşil, yeni yorum yok.
+- cont.js'ye LP-B (taban 61aff3b) ve LM-2 (taban c8559b8) "finish" girişleri eklendi.
+- İş akışları: wf_74045c79-bc7 (LP-B; görev wfmlyk47x), wf_65288838-604 (LM-2; görev wdqtd2g4x).
+- Sonra: dalga 3 = LP-C (claude/personel-baglanti, LP-B ucundan) + LM-3 (claude/kasa-zinciri, LM-2 ucundan).
+- LM-2 bitti (c28716c) → PR https://github.com/okanberk-dev/lafmaliyet/pull/125 (taslak, taban claude/hesap-uyumu-faz1, izleniyor). Açık: offDevice kart bahşişi ve gün sonrası fiş iptali için LafPOS alanı gerekiyor (sonraki paket).
+- LP-B bitti (1bcab54) → PR https://github.com/okanberk-dev/lafpos/pull/169 (taslak, taban claude/sleepy-knuth-144kr7, izleniyor).
+- Dalga 3 başladı (betik /home/user/wt/scripts/wave3.js; LP-C, LM-3, LP-E, LM-4, LM-5 tanımlı): wf_dced5dea-78e (LP-C; görev wpwx8g5ev), wf_3d869b95-1b8 (LM-3; görev w04gveasz). LM-3 kapsamına eklendi: altın gövde z değerleri (tests/lafpos.test.ts ~708) ve 200'deki eski nextOpening'in kaynağında düzeltilmesi.
+- 04:55 UTC: LM-4 ikiye bölündü. LM-4 = Faz 5 (yemek kartı, part-time günlük model + staff.userId/personRef, kira ev sahibi türü, İşletme geneli payı (bilgi)); worktree /home/user/wt/lafmaliyet-faz5, dal claude/personel-sube-kira, taban 2854165 (LM-3 uygulama ucu; LM-3 düzeltmeleri sonra birleştirilecek: git merge, yeniden yazma yok). İş akışı wf_b17b5d95-acf (görev wrebrs27c).
+- LM-4b = personel bağlantısı okuyucusu (GET personel, workedStaffRefs, staff 200 yanıtı, yemek kartı günleri LafPOS'tan); dal claude/personel-baglanti (lafmaliyet), claude/personel-sube-kira'dan; LP-C bitince. LM-5 artık LM-4b'den.
+- Sıra: LP-C → LP-E; LM-3 → (LM-4'e birleştir) → LM-4b (LP-C'den sonra) → LM-5 (LP-E'den sonra).
+- LM-3 bitti (540c991) → PR https://github.com/okanberk-dev/lafmaliyet/pull/126 (taslak, taban claude/lafpos-gun-alanlari, izleniyor). LM-4 dalı 2854165'ten; LM-4 bitince claude/kasa-zinciri (540c991) birleştirilecek (merge).
+- 05:48–06:10 UTC, kullanıcı: "Şimdiye kadar bitenleri maine gönder ve devam et". main'e birleşenler: laffogato#301 (squash), lafpos#167, #169, #168 (merge commit; yığın için), lafmaliyet#124, #125, #126, #123 (merge commit). #168 ve #123 main ile birleştirildi (çakışmalar çözüldü; lafmaliyet test:db 67/67, lafpos ilgili testler).
+- lafmaliyet "inceleme" (claude-code-action) işi 0,5 sn'de is_error ile düşüyor: kodla ilgisiz, #123'e yazıldı; sahip Actions anahtarına/kotasına bakmalı.
+- Açık: LP-C (claude/personel-baglanti, claude/kasa-zinciri'den; main artık LP-B'yi içeriyor, PR tabanı main), LM-4 (claude/personel-sube-kira, 2854165'ten; main'i birleştirmeli). Sıradaki: LP-E, LM-4b, LM-5.
+- 06:20 UTC kullanıcı: "lafposa girilenler eksiksiz lafmaliyete girsin; lafpos günü kapatırken POS'tan gün sonunu oraya giriyor; sadece gün sonu ladmine personel foto atsın". Paket: /home/user/wt/scripts/gunsonu.js (denetim → LP-F + LM-6 → inceleme → düzeltme). Worktree'ler /home/user/wt/lafpos-gunsonu ve /home/user/wt/lafmaliyet-gunsonu, dal claude/gun-sonu-tam (ikisi de origin/main'den). Karar: LafPOS gününde Banka POS ve yazarkasa alanları LafPOS'un cihaz verisinden (Pavo sonucu) dolar; personel yalnız foto ekler; foto ↔ LafPOS farkı yöneticiye uyarı. ÖNCELİK: LP-E / LM-4b / LM-5'ten önce.
+- gunsonu iş akışı başladı: wf_3419d704-8d2 (görev wg14j7s0t). Devretmede durdurulursa aynı oturumda Workflow({scriptPath:'/home/user/wt/scripts/gunsonu.js', resumeFromRunId:'wf_3419d704-8d2'}) ile denetim önbellekten gelir.
+- gunsonu yeniden başlatıldı (kullanıcı: 'sorularını da sen test edip gör' → denetim iki sistemi yerelde uçtan uca çalıştırıp gözlemler, yeniden koşulabilir betik bırakır): wf_c4e0137a-108 (görev wmos831q8). Eski wf_3419d704-8d2 durduruldu.

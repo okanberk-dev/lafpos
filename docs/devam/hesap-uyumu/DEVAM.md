@@ -21,24 +21,35 @@ sahip kararları `NOTES.md` ve `CONTRACT.md` §1'de, kod haritaları `maps/`'te.
 5. Temel kontrol: lafpos `npm run typecheck && npm test`; lafmaliyet `npx next typegen && npx tsc --noEmit && npm run
    lint && npm test && TEST_DATABASE_URL=postgres://ci:ci@localhost:5432/test npm run test:db`.
 
-## 2. Durum (24.11.2026 00:05 UTC, devam turu 1 sonu; 5 saatlik kullanım %95, haftalık %66)
+## 2. Durum (24.11.2026 06:25 UTC, devam turu 2 sonu; 5 saatlik %90, haftalık %81; 5 saatlik pencere 07:50 UTC'de yenilenir)
 
-Bitmiş, taslak PR'ı açık ve izleniyor (birleştirme sahibin işi):
-| PR | Paket | Dal | CI |
-| --- | --- | --- | --- |
-| okanberk-dev/laffogato#301 | LF-1 site şube fiyatı | claude/branch-prices | ✓ |
-| okanberk-dev/lafmaliyet#123 | LM-M ModPOS dönemi ucu + LM-M2 Satışlar kapsamı şube şube | claude/modpos-donemi | ✓ |
-| okanberk-dev/lafmaliyet#124 | LM-1 Faz 1 | claude/hesap-uyumu-faz1 | ✓ |
-| okanberk-dev/lafpos#167 | LP-A Faz 2 gönderen | claude/sleepy-knuth-144kr7 | ✓ |
-| okanberk-dev/lafpos#168 | LP-D Faz 4 + Uzaktan | claude/modpos-gecmis | CodeQL düzeltmesi (b094866) sonrası yeniden koşuyordu; denetle |
+**main'e birleşenler** (kullanıcı 05:47: "Şimdiye kadar bitenleri maine gönder ve devam et"; yığınlar için merge commit,
+laffogato squash): laffogato#301 (LF-1); lafpos#167 (LP-A), #169 (LP-B), #168 (LP-D); lafmaliyet#124 (LM-1),
+#125 (LM-2), #126 (LM-3), #123 (LM-M). Sahip işi: lafmaliyet "inceleme" (claude-code-action) işi 0,5 sn'de is_error ile
+düşüyor (Actions'taki Claude anahtarı/kotası; kodla ilgisiz, #123'e yazıldı).
 
-Yarıda kalan (dalın ucunda "WIP (devam)" commit'i):
-- **LP-B** kasa zinciri: lafpos `claude/kasa-zinciri` (LP-A'nın ucu 61aff3b'den). Yapılanlar (ajanın görev listesine göre): açılış önerisi + neden + sütunlar + denetim; nextOpening (giden kutusu yanıtı) + tembel devir GET; gider kategorileri + kasa hareketi kategorisi + cashMoves gövdesi. Kalan: arayüz (Günü aç öneri/neden, harcama kategori çipleri) + e2e akışı; docs/03, imza vektörleri, altın gövde + kabul günü yeniden üretimi, tam kontrol, commit; sonra bağımsız inceleme + düzeltme; taslak PR.
-- **LM-2** ladmin Faz 2 okuyucu: lafmaliyet `claude/lafpos-gun-alanlari` (LM-1'in ucu c8559b8'den). Yapılanlar: şemalar (.catch), altın gövde + kabul günü kopyası, saklama sütunları + pos_day_revisions + göç, iptal→zayi, kind/personKind, errorCode, okcZNo, z toplamları, z.vat ile KDV hariç, Satışlar brüt/indirim sonrası + tutarlılık, kasa raporu/gün görünümü. Kalan: kabul DB testi (Marina Kasım), docs/LAFPOS.md, tam kontrol, commit; inceleme + düzeltme; taslak PR. NOT: LP-B'den sonra altın gövde değişecek; LM-2'nin altın kopyası LP-A'nınkiyle (61aff3b) eşleşmeli.
+**Açık PR:** lafpos#170 (LP-C personel bağlantısı, taban main, CI sürüyordu). CI yeşilse birleştir (kullanıcı bitenleri
+main'e istiyor; merge commit, çünkü LP-E bunun üstüne kurulacak).
 
-Henüz başlanmayanlar: LP-C, LM-3, LP-E, LM-4, LM-5 (CONTRACT §4). Sıradaki dalgalar: 3 = LP-C + LM-3, 4 = LP-E + LM-4, 5 = LM-5.
-Betikler: /home/user/wt/scripts/ (cont.js finish→review→fix; wave2.js impl→review→fix); notlar dalında da kopyaları var.
-Haftalık limit %66 (30 Kasım ~18:20 UTC'de yenilenir); bir 5 saatlik pencere ~%15 harcıyor.
+**Yarıda kalan:**
+- **LM-4 (Faz 5)**: lafmaliyet worktree /home/user/wt/lafmaliyet-faz5, dal claude/personel-sube-kira (2854165'ten; main'i
+  birleştirmeli). Uygulama + belgeler commit'li (9af9f0a, 6489cb4); bağımsız inceleme bitti, düzeltme ajanı başlamıştı
+  (bulgular: hatırlatıcı yolları ev sahibi türünü kullanmalı; paylaşılan kalemin bilgi satırı; şube görünümünde Excel
+  net kâr ve başabaş işletme genelini dışlamalı; küçükler: Excel Personel sayfası, online sütunu, personel bağı tekilliği,
+  ev sahibi penceresi, yemek kartı sürümü). Devam: aynı oturumdaysan Workflow({scriptPath:'/home/user/wt/scripts/wave3.js',
+  resumeFromRunId:'wf_b17b5d95-acf', args:{ids:['LM-4']}}) (uygulama ve inceleme önbellekten gelir, düzeltme koşar).
+  Bulguların tam metni: /root/.claude/projects/-home-user/087a595d-df9f-592b-88ce-6553c15994c5/subagents/workflows/wf_b17b5d95-acf/journal.jsonl.
+- **Gün sonu tam otomatik (ÖNCELİK)**, kullanıcı 06:20: "lafposa girilenler eksiksiz lafmaliyete girsin; lafpos günü
+  kapatırken POS'tan gün sonunu oraya giriyor; sadece gün sonu ladmine personel foto atsın"; 06:25: "Sorularını da sen
+  test edip gör" (denetim iki sistemi yerelde uçtan uca çalıştırır). Betik /home/user/wt/scripts/gunsonu.js (denetim →
+  LP-F + LM-6 → inceleme → düzeltme); worktree'ler /home/user/wt/lafpos-gunsonu, /home/user/wt/lafmaliyet-gunsonu, dal
+  claude/gun-sonu-tam (origin/main'den, temiz). Denetim ajanı başlamıştı, sonuç yok: yeniden başlat
+  (Workflow({scriptPath:'/home/user/wt/scripts/gunsonu.js'})).
+
+**Sıradakiler:** LP-E (claude/sube-fiyati-kasa, LP-C'den), LM-4b (claude/personel-baglanti lafmaliyet, LM-4'ten),
+LM-5 (claude/sube-fiyati, LM-4b'den). Tanımlar /home/user/wt/scripts/wave3.js (inceleyici artık tam takımı koşmuyor;
+kullanıcı: "hızlı git, gereksiz kontrolleri fazladan yapma"). Biten her paket: push → PR (taban main) → CI yeşil →
+main'e birleştir.
 
 ## 3. Kalan iş sırası
 
