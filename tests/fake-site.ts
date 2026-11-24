@@ -120,6 +120,11 @@ export interface FakeSite {
   /** İmzalı panel menüsünde fiyat: kimlik → fiyat (yoksa fikstürdeki) */
   panelPrices: Map<string, { priceMinor: number; priceMinorL: number }>;
   /**
+   * Panel menüsünün en üstüne eklenen alanlar: şube fiyatlı sitenin `nextPriceAt`'i (laffogato #301, şubenin bir sonraki
+   * fiyat anı, yoksa null). Boşsa alan gönderilmez (şube fiyatı öncesi site)
+   */
+  panelTop: Record<string, unknown>;
+  /**
    * Şubeli sitenin `onMenu`'su: kimlik → site kalemi menüden kaldırdı mı (false). Boşsa alan gönderilmez (şube öncesi
    * site). Menüden kalkmış kalemi açma isteği 409 `site_closed` alır (laffogato src/app/api/panel/menu/route.ts)
    */
@@ -187,6 +192,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
     panelPrices: new Map(),
+    panelTop: {},
     panelOnMenu: new Map(),
     closedOrders: null,
     answerBranch: undefined,
@@ -319,6 +325,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       return send(200, {
         ...panelMenu,
         ...branchField(),
+        ...site.panelTop,
         version: site.panelMenuVersion,
         items: panelMenu.items.map((i) => ({
           ...i,

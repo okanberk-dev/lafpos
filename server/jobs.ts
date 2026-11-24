@@ -9,7 +9,7 @@ import { expirePlatformOrders } from './delivery/service';
 import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
-import { getSettings } from './lib/settings';
+import { getSettings, getSyncState } from './lib/settings';
 import { deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
@@ -20,6 +20,7 @@ import { siteLinked } from './sync/laffogato-link';
 import { onlineOrdersTick } from './sync/laffogato-orders';
 import { flushSiteOutbox } from './sync/site-outbox';
 import { runMenuSync } from './sync/menu-sync';
+import { type PriceTiming, priceInstant } from './sync/laffogato-menu';
 import { startCloudSync } from './sync/cloud';
 import { startMerkez } from './sync/merkez';
 import { startPlatformKeys } from './sync/platform-anahtar';
@@ -44,6 +45,16 @@ export const MARKER_SYNC_MIN_MS = 60_000;
 const RECENT_SYNC_MS = 20_000;
 /** CDN'deki herkese açık liste bayatsa (s-maxage=60 + swr=60) bir kez ETag'siz yeniden eşitleme */
 export const CDN_REFRESH_MS = 2 * 60_000;
+/**
+ * Şube fiyatı (laffogato #301, docs/03-ENTEGRASYON.md §2.1): sitenin söylediği bir sonraki fiyat anından bu kadar sonra
+ * tek bir ETag'siz eşitleme (iki saat arasındaki küçük kayma için pay). O an gelince site hiçbir şey yazmaz, işaret oynamaz
+ */
+export const PRICE_SYNC_DELAY_MS = 5_000;
+/**
+ * Bundan uzak fiyat anı zamanlayıcıya kurulmaz (site 90 güne kadar ileri yazar; `setTimeout` 24,8 günden uzunu hemen
+ * çalıştırır): gün açıkken her yoklama yeniden bakar, an yaklaşınca kurulur
+ */
+export const PRICE_SYNC_HORIZON_MS = 24 * 3600_000;
 
 const timers: NodeJS.Timeout[] = [];
 /** Bekleyen tek menü eşitlemesi: yeni istek en erken olanla birleşir (zorunluluk ve gece izni toplanır) */
@@ -109,9 +120,12 @@ export async function runScheduledSync() {
 export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}) {
   if (!siteLinked() || !getSettings().menuAutoSync) return;
   if (!opts.anyTime && !getOpenDay(db)) return;
+  // Şubenin fiyat anı son imzalı okumadan sonra geçti (gece, zamanlayıcı kaçtı ya da o eşitleme başaramadı): ETag'siz,
+  // yoksa herkese açık menü 304 döner ve imzalı okuma yapılmazdı. En sık yoklama aralığında (15 dk), bütçe içinde
+  const force = opts.force || priceInstant(menuState(), Date.now()).due;
   try {
     // force: ETag'e bakılmaz (CDN'deki liste henüz eskiyse 304 dönerdi); fiyat ve Satışta imzalı panelden tazedir
-    const r = await runMenuSync({ apply: true, force: opts.force });
+    const r = await runMenuSync({ apply: true, force });
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);
     // CDN'deki liste bayat (sitede yeniden açılan ürün listede yok): bir kez, CDN yenilenince ETag'siz
     if (r.cdnStale && !cdnRetried) {
@@ -121,9 +135,28 @@ export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}
   } catch (e) {
     console.warn('[senkron] site menüsü alınamadı:', e instanceof Error ? e.message : e);
   }
+  schedulePriceSync();
   // Yeni ya da değişen ürün görsellerinin küçük kopyası (kart için); eksik yoksa istek gitmez
   const fetched = await warmProductThumbs().catch(() => 0);
   if (fetched) console.log(`[görsel] ${fetched} ürün görseli indirildi`);
+}
+
+const menuState = () => getSyncState<PriceTiming>('laffogato.menu');
+
+/**
+ * Şubenin bir sonraki fiyat anına tek bir ETag'siz eşitleme (gün açıkken; an + `PRICE_SYNC_DELAY_MS`). Her eşitlemeden
+ * sonra yeniden bakılır: o anın eşitlemesi yeni anı (ya da hiçbirini) okur, aynı an ikinci kez kurulmaz. Bekleyen daha
+ * erken bir eşitleme varsa ona katılmaz (onu ETag'siz yapmaz); o eşitlemeden sonra kurulur. Gün kapalıyken kurulmaz:
+ * an geçtiyse gün açılınca `menuTick` ETag'siz eşitler; kurulan eşitleme günün kapanmasına denk gelirse açılışa kalır.
+ * Site alanı göndermiyorsa (şube fiyatı öncesi) hiçbir şey kurulmaz. AGENTS.md kural 6: fiyat anı başına bir imzalı okuma
+ */
+export function schedulePriceSync(now = Date.now()) {
+  if (!siteLinked() || !getSettings().menuAutoSync || !getOpenDay(db)) return;
+  const { at } = priceInstant(menuState(), now);
+  if (at === null || at - now > PRICE_SYNC_HORIZON_MS) return;
+  const when = at + PRICE_SYNC_DELAY_MS;
+  if (pendingSync && pendingSync.at <= when) return;
+  scheduleMenuSync(when, true, false);
 }
 
 /** Günlük SQLite yedeği: data/backups/lafpos-YYYY-MM-DD.db, son N gün tutulur. */
@@ -335,6 +368,8 @@ export function onJobEvent(e: LiveEvent) {
   // Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde değişti): gün açıkken ETag'siz,
   // en sık 60 sn'de bir; gece gün açılışına kalır
   if (e.topic === 'sync' && e.kind === 'site.menu.changed') onSiteMenuChanged();
+  // Menü eşitlendi (elle "Siteyle eşitle" de): şubenin bir sonraki fiyat anına eşitleme kurulur
+  if (e.topic === 'sync' && e.kind === 'menu.synced') schedulePriceSync();
   // Gün açıldı: gece atlanan menü yoklaması bir kez
   if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void onMenuDayOpened();
   // Paket siparişinin aşaması değişti: canlı platforma hemen yazılır (gidemezse 20 sn'lik turda yeniden)

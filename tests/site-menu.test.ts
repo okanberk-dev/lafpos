@@ -59,7 +59,7 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
     site.menu = siteMenuFixture();
   });
 
-  it('anahtar varken panel listesi alınamazsa fiyat ve ürünler yine uygulanır, Satışta bilgisi değişmez; sonraki tur uygular', async () => {
+  it('anahtar varken panel listesi alınamazsa ad ve ürünler yine uygulanır, Satışta bilgisi ve bağlı ürünün fiyatı değişmez (Tuzla fiyatı yazılmaz); sonraki tur uygular', async () => {
     site.panelActive.set('mnu-0005', false);
     await sync();
     expect((await product('mnu-0005')).active).toBe(false);
@@ -76,10 +76,11 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
     const { runMenuSync } = await import('../server/sync/menu-sync');
     const r = await runMenuSync({ apply: true });
     expect(r.status).toBe('uygulandi');
-    expect(r.warning).toMatch(/Satışta bilgisi alınamadı.*HTTP 401/);
+    expect(r.warning).toMatch(/Satışta ve fiyat bilgisi alınamadı.*HTTP 401/);
     expect(r.preview?.changes.filter((c) => c.kind === 'geri' || c.kind === 'kalkti')).toEqual([]);
     const latte = await product('mnu-0007');
-    expect(latte.price).toBe(latteBefore.price + 1000);
+    // Herkese açık menünün fiyatı Tuzla'nındır (şube fiyatı, sahibin kararı 1): son imzalı fiyat kalır
+    expect(latte.price).toBe(latteBefore.price);
     expect(latte.active).toBe(true);
     expect((await product('mnu-0005')).active).toBe(false);
     const status = await h.ok<{ menu: { state: { lastError?: string } } }>('patron', 'GET', '/sync/status');
@@ -99,7 +100,8 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
   it('panel listesi tanınmayan biçimde gelirse (version 1 değil) Satışta bilgisi değişmez; alanı göndermeyen eski site okunur', async () => {
     const { runMenuSync } = await import('../server/sync/menu-sync');
     expect((await product('mnu-0007')).active).toBe(true);
-    // Panel Latte'yi Tükendi der ama biçimi LafPOS bilmiyor: liste okunmaz, fiyat ve ürünler yine uygulanır
+    // Panel Latte'yi Tükendi der ama biçimi LafPOS bilmiyor: liste okunmaz, ad ve yeni ürünler yine uygulanır; bağlı
+    // ürünün fiyatı herkese açık listeden (Tuzla) yazılmaz
     site.panelActive.set('mnu-0007', false);
     const raised = siteMenuFixture();
     for (const c of raised.categories) for (const i of c.items) if (i.id === 'mnu-0007') i.priceMinor += 500;
@@ -110,11 +112,11 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
         site.panelMenuVersion = v;
         const r = await runMenuSync({ apply: true, force: true });
         expect(r.status).toBe('uygulandi');
-        expect(r.warning).toBe(`Satışta bilgisi alınamadı, ürünlerin Satışta durumu değişmedi: Panel menüsü tanınmayan biçimde (sürüm ${JSON.stringify(v)})`);
+        expect(r.warning).toBe(`Satışta ve fiyat bilgisi alınamadı, ürünlerin Satışta durumu ve fiyatı değişmedi: Panel menüsü tanınmayan biçimde (sürüm ${JSON.stringify(v)})`);
         expect(r.preview?.changes.filter((c) => c.kind === 'geri' || c.kind === 'kalkti')).toEqual([]);
         const latte = await product('mnu-0007');
         expect(latte.active).toBe(true);
-        expect(latte.price).toBe(before + 500);
+        expect(latte.price).toBe(before);
       }
       const status = await h.ok<{ menu: { state: { lastError?: string } } }>('patron', 'GET', '/sync/status');
       expect(status.menu.state.lastError).toMatch(/tanınmayan biçimde \(sürüm "1"\)/);
