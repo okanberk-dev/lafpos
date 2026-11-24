@@ -104,8 +104,9 @@ kira ev sahibi türü (şahıs: KDV yok, resmi kiraya %20 stopaj, tek kaynak; ş
 "İşletme geneli payı (bilgi)" (şube kârına girmez; Tümü'de bir kez).
 
 İnceleme bulguları `LM-4-impl-review.json`'da (3 büyük, 5 küçük). Önceki oturumun son dakikalarında bir ajan bunları
-düzeltmeye başladı ve her düzeltmeyi ayrı commit'leyip push'ladı: **`git log bc230a7..origin/claude/personel-sube-kira`
-ile neyin bittiğine bak, kalanları önce test yazarak düzelt.** Sonra tam kontrol → PR (taban main) → CI yeşil → birleştir.
+düzeltmeye başladı ve her düzeltmeyi ayrı commit'leyip push'ladı: Bitenler (push'lu): büyük 1 (569711b, Ödemeler'in sabit gider yolları ev sahibi türünü nakit planıyla aynı kuralla sayar)
+ve büyük 2 (fe24851, işletme geneli tam ay kalem şube görünümünde işletmenin günüyle). **Kalan: büyük 3 (şube görünümünde Excel
+temeli net kâr ve başabaş işletme genelini dışlamalı) ve 5 küçük bulgu**; önce test yazarak düzelt. Sonra tam kontrol → PR (taban main) → CI yeşil → birleştir.
 
 ### 4.3 Sonra sırayla (tanımlar `wave3.js`)
 
