@@ -27,6 +27,70 @@
 - Bitince: iki PR (Türkçe), CI yeşil → merge; ekran görüntülerini sahibe gönder.
 
 ## Limit ve otomatik devam
-- Sahip (11:45): "otomatik devam et". Tek seferlik CronCreate 005241c3 → 24.11 15:24 (limit 15:20'de yenilenir).
+- Sahip: "burada devam et hep, limit yenilenince otomatik devam et". Saatlik CronCreate 3b6d9c36 (her saat :24, oturum içi; bitince sil).
   Oturum içi; uygulama kapanırsa silinir. Her yeni limitte yenisini kur.
 - Sahip: oturum High; Extra high gereken adımları iş akışında ajan başına effort:'xhigh' ile ver (hesap incelemeleri).
+
+## Sıradaki paket: ladmin metin sadeleştirme (sahip 24.11 12:25)
+Sahip: "ladmin'deki Yardım sayfasında gereksiz bilgileri ve hatta sitedeki gereksiz olan bilgileri de temizle."
+Sahip onayladı: "site" = ladmin paneli. laffogato'ya DOKUNMA.
+- Ne zaman: arayüz ladmin dalı (claude/animasyonlu-sayac) birleşince, main'den dal claude/sade-metinler (Yardım o dalda
+  değiştiği için çakışmasın).
+- Yöntem: denetim ajanı (salt okuma) → liste (sayfa, metin, neden gereksiz, öneri: sil / kısalt / birleştir) →
+  uygulama → bağımsız inceleme (xhigh) → tam kontrol → PR → merge.
+- Gereksiz sayılır: aynı şeyi tekrar eden ipuçları ve açıklamalar; geliştirici notu gibi duran metinler; artık olmayan
+  ya da değişmiş özellikleri anlatanlar (ör. Marina için ModPOS'a işle/ModPOS yedeği — CONTRACT §9: Marina'da ModPOS
+  dönemi kapandı, LafPOS yazmalı); çok uzun paragraflar (tek cümleye inebilenler); personelin işine yaramayan
+  yönetici ayrıntıları personel Yardım'ında.
+- Kalır: hukuki/vergi zorunlu notlar, hesabın nasıl yapıldığını açıklayan formüller (Yardım "Formüller"), güvenlik
+  uyarıları, personelin maliyet/kâr görmeme kuralı, kısa ve işe yarayan ipuçları. Metin testleri (Yardım içerik
+  testleri) güncellenir, sayılar koddan gelir.
+- 12:40 LM-4 bitti (uç 1d2860e; npm test 2941 ✓, test:db test_faz5 69/69 ✓) → PR lafmaliyet#127 açıldı; CI yeşilse merge (tek PR, taban main → merge commit).
+- 12:5x lafmaliyet#127 (LM-4) CI sonucu yukarıda; birleştiyse main'de. Kullanım limiti doldu; saatlik CronCreate 3b6d9c36 devam ettirecek (iş akışları resume).
+- 16:10 Gün sonu iş akışı bitti (doğrulama ✓; ekran görüntüleri ~/laf/scripts/e2e-gunsonu/shots/). LP-F → PR lafpos#171 (uç 10a64e3; test 3502 ✓). LM-6 son düzeltmeler (personel farkı görmesin, personel metinleri) iş akışı wf_6f5fbe1a-08e (görev w33ti8h0s); sonra PR, LafPOS#171 birleştikten sonra birleştir.
+- Sahip cevapladı (16:20): (a) "Pavo cihazdan fiş isteyince veriyor, Z olarak detaylı" → personel tek foto: Pavo gün sonu (detaylı Z); okuyucu Z rakamlarını da karşılaştırır; LafPOS docs/04:286 sonra düzeltilecek. (b) föy kart sayısı Banka POS'u DOLDURMAZ. (c) "Fiş fotoğrafı ekle" kalır.
+- LM-6 son düzeltme yeniden başlatıldı: wf_8572501e-a0f (görev wlz3ugvxc), aynı betik (Z maddesi eklendi). Eski wf_6f5fbe1a-08e durduruldu.
+- 16:22 lafpos#171 (LP-F gün sonu) birleşti.
+
+## Sıradaki paket LM-6b: gün sonu fotoğraf okuma (sahip 24.11 16:30)
+Sahip: "mail olarak vs. bilgilerde de farklı olunca belirsin; AI ile okursa çok iyi ama fazla token harcamayan ve sonuç
+verecek şekilde; AI token biterse/yoksa kod ile okusun, en doğru sonucu alacak şekilde."
+- Ne zaman: LM-6 son düzeltme (wf_8572501e-a0f) bitince, aynı dal claude/gun-sonu-tam üstüne (aynı dosyalar: foto.ts,
+  photo-read/kasa.ts); LM-6 PR'ı ondan önce birleşebilir, LM-6b ayrı PR.
+- Bugün: kasa fotoğrafı AI_MODEL = claude-opus-5-5 ile okunuyor (src/server/ai/run.ts:22; pahalı), MAX_READS_PER_PHOTO 3,
+  ai_calls'ta maliyet kaydı var. Fatura Haiku 5.5.
+- Yapılacak: (1) E-posta: fotoğraf ↔ LafPOS farkı yöneticinin e-postalarında (kasa raporu / günlük özet) satır satır;
+  personele giden hiçbir şeyde yok. (2) Ekonomik okuma: önce ucuz model (Haiku 5.5, kısa istem, yapılandırılmış çıktı,
+  küçültülmüş görüntü), yalnız eksik/çelişkili okuma ya da LafPOS'tan fark çıkınca bir kez güçlü modelle yeniden oku
+  (yanlış "fark" alarmı olmasın); aynı fotoğraf iki kez okunmaz; maliyet ai_calls'ta. (3) Kod yedeği: AI anahtarı yoksa,
+  bütçe/kota bitmişse, hata/zaman aşımında yerel OCR (ör. tesseract.js, dil verisi pakette, çalışma anında ağ yok;
+  docs/DEPLOY.md'deki ortamda çalışmalı) + Pavo detaylı Z / gün sonu fişi için kural tabanlı ayrıştırma (TOPLAM, NAKİT,
+  KREDİ KARTI, KDV, Z NO, banka gün sonu toplamı); güven yüksekse uyumlu/fark, değilse "okunamadı — yönetici baksın";
+  okumanın kaynağı (AI / kod) yöneticiye görünür. (4) Testler: okuma fikstürleri (canlı AI yok), sentetik fiş görüntüsüyle
+  OCR testi, e-posta içeriği testi. (5) docs/FOTOGRAF.md, LAFPOS.md, KASA-RAPORU.md.
+- 16:37 Arayüz: ladmin PR lafmaliyet#131, LafPOS PR lafpos#172 açıldı (main birleştirildi, testler yeşil). CI yeşilse merge.
+- 17:04 lafpos#172 (UI) birleşti. lafmaliyet#131 (UI) CI'da Paraşüt testi düştü → düzeltildi, push. LM-6 → PR lafmaliyet#132 (main birleştirildi, migration 0074, test 2978 ✓, test:db 70/70 ✓, fikstürler aynı).
+- 17:05 SON DALGA başladı: wf_cc74ee4c-e13 (görev wzik5bdix), betik ~/laf/scripts/wave4.js. Dalga A paralel: LP-E (wt/lafpos-subefiyat, claude/sube-fiyati-kasa), LM-4b (wt/lafmaliyet-personel, claude/personel-baglanti), LM-6b foto okuma (wt/lafmaliyet-foto, claude/gun-sonu-foto, #132 üstüne). Dalga B: LM-5 (wt/lafmaliyet-subefiyat, LM-4b üstüne), metin temizliği (wt/lafmaliyet-metin, claude/sade-metinler). İncelemeler xhigh. Test DB'leri test_lp_e, test_lm4b, test_lm6b, test_lm5, test_metin.
+- lafpos ana klon main'e ilerletildi + npm ci (motion). Bekleyen: lafmaliyet#131 ve #132 CI → merge (bdn67spfq).
+- 17:14 lafmaliyet#131 (UI) ve #132 (LM-6 gün sonu) birleşti.
+- 20:21 Limit 20:20'de yenilendi; wave4 kendiliğinden sürdü. LP-E → PR lafpos#173 (test 3624 ✓, e2e ✓). CI yeşilse merge.
+- 20:31 LM-4b → PR lafmaliyet#134 (test 3023 ✓, test:db 71/71, migration 0075). LM-6b main birleştirildi, kontroller koşuyor (bnph9nww2). Wave B (LM-5, METIN) başladı.
+- 20:35 LM-6b → PR lafmaliyet#135 (main birleşik; tsc/lint ✓, test 3031 ✓, test:db 71/71). #134'ten sonra birleştir.
+- 20:39 lafpos#173 (LP-E) sonucu yukarıda.
+- 20:40 lafmaliyet#134 (LM-4b) birleşti.
+- 20:42 lafmaliyet#135 (LM-6b foto okuma) birleşti.
+- 20:46 lafmaliyet main doğrulandı (#134+#135 sonrası): tsc ✓, test 3047 ✓, test:db 72/72 ✓.
+- 21:16 wave4 bitti. LM-5 (wt/lafmaliyet-subefiyat, migration 0076, fikstürler LafPOS main ile aynı) ve METIN (wt/lafmaliyet-metin) main birleştirildi; kontroller koşuyor (bnc1vqljj). Sonra PR → CI → merge (önce LM-5, sonra METIN).
+- 21:24 LM-5 → PR lafmaliyet#137 (test 3068 ✓, test:db 73/73); METIN → PR #138 (test 3063 ✓, test:db 72/72). Sırayla merge.
+- 21:29 Sahip: "başka yerde de lafmaliyet çalışıyor; çakışmadığından ve diğer tarafı bozmadığından emin ol; her şeyi tamamen yaptığından emin ol, eksik/hatalıyı düzelt."
+  - Öbür oturum: lafmaliyet #128–#130, #133 (birleşti), #136 ai/panel-asistani AÇIK (migration 0076_asistan_islemleri).
+  - #137 (LM-5) migration 0076_sube_fiyati #136 ile çakışır → #136 birleşene kadar BEKLET; sonra main'i birleştir, migration'ı 0077 olarak yeniden üret, test, merge.
+  - #138 (metin) main ve #136 ile çakışmıyor; main+#136 ile birlikte test ediliyor (bplfb4bi9).
+  - Birleştirme kuralı: her PR'dan önce origin/main'i birleştir, tam test, push, CI, sonra merge; main'i ayrıca doğrula.
+  - Son denetim iş akışı wf_eccd3678-c8f (görev wx7hmpkjn): sözleşme, sahip istekleri, uçtan uca (worktree check-lafpos, check-lafmaliyet) → düzeltme (claude/son-kontrol dalları).
+- 21:34 #138: main (+#133) birleştirildi, test 3086 ✓; #136 ile birlikte test 3121 ✓, tsc ✓ (4 GB heap). Push'landı; merge son denetimden sonra.
+- 21:43 lafpos#174 (Pavo Z belgesi) sonucu: 
+- 22:09 Son denetim bitti (wf_eccd3678-c8f). Uçtan uca veri yolu eksiksiz. Düzeltmeler: lafmaliyet claude/sube-fiyati a21602c0 (main+#136 birleşti, migration 0077, asistan bilgi bankası yeniden üretildi); lafmaliyet claude/son-kontrol (sube-fiyati üstüne; personel gün sonundan önce form görmez + sunucu reddi, güçlü model yeniden bakış, Pavo kartı, iade satırı, belgeler, hesap-sözleşmesi §10) wt/lafmaliyet-sonkontrol; LafPOS claude/son-kontrol 78c67ab (03-ENTEGRASYON durum tablosu + Pavo Z) wt/lafpos-sonkontrol; LafPOS claude/hesap-sozlesmesi-pencere 28b20d3 (§10, SHA) wt/lafpos-sozlesme.
+  Sıra: #137 (checks bq9q91s63) → lafmaliyet son-kontrol + LafPOS sozlesme-pencere birlikte → LafPOS son-kontrol → #138. tsc artık NODE_OPTIONS=--max-old-space-size=6144 ister.
+  Sahibe sorulacak: LafPOS günlerinde personel ladmin'de "Kasadan çıkanlar" ve zayi/ikram ekleyebilsin mi?
+- 22:13 #137: main(+#136) birleşik a21602c0, tsc/lint ✓, test 3142 ✓, test:db 77/77 ✓; push. Personel LafPOS günü kısıtı iş akışı wf_d0517a94-5c4 (son-kontrol dalında).
