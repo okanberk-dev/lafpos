@@ -99,15 +99,21 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
   yazılmaz, sonraki tur yeniden dener.
   **Fiyat anı.** Okumanın en üstündeki `nextPriceAt` şubenin bir sonraki fiyat anıdır (yoksa `null`; alanı göndermeyen
   eski site ve bozuk değer yok sayılır). O an gelince site hiçbir şey yazmaz: ne herkese açık menünün ETag'i ne `menu`
-  işareti değişir. Kasa uygulanan her imzalı okumadan sonra anı ve okumanın anını (sitenin `now`'u) durum kaydına yazar
-  (`laffogato.menu` `nextPriceAt`, `priceReadAt`) ve **gün açıkken o andan 5 saniye sonrasına tek bir ETag'siz
-  eşitleme** kurar (`server/jobs.ts` `schedulePriceSync`, `PRICE_SYNC_DELAY_MS`). O eşitleme yeni fiyatı ve bir sonraki
-  anı okur; aynı an ikinci kez kurulmaz. Bekleyen daha erken bir eşitleme varsa ona katılmaz (onu ETag'siz yapmaz), o
-  eşitlemeden sonra kurulur. 24 saatten uzak an zamanlayıcıya kurulmaz (site 90 güne kadar ileri yazar), gün açıkken
-  her yoklama yeniden bakar. Gün kapalıyken kurulmaz; an gece geçtiyse gün açılınca ilk eşitleme ETag'siz olur (herkese
-  açık menü değişmediği için 304 dönüp imzalı okuma yapılmazdı). An son okumadan sonra geçmiş ama okunamamışsa (site
-  yanıt vermedi, saati gerideydi) 15 dakikalık yoklama ETag'siz eşitler, okununca biter; geçmiş ana zamanlayıcı
-  kurulmaz (döngü yok). Bütçe: fiyat anı başına bir imzalı okuma (AGENTS.md kural 6).
+  işareti değişir. Kasa uygulanan her imzalı okumadan sonra anı ve okumanın anını sitenin saatiyle (`now`) ve kendi
+  saatiyle durum kaydına yazar (`laffogato.menu` `nextPriceAt`, `priceReadAt`, `priceReadLocalAt`) ve **gün açıkken o
+  andan 5 saniye sonrasına tek bir ETag'siz eşitleme** kurar (`server/jobs.ts` `schedulePriceSync`,
+  `PRICE_SYNC_DELAY_MS`). An kasanın saatine okumadaki iki saatin farkıyla çevrilir (en çok 10 dk; imza 300 sn'den
+  büyük kaymayı zaten reddeder): kasanın saati ileriyse eşitleme de o kadar geç kurulur, site anı geçmeden okunmaz. O
+  eşitleme yeni fiyatı ve bir sonraki anı okur; aynı an ikinci kez kurulmaz. Zorunlu eşitlemeler (işaret ve fiyat anı)
+  arası en az 60 sn (`MARKER_SYNC_MIN_MS`): yakın fiyat anları tek okumada toplanır. Bekleyen daha erken bir eşitleme
+  varsa ona katılmaz (onu ETag'siz yapmaz), o eşitlemeden sonra kurulur. 24 saatten uzak an zamanlayıcıya kurulmaz
+  (site 90 güne kadar ileri yazar), gün açıkken her yoklama yeniden bakar. Gün kapalıyken kurulmaz; an gece geçtiyse
+  gün açılınca ilk eşitleme ETag'siz olur (herkese açık menü değişmediği için 304 dönüp imzalı okuma yapılmazdı). An
+  son okumadan sonra geçmiş ama okunamamışsa (site yanıt vermedi) 15 dakikalık yoklama ETag'siz eşitler, okununca
+  biter; geçmiş ana zamanlayıcı kurulmaz (döngü yok). **Kasa yeniden başlayınca** (gece kapalı bilgisayar, güncelleme)
+  ilk eşitleme (ilk yoklama ya da gün açılışı) bir kez ETag'siz olur (`processSynced`): menü işareti ve fiyat anı
+  bellekte ya da son okumadadır, kasa kapalıyken yazılan şube fiyatını herkese açık menü göstermez. Bütçe: fiyat anı
+  başına en çok bir, süreç başına bir imzalı okuma (AGENTS.md kural 6).
 - **CDN bayatlığı:** panelde satışta olan bağlı ürün herkese açık listede yoksa liste CDN'de eskidir (`cdnStale`):
   2 dakika sonra (s-maxage + swr) **bir kez** ETag'siz yeniden eşitler, ad, KDV ve görsel de taze listeden gelsin. Yine
   bayatsa 15 dakikalık yoklama bekler (döngü yok). ETag yine yazılır: CDN yenilenince ETag değişir, yoklama taze listeyi
@@ -189,7 +195,7 @@ Sitenin kendi imza testi 16 Kasım 2026'da kaldırıldı.
 
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
-| `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1); şubenin şu anki fiyatı ve bir sonraki fiyat anı (`nextPriceAt`, §2.1 "Şube fiyatı") | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok), şubenin fiyat anında bir kez (gün açıkken; gece geçtiyse gün açılınca) ve elle |
+| `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1); şubenin şu anki fiyatı ve bir sonraki fiyat anı (`nextPriceAt`, §2.1 "Şube fiyatı") | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok), şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca), kasa yeniden başlayınca bir kez ve elle |
 | `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version?branch=<id>` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; site veritabanını yalnız genel işaret değişince, şubenin özeti için bir kez okur |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
@@ -1272,8 +1278,8 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 
 | İş | Sıklık | Neon'a etkisi |
 | --- | --- | --- |
-| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; `menu` işareti değişince gün açıkken en sık 60 sn, sonda tek eşitleme, gece yok (gün açılınca bir kez ETag'siz); CDN bayatsa 2 dk sonra bir kez; şubenin fiyat anında bir kez ETag'siz (§2.1 "Şube fiyatı"); elle | CDN ıskasında okuma (uyanma) |
-| İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle; şubenin fiyat anında bir kez (gün açıkken; gece geçtiyse gün açılınca; okunamazsa 15 dk'lık yoklamada yeniden) | küçük okuma |
+| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; `menu` işareti değişince gün açıkken en sık 60 sn, sonda tek eşitleme, gece yok (gün açılınca bir kez ETag'siz); CDN bayatsa 2 dk sonra bir kez; şubenin fiyat anında bir kez ETag'siz (§2.1 "Şube fiyatı"); kasa yeniden başlayınca ilk eşitleme bir kez ETag'siz; elle | CDN ıskasında okuma (uyanma) |
+| İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle; şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca; okunamazsa 15 dk'lık yoklamada yeniden); kasa yeniden başlayınca bir kez | küçük okuma |
 | Sipariş sürüm sinyali | gün açıkken 20 sn, gece en sık 3 dk; hiç iş günü yokken hiç; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | genel işaret yerinde durdukça yok (veri önbelleği); bir yazımdan sonra şubenin özeti için bir okuma |
 | Online sipariş okuma (masa çağrıları dahil; kasanın şubesinin, §2 "Şube") | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
 | Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si ve internetsiz basılan Tükendi / Satışa aç giden kutusundan (internet yokken istek denenmez, internet gelince tek yazım) | tek yazım |

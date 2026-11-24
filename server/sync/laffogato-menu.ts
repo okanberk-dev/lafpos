@@ -112,12 +112,14 @@ export type PanelMenu = Map<string, { isActive: boolean; onMenu?: boolean; price
 /**
  * İmzalı panel okuması: kalemler ve şube fiyatının zamanı (laffogato #301, docs/03-ENTEGRASYON.md §2.1 "Şube fiyatı").
  * `nextPriceAt` şubenin bir sonraki fiyat anı (yoksa, eski sitede ya da bozuksa null), `readAt` okumanın anı sitenin
- * saatiyle (`now`; yoksa kasanın saati): o an gelince site hiçbir şey yazmaz, kasa o anda kendisi çeker
+ * saatiyle (`now`; yoksa kasanın saati), `readLocalAt` aynı an kasanın saatiyle (ikisinin farkı iki saat arasındaki
+ * kayma): o an gelince site hiçbir şey yazmaz, kasa o anda kendisi çeker
  */
 export interface PanelRead {
   items: PanelMenu;
   nextPriceAt: string | null;
   readAt: string;
+  readLocalAt: string;
 }
 
 /** Sitenin ISO anı (saat dilimli); değilse null. Bozuk değer okumayı bozmaz, yalnız yok sayılır */
@@ -157,25 +159,36 @@ export async function fetchPanelMenu(): Promise<PanelRead | null> {
       ]),
   );
   // Şube fiyatı öncesi site alanları göndermez: bir sonraki an yok, okuma bugünkü gibi
-  return { items: map, nextPriceAt: isoInstant(body.nextPriceAt), readAt: isoInstant(body.now) ?? localNow };
-}
-
-/** Şube fiyatının kayıtlı zamanı (`laffogato.menu` durum kaydı): son imzalı okumanın `nextPriceAt`'i ve okuma anı */
-export interface PriceTiming {
-  nextPriceAt?: string | null;
-  priceReadAt?: string | null;
+  return { items: map, nextPriceAt: isoInstant(body.nextPriceAt), readAt: isoInstant(body.now) ?? localNow, readLocalAt: localNow };
 }
 
 /**
- * Şubenin bir sonraki fiyat anı kasada ne ister. An son imzalı okumadan (sitenin saatiyle) sonraysa: gelecekteyse o an
- * (`at`, zamanlayıcı kurar), kasanın saatinde geçtiyse zorunlu eşitleme (`due`: gün açılışında ya da yoklamada ETag'siz,
- * imzalı okuma da yapılsın; herkese açık menü değişmediği için 304 dönerdi). An okumadan önceyse o fiyat zaten okundu.
+ * Şube fiyatının kayıtlı zamanı (`laffogato.menu` durum kaydı): son imzalı okumanın `nextPriceAt`'i, okuma anı sitenin
+ * saatiyle (`priceReadAt`) ve kasanın saatiyle (`priceReadLocalAt`; eski kayıtta yok, fark 0 sayılır)
+ */
+export interface PriceTiming {
+  nextPriceAt?: string | null;
+  priceReadAt?: string | null;
+  priceReadLocalAt?: string | null;
+}
+
+/** İki saat arasındaki fark bundan büyükse yok sayılır (imza zaten 300 sn'den büyük kaymayı reddeder) */
+const MAX_CLOCK_SKEW_MS = 10 * 60_000;
+
+/**
+ * Şubenin bir sonraki fiyat anı kasada ne ister. An son imzalı okumadan (sitenin saatiyle) sonraysa: kasanın saatine
+ * çevrilir (okumadaki iki saatin farkıyla; kasa ileriyse an kasada daha geç gelir), gelecekteyse o an (`at`, zamanlayıcı
+ * kurar), geçtiyse zorunlu eşitleme (`due`: gün açılışında ya da yoklamada ETag'siz, imzalı okuma da yapılsın; herkese
+ * açık menü değişmediği için 304 dönerdi). An okumadan önceyse o fiyat zaten okundu.
  */
 export function priceInstant(state: PriceTiming | null | undefined, now: number): { due: boolean; at: number | null } {
-  const at = Date.parse(state?.nextPriceAt ?? '');
-  if (!Number.isFinite(at)) return { due: false, at: null };
+  const siteAt = Date.parse(state?.nextPriceAt ?? '');
+  if (!Number.isFinite(siteAt)) return { due: false, at: null };
   const read = Date.parse(state?.priceReadAt ?? '');
-  if (Number.isFinite(read) && at <= read) return { due: false, at: null };
+  if (Number.isFinite(read) && siteAt <= read) return { due: false, at: null };
+  // Kasanın saati - sitenin saati, okuma anında
+  const skew = Number.isFinite(read) ? Date.parse(state?.priceReadLocalAt ?? '') - read : Number.NaN;
+  const at = siteAt + (Number.isFinite(skew) && Math.abs(skew) <= MAX_CLOCK_SKEW_MS ? skew : 0);
   return now >= at ? { due: true, at: null } : { due: false, at };
 }
 
@@ -296,7 +309,8 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu |
     }
     if (p.name !== i.name) changes.push({ kind: 'ad', productId: p.id, extId: i.id, name: i.name, detail: `"${p.name}" → "${i.name}"` });
     if (p.kdvRate !== (i.taxRatePct ?? 10)) changes.push({ kind: 'kdv', productId: p.id, extId: i.id, name: i.name, detail: `%${p.kdvRate} → %${i.taxRatePct ?? 10}` });
-    else if (p.extHash && p.extHash !== hashItem(i) && !changes.some((c) => c.extId === i.id)) {
+    // `keep`: saklanan özet korunan fiyatla yazıldı (applyMenu); karşılaştırma da onunla (sahte "diğer" çıkmasın)
+    else if (p.extHash && p.extHash !== hashItem(rule.keep ? { ...i, priceMinor: p.price, priceLargeMinor: p.priceL ?? null } : i) && !changes.some((c) => c.extId === i.id)) {
       changes.push({ kind: 'diger', productId: p.id, extId: i.id, name: i.name, detail: 'Açıklama, görsel ya da alerjen değişti' });
     }
   }
@@ -497,12 +511,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   extras: '#7a6a5f',
 };
 
-export function recordMenuSync(result: { etag?: string | null; changes?: number; error?: string | null; prices?: { nextPriceAt: string | null; readAt: string } }) {
+export function recordMenuSync(result: { etag?: string | null; changes?: number; error?: string | null; prices?: { nextPriceAt: string | null; readAt: string; readLocalAt: string } }) {
   const prev = getSyncState<Record<string, unknown>>('laffogato.menu') ?? {};
   setSyncState('laffogato.menu', {
     ...prev,
     // Şube fiyatının zamanı yalnız uygulanmış imzalı okumadan (jobs.ts bir sonraki ana eşitleme kurar)
-    ...(result.prices ? { nextPriceAt: result.prices.nextPriceAt, priceReadAt: result.prices.readAt } : {}),
+    ...(result.prices ? { nextPriceAt: result.prices.nextPriceAt, priceReadAt: result.prices.readAt, priceReadLocalAt: result.prices.readLocalAt } : {}),
     ...(result.etag !== undefined ? { etag: result.etag } : {}),
     lastCheckAt: Date.now(),
     ...(result.error ? { lastError: result.error, lastErrorAt: Date.now() } : { lastError: null, lastSuccessAt: Date.now() }),

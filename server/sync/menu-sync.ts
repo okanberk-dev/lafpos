@@ -75,7 +75,7 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
         // gösterir: Marina'da satılan, Tuzla'da tükenen ürün listede yoktur ve "bayat" görünür; ETag yazılmasaydı her
         // 15 dakikalık yoklama tam liste ve imzalı panel okuması isterdi (laffogato src/lib/mobile/menu.ts)
         // Şube fiyatının bir sonraki anı uygulanan imzalı okumadan (server/jobs.ts o ana bir eşitleme kurar)
-        const prices = read ? { prices: { nextPriceAt: read.nextPriceAt, readAt: read.readAt } } : {};
+        const prices = read ? { prices: { nextPriceAt: read.nextPriceAt, readAt: read.readAt, readLocalAt: read.readLocalAt } } : {};
         recordMenuSync(warning ? { changes: preview.changes.length, error: warning } : { etag: fetched.etag, changes: preview.changes.length, ...prices });
         fx.emit({ topic: 'menu', kind: 'menu.synced' });
         fx.emit({ topic: 'sync', kind: 'menu.synced' });

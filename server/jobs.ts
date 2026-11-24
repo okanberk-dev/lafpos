@@ -60,11 +60,18 @@ const timers: NodeJS.Timeout[] = [];
 /** Bekleyen tek menü eşitlemesi: yeni istek en erken olanla birleşir (zorunluluk ve gece izni toplanır) */
 let pendingSync: { at: number; force: boolean; anyTime: boolean; timer: NodeJS.Timeout } | null = null;
 let lastSyncAt = 0;
+/** Son zorunlu (ETag'siz) zamanlanmış eşitleme: işaret ve fiyat anı eşitlemeleri arası en az `MARKER_SYNC_MIN_MS` */
 let lastMarkerSyncAt = 0;
 /** Gece (açık gün yokken) menü işareti değişti: gün açılınca bir kez ETag'siz eşitlenir */
 let menuDirty = false;
 /** CDN bayatlığı için yeniden eşitleme bir kez kuruldu: yine bayatsa 15 dakikalık yoklama bekler (döngü yok) */
 let cdnRetried = false;
+/**
+ * Bu süreçte ETag'siz bir eşitleme yapıldı. Menü işareti ve fiyat anı bellekte ya da son okumada: kasa kapalıyken
+ * (gece, güncelleme) yazılan şube fiyatını herkese açık menü göstermez (304, Tuzla'nın listesi değişmez), işaretin ilk
+ * okuması da onu taban alır. Süreç başına bir kez (ilk yoklama ya da gün açılışı) ETag'siz: bir imzalı okuma
+ */
+let processSynced = false;
 
 /** Testler için: zamanlayıcının menü belleğini sıfırlar */
 export function resetMenuScheduler() {
@@ -74,6 +81,7 @@ export function resetMenuScheduler() {
   lastMarkerSyncAt = 0;
   menuDirty = false;
   cdnRetried = false;
+  processSynced = false;
 }
 
 /** Testler için: bekleyen eşitleme (an ve ETag'siz mi) */
@@ -122,10 +130,12 @@ export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}
   if (!opts.anyTime && !getOpenDay(db)) return;
   // Şubenin fiyat anı son imzalı okumadan sonra geçti (gece, zamanlayıcı kaçtı ya da o eşitleme başaramadı): ETag'siz,
   // yoksa herkese açık menü 304 döner ve imzalı okuma yapılmazdı. En sık yoklama aralığında (15 dk), bütçe içinde
-  const force = opts.force || priceInstant(menuState(), Date.now()).due;
+  // Süreç yeni başladı: kapalıyken yazılan şube fiyatı için bir kez ETag'siz (`processSynced`)
+  const force = opts.force || !processSynced || priceInstant(menuState(), Date.now()).due;
   try {
     // force: ETag'e bakılmaz (CDN'deki liste henüz eskiyse 304 dönerdi); fiyat ve Satışta imzalı panelden tazedir
     const r = await runMenuSync({ apply: true, force });
+    if (force) processSynced = true;
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);
     // CDN'deki liste bayat (sitede yeniden açılan ürün listede yok): bir kez, CDN yenilenince ETag'siz
     if (r.cdnStale && !cdnRetried) {
@@ -148,13 +158,15 @@ const menuState = () => getSyncState<PriceTiming>('laffogato.menu');
  * sonra yeniden bakılır: o anın eşitlemesi yeni anı (ya da hiçbirini) okur, aynı an ikinci kez kurulmaz. Bekleyen daha
  * erken bir eşitleme varsa ona katılmaz (onu ETag'siz yapmaz); o eşitlemeden sonra kurulur. Gün kapalıyken kurulmaz:
  * an geçtiyse gün açılınca `menuTick` ETag'siz eşitler; kurulan eşitleme günün kapanmasına denk gelirse açılışa kalır.
- * Site alanı göndermiyorsa (şube fiyatı öncesi) hiçbir şey kurulmaz. AGENTS.md kural 6: fiyat anı başına bir imzalı okuma
+ * Site alanı göndermiyorsa (şube fiyatı öncesi) hiçbir şey kurulmaz. AGENTS.md kural 6: fiyat anı başına en çok bir
+ * imzalı okuma, zorunlu eşitlemeler arası en az 60 sn (`MARKER_SYNC_MIN_MS`; yakın anlar tek okumada toplanır)
  */
 export function schedulePriceSync(now = Date.now()) {
   if (!siteLinked() || !getSettings().menuAutoSync || !getOpenDay(db)) return;
   const { at } = priceInstant(menuState(), now);
   if (at === null || at - now > PRICE_SYNC_HORIZON_MS) return;
-  const when = at + PRICE_SYNC_DELAY_MS;
+  // Zorunlu eşitlemeler arası en az 60 sn (işaret eşitlemesiyle aynı taban): yakın fiyat anları tek okumada toplanır
+  const when = Math.max(at + PRICE_SYNC_DELAY_MS, lastMarkerSyncAt + MARKER_SYNC_MIN_MS);
   if (pendingSync && pendingSync.at <= when) return;
   scheduleMenuSync(when, true, false);
 }
