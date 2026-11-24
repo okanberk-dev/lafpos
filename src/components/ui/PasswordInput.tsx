@@ -60,7 +60,8 @@ function setRef<T>(ref: Ref<T> | undefined, value: T | null) {
   else if (ref) (ref as { current: T | null }).current = value;
 }
 
-export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(function PasswordInput(
+// `#__PURE__`: kasa build'inde Uzaktan girişi ağaçtan atılınca bu modül de ana pakete inmez (kullanan ekranla gelir)
+const PasswordField = /*#__PURE__*/ forwardRef<HTMLInputElement, PasswordInputProps>(function PasswordInput(
   {
     value,
     defaultValue,
@@ -258,3 +259,9 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
     </div>
   );
 });
+
+/**
+ * `labelOutside`: Field bu işareti görünce `<label>` ile yalnız etiketin yazısını sarar ve alana `for` ile bağlar. Göz
+ * düğmesi etiketin içinde kalsaydı adı alanın adına karışırdı ("Parola Parolayı göster")
+ */
+export const PasswordInput = /*#__PURE__*/ Object.assign(PasswordField, { labelOutside: true as const });

@@ -17,6 +17,7 @@ const root = join(__dirname, '..');
 const load = (p: string): Promise<any> => import(/* @vite-ignore */ join(root, p));
 const { default: NotificationBell } = (await load('src/components/ui/NotificationBell.tsx')) as { default: FC<Record<string, unknown>> };
 const { PasswordInput } = (await load('src/components/ui/PasswordInput.tsx')) as { PasswordInput: FC<Record<string, unknown>> };
+const { Field } = (await load('src/components/ui/Field.tsx')) as { Field: FC<Record<string, unknown>> };
 const { toast, ToastItem } = (await load('src/lib/toast.tsx')) as { toast: Record<string, unknown>; ToastItem: FC<{ t: { id: number; tone: Tone; text: string; duration: number } }> };
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 const html = (el: ReturnType<typeof createElement>) => renderToStaticMarkup(el);
@@ -170,6 +171,35 @@ describe('şifre kutusu: gizliyken karakter sayfada yok', () => {
     expect(out).toContain('id="parola-guc"');
     expect(out).toContain('data-level="4"');
   });
+  it('etiketli alanda göz düğmesi adın parçası olmaz: düğme <label> dışında, etiket alana for ile bağlı', () => {
+    // <label> içindeki düğmenin adı alanın adına karışır ("Parola Parolayı göster"); etiket yalnız yazıyı sarar
+    const field = (props: Record<string, unknown> = {}, child: Record<string, unknown> = {}) =>
+      html(createElement(Field, { label: 'Parola', ...props }, createElement(PasswordInput, { value: SECRET, onChange: () => {}, showLabel: 'Parolayı göster', ...child })));
+    for (const out of [field(), field({ hint: 'En az 10 karakter, harf ve rakam karışık', error: 'Parola yanlış' }), field({}, { id: 'parola' })]) {
+      const labels = [...out.matchAll(/<label[^>]*>([\s\S]*?)<\/label>/g)];
+      expect(labels.length, out).toBe(1);
+      expect(labels[0][1]).toContain('Parola');
+      expect(labels[0][1]).not.toContain('<button');
+      expect(labels[0][1]).not.toContain('<input');
+      const id = /<input[^>]*\sid="([^"]+)"/.exec(out)?.[1];
+      expect(id).toBeTruthy();
+      expect(labels[0][0]).toContain(`for="${id}"`);
+      expect(out).toContain(`aria-controls="${id}"`);
+    }
+    expect(field({}, { id: 'parola' })).toContain('id="parola"');
+    // Hata ve uzun ipucu yine alanın açıklaması
+    const err = field({ hint: 'En az 10 karakter, harf ve rakam karışık', error: 'Parola yanlış' });
+    const described = /<input[^>]*aria-describedby="([^"]+)"/.exec(err)?.[1].split(' ') ?? [];
+    expect(described.length).toBe(2);
+    expect(err).toContain('aria-invalid="true"');
+  });
+  it('Field şifre kutusunu içe aktarmaz (şifre kutusu ana pakete inmez, kullanan ekranla gelir)', () => {
+    expect(read('src/components/ui/Field.tsx')).not.toMatch(/from '\.\/PasswordInput'/);
+    // Uzaktan girişi App.tsx'te statik: kasa build'inde ağaçtan atılır, modülün üst düzeyi yan etkisiz kalmalı
+    const src = read('src/components/ui/PasswordInput.tsx');
+    expect(src).toContain('= /*#__PURE__*/ forwardRef<');
+    expect(src).toContain('= /*#__PURE__*/ Object.assign(');
+  });
   it('dokunmatikte alan ve göz düğmesi 44 px', () => {
     const src = read('src/components/ui/PasswordInput.tsx');
     expect(src).toContain('pointer-coarse:h-11');
@@ -182,7 +212,7 @@ describe('şifre kutusu: yerleri', () => {
   it('uygulamada yerli type="password" kalmadı (PIN tuş takımı hariç, o zaten yazı alanı değil)', () => {
     const bad = walk(join(root, 'src'))
       .filter((f) => !f.endsWith('PasswordInput.tsx'))
-      .filter((f) => /type=(?:"password"|\{[^}]*'password')/.test(readFileSync(f, 'utf8')));
+      .filter((f) => /type(?:=|:\s*)(?:"password"|'password'|\{[^}]*'password')/.test(readFileSync(f, 'utf8')));
     expect(bad).toEqual([]);
   });
   it('güç çubuğu yalnız yeni parolada (üyelik), girişte ve PIN alanlarında yok', () => {
@@ -196,6 +226,12 @@ describe('şifre kutusu: yerleri', () => {
       expect(src, f).not.toMatch(/<PasswordInput[^>]*\sstrength/);
     }
     expect(read('src/pages/cash/ShiftHandover.tsx')).toContain('showLabel="PIN\'i göster"');
+    // Uzaktan › Ekip'in PIN alanları: şifre kutusu, parola yöneticisi karışmaz, yalnız rakam
+    const ekip = read('src/pages/kontrol/EkipSekmesi.tsx');
+    expect(ekip.match(/<PasswordInput /g)?.length).toBe(2);
+    expect(ekip).toContain("'data-1p-ignore': ''");
+    expect(ekip).toContain("'data-lpignore': 'true'");
+    expect(ekip).toContain('setPin(pinGirdisi(e.target.value))');
   });
 });
 

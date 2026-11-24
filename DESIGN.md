@@ -493,7 +493,8 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   **Adet seçici** (`Stepper`): açık gri hap ray, içinde beyaz yuvarlak eksi ve artı. **Şifre kutusu** (`PasswordInput`;
   yerli `type="password"` yok): alanın görünümünde, gizliyken yalnız noktalar (gerçek karakter sayfaya yazılmaz), göz
   düğmesiyle karakterler noktaların yerinde belirir ("Şifreyi göster" / "Şifreyi gizle"; PIN'de "PIN'i", Uzaktan'da
-  "Parolayı"); güç çubuğu (Zayıf, Orta, İyi, Güçlü) yalnız yeni şifre alanında.
+  "Parolayı"); güç çubuğu (Zayıf, Orta, İyi, Güçlü) yalnız yeni şifre alanında. `Field` içinde etiket yalnız yazıyı sarar
+  ve alana `for` ile bağlanır: göz düğmesinin adı alanın adına karışmaz.
 - **Gelen işin zili:** platform siparişi ve sitenin uyarıları şeridinin başındaki dolu dairede zil (`InboxBell`): yeni
   sipariş ya da çağrı gelince bir kez sallanır, sağ üstteki mürekkep rozetin rakamı kayan sayaçla döner (99'dan çoğu
   "99+"). Hareket kütüphanesi tembel parçada; hareket azaltmada sallanmaz.

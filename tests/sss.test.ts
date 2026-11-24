@@ -77,12 +77,33 @@ describe('Sık sorulan sorular: rol gözetilir', () => {
     }
     expect(faqFor(ctx(ALL_PERMISSIONS)).some((i) => cost.test(answerText(i.answer)))).toBe(true);
   });
+  // Sunucunun kuralı (server/lib/auth.ts seesCashNumbers): kasa.rakam ya da rapor.gor olan kasa rakamlarını görür
+  const seesCash = (c: FaqContext) => c.can('kasa.rakam') || c.can('rapor.gor');
   it('kör kasada kasa rakamları (ara rapor, beklenen nakit) anlatılmaz', () => {
-    for (const c of CONTEXTS.filter((x) => !x.can('kasa.rakam'))) {
+    for (const c of CONTEXTS.filter((x) => !seesCash(x))) {
       for (const item of faqFor(c)) expect(`${item.question} ${answerText(item.answer)}`, item.id).not.toMatch(/beklenen|Ara rapor \(X\)/i);
     }
     const kor = faqFor(ctx(ROLE_DEFAULTS.kasiyer)).find((i) => i.id === 'kasa-rakam');
     expect(kor?.answer).toMatch(/kör kasa/);
+  });
+  it('kör kasa sunucuyla aynı kurala göre: rapor.gor olana kör kasa denmez', () => {
+    // kasa.rakam yok, rapor.gor var: sunucu ara raporu ve beklenen nakdi gönderir
+    const raporcu = ctx([...ROLE_DEFAULTS.kasiyer.filter((p) => p !== 'kasa.rakam'), 'rapor.gor']);
+    const item = faqFor(raporcu).find((i) => i.id === 'kasa-rakam')!;
+    expect(item.answer).not.toMatch(/kör kasa/);
+    expect(item.answer).toMatch(/Ara rapor \(X\)/);
+    for (const c of CONTEXTS.filter(seesCash)) {
+      for (const i of faqFor(c)) expect(answerText(i.answer), i.id).not.toMatch(/Rolünüzde kör kasa/);
+    }
+  });
+  it('gün sonu: kör kasada Z raporunun ekranda açıldığı söylenmez (sunucu özet göndermez)', () => {
+    const z = (c: FaqContext) => answerText(faqFor(c).find((i) => i.id === 'gun-sonu')!.answer);
+    expect(ROLE_DEFAULTS.kasiyer).not.toContain('rapor.gor');
+    for (const c of CONTEXTS.filter((x) => x.can('kasa.gun') && !seesCash(x))) {
+      expect(z(c)).not.toMatch(/Z raporu ekranda açılır/);
+      expect(z(c)).toMatch(/yönetici/);
+    }
+    expect(z(ctx(ALL_PERMISSIONS))).toMatch(/Z raporu ekranda açılır/);
   });
   it('yanıtta veri yok: tutar yazılmaz (yalnız sabit eşikler ve süreler)', () => {
     for (const item of everyItem()) expect(answerText(item.answer), item.id).not.toMatch(/₺\s?\d/);
