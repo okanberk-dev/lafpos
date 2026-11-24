@@ -977,6 +977,13 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
   `lastAnswer` değil, geçmiş günler sırasız gidebilir) ya da tembel devir okumasının değeri, hangisi daha yeniyse. Günün
   gönderilmemiş kaydı varsa (yeniden sayım yolda) lafmaliyet eski günü bilir: yerel sayım geçer. lafmaliyet `null`
   derse ya da bir şey söylemediyse yerel sayım; o da yoksa (sayımsız kapanış) beklenen yok.
+- **Yeniden gönderimin yanıtı eskidir:** lafmaliyet devri kayıtlı Kasa raporundan hesaplar ve raporu yanıtı gönderdikten
+  sonra yazar (`after()`): bir gönderimin yanıtı o gönderimin sayımını görmez. Yeniden sayım ya da yeniden açılıp
+  kapanan günün yanıtı `kasa_raporu` der ve tutarı günün önceki bir gönderiminin sayımına eşitse (bu gönderiminkine
+  değil), rapor LafPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt okunmaz, yerel sayım geçer (lafmaliyet
+  raporu bu sayımla günceller). Panelde düzeltilen rapor önceki sayımın yankısı değildir, yanıtı geçer; sayımsız
+  yeniden kapanışta da (lafmaliyet raporun sayımını korur). Günün son gönderiminden önce okunan devir de eskidir.
+  Doğrusu ertesi sabahki tembel devir okumasıyla gelir (lafmaliyet o anda raporu yazmıştır).
 - **`GET /api/cash/day`** gün kapalıyken `opening` döner: kasa rakamlarını gören kullanıcıya (`kasa.rakam` ya da
   `rapor.gor`) `{ suggested, source, fromDate }` (`suggested` kuruş, `source` `lafmaliyet` | `lafpos`, `fromDate`
   devrin günü); kör kasiyere yalnız `{ check: true }`; beklenen yoksa `null`. Kasa ekranı "Günü aç" kartında beklenen

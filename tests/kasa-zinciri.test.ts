@@ -20,7 +20,7 @@ interface Reply {
 let h: Harness;
 let ladmin: Server;
 const calls: { method: string; path: string; query: string; body: { date?: string } | null }[] = [];
-let dayReply = (date: string): Reply => ({ status: 200, body: { ok: true, date, counted: true, switchDay: '2026-11-22' } });
+let dayReply = (date: string, _body?: { z?: { countedCash?: number | null } } | null): Reply => ({ status: 200, body: { ok: true, date, counted: true, switchDay: '2026-11-22' } });
 let devirReply = (date: string): Reply => ({ status: 200, body: { version: 1, date, nextOpening: null } });
 const CATEGORIES = [
   { id: 1, name: 'Nakit malzeme alımı', section: 'mal' },
@@ -42,7 +42,7 @@ beforeAll(async () => {
       calls.push({ method: req.method ?? '', path: url.pathname, query: url.search, body });
       const reply =
         url.pathname === '/api/pos/gun'
-          ? dayReply(body?.date ?? '')
+          ? dayReply(body?.date ?? '', body)
           : url.pathname === '/api/panel/pos/devir'
             ? devirReply(url.searchParams.get('date') ?? '')
             : url.pathname === '/api/panel/pos/gider-kategorileri'
@@ -313,9 +313,160 @@ describe('bugünün günü kapandıktan sonra', () => {
     expect(await lm.devirIfStale()).toBe(false);
     await new Promise((r) => setTimeout(r, 100));
     expect(devirGets()).toHaveLength(before);
-    // Ertesi iş günü (gün dünün tarihine alınır): ekran yine sorar
+    // Ertesi iş günü (gün dünün tarihine alınır, gönderim kaydıyla): ekran yine sorar
     db.update(schema.businessDays).set({ date: addDays(today, -1) }).where(eq(schema.businessDays.id, id)).run();
+    db.update(schema.outbox).set({ dedupeKey: `gun:${addDays(today, -1)}` }).where(eq(schema.outbox.dedupeKey, `gun:${today}`)).run();
     await h.ok('mudur', 'GET', '/cash/day');
     await vi.waitFor(() => expect(devirGets()).toHaveLength(before + 1), { timeout: 5000, interval: 25 });
+  });
+});
+
+describe('yeniden sayım lafmaliyet\'e gidince', () => {
+  // lafmaliyet (§3) devri günün kayıtlı kasa raporundan hesaplar ve raporu yanıttan SONRA yazar (`after()`): gönderimin
+  // yanıtı o gönderimin sayımını görmez, önceki gönderimin raporunu söyler. Bu sahte lafmaliyet ikisini de öyle yapar;
+  // LafPOS'un otomatik raporu (elle düzeltilmemiş) yeni sayımı alır
+  const reports = new Map<string, number>();
+  const ladminLike = (date: string, body?: { z?: { countedCash?: number | null } } | null): Reply => {
+    const stored = reports.get(date);
+    const counted = body?.z?.countedCash ?? null;
+    const nextOpening = stored != null ? { amount: stored, source: 'kasa_raporu' } : counted != null ? { amount: counted, source: 'lafpos' } : null;
+    if (counted != null) reports.set(date, counted);
+    return { status: 200, body: { ok: true, date, counted: true, switchDay: '2026-11-22', nextOpening } };
+  };
+  const ladminDevir = (date: string): Reply => {
+    const stored = reports.get(date);
+    return { status: 200, body: { version: 1, date, nextOpening: stored != null ? { amount: stored, source: 'kasa_raporu' } : null } };
+  };
+  const devirDown = (): Reply => ({ status: 503, body: { error: 'maintenance' } });
+
+  async function sentAnswers(date: string) {
+    const { db, schema } = await mod();
+    return db
+      .select()
+      .from(schema.outbox)
+      .all()
+      .filter((o) => o.dedupeKey === `gun:${date}` && o.sentAt != null)
+      .map((o) => o.response as { nextOpening?: unknown });
+  }
+
+  /** Önceki test yarıda kaldıysa da açık gün olsun (açılış neden yazılarak) */
+  async function ensureOpen() {
+    const { openRow } = await mod();
+    if (!openRow()) await h.ok('mudur', 'POST', '/cash/day/open', { openingCash: 100000, reason: 'Test' });
+  }
+
+  /** Devri hemen sordurur (5 dakika bütçesi sıfırlanır) ve isteğin bitmesini bekler */
+  async function askDevir() {
+    const { settings, lm } = await mod();
+    settings.setSyncState('lafmaliyet.devir', { ...(settings.getSyncState<Record<string, unknown>>('lafmaliyet.devir') ?? {}), attemptAt: 0 });
+    expect(await lm.devirIfStale()).toBe(true);
+  }
+
+  it('yanıt önceki gönderimin raporunu söylese de yeni sayım geçer: devir okunamazken kör kasiyer doğru tutarla nedensiz açar', async () => {
+    const { openRow, dayRow } = await mod();
+    dayReply = ladminLike;
+    devirReply = devirDown;
+    await ensureOpen();
+    const id = await closeBack(127950);
+    const date = dayRow(id).date;
+    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1279.5, source: 'lafpos' } });
+    // Geç gelen masa ya da yeniden sayım: lafmaliyet'e giden yeni sayımın yanıtı eski raporu (₺1.279,50) söyler
+    await h.ok('mudur', 'POST', `/cash/days/${id}/count`, { countedCash: 130000 });
+    const { lm } = await mod();
+    await lm.flushOutbox();
+    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1279.5, source: 'kasa_raporu' } });
+    expect(reports.get(date)).toBe(1300);
+    // Ertesi sabah lafmaliyet'e ulaşılamıyor: beklenen kasanın yeni sayımıdır
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: 'lafpos', fromDate: date });
+    // Kör kasiyer çekmecedeki doğru tutarı yazar: olmayan bir fark için neden istenmez
+    await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 130000 });
+    expect(openRow()).toMatchObject({ expectedOpening: 130000, openingDiff: 0, openingReason: null });
+  });
+
+  it('yeniden gönderimden önce okunan devir de eskidir; sonra okunan devir lafmaliyet\'in güncel raporudur', async () => {
+    const { openRow, dayRow, lm } = await mod();
+    dayReply = ladminLike;
+    devirReply = ladminDevir;
+    await ensureOpen();
+    const id = await closeBack(150000);
+    const date = dayRow(id).date;
+    // Sabah okunan devir: lafmaliyet'in raporu (LafPOS'un ilk sayımı)
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 150000, source: 'lafmaliyet', fromDate: date });
+    // Gün yeniden sayılır ve gider; yanıt eski raporu söyler, sonra lafmaliyet'e ulaşılamaz
+    await h.ok('mudur', 'POST', `/cash/days/${id}/count`, { countedCash: 152000 });
+    await lm.flushOutbox();
+    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1500, source: 'kasa_raporu' } });
+    devirReply = devirDown;
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 152000, source: 'lafpos', fromDate: date });
+    // lafmaliyet geri gelince güncel rapor okunur
+    devirReply = ladminDevir;
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 152000, source: 'lafmaliyet', fromDate: date });
+    await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 152000 });
+    expect(openRow()).toMatchObject({ expectedOpening: 152000, openingDiff: 0 });
+  });
+
+  it('geç gelen masa: bugünün günü yeniden açılıp kapanınca da yeni sayım geçer; sayımsız yeniden kapanışta lafmaliyet\'in raporu kalır', async () => {
+    const { openRow, dayRow, lm, db, schema, eq } = await mod();
+    dayReply = ladminLike;
+    devirReply = devirDown;
+    await ensureOpen();
+    // Bugünün günü (tarihi kaydırılmaz) sayılıp kapanır ve gider
+    const id = openRow()!.id;
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: 127950 });
+    await lm.flushOutbox();
+    await h.ok('mudur', 'POST', `/cash/days/${id}/reopen`, { reason: 'Geç gelen masa' });
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: 130000 });
+    await lm.flushOutbox();
+    let at = dayRow(id).date;
+    expect((await sentAnswers(at)).at(-1)).toMatchObject({ nextOpening: { amount: 1279.5, source: 'kasa_raporu' } });
+    // Ertesi iş günü (gün iki gün önceye alınır; başka günün tarihi değil), lafmaliyet'e ulaşılamıyor
+    const move = (to: string) => {
+      db.update(schema.businessDays).set({ date: to }).where(eq(schema.businessDays.id, id)).run();
+      db.update(schema.outbox).set({ dedupeKey: `gun:${to}` }).where(eq(schema.outbox.dedupeKey, `gun:${at}`)).run();
+      at = to;
+    };
+    const past = addDays(today, -2);
+    move(past);
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: 'lafpos', fromDate: past });
+    // Yeniden açılıp sayımsız kapanırsa (föy sonra) lafmaliyet raporun sayımını korur: onun yanıtı geçer
+    move(today);
+    await h.ok('mudur', 'POST', `/cash/days/${id}/reopen`, { reason: 'Bir masa daha' });
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    await lm.flushOutbox();
+    expect((await sentAnswers(today)).map((a) => a.nextOpening)).toEqual([
+      { amount: 1279.5, source: 'lafpos' },
+      { amount: 1279.5, source: 'kasa_raporu' },
+      { amount: 1300, source: 'kasa_raporu' },
+    ]);
+    move(past);
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: 'lafmaliyet', fromDate: past });
+    await h.ok('mudur', 'POST', '/cash/day/open', { openingCash: 130000 });
+  });
+
+  it('panelde düzeltilen rapor (önceki sayımın yankısı değil) yeniden gönderimin yanıtında da geçer', async () => {
+    const { dayRow, lm } = await mod();
+    dayReply = ladminLike;
+    devirReply = devirDown;
+    await ensureOpen();
+    const id = await closeBack(140000);
+    const date = dayRow(id).date;
+    // Müdür lafmaliyet'te raporu düzeltti (kapanıştan sonra ₺15,00 teslim): rapor elle değişti, yeniden sayım onu ezmez
+    reports.set(date, 1385);
+    dayReply = (d, body) => {
+      const r = ladminLike(d, body);
+      reports.set(d, 1385);
+      return r;
+    };
+    await h.ok('mudur', 'POST', `/cash/days/${id}/count`, { countedCash: 140100 });
+    await lm.flushOutbox();
+    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1385, source: 'kasa_raporu' } });
+    await askDevir();
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 138500, source: 'lafmaliyet', fromDate: date });
   });
 });

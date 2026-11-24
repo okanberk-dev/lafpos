@@ -68,24 +68,43 @@ export function dayPushPending(t: Tx | DB, date: string): boolean {
 /** TL'den kuruşa (lafmaliyet iki ondalıklı TL gönderir) */
 export const kurusOf = (tl: number) => Math.round(tl * 100);
 
+/** Gönderimin taşıdığı sayım (kuruş; gövdenin `z.countedCash`'i TL), sayımsızsa null */
+function pushedCount(payload: unknown): number | null {
+  const c = (payload as { z?: { countedCash?: unknown } } | null)?.z?.countedCash;
+  return typeof c === 'number' && Number.isFinite(c) ? kurusOf(c) : null;
+}
+
 /**
  * lafmaliyet'in bu güne söylediği en yeni devir: günün kendi 200 almış gönderim kaydının yanıtı (en yenisi) ile tembel
  * okumanın değerinden hangisi daha yeniyse. `undefined`: lafmaliyet bu gün için bir şey söylemedi (eski panel, hiç
- * gönderilmedi); `null`: gün lafmaliyet'te sayılmamış
+ * gönderilmedi); `null`: gün lafmaliyet'te sayılmamış.
+ *
+ * lafmaliyet devri kayıtlı Kasa raporundan hesaplar ve raporu yanıtı gönderdikten sonra yazar: bir gönderimin yanıtı o
+ * gönderimin sayımını görmez. Yeniden sayım ya da yeniden kapanışın yanıtı (`kasa_raporu`) önceki bir gönderimin
+ * sayımına eşitse ve bu gönderiminkine değilse rapor LafPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt
+ * eskidir, lafmaliyet raporu bu gönderimin sayımıyla günceller (yerel sayım geçer). Panelde düzeltilen rapor önceki
+ * sayımın yankısı değildir, o yanıt geçer. Günün son gönderiminden önce okunan devir de o gönderimin sayımını görmedi
  */
 function ladminNextOpening(t: Tx | DB, date: string): { value: NextOpening | null; at: number } | undefined {
   const sent = t
-    .select({ response: schema.outbox.response, sentAt: schema.outbox.sentAt })
+    .select({ payload: schema.outbox.payload, response: schema.outbox.response, sentAt: schema.outbox.sentAt })
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, `gun:${date}`), isNotNull(schema.outbox.sentAt)))
     .orderBy(desc(schema.outbox.sentAt), desc(schema.outbox.id))
-    .get();
-  const answer = sent?.response as { at?: number; nextOpening?: { amount: number; source: NextOpening['source'] } | null } | null | undefined;
-  const fromAnswer = answer && 'nextOpening' in answer && answer.nextOpening !== undefined
-    ? { value: answer.nextOpening ? { amount: kurusOf(answer.nextOpening.amount), source: answer.nextOpening.source } : null, at: answer.at ?? sent?.sentAt ?? 0 }
+    .all();
+  const [latest, ...earlier] = sent;
+  const answer = latest?.response as { at?: number; nextOpening?: { amount: number; source: NextOpening['source'] } | null } | null | undefined;
+  let fromAnswer = answer && 'nextOpening' in answer && answer.nextOpening !== undefined
+    ? { value: answer.nextOpening ? { amount: kurusOf(answer.nextOpening.amount), source: answer.nextOpening.source } : null, at: answer.at ?? latest?.sentAt ?? 0 }
     : undefined;
+  if (fromAnswer?.value?.source === 'kasa_raporu') {
+    const amount = fromAnswer.value.amount;
+    const count = pushedCount(latest.payload);
+    if (count != null && count !== amount && earlier.some((r) => pushedCount(r.payload) === amount)) fromAnswer = undefined;
+  }
   const devir = getSyncState<DevirState>('lafmaliyet.devir');
-  const fromDevir = devir && devir.date === date && devir.okAt != null && devir.nextOpening !== undefined ? { value: devir.nextOpening ?? null, at: devir.okAt } : undefined;
+  const fromDevir =
+    devir && devir.date === date && devir.okAt != null && devir.okAt > (latest?.sentAt ?? 0) && devir.nextOpening !== undefined ? { value: devir.nextOpening ?? null, at: devir.okAt } : undefined;
   if (fromAnswer && fromDevir) return fromDevir.at > fromAnswer.at ? fromDevir : fromAnswer;
   return fromAnswer ?? fromDevir;
 }
