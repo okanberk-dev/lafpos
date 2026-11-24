@@ -169,6 +169,13 @@
       "when": 1795474913998,
       "tag": "0023_sayim_ani",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1795477324974,
+      "tag": "0024_kasa_zinciri",
+      "breakpoints": true
     }
   ]
 }

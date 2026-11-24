@@ -15,8 +15,9 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
-import { REFUND_REWRITE, REFUND_VOID } from '../services/orders';
+import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
+import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../services/devir';
+import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { dropPending, land, takeOff } from './outbox-flight';
 
 /**
@@ -446,6 +447,11 @@ export function buildDayPayload(dayId: string) {
       openedAt: new Date(day.openedAt).toISOString(),
       closedAt: day.closedAt != null ? new Date(day.closedAt).toISOString() : null,
       okcZNo: okc?.zNo != null ? String(okc.zNo) : null,
+      // Kasa zinciri (§4.6): açılışta beklenen nakit (önceki gerçek günün devri), fark (açılış − beklenen, işaretli) ve
+      // en az ₺1,00 farkta yazılan neden. Beklenen bilinmiyorsa üçü de null
+      expectedOpening: day.expectedOpening != null ? toTL(day.expectedOpening) : null,
+      openingDiff: day.openingDiff != null ? toTL(day.openingDiff) : null,
+      openingReason: cap(day.openingReason),
     },
     lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon })),
     ikram: comps.flatMap((i) =>
@@ -484,11 +490,28 @@ export function buildDayPayload(dayId: string) {
         })),
       )
       .slice(0, LIST_MAX),
+    // Kasa hareketleri satır satır (§4.7; lafmaliyet "Kasadan çıkanlar"): hep gider, hareketsiz günde boş dizi (eski
+    // LafPOS'tan ayrılsın). Kişi gitmez; harcamanın kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut,
+    // Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit tahsilatı ve bahşişi de sayar)
+    cashMoves: cashMovesOf(day.id),
   };
+}
+
+/** Günün kasa hareketleri, yazıldığı sırayla (TL; açıklama en çok 200 karakter) */
+function cashMovesOf(dayId: string) {
+  return db
+    .select()
+    .from(schema.cashMovements)
+    .where(eq(schema.cashMovements.dayId, dayId))
+    .orderBy(asc(schema.cashMovements.createdAt), asc(schema.cashMovements.id))
+    .all()
+    .map((m) => ({ id: m.id, kind: m.kind, amount: toTL(m.amount), description: cap(m.description) ?? '', at: new Date(m.createdAt).toISOString(), categoryId: m.kind === 'harcama' ? m.categoryId : null }));
 }
 
 
 const configured = () => !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= MIN_SECRET_LENGTH;
+/** lafmaliyet bağlantısı tanımlı mı (LAFMALIYET_URL ve en az 32 karakterlik LAFMALIYET_SYNC_SECRET) */
+export const lafmaliyetConfigured = configured;
 
 export const TRAINING_MESSAGE =
   "Kurulum modunda lafmaliyet'e gün gönderilmez: örnek PIN'ler açık (Yönetim › Ayarlar › Kurulum modu) ya da yazarkasa eğitim simülatöründe (Yönetim › Yazarkasa POS)";
@@ -565,7 +588,15 @@ export interface DayAnswer {
   counted?: boolean;
   /** lafmaliyet'teki "LafPOS'a geçiş günü"; null: seçilmedi, kasa ModPOS */
   switchDay?: string | null;
+  /**
+   * Ertesi günün beklenen açılışı (TL; kasa zinciri §4.6): lafmaliyet'te bu günün kasa raporu varsa sayılan − teslim
+   * (`kasa_raporu`), yoksa gövdenin sayımı (`lafpos`); null: gün sayılmadı
+   */
+  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
 }
+
+/** lafmaliyet'in devir nesnesi (gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı) */
+const nextOpeningShape = z.object({ amount: z.number().finite().min(0).max(10_000_000), source: z.enum(['kasa_raporu', 'lafpos']) });
 
 const count = z.number().int().min(0).optional().catch(undefined);
 const answerShape = z.object({
@@ -578,6 +609,7 @@ const answerShape = z.object({
     .catch(undefined),
   counted: z.boolean().optional().catch(undefined),
   switchDay: z.string().refine(isCalendarDate).nullable().optional().catch(undefined),
+  nextOpening: nextOpeningShape.nullable().optional().catch(undefined),
 });
 
 export function readDayAnswer(json: unknown, date: string, at = Date.now()): DayAnswer {
@@ -855,6 +887,16 @@ export function acceptedBranch(): string | null {
   return typeof sube === 'string' && sube ? sube : null;
 }
 
+/**
+ * Yanıtın kullanıcıya giden hâli: ertesi günün beklenen açılışı (`nextOpening`) yalnız kasa rakamlarını görene (kör
+ * kasiyer devri bağlantı durumundan ya da "Gönder"in yanıtından öğrenmesin; docs/03-ENTEGRASYON.md §4.6)
+ */
+export function answerFor(a: DayAnswer | null, seesCash: boolean): DayAnswer | null {
+  if (!a || seesCash || !('nextOpening' in a)) return a;
+  const { nextOpening: _hidden, ...rest } = a;
+  return rest;
+}
+
 /** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */
 export function lastDayAnswer(): DayAnswer | null {
   return getSyncState<PushState>('lafmaliyet.push')?.lastAnswer ?? null;
@@ -1016,11 +1058,146 @@ export function costsAt(): number | null {
   return costsState()?.at || null;
 }
 
+// ─── Kasa zinciri: devir ve gider kategorileri (lafmaliyet → LafPOS) ────────
+
+/**
+ * lafmaliyet'e kendiliğinden giden okumaların (devir, gider kategorileri) en kısa arası: istek ancak ekran isteyince
+ * gider (tembel), yine de 5 dakikada birden sık değil (AGENTS kural 6'nın ruhu; docs/03-ENTEGRASYON.md §5)
+ */
+export const LADMIN_LAZY_MIN_MS = 5 * 60_000;
+
+/** Eski lafmaliyet (uç yok) 404 döner: adres yanlış değildir, bu uç henüz yok */
+function lazyErrorText(status: number, json: unknown): string {
+  return status === 404 ? "HTTP 404: lafmaliyet bu ucu henüz sunmuyor (eski sürüm)" : httpErrorText(status, json);
+}
+
+/** `GET /api/panel/pos/devir?date=` gövdesi (§4.6); bozuksa ya da başka günse önceki değer kalır */
+const devirBody = z.object({ version: z.literal(1), date: z.string().refine(isCalendarDate), nextOpening: nextOpeningShape.nullable() });
+
+let devirRunning: Promise<boolean> | null = null;
+
+/**
+ * Devri lafmaliyet'ten tembel okur: yalnız bağlantı tanımlıyken, gün kapalıyken (Kasa ekranı "Günü aç"ı gösterirken),
+ * son gerçek gün varken, onun gönderilmemiş kaydı yokken (varsa yerel sayım geçer) ve son denemeden 5 dakika geçtiyse.
+ * Bugünün günü kapandıysa sorulmaz: yeni gün 05:00'ten önce açılmaz, gece açık kalan Kasa ekranı lafmaliyet'i
+ * uyandırmaz (ertesi iş gününde ekran yine sorar). Değer değişince ekranlar yenilenir. Hata öncekini silmez. İstek
+ * gittiyse true
+ */
+export function devirIfStale(now = Date.now()): Promise<boolean> {
+  if (!configured() || devirRunning) return Promise.resolve(false);
+  if (getOpenDay(db) || closedToday(db)) return Promise.resolve(false);
+  const day = lastClosedRealDay(db);
+  if (!day || dayPushPending(db, day.date)) return Promise.resolve(false);
+  const prev = getSyncState<DevirState>('lafmaliyet.devir');
+  if (prev && now - prev.attemptAt < LADMIN_LAZY_MIN_MS) return Promise.resolve(false);
+  // Deneme anı istekten önce yazılır (aynı anda gelen ikinci ekran ikinci istek açmaz); başka günün değeri atılır
+  setSyncState('lafmaliyet.devir', { ...(prev?.date === day.date ? prev : { okAt: null }), date: day.date, attemptAt: now } satisfies DevirState);
+  devirRunning = pullDevir(day.date)
+    .catch((e) => console.warn('[lafmaliyet] devir alınamadı:', e instanceof Error ? e.message : e))
+    .then(() => true)
+    .finally(() => {
+      devirRunning = null;
+    });
+  return devirRunning;
+}
+
+async function pullDevir(date: string) {
+  const state = () => getSyncState<DevirState>('lafmaliyet.devir')!;
+  const fail = (message: string) => setSyncState('lafmaliyet.devir', { ...state(), lastError: message } satisfies DevirState);
+  let res: { status: number; json: unknown };
+  try {
+    const url = new URL('/api/panel/pos/devir', env.lafmaliyetUrl);
+    url.searchParams.set('date', date);
+    res = await signedFetch(env.lafmaliyetToken, 'GET', url);
+  } catch (e) {
+    return fail(`Devir alınamadı: ${networkErrorText(e)}`);
+  }
+  if (res.status !== 200) return fail(`Devir alınamadı (${lazyErrorText(res.status, res.json)})`);
+  const parsed = devirBody.safeParse(res.json);
+  if (!parsed.success || parsed.data.date !== date) return fail("Devir okunamadı: lafmaliyet'in yanıtı beklenen biçimde değil; önceki değer kaldı");
+  const value = parsed.data.nextOpening ? { amount: kurusOf(parsed.data.nextOpening.amount), source: parsed.data.nextOpening.source } : null;
+  const before = state();
+  setSyncState('lafmaliyet.devir', { ...before, okAt: Date.now(), nextOpening: value, lastError: null } satisfies DevirState);
+  if (before.okAt == null || JSON.stringify(before.nextOpening ?? null) !== JSON.stringify(value)) bus.publish({ topic: 'cash', kind: 'devir' });
+}
+
+/** lafmaliyet'in personelin seçebildiği gider kategorisi (§4.7) */
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  section: string | null;
+}
+
+interface CategoriesState {
+  /** Son başarılı çekim; hiç çekilmediyse null */
+  at: number | null;
+  /** Son deneme (5 dakika bütçesi) */
+  attemptAt: number;
+  items: ExpenseCategory[];
+  lastError?: string | null;
+  lastErrorAt?: number | null;
+}
+
+/** `GET /api/panel/pos/gider-kategorileri` gövdesi (§4.7); bozuksa son liste kalır */
+const categoriesBody = z.object({
+  version: z.literal(1),
+  items: z.array(z.object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(120), section: z.string().max(40).nullish() })).max(500),
+});
+
+const categoriesState = () => getSyncState<CategoriesState>('lafmaliyet.expenseCategories');
+
+/**
+ * Son çekilen harcama kategorileri (internet yokken ya da bağlantı sonradan kaldırılsa da son liste); hiç çekilmediyse
+ * boş: harcama kategorisiz kaydedilir
+ */
+export function expenseCategories(): ExpenseCategory[] {
+  return categoriesState()?.items ?? [];
+}
+
+let categoriesRunning: Promise<boolean> | null = null;
+
+/**
+ * Harcama kategorilerini tembel çeker (harcama penceresi açılınca, gün açıkken; Kasa'nın uç kapısı): yalnız bağlantı
+ * tanımlıyken ve son denemeden 5 dakika geçtiyse. İnternet yokken ya da yanıt bozukken son liste kalır, hata saklanır.
+ * İstek gittiyse true
+ */
+export function categoriesIfStale(now = Date.now()): Promise<boolean> {
+  if (!configured() || categoriesRunning) return Promise.resolve(false);
+  const prev = categoriesState();
+  if (prev && now - prev.attemptAt < LADMIN_LAZY_MIN_MS) return Promise.resolve(false);
+  setSyncState('lafmaliyet.expenseCategories', { at: prev?.at ?? null, items: prev?.items ?? [], lastError: prev?.lastError ?? null, lastErrorAt: prev?.lastErrorAt ?? null, attemptAt: now } satisfies CategoriesState);
+  categoriesRunning = pullExpenseCategories()
+    .catch((e) => console.warn('[lafmaliyet] gider kategorileri alınamadı:', e instanceof Error ? e.message : e))
+    .then(() => true)
+    .finally(() => {
+      categoriesRunning = null;
+    });
+  return categoriesRunning;
+}
+
+async function pullExpenseCategories() {
+  const fail = (message: string) => setSyncState('lafmaliyet.expenseCategories', { ...categoriesState()!, lastError: message, lastErrorAt: Date.now() } satisfies CategoriesState);
+  let res: { status: number; json: unknown };
+  try {
+    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL('/api/panel/pos/gider-kategorileri', env.lafmaliyetUrl));
+  } catch (e) {
+    return fail(`Gider kategorileri alınamadı: ${networkErrorText(e)}`);
+  }
+  if (res.status !== 200) return fail(`Gider kategorileri alınamadı (${lazyErrorText(res.status, res.json)})`);
+  const parsed = categoriesBody.safeParse(res.json);
+  if (!parsed.success) return fail("Gider kategorileri okunamadı: lafmaliyet'in yanıtı beklenen biçimde değil; son liste kaldı");
+  const items = parsed.data.items.map((i) => ({ id: i.id, name: i.name, section: i.section ?? null }));
+  const before = categoriesState()!;
+  setSyncState('lafmaliyet.expenseCategories', { ...before, at: Date.now(), items, lastError: null, lastErrorAt: null } satisfies CategoriesState);
+  if (JSON.stringify(before.items) !== JSON.stringify(items)) bus.publish({ topic: 'cash', kind: 'expense-categories' });
+}
+
 /**
  * Entegrasyon ve Genel bakış durumu. Maliyetin tarihi ve hatası yalnız maliyet yetkisine (`withCost`): personel
- * maliyetin varlığını da görmez (Raporlar ve patron paneliyle aynı kapı)
+ * maliyetin varlığını da görmez (Raporlar ve patron paneliyle aynı kapı). Yanıttaki devir yalnız kasa rakamlarını
+ * görene (`withCash`)
  */
-export function lafmaliyetStatus(withCost = false) {
+export function lafmaliyetStatus(withCost = false, withCash = false) {
   const pending = db
     .select({ id: schema.outbox.id, lastError: schema.outbox.lastError, attempts: schema.outbox.attempts, dedupeKey: schema.outbox.dedupeKey })
     .from(schema.outbox)
@@ -1039,7 +1216,7 @@ export function lafmaliyetStatus(withCost = false) {
     pendingDays: pending.map((p) => p.dedupeKey),
     lastError: pending.find((p) => p.lastError)?.lastError ?? null,
     push: push ? { lastRunAt: push.lastRunAt, lastSuccessAt: push.lastSuccessAt, sent: push.sent, failed: push.failed } : null,
-    answer: push?.lastAnswer ?? null,
+    answer: answerFor(push?.lastAnswer ?? null, withCash),
     backfill: { ...range, unsent: range.from && range.from <= range.to ? unsentClosedDays(range.from, range.to).length : null },
     ...(withCost ? { costsAt: costs?.at || null, costsError: costs?.lastError ? { message: costs.lastError, at: costs.lastErrorAt ?? null } : null } : {}),
   };
