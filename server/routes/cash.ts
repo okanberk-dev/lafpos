@@ -10,6 +10,7 @@ import { body, kurus, query } from '../lib/http';
 import { summaryFor } from '../lib/kor-kasa';
 import {
   addCashMovement,
+  auditOpeningAttempt,
   closeDay,
   closedToday,
   collectCustomerPayment,
@@ -19,6 +20,7 @@ import {
   lafmaliyetZ,
   listDays,
   openDay,
+  OpeningReasonRequired,
   recordCount,
   recordShiftCount,
   reopenDay,
@@ -26,7 +28,8 @@ import {
   shiftCountToDTO,
 } from '../services/days';
 import { deviceEndOfDay } from '../okc/service';
-import { afterDayClosed, enqueueDay, flushOutbox } from '../sync/lafmaliyet';
+import { afterDayClosed, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured } from '../sync/lafmaliyet';
+import { expectedOpening } from '../services/devir';
 import { onlineOrdersDayOpened } from '../sync/laffogato-orders';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
@@ -74,6 +77,16 @@ function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
   return shiftCountsOf(db, dayId).map((s, i, all) => blindShiftCount(user, shiftCountToDTO(s, names, i ? all[i - 1].diff : 0)));
 }
 
+/**
+ * Açılış önerisi (kasa zinciri, docs/03-ENTEGRASYON.md §4.6): rakam gören kullanıcıya beklenen açılış, kaynağı ve
+ * devrin günü; kör kasiyere yalnız "beklenen var, sayın" (`check`). Beklenen bilinmiyorsa null
+ */
+function openingFor(user: AuthUser) {
+  const exp = expectedOpening(db);
+  if (!exp) return null;
+  return seesNumbers(user) ? { suggested: exp.amount, source: exp.source, fromDate: exp.fromDate } : { check: true as const };
+}
+
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
 cashRoutes.get('/day', (c) => {
   const user = c.get('user');
@@ -81,7 +94,9 @@ cashRoutes.get('/day', (c) => {
   const blind = !seesNumbers(user);
   if (!day) {
     const closed = closedToday(db);
-    return c.json({ day: null, summary: null, movements: [], shiftCounts: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
+    // Gün kapalıyken lafmaliyet'e devir sorulur (bağlıysa, en sık 5 dakikada bir); yanıt gelince ekran yenilenir
+    void devirIfStale();
+    return c.json({ day: null, summary: null, movements: [], shiftCounts: [], blind, closedToday: closed ? dayToDTO(db, closed) : null, opening: openingFor(user) });
   }
   // Dünden açık kalan gün: yeni satış reddedilir (409 stale_day), kasa aynı metni bant olarak gösterir
   return c.json({
@@ -129,9 +144,18 @@ cashRoutes.get('/shift-counts', (c) => {
 });
 
 cashRoutes.post('/day/open', async (c) => {
-  const input = await body(c, z.object({ openingCash: kurus }));
+  // `reason`: açılış beklenenden en az ₺1,00 farklıysa zorunlu (docs/03-ENTEGRASYON.md §4.6)
+  const input = await body(c, z.object({ openingCash: kurus, reason: z.string().max(200).nullish() }));
   const actor = actorFrom(c);
-  const day = write((t, fx) => openDay(t, actor, fx, input));
+  let day;
+  try {
+    day = write((t, fx) => openDay(t, actor, fx, input));
+  } catch (e) {
+    // Nedensiz deneme gün açmaz ama iz bırakır: kör kasiyer beklenen tutarı sessizce deneyerek bulamaz. Ret işlemi geri
+    // aldığı için denetim kaydı ayrı işlemde
+    if (e instanceof OpeningReasonRequired) write((t, fx) => auditOpeningAttempt(t, actor, fx, e));
+    throw e;
+  }
   // Online siparişler hemen çekilir: gece seyrek sorulan sinyal, gün yokken bekleyen liste (beklemeden)
   void onlineOrdersDayOpened();
   return c.json(dayToDTO(db, day));
@@ -187,10 +211,32 @@ cashRoutes.post('/days/:id/count', async (c) => {
 });
 
 cashRoutes.post('/movements', async (c) => {
-  const input = await body(c, z.object({ kind: z.enum(['harcama', 'teslim', 'giris']), amount: kurus, description: z.string().max(200).default(''), approverPin: z.string().nullish() }));
+  const input = await body(
+    c,
+    z.object({
+      kind: z.enum(['harcama', 'teslim', 'giris']),
+      amount: kurus,
+      description: z.string().max(200).default(''),
+      // Yalnız harcamada: lafmaliyet'in personel gider kategorisi (GET /cash/expense-categories listesinden)
+      categoryId: z.number().int().positive().nullish(),
+      approverPin: z.string().nullish(),
+    }),
+  );
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => addCashMovement(t, actor, fx, input));
+  write((t, fx) => addCashMovement(t, actor, fx, input, expenseCategories()));
   return c.json({ ok: true });
+});
+
+/**
+ * Harcama kategorileri (lafmaliyet'in personelin seçebildiği gider kategorileri; docs/03-ENTEGRASYON.md §4.7): son
+ * çekilen liste hemen döner. Gün açıkken ve liste 5 dakikadan eskiyse lafmaliyet'ten arka planda yenilenir, gelince
+ * ekran yenilenir; internet yokken son liste kalır, bağlantı yoksa liste boş (harcama kategorisiz kaydedilir)
+ */
+cashRoutes.get('/expense-categories', (c) => {
+  const user = c.get('user');
+  if (!can(user, 'kasa.hareket')) requirePermission(user, 'kasa.gun');
+  if (getOpenDay(db)) void categoriesIfStale();
+  return c.json({ items: expenseCategories(), configured: lafmaliyetConfigured() });
 });
 
 cashRoutes.post('/collect', async (c) => {

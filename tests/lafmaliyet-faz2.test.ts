@@ -102,7 +102,7 @@ async function mods() {
 }
 
 async function openDay() {
-  return (await h.ok<{ id: string }>('kasa', 'POST', '/cash/day/open', { openingCash: 50000 })).id;
+  return (await h.ok<{ id: string }>('kasa', 'POST', '/cash/day/open', { openingCash: 50000, reason: 'Test: açılış önceki sayımdan farklı' })).id;
 }
 /**
  * Kapanan günü geçmiş bir tarihe alır (bir tarihe tek Z): sonraki test yeni gün açar. Giden kutusundaki kayıtları da

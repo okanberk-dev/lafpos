@@ -2,17 +2,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ChevronLeft, ChevronRight, Coins, EyeOff, FileText, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { parseTL, tl } from '@shared/money';
+import { parseTL, tl, tlPlain } from '@shared/money';
 import { fmtDateLong, fmtTime } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO, ZSummary } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Field, Input } from '@/components/ui/Field';
+import { Chip, Field, Input, Label } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { Badge, Card, EmptyState, ErrorState, ListSkeleton, Notice, PageLoading } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { cn } from '@/lib/cn';
-import { errorMessage, get, post } from '@/lib/api';
+import { ApiError, errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -37,7 +37,19 @@ interface Movement {
   description: string;
   userName: string | null;
   createdAt: number;
+  /** Harcamanın lafmaliyet gider kategorisi (yazıldığı andaki adı) */
+  categoryName?: string | null;
 }
+/** lafmaliyet'in personelin seçebildiği gider kategorisi (GET /cash/expense-categories) */
+interface ExpenseCategory {
+  id: number;
+  name: string;
+}
+/**
+ * Açılış önerisi (kasa zinciri): rakam gören kullanıcıya beklenen tutar, kaynağı ve devrin günü; kör kasiyere yalnız
+ * "beklenen var" (`check`). Beklenen bilinmiyorsa null
+ */
+type OpeningHint = { suggested: number; source: 'lafmaliyet' | 'lafpos'; fromDate: string } | { check: true };
 interface DayResponse {
   day: BusinessDayDTO | null;
   summary: ZSummary | null;
@@ -50,6 +62,8 @@ interface DayResponse {
   stale?: string | null;
   /** Günün vardiya devirleri (kör kasada beklenen ve fark gizli) */
   shiftCounts?: ShiftCountDTO[];
+  /** Gün kapalıyken: açılış önerisi (eski sunucu göndermez) */
+  opening?: OpeningHint | null;
 }
 interface DayListItem extends BusinessDayDTO {
   netSales: number | null;
@@ -74,6 +88,11 @@ const MOVE_ICON = { harcama: ArrowUpFromLine, teslim: Wallet, giris: ArrowDownTo
 const MOVE_HINT: Record<MoveKind, string> = { harcama: 'Kasadan nakit çıkan masraf', teslim: 'Patrona ya da bankaya teslim edilen nakit', giris: 'Kasaya eklenen nakit (bozuk para gibi)' };
 const MOVE_SAVE: Record<MoveKind, string> = { harcama: 'Harcamayı kaydet', teslim: 'Teslimi kaydet', giris: 'Girişi kaydet' };
 
+/** En az bu kadar farkta (kuruş) açılışın nedeni zorunlu (sunucudaki `OPENING_REASON_MIN`, lafmaliyet'in 1 TL toleransı) */
+const OPENING_REASON_MIN = 100;
+const openingSourceText = (o: { source: 'lafmaliyet' | 'lafpos'; fromDate: string }) =>
+  o.source === 'lafmaliyet' ? `${fmtDateLong(o.fromDate)} devri, lafmaliyet kasa raporundan` : `${fmtDateLong(o.fromDate)} gün sonu sayımı`;
+
 export default function CashPage() {
   const boot = useBoot();
   const can = useCan();
@@ -85,9 +104,22 @@ export default function CashPage() {
   const detail = useQuery({ queryKey: ['cash', 'detail', selected], queryFn: () => get<DayDetail>(`/cash/days/${selected}`), enabled: !!selected });
 
   const [opening, setOpening] = useState('');
+  // Açılışın nedeni: rakam gören kullanıcıda fark ₺1,00 ve üstündeyse, kör kasiyerde sunucu farkı söyleyince istenir
+  const [openingReason, setOpeningReason] = useState('');
+  const [openingAsked, setOpeningAsked] = useState<string | null>(null);
+  const [openingReasonError, setOpeningReasonError] = useState<string | null>(null);
+  const openingReasonRef = useRef<HTMLInputElement>(null);
   const [moveKind, setMoveKind] = useState<null | MoveKind>(null);
   const [moveAmount, setMoveAmount] = useState('');
   const [moveDesc, setMoveDesc] = useState('');
+  const [moveCategory, setMoveCategory] = useState<number | null>(null);
+  // Harcama kategorileri: pencere açılınca son liste gelir, lafmaliyet'ten gelen yenisi ekranı kendiliğinden yeniler
+  const categories = useQuery({
+    queryKey: ['cash', 'categories'],
+    queryFn: () => get<{ items: ExpenseCategory[] }>('/cash/expense-categories'),
+    enabled: moveKind === 'harcama',
+    staleTime: 60_000,
+  });
   const [closing, setClosing] = useState(false);
   const [handover, setHandover] = useState(false);
   const [count, setCount] = useState<CountResult>(emptyCount());
@@ -113,16 +145,35 @@ export default function CashPage() {
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
 
+  const openingHint = current.data?.opening ?? null;
+  const openingCash = parseTL(opening || '0') ?? 0;
+  const openingDiff = openingHint && 'suggested' in openingHint ? openingCash - openingHint.suggested : null;
+  // Neden alanı: rakam gören kullanıcıda fark eşiği geçince, kör kasiyerde sunucu sorunca (tutar ve yön söylenmez)
+  const openingNeedsReason = (openingDiff != null && Math.abs(openingDiff) >= OPENING_REASON_MIN) || openingAsked != null;
+
   const openDay = async () => {
     if (busy) return;
+    if (openingNeedsReason && !openingReason.trim()) {
+      setOpeningReasonError(openingAsked ?? 'Farkın nedeni gerekli');
+      openingReasonRef.current?.focus();
+      return;
+    }
     setBusy(true);
     try {
-      await post('/cash/day/open', { openingCash: parseTL(opening || '0') ?? 0 });
+      await post('/cash/day/open', { openingCash, reason: openingReason.trim() || null });
       toast.ok('Gün açıldı, satışa hazır');
       setOpening('');
+      setOpeningReason('');
+      setOpeningAsked(null);
+      setOpeningReasonError(null);
       refresh();
     } catch (e) {
-      toast.err(errorMessage(e));
+      // Sayım beklenenden farklı: neden alanı açılır, ileti altında (kör kasiyerde tutarsız)
+      if (e instanceof ApiError && e.code === 'opening_reason_required') {
+        setOpeningAsked(e.message);
+        setOpeningReasonError(e.message);
+        requestAnimationFrame(() => openingReasonRef.current?.focus());
+      } else toast.err(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -152,6 +203,7 @@ export default function CashPage() {
 
   const openMove = (kind: MoveKind) => {
     setMoveError({});
+    setMoveCategory(null);
     setMoveKind(kind);
   };
   const addMove = async () => {
@@ -166,12 +218,14 @@ export default function CashPage() {
     moveBusy.current = true;
     setMoveSaving(true);
     try {
-      const res = await withApproval((pin) => post('/cash/movements', { kind: moveKind, amount: parseTL(moveAmount) ?? 0, description: moveDesc, approverPin: pin }));
+      const categoryId = moveKind === 'harcama' ? moveCategory : null;
+      const res = await withApproval((pin) => post('/cash/movements', { kind: moveKind, amount: parseTL(moveAmount) ?? 0, description: moveDesc, categoryId, approverPin: pin }));
       if (res === null) return;
       toast.ok(`${MOVE_LABEL[moveKind]} kaydedildi`);
       setMoveKind(null);
       setMoveAmount('');
       setMoveDesc('');
+      setMoveCategory(null);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -367,11 +421,54 @@ export default function CashPage() {
               </div>
               {can('kasa.gun') ? (
                 <>
+                  {openingHint && 'suggested' in openingHint && (
+                    // Kasa zinciri: önceki günün devri (lafmaliyet'in kasa raporu ya da LafPOS'un sayımı); sayım yerine geçmez
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-[var(--r-tile)] bg-surface-2 px-4 py-3 text-left">
+                      <div className="min-w-0">
+                        <p className="text-[13px] text-muted">Beklenen açılış</p>
+                        <p className="tabular text-lg font-semibold">{tl(openingHint.suggested)}</p>
+                        <p className="text-pretty text-xs text-muted">{openingSourceText(openingHint)}</p>
+                      </div>
+                      <Button variant="soft" onClick={() => setOpening(tlPlain(openingHint.suggested).replace(/\./g, ''))}>
+                        Bu tutarı yaz
+                      </Button>
+                    </div>
+                  )}
+                  {openingHint && 'check' in openingHint && !openingAsked && (
+                    <p className="text-pretty text-sm text-muted">Çekmeceyi sayıp girin; önceki günün devriyle karşılaştırılır</p>
+                  )}
                   {/* Kasa bilgisayarında tutar klavyeyle de yazılır (rakam, virgül, Backspace, Enter: günü aç) */}
                   <output aria-label="Açılış nakdi" aria-live="polite" className="tabular font-headline block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">
                     <TypedAmount text={opening} />
                   </output>
                   <Numpad decimal keyboard onEnter={() => void openDay()} onKey={(k) => setOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
+                  {openingNeedsReason && (
+                    <Field
+                      label="Farkın nedeni"
+                      hint={
+                        openingDiff != null && Math.abs(openingDiff) >= OPENING_REASON_MIN
+                          ? `Açılış beklenenden ${tl(Math.abs(openingDiff))} ${openingDiff > 0 ? 'fazla' : 'eksik'}; neden zorunlu`
+                          : 'zorunlu'
+                      }
+                      className="text-left"
+                      error={openingReasonError}
+                    >
+                      <Input
+                        ref={openingReasonRef}
+                        value={openingReason}
+                        onChange={(e) => {
+                          setOpeningReason(e.target.value);
+                          setOpeningReasonError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.repeat) void openDay();
+                        }}
+                        maxLength={200}
+                        enterKeyHint="done"
+                        placeholder="Ör. bozuk para için kasaya para kondu"
+                      />
+                    </Field>
+                  )}
                   <Button variant="primary" size="xl" block loading={busy} onClick={openDay}>
                     Günü aç
                   </Button>
@@ -545,6 +642,21 @@ export default function CashPage() {
               setMoveError((e) => ({ ...e, amount: undefined }));
             }}
           />
+          {moveKind === 'harcama' && !!categories.data?.items.length && (
+            // lafmaliyet'in personel gider kategorileri (isteğe bağlı): satır "Kasadan çıkanlar"a bu kategoriyle gider
+            <div role="group" aria-labelledby="harcama-kategori">
+              <Label hint="isteğe bağlı">
+                <span id="harcama-kategori">Kategori</span>
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {categories.data.items.map((cat) => (
+                  <Chip key={cat.id} on={moveCategory === cat.id} tone="ink" className="pointer-fine:min-h-11" onClick={() => setMoveCategory(moveCategory === cat.id ? null : cat.id)}>
+                    {cat.name}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
           <Field label="Açıklama" hint={moveKind === 'harcama' ? 'zorunlu' : 'isteğe bağlı'} error={moveError.desc}>
             <Input
               ref={descRef}
@@ -673,7 +785,7 @@ function MovementsCard({ movements, past }: { movements: Movement[]; past?: bool
                         <span aria-hidden="true">·</span>
                       </>
                     )}
-                    <span className="whitespace-nowrap">{joinMeta([m.userName, fmtTime(m.createdAt)])}</span>
+                    <span className="whitespace-nowrap">{joinMeta([m.categoryName, m.userName, fmtTime(m.createdAt)])}</span>
                   </span>
                 </span>
                 <span className={cn('tabular shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-success-ink' : 'text-ink')}>

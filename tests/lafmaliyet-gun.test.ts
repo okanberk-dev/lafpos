@@ -46,6 +46,7 @@ type Payload = {
   offDevice: { card: number; cash: number };
   refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
   iptal: { posName: string; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
+  cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[];
 };
 
 const product = (name: string) => {
@@ -170,18 +171,46 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     await h.ok('mudur', 'POST', `/cash/days/${day.id}/reopen`, { reason: 'Geç gelen masa' });
     expect((await pay(await sell([{ name: 'Espresso', size: 'L' }]), 'Nakit')).closed).toBe(true);
 
-    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 12000, description: 'Buz' });
+    // Kasa hareketleri satır satır (cashMoves): lafmaliyet'in personel kategorisiyle harcama (son çekilen liste), teslim,
+    // giriş. Kimlik ve an saatten bağımsız olsun diye sabitlenir
+    const { setSyncState } = await import('../server/lib/settings');
+    setSyncState('lafmaliyet.expenseCategories', {
+      at: Date.parse('2026-10-26T08:00:00+03:00'),
+      attemptAt: Date.parse('2026-10-26T08:00:00+03:00'),
+      items: [
+        { id: 1, name: 'Nakit malzeme alımı', section: 'mal' },
+        { id: 2, name: 'Bakım & onarım', section: 'genel' },
+        { id: 3, name: 'Diğer fatura dışı', section: 'genel' },
+      ],
+    });
+    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 12000, description: 'Buz', categoryId: 1 });
+    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'teslim', amount: 20000, description: 'Patrona teslim' });
+    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'giris', amount: 5000, description: 'Bozuk para' });
+    const moves = db.select().from(schema.cashMovements).where(eq(schema.cashMovements.dayId, day.id)).all().sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+    const fixed = [
+      ['01M5WDWP40S3V9J8M2N4P6Q8T0', '2026-10-26T18:40:00+03:00'],
+      ['01M5WFAEZ0X2Y4Z6A8B0C2D4E6', '2026-10-26T19:05:00+03:00'],
+      ['01M5WG5XW0F0G2H4J6K8M0N2P4', '2026-10-26T19:20:00+03:00'],
+    ] as const;
+    moves.forEach((m, i) => db.update(schema.cashMovements).set({ id: fixed[i]![0], createdAt: Date.parse(fixed[i]![1]) }).where(eq(schema.cashMovements.id, m.id)).run());
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
     // Paket tarihi saatten bağımsız olsun: satışlar bugünün gününe yazılır (eski güne satış engeli), gün kapanmadan
     // hemen önce sabit bir iş gününe alınır. Gün sonu eski günde de alınır; kapanış ve paket bu tarihi görür.
     db.update(schema.businessDays).set({ date: GOLDEN_DATE }).where(eq(schema.businessDays.id, day.id)).run();
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash - 1000 });
-    // Açılış ve kapanış anı ile banka gün sonu saatten bağımsız: sabit anlar (gövde bayt bayt aynı kalsın)
+    // Açılış ve kapanış anı ile banka gün sonu saatten bağımsız: sabit anlar (gövde bayt bayt aynı kalsın). Kasa zinciri:
+    // gün kurulum modunda açıldı (önceki gerçek gün yok, beklenen boş); örnek gövde beklenenli bir açılışı gösterir
+    // (önceki günün devri ₺1.400,00, açılış ₺1.500,00, fark +₺100,00 ve nedeni; services/devir.ts)
     db.update(schema.businessDays)
-      .set({ openedAt: Date.parse('2026-10-26T07:58:00+03:00'), closedAt: Date.parse('2026-10-27T00:12:00+03:00') })
+      .set({
+        openedAt: Date.parse('2026-10-26T07:58:00+03:00'),
+        closedAt: Date.parse('2026-10-27T00:12:00+03:00'),
+        expectedOpening: 140000,
+        openingDiff: 10000,
+        openingReason: 'Sabah bozuk para eklendi',
+      })
       .where(eq(schema.businessDays.id, day.id))
       .run();
-    const { setSyncState } = await import('../server/lib/settings');
     setSyncState(`pavo.eod.${day.id}`, {
       status: 'failed',
       batchNo: null,
@@ -238,6 +267,17 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     expect(payload.payments.find((p) => p.name === 'Pluxee')!.channel).toBe('pluxee');
     const milk = payload.lines.find((l) => l.posName === 'ALTERNATIF SÜT')!;
     expect(milk).toMatchObject({ siteMenuId: 'mnu-0082', slot: 'M', qty: 3 });
+    // Kasa zinciri (Faz 3): açılışın beklenen tutarı, farkı ve nedeni; kasa hareketleri satır satır, kişisiz, toplamları Z ile
+    expect(z).toMatchObject({ openingCash: 1500, expectedOpening: 1400, openingDiff: 100, openingReason: 'Sabah bozuk para eklendi' });
+    expect(payload.cashMoves).toEqual([
+      { id: '01M5WDWP40S3V9J8M2N4P6Q8T0', kind: 'harcama', amount: 120, description: 'Buz', at: '2026-10-26T15:40:00.000Z', categoryId: 1 },
+      { id: '01M5WFAEZ0X2Y4Z6A8B0C2D4E6', kind: 'teslim', amount: 200, description: 'Patrona teslim', at: '2026-10-26T16:05:00.000Z', categoryId: null },
+      { id: '01M5WG5XW0F0G2H4J6K8M0N2P4', kind: 'giris', amount: 50, description: 'Bozuk para', at: '2026-10-26T16:20:00.000Z', categoryId: null },
+    ]);
+    const moved = (k: string) => payload.cashMoves.filter((m) => m.kind === k).reduce((a, m) => a + m.amount, 0);
+    expect(moved('harcama')).toBeCloseTo(z.cashOut!, 2);
+    expect(moved('teslim')).toBeCloseTo(z.handedOver!, 2);
+    expect(moved('giris')).toBeLessThanOrEqual(z.cashIn! + 0.001);
   });
 });
 

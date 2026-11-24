@@ -2,17 +2,18 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'dr
 import { odenmezByPerson } from '@shared/comp';
 import { tl } from '@shared/money';
 import { calcOrder, offDeviceTotals } from '@shared/order-calc';
-import { addDays, businessDate, businessDayStartMs } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs, fmtDateShort } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
 import { nextZNo } from '@shared/z-no';
 import { type DB, schema, type Tx } from '../db/client';
 import type { FiscalStatus, ZField, ZSummary } from '../db/schema';
-import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
+import { type Actor, counterpartFor, need, needDirect, seesCashNumbers } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, trainingDayNow } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
+import { expectedOpening, OPENING_REASON_MIN, type OpeningExpectation } from './devir';
 import { dropPending } from '../sync/outbox-flight';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
@@ -28,7 +29,50 @@ export function lastZNo(t: Tx | DB): number {
   return t.select({ z: sql<number>`coalesce(max(${schema.businessDays.zNo}), 0)` }).from(schema.businessDays).get()?.z ?? 0;
 }
 
-export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: number }): DayRow {
+/** Kör kasiyerin gördüğü metin: tutar ve yön yok (beklenen nakit kör kasada gizli; docs/03-ENTEGRASYON.md §4.6) */
+export const OPENING_REASON_BLIND = 'Sayımınız beklenenden farklı; nedenini yazın';
+
+/** "₺20,50 fazla", "₺79,50 eksik" */
+const signedDiffText = (diff: number) => `${tl(Math.abs(diff))} ${diff > 0 ? 'fazla' : 'eksik'}`;
+
+/**
+ * Açılışın nedeni istenir mi: beklenen açılış biliniyorsa ve fark en az ₺1,00 ise neden yazılmalı (lafmaliyet'in kasa
+ * raporu toleransı). Kör kasiyer (`blind`) tutar ve yön görmez; rakam gören beklenen ve farkı görür. Ret işlemin içinde
+ * fırlatılır (gün açılmaz); denemenin denetim kaydını çağıran ayrı işlemde yazar (`auditOpeningAttempt`)
+ */
+export class OpeningReasonRequired extends HttpError {
+  constructor(
+    public readonly openingCash: number,
+    public readonly expectation: OpeningExpectation,
+    public readonly blind: boolean,
+  ) {
+    const diff = openingCash - expectation.amount;
+    super(
+      422,
+      blind ? OPENING_REASON_BLIND : `Açılış beklenenden ${signedDiffText(diff)} (beklenen ${tl(expectation.amount)}, ${fmtDateShort(expectation.fromDate)} devri); nedenini yazın`,
+      'opening_reason_required',
+      blind ? undefined : { expected: expectation.amount, diff },
+    );
+  }
+}
+
+/**
+ * Nedeni eksik açılış denemesi denetime yazılır (gün açılmadı): kör kasiyer beklenen tutarı denemeyle bulmaya çalışırsa
+ * her deneme patronun uyarılarına düşer. Rakam gören kullanıcının denemesi bilgi önemindedir (ekran farkı zaten gösterir)
+ */
+export function auditOpeningAttempt(t: Tx, actor: Actor, fx: Effects, e: OpeningReasonRequired) {
+  const diff = e.openingCash - e.expectation.amount;
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'day.open_attempt',
+    severity: e.blind ? 'uyari' : 'info',
+    amount: e.openingCash,
+    message: `${actor.user.name} günü açmayı denedi: açılış ${tl(e.openingCash)}, beklenen ${tl(e.expectation.amount)} (${signedDiffText(diff)}); neden yazılmadığı için açılmadı`,
+    data: { openingCash: e.openingCash, expected: e.expectation.amount, diff, source: e.expectation.source, fromDate: e.expectation.fromDate, blind: e.blind },
+  });
+}
+
+export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: number; reason?: string | null }): DayRow {
   needDirect(actor, 'kasa.gun');
   if (getOpenDay(t)) throw conflict('Açık bir gün zaten var', 'day_open');
   const now = Date.now();
@@ -40,6 +84,12 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     .where(and(eq(schema.businessDays.date, businessDate(now)), isNotNull(schema.businessDays.closedAt)))
     .get();
   if (closedToday) throw conflict(`Bugünün gün sonu alındı (Z ${closedToday.zNo}). Satış gerekiyorsa günü yeniden açın; yeni gün 05:00'ten sonra açılır`, 'day_closed_today');
+  const openingCash = Math.max(0, Math.trunc(input.openingCash));
+  // Kasa zinciri: beklenen açılış önceki gerçek günün devri (lafmaliyet'in ya da LafPOS'un); fark en az ₺1,00 ise neden
+  const expected = expectedOpening(t);
+  const diff = expected ? openingCash - expected.amount : null;
+  const reason = input.reason?.trim().slice(0, 200) || null;
+  if (expected && diff != null && Math.abs(diff) >= OPENING_REASON_MIN && !reason) throw new OpeningReasonRequired(openingCash, expected, !seesCashNumbers(actor.user));
   const day = {
     id: ulid(now),
     date: businessDate(now),
@@ -47,12 +97,26 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     zNo: nextZNo(lastZNo(t), getSettings().zNoStart),
     openedAt: now,
     openedBy: actor.user.id,
-    openingCash: Math.max(0, Math.trunc(input.openingCash)),
+    openingCash,
     lastOrderNo: 0,
+    expectedOpening: expected?.amount ?? null,
+    openingDiff: diff,
+    openingReason: reason,
   };
   t.insert(schema.businessDays).values(day).run();
   claimEarlyOnlineOrders(t, day.id, day.date);
-  fx.audit(t, { userId: actor.user.id, action: 'day.open', amount: day.openingCash, message: `${actor.user.name} günü açtı (Z ${day.zNo}, açılış ${tl(day.openingCash)})` });
+  // Fark gün sonu sayımıyla aynı eşikte uyarı ya da alarm (patronun uyarıları); beklenen bilinmiyorsa bilgi
+  const threshold = getSettings().alertCashDiffKurus;
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'day.open',
+    severity: diff == null || Math.abs(diff) < OPENING_REASON_MIN ? 'info' : Math.abs(diff) >= threshold ? 'alarm' : 'uyari',
+    amount: day.openingCash,
+    message: `${actor.user.name} günü açtı (Z ${day.zNo}, açılış ${tl(day.openingCash)}${
+      expected && diff != null ? `, beklenen ${tl(expected.amount)}${diff === 0 ? '' : `, ${signedDiffText(diff)}`}${reason ? `: ${reason}` : ''}` : ''
+    })`,
+    data: expected ? { expected: expected.amount, diff, source: expected.source, ladminSource: expected.ladminSource ?? null, fromDate: expected.fromDate, reason } : null,
+  });
   fx.emit({ topic: 'cash', kind: 'day.opened', byUserId: actor.user.id });
   fx.emit({ topic: 'settings', kind: 'day.opened', byUserId: actor.user.id });
   return t.select().from(schema.businessDays).where(eq(schema.businessDays.id, day.id)).get()!;
@@ -84,14 +148,30 @@ function claimEarlyOnlineOrders(t: Tx, dayId: string, date: string) {
   if (early.length) t.update(schema.orders).set({ dayId }).where(inArray(schema.orders.id, early.map((o) => o.id))).run();
 }
 
-export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string }) {
+/**
+ * Kasa hareketi. Harcamaya lafmaliyet'in gider kategorisi bağlanabilir (`categoryId`, son çekilen listeden; adı anlık
+ * görüntü olarak saklanır): lafmaliyet satırı "Kasadan çıkanlar"a o kategoriyle alır. Teslim ve giriş kategorisizdir
+ */
+export function addCashMovement(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; categoryId?: number | null },
+  categories: { id: number; name: string }[] = [],
+) {
   const approverId = need(actor, 'kasa.hareket');
   const day = requireOpenDay(t);
   const amount = Math.trunc(input.amount);
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');
   const description = input.description.trim();
   if (input.kind === 'harcama' && !description) throw bad('Harcamanın açıklaması yazılmalı', 'reason_required');
-  const row = { id: ulid(), dayId: day.id, kind: input.kind, amount, description, userId: actor.user.id, createdAt: Date.now() };
+  let category: { id: number; name: string } | null = null;
+  if (input.categoryId != null) {
+    if (input.kind !== 'harcama') throw bad('Kategori yalnız harcamaya seçilir', 'category_not_allowed');
+    category = categories.find((c) => c.id === input.categoryId) ?? null;
+    if (!category) throw new HttpError(422, 'Seçilen kategori lafmaliyet’in listesinde yok; listeyi yenileyip yeniden seçin', 'invalid_category');
+  }
+  const row = { id: ulid(), dayId: day.id, kind: input.kind, amount, description, userId: actor.user.id, createdAt: Date.now(), categoryId: category?.id ?? null, categoryName: category?.name ?? null };
   t.insert(schema.cashMovements).values(row).run();
   const label = { harcama: 'kasadan harcama', teslim: 'kasadan teslim', giris: 'kasaya para girişi' }[input.kind];
   fx.audit(t, {
@@ -102,7 +182,8 @@ export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind:
     entity: 'cash_movement',
     entityId: row.id,
     amount,
-    message: `${actor.user.name}: ${label} ${tl(amount)}${description ? ` (${description})` : ''}`,
+    message: `${actor.user.name}: ${label} ${tl(amount)}${description ? ` (${description})` : ''}${category ? ` · ${category.name}` : ''}`,
+    ...(category ? { data: { categoryId: category.id, categoryName: category.name } } : {}),
   });
   fx.emit({ topic: 'cash', kind: 'movement', byUserId: actor.user.id });
   return row;

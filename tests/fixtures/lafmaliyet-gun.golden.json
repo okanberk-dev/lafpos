@@ -32,11 +32,11 @@
     "discounts": 36,
     "openingCash": 1500,
     "cashOut": 120,
-    "countedCash": 1835,
-    "handedOver": 0,
+    "countedCash": 1685,
+    "handedOver": 200,
     "cashDiff": -10,
-    "cashIn": 0,
-    "expectedCash": 1845,
+    "cashIn": 50,
+    "expectedCash": 1695,
     "cardTips": 25,
     "cardCollections": 400,
     "listValue": 4150,
@@ -57,7 +57,10 @@
     ],
     "openedAt": "2026-10-26T04:58:00.000Z",
     "closedAt": "2026-10-26T21:12:00.000Z",
-    "okcZNo": "1"
+    "okcZNo": "1",
+    "expectedOpening": 1400,
+    "openingDiff": 100,
+    "openingReason": "Sabah bozuk para eklendi"
   },
   "lines": [
     {
@@ -363,6 +366,32 @@
       "prepared": false,
       "reason": "İade: Soğuk geldi",
       "refund": true
+    }
+  ],
+  "cashMoves": [
+    {
+      "id": "01M5WDWP40S3V9J8M2N4P6Q8T0",
+      "kind": "harcama",
+      "amount": 120,
+      "description": "Buz",
+      "at": "2026-10-26T15:40:00.000Z",
+      "categoryId": 1
+    },
+    {
+      "id": "01M5WFAEZ0X2Y4Z6A8B0C2D4E6",
+      "kind": "teslim",
+      "amount": 200,
+      "description": "Patrona teslim",
+      "at": "2026-10-26T16:05:00.000Z",
+      "categoryId": null
+    },
+    {
+      "id": "01M5WG5XW0F0G2H4J6K8M0N2P4",
+      "kind": "giris",
+      "amount": 50,
+      "description": "Bozuk para",
+      "at": "2026-10-26T16:20:00.000Z",
+      "categoryId": null
     }
   ]
 }

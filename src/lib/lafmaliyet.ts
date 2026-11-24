@@ -12,6 +12,8 @@ export interface DayAnswer {
   unmatched?: string[];
   counted?: boolean;
   switchDay?: string | null;
+  /** Ertesi günün beklenen açılışı (TL; kasa zinciri); kasa rakamlarını görmeyene gitmez */
+  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
 }
 
 const dayFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long' });

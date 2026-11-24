@@ -3,6 +3,8 @@
  * Her akış kendi bağlamını açar, sonucu API'den doğrular ve tarayıcıda konsol ya da ağ hatası bırakmaz.
  */
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { openContext, overflowReport, PINS, ROOT, settle, smallTargets } from './lib.mjs';
 
 mkdirSync(`${ROOT}/e2e/out`, { recursive: true });
@@ -1301,6 +1303,115 @@ export async function runFlows(ctx) {
         }, [/istek 403: POST \/api\/cash\/days\/[^/]+\/reopen/, /konsol: Failed to load resource: .*403/]);
         const now = await api.call('kasa', 'GET', '/cash/day');
         assert(now.day?.id === closed.day.id && now.day.zNo === closed.day.zNo, 'gün aynı Z ile yeniden açılmadı');
+      },
+    ],
+    [
+      // Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): kurulum modundaki gün devir vermez, akış gerçek kullanıma geçer. Önceki
+      // akışın yeniden açtığı gün sayılarak kapanır ve düne alınır (bir tarihe tek Z; saat değiştirilemediği için veritabanında)
+      'Tablette günü aç: kör kasiyer farkta nedenini yazar, müdür beklenen açılışı görür; harcamaya kategori seçilir',
+      async () => {
+        // Gün sonu açık adisyon bırakmaz (akış tek başına da koşar: LAFPOS_E2E_FLOW)
+        for (const o of await api.call('mudur', 'GET', '/orders')) {
+          if (o.source === 'pos') await api.call('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Uçtan uca test' });
+        }
+        await api.call('patron', 'PUT', '/admin/settings', { demoMode: false });
+        await api.call('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
+        const sqlite = new Database(join(ctx.server.dataDir, 'lafpos.db'));
+        const ymd = (n) => new Date(Date.now() + 3 * 3600_000 - 5 * 3600_000 - n * 86_400_000).toISOString().slice(0, 10);
+        /** Açık günü `counted` sayımıyla kapatır, `n` gün öncesine alır */
+        const closeBack = async (counted, n) => {
+          const closed = await api.call('mudur', 'POST', '/cash/day/close', { countedCash: counted });
+          sqlite.prepare('UPDATE business_days SET date = ? WHERE id = ?').run(ymd(n), closed.day.id);
+          return closed.day;
+        };
+        try {
+          const first = await closeBack(127950, 2);
+          // Kör kasiyer: beklenen tutarı görmez; farklı sayımda sunucu nedeni ister (tutar ve yön söylemeden)
+          await withPage(
+            ctx,
+            'tablet',
+            'kasa',
+            async (page) => {
+              await go(ctx, page, '/kasa');
+              await page.getByRole('heading', { name: 'Günü aç', exact: true }).waitFor();
+              await page.getByText('Çekmeceyi sayıp girin; önceki günün devriyle karşılaştırılır', { exact: true }).waitFor();
+              assert(!(await page.getByText('₺1.279,50').count()), 'kör kasiyer beklenen açılışı görüyor');
+              for (const d of '1200') await page.getByRole('button', { name: d, exact: true }).click();
+              await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
+              await page.getByText('Sayımınız beklenenden farklı; nedenini yazın').first().waitFor({ timeout: 8000 });
+              await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-acilis-neden.png` });
+              const overflow = await overflowReport(page);
+              assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+              const small = await smallTargets(page);
+              assert(!small.length, `44 px altı: ${small.join(', ')}`);
+              await page.getByRole('textbox', { name: /^Farkın nedeni/ }).fill('Bozuk para için 79,50 alındı');
+              await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
+              await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).first().waitFor({ timeout: 8000 });
+            },
+            [/istek 422: POST \/api\/cash\/day\/open/, /konsol: Failed to load resource: .*422/],
+          );
+          const audit = await api.call('patron', 'GET', '/admin/audit?limit=50');
+          const opened = audit.find((a) => a.action === 'day.open');
+          assert(audit.some((a) => a.action === 'day.open_attempt' && a.severity === 'uyari'), 'nedensiz deneme denetime yazılmadı');
+          assert(opened?.data?.expected === 127950 && opened.data.diff === -7950 && opened.data.reason === 'Bozuk para için 79,50 alındı', `açılış denetimi: ${JSON.stringify(opened?.data)}`);
+          assert(first.zNo > 0, 'ilk gün kapanmadı');
+
+          // Harcama penceresi: lafmaliyet'in son çekilen kategorileri (bağlantısız kasada önbellek elle yazılır) çip olarak
+          sqlite
+            .prepare('INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES (?, ?, ?)')
+            .run(
+              'lafmaliyet.expenseCategories',
+              JSON.stringify({ at: Date.now(), attemptAt: Date.now(), items: [{ id: 1, name: 'Nakit malzeme alımı', section: 'mal' }, { id: 3, name: 'Diğer fatura dışı', section: 'genel' }] }),
+              Date.now(),
+            );
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, '/kasa');
+            await page.getByRole('button', { name: 'Harcama', exact: true }).click();
+            const dialog = page.getByRole('dialog', { name: 'Harcama' });
+            const chip = dialog.getByRole('button', { name: 'Diğer fatura dışı', exact: true });
+            await chip.waitFor({ timeout: 8000 });
+            await chip.click();
+            assert((await chip.getAttribute('aria-pressed')) === 'true', 'kategori seçilmedi');
+            for (const d of '800') await dialog.getByRole('button', { name: d, exact: true }).click();
+            await dialog.getByRole('textbox', { name: /^Açıklama/ }).fill('Fişsiz');
+            const small = await smallTargets(page);
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-harcama-kategori.png` });
+            await dialog.getByRole('button', { name: 'Harcamayı kaydet', exact: true }).click();
+            await dialog.waitFor({ state: 'detached', timeout: 8000 });
+          });
+          const day = await api.call('mudur', 'GET', '/cash/day');
+          const move = day.movements.find((m) => m.kind === 'harcama');
+          assert(move?.categoryId === 3 && move.categoryName === 'Diğer fatura dışı' && move.amount === 80000, `harcama kategorisi: ${JSON.stringify(move)}`);
+
+          // Müdür (rakam görür): beklenen açılış ve kaynağı kartta; farkta neden alanı istekten önce açılır
+          await closeBack(150000, 1);
+          await withPage(ctx, 'tablet', 'mudur', async (page) => {
+            await go(ctx, page, '/kasa');
+            await page.getByRole('heading', { name: 'Günü aç', exact: true }).waitFor();
+            await page.getByText('₺1.500,00', { exact: true }).waitFor();
+            for (const d of '1400') await page.getByRole('button', { name: d, exact: true }).click();
+            const reason = page.getByRole('textbox', { name: /^Farkın nedeni/ });
+            await reason.waitFor();
+            await page.getByText(/Açılış beklenenden ₺100,00 eksik/).first().waitFor();
+            await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
+            await page.getByText('Farkın nedeni gerekli', { exact: true }).waitFor();
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-acilis-beklenen.png` });
+            const small = await smallTargets(page);
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            // "Bu tutarı yaz": beklenenle aynı açılış neden istemez
+            await page.getByRole('button', { name: 'Bu tutarı yaz', exact: true }).click();
+            await reason.waitFor({ state: 'detached' });
+            await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
+            await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).first().waitFor({ timeout: 8000 });
+          });
+          const after = await api.call('mudur', 'GET', '/cash/day');
+          assert(after.day?.openingCash === 150000, `açılış önerilen tutarla yazılmadı: ${after.day?.openingCash}`);
+        } finally {
+          sqlite.close();
+        }
       },
     ],
   ];

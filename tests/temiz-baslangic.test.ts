@@ -33,7 +33,7 @@ async function makeDay(date: string | null, trainingDay: boolean, customerId?: s
   const kasa = as ?? 'kasa';
   const mudur = as ?? 'mudur';
   const { db, schema, eq } = await mod();
-  await h.ok(kasa, 'POST', '/cash/day/open', { openingCash: 10000 });
+  await h.ok(kasa, 'POST', '/cash/day/open', { openingCash: 10000, reason: 'Test: açılış önceki sayımdan farklı' });
   const product = h.boot.products.find((p) => p.name === 'Latte')!;
   const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
   let o = await h.ok<OrderDTO>(kasa, 'POST', '/orders', { type: 'tezgah' });
@@ -113,7 +113,7 @@ describe('Geçişi tamamla: deneme günleri silinir, gerçek günler kalır', ()
     expect((await h.call('mudur', 'POST', PATH, { pin: PINS.mudur, purgeReal: true })).status).toBe(403);
     expect((await h.call('kasa', 'POST', PATH, { pin: PINS.kasa })).status).toBe(403);
     expect((await h.call('mudur', 'GET', '/admin/deneme')).status).toBe(403);
-    await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0, reason: 'Test: açılış önceki sayımdan farklı' });
     const r = await h.call<{ code: string }>('patron', 'POST', PATH, { pin: PINS.patron, newPin: NEW_PIN });
     expect(r.status).toBe(409);
     expect(r.json.code).toBe('day_open');
