@@ -99,8 +99,8 @@ main'e birleştir.
    /home/user/wt/lafmaliyet-faz5; her birinde node_modules ana klonun node_modules'üne symlink.
 4. Sıra: (a) lafpos#170 açıksa CI yeşilse birleştir. (b) ÖNCELİK gün sonu tam otomatik: `gunsonu.js` (denetim iki
    sistemi yerelde uçtan uca çalıştırır → LP-F + LM-6 → inceleme → düzeltme); bitince push, PR (taban main), CI yeşilse
-   birleştir. (c) LM-4: claude/personel-sube-kira'ya origin/main'i birleştir; inceleme bulgularını (§2) düzelten ajanı
-   koş (wave3.js `LM-4` girişinin kapsamı + bulgular); push, PR, birleştir. (d) LP-E, LM-4b, LM-5 (wave3.js; tabanlar
+   birleştir. (c) LM-4: claude/personel-sube-kira'ya origin/main 06:40'ta birleştirildi (bc230a7; çakışma yok, tsc temiz, npm test
+   2930/2930); inceleme bulgularını (LM-4-impl-review.json) düzelten ajanı koş (wave3.js `LM-4` girişinin kapsamı + bulgular); push, PR, birleştir. (d) LP-E, LM-4b, LM-5 (wave3.js; tabanlar
    artık main ya da bir önceki paketin dalı).
 5. Kullanıcı: "hızlı git, gereksiz emin olduğun kontrolleri fazladan yapma", "bitenleri maine gönder", "sorularını da
    sen test edip gör". Commit/PR ekleri yeni oturumun kendi Co-Authored-By / Claude-Session satırlarıyla.
