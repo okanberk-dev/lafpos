@@ -14,6 +14,7 @@ import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
 import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
+import { StaffLinkSection } from './StaffLink';
 
 interface UserRow {
   id: string;
@@ -25,8 +26,10 @@ interface UserRow {
   permRevoke: Permission[];
   maxDiscountPct: number;
   lastLoginAt: number | null;
+  /** lafmaliyet personel kaydı (`s:<id>`); eski sunucu göndermez */
+  staffRef?: string | null;
 }
-type Draft = Omit<UserRow, 'id' | 'lastLoginAt'> & { id?: string; pin: string };
+type Draft = Omit<UserRow, 'id' | 'lastLoginAt' | 'staffRef'> & { id?: string; pin: string };
 
 const COLORS = ['#1e4031', '#6b1a2b', '#a87c2e', '#3f6b8a', '#5e8f45', '#a23e6b', '#9a3b2f', '#7a6a5f'];
 
@@ -80,6 +83,8 @@ export default function UsersAdmin() {
   const me = useAuth((s) => s.me);
   const [params, setParams] = useSearchParams();
   const data = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<UserRow[]>('/admin/users') });
+  // lafmaliyet bağlantısı tanımlı mı: kişi çekmecesinin "lafmaliyet personeli" bölümü (liste yalnız bağlıyken çekilir)
+  const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<{ lafmaliyet?: { configured: boolean } }>('/sync/status'), staleTime: 60_000 });
   // Rol yetkileri Roller sayfasında değişebilir: "rol varsayılanı" o anki rol setidir
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: () => get<{ roles: { role: Role; permissions: Permission[]; custom: boolean }[] }>('/admin/roles') });
   const matrix: RoleMatrix = Object.fromEntries((roles.data?.roles ?? []).filter((r) => r.custom).map((r) => [r.role, r.permissions]));
@@ -249,6 +254,8 @@ export default function UsersAdmin() {
           isMe={selected?.id === me?.id}
           focusPin={!!selected && params.get('odak') === 'pin'}
           matrix={matrix}
+          ladmin={sync.data?.lafmaliyet?.configured ?? false}
+          names={new Map(all.map((u) => [u.id, u.name]))}
           onClose={() => open(null)}
           onSaved={() => {
             refresh();
@@ -260,8 +267,26 @@ export default function UsersAdmin() {
   );
 }
 
-function UserDrawer({ user, isMe, focusPin, matrix, onClose, onSaved }: { user: UserRow | null; isMe: boolean; focusPin: boolean; matrix: RoleMatrix; onClose: () => void; onSaved: () => void }) {
-  const [d, setD] = useState<Draft>(user ? { ...user, pin: '' } : { name: '', role: 'garson', color: COLORS[3], active: true, permGrant: [], permRevoke: [], maxDiscountPct: 10, pin: '' });
+function UserDrawer({
+  user,
+  isMe,
+  focusPin,
+  matrix,
+  ladmin,
+  names,
+  onClose,
+  onSaved,
+}: {
+  user: UserRow | null;
+  isMe: boolean;
+  focusPin: boolean;
+  matrix: RoleMatrix;
+  ladmin: boolean;
+  names: Map<string, string>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [d, setD] = useState<Draft>(user ? { name: user.name, role: user.role, color: user.color, active: user.active, permGrant: user.permGrant, permRevoke: user.permRevoke, maxDiscountPct: user.maxDiscountPct, pin: '' } : { name: '', role: 'garson', color: COLORS[3], active: true, permGrant: [], permRevoke: [], maxDiscountPct: 10, pin: '' });
   const fine = useFinePointer();
   const [saving, setSaving] = useState(false);
   // Eksik ya da hatalı alan Kaydet'e basınca alanın altında söylenir (düğme sessizce soluk kalmaz)
@@ -380,6 +405,9 @@ function UserDrawer({ user, isMe, focusPin, matrix, onClose, onSaved }: { user: 
           </div>
         </div>
       </section>
+
+      {/* lafmaliyet personel bağlantısı: kayıtlı kişide, sahibin kararıyla elle ve onaylı (docs/03-ENTEGRASYON.md §4.8) */}
+      {user && <StaffLinkSection user={{ id: user.id, name: user.name, role: user.role, staffRef: user.staffRef ?? null }} configured={ladmin} names={names} />}
 
       <section aria-labelledby="kisi-yetki" className="mt-6 border-t border-[var(--admin-divider)] pt-5">
         <h3 id="kisi-yetki" className={cn('flex items-baseline justify-between gap-3', SECTION_TITLE)}>

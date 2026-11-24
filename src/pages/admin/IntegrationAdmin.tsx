@@ -10,7 +10,7 @@ import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { answerText, type DayAnswer, dayLabel, unmatchedCount, unmatchedText } from '@/lib/lafmaliyet';
+import { answerText, type DayAnswer, dayLabel, type StaffIssues, staffAnswerText, unmatchedCount, unmatchedText } from '@/lib/lafmaliyet';
 import { toast } from '@/lib/toast';
 
 interface SyncStatus {
@@ -40,6 +40,8 @@ interface SyncStatus {
     push: { lastRunAt?: number; sent?: number; failed?: number } | null;
     /** Son gönderilen günün lafmaliyet yanıtı */
     answer: DayAnswer | null;
+    /** Yanıttaki personel sorunları LafPOS adıyla; yalnız personel ya da bağlantı yöneticisine */
+    staffIssues?: StaffIssues | null;
     /** "Geçmiş günleri gönder"in varsayılanı: lafmaliyet'in geçiş gününden düne */
     backfill: { from: string | null; to: string; unsent: number | null };
     /** Yalnız maliyet yetkisine gelir (`rapor.maliyet`) */
@@ -348,6 +350,7 @@ function LafmaliyetCard({ s, badge, canSync, canCost, run, busy }: { s: SyncStat
   const to = range?.to ?? s.backfill.to;
   const answer = s.answer ? answerText(s.answer) : null;
   const unmatched = s.answer ? unmatchedCount(s.answer) : 0;
+  const staff = s.answer ? staffAnswerText(s.answer, s.staffIssues) : null;
   // Son başarılı çekimden sonraki hata (gün sonundaki kendiliğinden çekim de yazar)
   const costsError = s.costsError && (!s.costsAt || (s.costsError.at ?? 0) > s.costsAt) ? s.costsError.message : null;
   const backfill = async () => {
@@ -401,6 +404,12 @@ function LafmaliyetCard({ s, badge, canSync, canCost, run, busy }: { s: SyncStat
                 <Status>
                   lafmaliyet’te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
                   <span className={DETAIL}>lafmaliyet Ayarlar › LafPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
+                </Status>
+              )}
+              {staff && (
+                <Status ok={staff.tone === 'ok'}>
+                  {staff.text}
+                  {staff.detail && <span className={DETAIL}>{staff.detail}</span>}
                 </Status>
               )}
             </StatusGroup>
