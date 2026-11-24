@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 /** docs/hesap-sozlesmesi.md'nin SHA-256 özeti (lafmaliyet ile aynı) */
-const HESAP_SOZLESMESI_SHA256 = 'd0f28629536fdb7e77a42ce37f30e45989f849071dd926d41e64a48525ed41d1';
+const HESAP_SOZLESMESI_SHA256 = 'd447b4026ac26a1f6e91e62a15668fdb76ff84223657559c302d3b884a1712c8';
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url));
 

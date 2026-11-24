@@ -102,6 +102,7 @@ Belge yalnız formülleri, yuvarlamayı ve formüllerin hangi gövde alanına ba
 - Tek fonksiyon, iki sayfa (Satışlar ve Gelir-gider): komisyon = Σ şube (kart tutarı × şubenin POS oranı).
 - Kart tutarı yemek kartını içermez: LafPOS günlerinde `z.card`, ModPOS günlerinde kasa raporunun kartı.
 - Satırlara ciro payıyla dağıtılır: satırın payı = komisyon × satır cirosu ÷ Σ satır cirosu.
+- Süren ayda pencere farklıdır: Satışlar komisyonu satış listesinin günleri için sayar (o günlerin kasa kartı), Gelir-gider ayın bugüne kadarki bütün kasa raporlarıyla; liste kasa raporlarına yetişince iki tutar aynı olur.
 - Marina Kasım 2026: 24.774,25 × %2 = 495,49.
 
 ## 11. Tutarlılık
