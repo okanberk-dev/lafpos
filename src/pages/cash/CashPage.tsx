@@ -26,6 +26,7 @@ import { CashCount, signedTL } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
 import { DayCloseGuide } from './DayCloseGuide';
+import { WorkedStaffCard, type WorkedDTO } from './WorkedStaff';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
 const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-[400px]:[&>svg]:hidden';
@@ -81,6 +82,8 @@ interface DayDetail {
   note?: string | null;
   /** Kaydedilmiş sayım: `b:<kuruş>` banknot adedi, `m:<ödeme türü>` sayılan tutar; föy düzeltilirken pencereye gelir */
   cashCounts?: Record<string, number> | null;
+  /** "Bugün çalışanlar" (lafmaliyet'in yemek kartı günleri; eski sunucu göndermez) */
+  worked?: WorkedDTO;
 }
 
 const MOVE_KINDS: MoveKind[] = ['harcama', 'teslim', 'giris'];
@@ -595,7 +598,7 @@ export default function CashPage() {
       {tab === 'gecmis' && selected && !detail.data && (
         // Detay gelene dek sayfa boş kalmaz: dönüş düğmesi ve iskelet ya da hata
         <div className="space-y-3">
-          <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2" onClick={() => setSelected(null)}>
+          <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="sm:-ml-2" onClick={() => setSelected(null)}>
             Listeye dön
           </Button>
           <Card>
@@ -611,7 +614,7 @@ export default function CashPage() {
       {tab === 'gecmis' && selected && detail.data && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2" onClick={() => setSelected(null)}>
+            <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="sm:-ml-2" onClick={() => setSelected(null)}>
               Listeye dön
             </Button>
             {detail.data.day.closedAt && can('kasa.gun') && (
@@ -622,6 +625,15 @@ export default function CashPage() {
           </div>
           <ZView day={detail.data.day} summary={detail.data.summary} lafmaliyet={detail.data.lafmaliyet}>
             <CashActivity movements={detail.data.movements} counts={detail.data.shiftCounts ?? []} past />
+            {/* Eski sunucu göndermez: kart yalnız alan varken */}
+            {detail.data.worked && (
+              <WorkedStaffCard
+                dayId={detail.data.day.id}
+                worked={detail.data.worked}
+                editable={!!detail.data.day.closedAt && can('rapor.gor')}
+                onSaved={() => void qc.invalidateQueries({ queryKey: ['cash', 'detail', detail.data!.day.id] })}
+              />
+            )}
           </ZView>
         </div>
       )}

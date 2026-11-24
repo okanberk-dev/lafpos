@@ -10,8 +10,10 @@
  * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
  * 4. İnternet kesintisi: e2e/internet.mjs (sahte lafmaliyet ucu kapalıyken satış ve gün sonu, rozet, dönüşte tam bir kez).
  * 5. LafPOS Uzaktan: e2e/uzaktan.mjs (Vercel derlemesi; patron paneli, raporlar ve İndir, girişten önce ve sonra).
+ * 6. Personel bağlantısı: e2e/personel.mjs (sahte lafmaliyet personel listesi; önceden seçili aday yok, "Eminim", gün
+ *    sonunda workedStaffRefs, Entegrasyon'da personel yanıtı, Kasa › Geçmiş günler › Bugün çalışanlar).
  *
- * Seçenekler: --only=tarama|akis|demo|internet|uzaktan  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
+ * Seçenekler: --only=tarama|akis|demo|internet|uzaktan|personel  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
  *             --targets=warn (küçük hedefleri yalnız raporla)  --out=klasör (görüntüler; varsayılan e2e/out)
  * Sorun varsa çıkış kodu 1'dir.
  */
@@ -21,6 +23,7 @@ import { runDemo } from './demo.mjs';
 import { runFlows } from './flows.mjs';
 import { runRemote } from './uzaktan.mjs';
 import { runInternet } from './internet.mjs';
+import { runStaffLink } from './personel.mjs';
 import { apiClient, launchBrowser, openContext, overflowReport, ROOT, seedFloor, settle, smallTargets, startServer, SWEEP_VIEWPORTS, VIEWPORT_ROLES } from './lib.mjs';
 
 const args = Object.fromEntries(
@@ -254,6 +257,12 @@ const ROUTES = {
     state('/yonetim/musteri-ekrani', 'siparis', (page) => page.getByRole('radio', { name: 'Sipariş', exact: true }).click({ timeout: 5000 })),
     state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
+    // Kişi çekmecesi: lafmaliyet personeli bölümü (taramada bağlantı yok: sakin not; seçici e2e/personel.mjs'te)
+    state('/yonetim/personel', 'kisi', async (page) => {
+      // Telefonda tablo gizli, satır kartı görünür: görünen ilk "Kasa"
+      await page.locator('main >> text="Kasa" >> visible=true').first().click({ timeout: 5000 });
+      await page.getByRole('heading', { name: 'lafmaliyet personeli', exact: true }).waitFor({ timeout: 5000 });
+    }),
     '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',
@@ -400,6 +409,13 @@ try {
       const failed = results.filter((r) => !r.ok).length;
       console.log(`İnternet kesintisi: ${results.length - failed}/${results.length} geçti`);
       if (failed || results.length < 3) exitCode = 1;
+    }
+    if (!args.only || args.only === 'personel') {
+      const results = await runStaffLink(browser);
+      for (const r of results) console.log(`  ${r.ok ? 'tamam' : 'HATA '}  ${r.name}${r.ok ? '' : `: ${r.error}`}`);
+      const failed = results.filter((r) => !r.ok).length;
+      console.log(`Personel bağlantısı: ${results.length - failed}/${results.length} geçti`);
+      if (failed || results.length < 4) exitCode = 1;
     }
     if (!args.only || args.only === 'uzaktan') {
       const { failures, pages } = await runRemote(browser);

@@ -176,6 +176,13 @@
       "when": 1795477324974,
       "tag": "0024_kasa_zinciri",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1795494149848,
+      "tag": "0025_personel_baglanti",
+      "breakpoints": true
     }
   ]
 }

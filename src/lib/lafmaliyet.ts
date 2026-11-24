@@ -16,6 +16,35 @@ export interface DayAnswer {
   switchDay?: string | null;
   /** Ertesi günün beklenen açılışı (TL; kasa zinciri); kasa rakamlarını görmeyene gitmez */
   nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  /** Gövdenin `workedStaffRefs`'inin lafmaliyet'teki karşılığı (§4.8); yalnız personel ya da bağlantı yöneticisine */
+  staff?: { counted: string[]; unknown: string[]; otherBranch: string[] };
+}
+
+/** lafmaliyet'in saymadığı personel kimlikleri, LafPOS'taki adıyla (`lafmaliyetStatus` `staffIssues`; ad bu kasada) */
+export interface StaffIssues {
+  unknown: { ref: string; name: string | null }[];
+  otherBranch: { ref: string; name: string | null }[];
+}
+
+/**
+ * Entegrasyon'da personel satırı: lafmaliyet o gün kaç bağlı kişiyi saydı, hangilerini bulamadı (ladmin'de silinmiş
+ * kayıt: Yönetim › Personel'de yeniden bağlanır) ve hangileri başka şubenin kaydı (ladmin Maaşlar'da şubesi
+ * düzeltilir). `null`: gün personelsiz gitti ya da lafmaliyet bu alanı bilmiyor
+ */
+export function staffAnswerText(a: DayAnswer, issues: StaffIssues | null | undefined): { tone: 'ok' | 'warn'; text: string; detail: string | null } | null {
+  if (!a.staff) return null;
+  const who = (list: { ref: string; name: string | null }[]) => list.map((p) => (p.name ? `${p.name} (${p.ref})` : p.ref)).join(', ');
+  const parts = [
+    issues?.unknown.length ? `lafmaliyet'te bulunamadı: ${who(issues.unknown)}` : null,
+    issues?.otherBranch.length ? `başka şubenin kaydı: ${who(issues.otherBranch)}` : null,
+  ].filter((x): x is string => !!x);
+  const day = dayLabel(a.date);
+  if (!parts.length) return { tone: 'ok', text: `${day}: lafmaliyet ${a.staff.counted.length} personelin gününü saydı`, detail: null };
+  return {
+    tone: 'warn',
+    text: `${day}: lafmaliyet ${a.staff.counted.length} personelin gününü saydı; ${parts.join('; ')}`,
+    detail: "Bulunamayan kişi Yönetim › Personel'de yeniden bağlanır; başka şubenin kaydı ladmin Maaşlar'da şubesi düzeltilince sayılır",
+  };
 }
 
 /**

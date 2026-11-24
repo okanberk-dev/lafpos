@@ -29,6 +29,7 @@ import { cloudState } from '../sync/cloud';
 import { platformKeysBranchChanged } from '../sync/platform-anahtar';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { acceptedBranch, branchLocked, reservedPosName } from '../sync/lafmaliyet';
+import { assertLinkable, ladminStaff, linkedUsers, STAFF_REF, STAFF_REFRESH_MIN_MS } from '../sync/lafmaliyet-personel';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
@@ -688,12 +689,43 @@ adminRoutes.get('/users', (c) => {
   // Kaldırılmış yetkinin anahtarı listede gelmez: ekran onu geri gönderse "Bilinmeyen yetki" diye düzenleme düşerdi
   return c.json(
     db
-      .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role, color: schema.users.color, active: schema.users.active, permGrant: schema.users.permGrant, permRevoke: schema.users.permRevoke, maxDiscountPct: schema.users.maxDiscountPct, lastLoginAt: schema.users.lastLoginAt })
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        role: schema.users.role,
+        color: schema.users.color,
+        active: schema.users.active,
+        permGrant: schema.users.permGrant,
+        permRevoke: schema.users.permRevoke,
+        maxDiscountPct: schema.users.maxDiscountPct,
+        lastLoginAt: schema.users.lastLoginAt,
+        staffRef: schema.users.staffRef,
+      })
       .from(schema.users)
       .orderBy(asc(schema.users.name))
       .all()
       .map((u) => ({ ...u, permGrant: u.permGrant.filter(isPermission), permRevoke: u.permRevoke.filter(isPermission) })),
   );
+});
+
+/**
+ * lafmaliyet (ladmin) personel listesi (Yönetim › Personel › kişi › ladmin personeli; docs/03-ENTEGRASYON.md §4.8): yalnız
+ * istenince çekilir, bellekte en çok 5 dakika. Her kaydın hangi LafPOS kullanıcısına bağlı olduğu (`linkedUserId`) ve
+ * bağlı olup listede bulunmayan kullanıcılar (`missing`: ladmin'de silinmiş ya da başka şubeye taşınmış). `?yenile=1`
+ * önbelleği atlar (en sık 30 saniyede bir). Bağlantı yoksa ya da ladmin'e ulaşılamazsa 503
+ */
+adminRoutes.get('/ladmin-personel', async (c) => {
+  requirePermission(c.get('user'), 'personel.yonet');
+  const q = query(c, z.object({ yenile: z.enum(['1']).optional() }));
+  const list = await ladminStaff(q.yenile ? { maxAgeMs: STAFF_REFRESH_MIN_MS } : {});
+  const linked = linkedUsers();
+  const refs = new Set(list.items.map((i) => i.ref));
+  return c.json({
+    at: list.at,
+    sube: list.sube,
+    items: list.items.map((i) => ({ ...i, linkedUserId: linked.get(i.ref)?.id ?? null })),
+    missing: [...linked.entries()].filter(([ref]) => !refs.has(ref)).map(([staffRef, u]) => ({ userId: u.id, staffRef })),
+  });
 });
 
 const permList = z.array(z.string().refine((p) => (ALL_PERMISSIONS as string[]).includes(p), 'Bilinmeyen yetki'));
@@ -859,7 +891,16 @@ adminRoutes.post('/users', async (c) => {
 adminRoutes.patch('/users/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'personel.yonet');
-  const input = await body(c, patchOf(userShape).extend({ pin: z.string().optional(), active: z.boolean().optional() }));
+  const input = await body(
+    c,
+    patchOf(userShape).extend({
+      pin: z.string().optional(),
+      active: z.boolean().optional(),
+      // lafmaliyet personel kaydı (`s:<staff.id>`); null bağlantıyı kaldırır. Bağlamak taze liste ister (internet yokken
+      // 503), kaldırmak istemez (docs/03-ENTEGRASYON.md §4.8)
+      staffRef: z.string().regex(STAFF_REF, 'lafmaliyet personel kimliği s:<sayı> biçiminde olmalı').nullable().optional(),
+    }),
+  );
   const target = db.select().from(schema.users).where(eq(schema.users.id, c.req.param('id'))).get();
   if (!target) throw notFound('Personel');
   if ((target.role === 'patron' || input.role === 'patron') && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron değiştirebilir');
@@ -890,17 +931,36 @@ adminRoutes.patch('/users/:id', async (c) => {
     pinFree(c, input.pin, target);
     patch.pinHash = hashPin(input.pin);
   }
+  const link = input.staffRef !== undefined && input.staffRef !== target.staffRef ? { staffRef: input.staffRef, previous: target.staffRef } : null;
+  if (link) {
+    // Bağlamak taze listeye karşı (etkin, listede, boşta); öteki denetimlerden sonra, yazmadan hemen önce. Beklemeden sonra
+    // yazıma dek başka await yok: liste beklenirken başka bir istek bağladıysa assertLinkable'ın son bakışı görür
+    if (link.staffRef) await assertLinkable(link.staffRef, target.id);
+    patch.staffRef = link.staffRef;
+  }
   const fields = patchFields(patch);
+  const others = Object.keys(fields).some((k) => k !== 'staffRef');
+  const fx = new Effects();
   tx((t) => {
     t.update(schema.users).set(fields).where(eq(schema.users.id, target.id)).run();
     // Yetki ya da PIN değişince açık oturumlar kapanır
     if (input.pin || input.role || input.permGrant || input.permRevoke || input.active === false) t.delete(schema.sessions).where(eq(schema.sessions.userId, target.id)).run();
+    // Bağlantı ayrı denetim satırı: LafPOS adı ve kimlik, ladmin'deki ad yazılmaz (KVKK; ad yalnız seçicide görünür)
+    if (link) {
+      const message = !link.staffRef
+        ? `${user.name}, ${target.name} hesabının lafmaliyet personel bağlantısını kaldırdı (${link.previous})`
+        : link.previous
+          ? `${user.name}, ${target.name} hesabının lafmaliyet personel bağlantısını değiştirdi: ${link.previous} → ${link.staffRef}`
+          : `${user.name}, ${target.name} hesabını lafmaliyet personeline bağladı (${link.staffRef})`;
+      fx.audit(t, { userId: user.id, action: 'user.staff_link', severity: link.previous ? 'uyari' : 'info', entity: 'user', entityId: target.id, message, data: { staffRef: link.staffRef, previous: link.previous } });
+    }
   });
+  fx.flush();
   // Oturumu kapanan ya da yetkisi değişen kişinin açık canlı akışı hemen kapanır ya da yeni yetkiyle süzülür
   sessionsChanged();
   // PIN değişikliği modu değiştirmez: deneme yalnız "Denemeyi bitir"le biter (sahada patronun PIN değişikliği denemeyi
   // sessizce kapatıyordu; örnek PIN'li hesaplar açık, sonraki gün gerçek sayılıp bankada gün sonu alınıyordu)
-  changed('users', 'user.updated', user.id, { action: 'user.update', message: `${user.name} ${target.name} hesabını güncelledi${input.pin ? ' (PIN değişti)' : ''}` });
+  changed('users', 'user.updated', user.id, others ? { action: 'user.update', message: `${user.name} ${target.name} hesabını güncelledi${input.pin ? ' (PIN değişti)' : ''}` } : undefined);
   return c.json({ ok: true });
 });
 

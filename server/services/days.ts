@@ -457,6 +457,76 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
   return getDay(t, dayId);
 }
 
+/**
+ * Günün kayıtlarından o gün iş yapan LafPOS kullanıcıları (kimlik, sıralı): günü açan ve kapatan, adisyonu açan, kapatan
+ * ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan ve devralan. Mesai kaydı yok (4
+ * Kas 2026'da kaldırıldı): ortak girişle çalışan ya da hiç giriş yapmayan (bar) görünmez, yalnız günü kapatan yönetici
+ * görünür; düzeltmesi "Bugün çalışanlar" (`business_days.workedCorrection`)
+ */
+export function derivedWorkedUserIds(t: Tx | DB, day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy'>): string[] {
+  const ids = new Set<string>();
+  const add = (...vs: (string | null | undefined)[]) => vs.forEach((v) => v && ids.add(v));
+  add(day.openedBy, day.closedBy);
+  for (const o of t.select({ w: schema.orders.waiterId, o: schema.orders.openedBy, c: schema.orders.closedBy }).from(schema.orders).where(eq(schema.orders.dayId, day.id)).all()) add(o.w, o.o, o.c);
+  const orderIds = t.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, day.id));
+  for (const i of t.selectDistinct({ u: schema.orderItems.createdBy }).from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all()) add(i.u);
+  for (const p of t.selectDistinct({ u: schema.payments.userId }).from(schema.payments).where(eq(schema.payments.dayId, day.id)).all()) add(p.u);
+  for (const m of t.selectDistinct({ u: schema.cashMovements.userId }).from(schema.cashMovements).where(eq(schema.cashMovements.dayId, day.id)).all()) add(m.u);
+  for (const sc of t.select({ u: schema.shiftCounts.userId, to: schema.shiftCounts.toUserId }).from(schema.shiftCounts).where(eq(schema.shiftCounts.dayId, day.id)).all()) add(sc.u, sc.to);
+  // Yalnız gerçek personel (sistem yazanları: site, platform, uzaktan kimlikleri düşer)
+  const known = new Set(t.select({ id: schema.users.id }).from(schema.users).all().map((u) => u.id));
+  return [...ids].filter((id) => known.has(id)).sort();
+}
+
+/**
+ * Günün çalışanları (sıralı): kayıtlardan çıkan, "Bugün çalışanlar" düzeltmesi varsa onun eklediği katılır, çıkardığı
+ * düşer. Kapanmış günde bu, düzeltmede seçilenin tamamıdır; gün yeniden açılıp kapanınca sonradan kayıtlara giren de
+ * katılır
+ */
+export function workedUserIdsOf(t: Tx | DB, day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedCorrection'>) {
+  const derived = derivedWorkedUserIds(t, day);
+  const c = day.workedCorrection;
+  if (!c) return { ids: derived, derived, corrected: false };
+  const removed = new Set(c.remove);
+  const ids = [...new Set([...derived, ...c.add])].filter((id) => !removed.has(id)).sort();
+  return { ids, derived, corrected: true };
+}
+
+/**
+ * Kasa › Geçmiş günler › "Bugün çalışanlar" düzeltmesi (docs/03-ENTEGRASYON.md §4.8): kapanmış günde yönetimin seçtiği
+ * personel o günün listesi olur (ortak girişle çalışan, hiç giriş yapmayan bar personeli eklenir; yalnız günü kapatan
+ * yönetici çıkarılır). Kayıtlardan çıkan listeye göre fark olarak saklanır: gün yeniden açılıp kapanırsa düzeltmenin
+ * eklediği ve çıkardığı kalır, yeniden açılıştan sonra iş yapan da katılır. null kayıtlara döndürür, boş liste "kimse"
+ * demektir. lafmaliyet'e giden gövdenin `workedStaffRefs`'i bundan çözülür (yemek kartı günleri): denetime uyarı önemiyle
+ * yazılır (`previous`: önceki düzeltilmiş liste, düzeltme yoksa null)
+ */
+export function setWorkedUsers(t: Tx, actor: { id: string; name: string }, fx: Effects, dayId: string, userIds: string[] | null): DayRow {
+  const day = getDay(t, dayId);
+  if (!day.closedAt) throw conflict('Çalışanlar gün sonundan sonra düzeltilir (Kasa › Geçmiş günler)', 'day_open');
+  const names = new Map(t.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
+  const ids = userIds == null ? null : [...new Set(userIds)];
+  if (ids?.some((id) => !names.has(id))) throw new HttpError(422, 'Listede olmayan personel seçildi; sayfayı yenileyip yeniden seçin', 'validation');
+  const before = workedUserIdsOf(t, day);
+  const derived = new Set(before.derived);
+  const picked = new Set(ids);
+  const correction = ids == null ? null : { add: ids.filter((id) => !derived.has(id)).sort(), remove: before.derived.filter((id) => !picked.has(id)) };
+  t.update(schema.businessDays).set({ workedCorrection: correction }).where(eq(schema.businessDays.id, dayId)).run();
+  fx.audit(t, {
+    userId: actor.id,
+    action: 'day.worked_staff',
+    severity: 'uyari',
+    entity: 'day',
+    entityId: dayId,
+    message:
+      ids == null
+        ? `${actor.name} Z ${day.zNo} (${fmtDateShort(day.date)}) çalışan listesini kayıtlara döndürdü`
+        : `${actor.name} Z ${day.zNo} (${fmtDateShort(day.date)}) çalışan listesini düzeltti: ${ids.length ? ids.map((id) => names.get(id)).join(', ') : 'kimse'}`,
+    data: { userIds: ids, previous: before.corrected ? before.ids : null },
+  });
+  fx.emit({ topic: 'cash', kind: 'day.worked', byUserId: actor.id });
+  return getDay(t, dayId);
+}
+
 /** Açık gün yokken bugünün kapanmış günü (kasa ekranındaki "Günü yeniden aç" için) */
 export function closedToday(t: Tx | DB): DayRow | null {
   return (

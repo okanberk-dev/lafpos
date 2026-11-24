@@ -14,7 +14,10 @@ import { type Harness, startApp } from './harness';
  * ayrıştırıcısıyla okur. Gövde değişirse bilerek yeniden üretilir: LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts
  */
 const GOLDEN = new URL('./fixtures/lafmaliyet-gun.golden.json', import.meta.url);
+/** Aynı gün, personel bağlantısıyla (§4.8 `workedStaffRefs`): ikinci ortak örnek, lafmaliyet aynı dosyayı okur */
+const GOLDEN_STAFF = new URL('./fixtures/lafmaliyet-gun-personel.golden.json', import.meta.url);
 const GOLDEN_DATE = '2026-10-26';
+let goldenDayId = '';
 
 let h: Harness;
 let modules: {
@@ -222,7 +225,10 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
       acquirers: [],
     });
 
+    goldenDayId = day.id;
     const payload = await payloadOf(day.id);
+    // Hiçbir kullanıcı lafmaliyet personeline bağlı değil: alan yok, gövde bağlantıdan önceki baytlarla aynı (§4.8)
+    expect('workedStaffRefs' in payload).toBe(false);
     if (process.env.LAFPOS_GOLDEN === '1') {
       mkdirSync(new URL('./fixtures/', import.meta.url), { recursive: true });
       writeFileSync(GOLDEN, `${JSON.stringify(payload, null, 2)}\n`);
@@ -278,6 +284,32 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     expect(moved('harcama')).toBeCloseTo(z.cashOut!, 2);
     expect(moved('teslim')).toBeCloseTo(z.handedOver!, 2);
     expect(moved('giris')).toBeLessThanOrEqual(z.cashIn! + 0.001);
+  });
+
+  it('personel bağlantısıyla (ikinci örnek): yalnız workedStaffRefs eklenir, sonda; o gün iş yapan bağlı kişiler, sayı sırasıyla, ad yok', async () => {
+    const { db, schema } = modules;
+    expect(goldenDayId).not.toBe('');
+    const user = (name: string) => h.boot.users.find((u) => u.name === name)!;
+    // Kasa ve Müdür o gün satış, ödeme, iptal ve gün sonu yaptı; Garson yalnız ödenmezin kişisi (iş yapmadı); Patron bağsız
+    const links: [string, string][] = [
+      ['Kasa', 's:12'],
+      ['Müdür', 's:7'],
+      ['Garson', 's:3'],
+    ];
+    try {
+      for (const [name, ref] of links) db.update(schema.users).set({ staffRef: ref }).where(eq(schema.users.id, user(name).id)).run();
+      const payload = await payloadOf(goldenDayId);
+      if (process.env.LAFPOS_GOLDEN === '1') writeFileSync(GOLDEN_STAFF, `${JSON.stringify(payload, null, 2)}\n`);
+      expect(`${JSON.stringify(payload, null, 2)}\n`).toBe(readFileSync(GOLDEN_STAFF, 'utf8'));
+      const golden = JSON.parse(readFileSync(GOLDEN, 'utf8')) as Record<string, unknown>;
+      expect(payload).toEqual({ ...golden, workedStaffRefs: ['s:7', 's:12'] });
+      expect(Object.keys(payload).at(-1)).toBe('workedStaffRefs');
+      expect(JSON.stringify(payload)).not.toMatch(/Kasa"|Müdür|Garson/);
+    } finally {
+      db.update(schema.users).set({ staffRef: null }).run();
+    }
+    // Bağlantılar kalkınca yine ilk örnekle bayt bayt aynı
+    expect(`${JSON.stringify(await payloadOf(goldenDayId), null, 2)}\n`).toBe(readFileSync(GOLDEN, 'utf8'));
   });
 });
 

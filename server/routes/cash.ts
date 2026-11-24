@@ -24,11 +24,13 @@ import {
   recordCount,
   recordShiftCount,
   reopenDay,
+  setWorkedUsers,
   shiftCountsOf,
   shiftCountToDTO,
+  workedUserIdsOf,
 } from '../services/days';
 import { deviceEndOfDay } from '../okc/service';
-import { afterDayClosed, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured } from '../sync/lafmaliyet';
+import { afterDayClosed, anyStaffLinked, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured } from '../sync/lafmaliyet';
 import { expectedOpening } from '../services/devir';
 import { onlineOrdersDayOpened } from '../sync/laffogato-orders';
 import { getOpenDay } from '../services/orders';
@@ -284,7 +286,36 @@ cashRoutes.get('/days/:id', (c) => {
     lafmaliyet: lafmaliyetZ(day, summary),
     note: day.note,
     cashCounts: day.cashCounts,
+    worked: workedFor(day),
   });
+});
+
+/**
+ * "Bugün çalışanlar" (docs/03-ENTEGRASYON.md §4.8): kayıtlardan çıkan liste, düzeltme ve seçilebilecek personel
+ * (kapalı hesaplar yalnız listedeyse). `linked`: lafmaliyet personeline bağlı mı (kimlik gitmez; yemek kartı günü yalnız
+ * bağlı kişide sayılır)
+ */
+function workedFor(day: Parameters<typeof workedUserIdsOf>[1]) {
+  const w = workedUserIdsOf(db, day);
+  const listed = new Set([...w.ids, ...w.derived]);
+  const people = db
+    .select({ id: schema.users.id, name: schema.users.name, active: schema.users.active, staffRef: schema.users.staffRef })
+    .from(schema.users)
+    .orderBy(asc(schema.users.name))
+    .all()
+    .filter((u) => u.active || listed.has(u.id))
+    .map((u) => ({ id: u.id, name: u.name, active: u.active, linked: u.staffRef != null }));
+  return { ids: w.ids, derivedIds: w.derived, corrected: w.corrected, people };
+}
+
+cashRoutes.put('/days/:id/worked', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'rapor.gor');
+  const input = await body(c, z.object({ userIds: z.array(z.string().min(1).max(64)).max(200).nullable() }));
+  const day = write((t, fx) => setWorkedUsers(t, user, fx, c.req.param('id'), input.userIds));
+  // Gönderilmiş gün yeniden gider (yeni sıra, düzeltme değil): gövdenin `workedStaffRefs`'i yalnız bağlı kullanıcı varken
+  if (anyStaffLinked() && enqueueDay(day.id)) void flushOutbox();
+  return c.json({ worked: workedFor(day) });
 });
 
 cashRoutes.get('/days/:id/lafmaliyet.json', (c) => {
