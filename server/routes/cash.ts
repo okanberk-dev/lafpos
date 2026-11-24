@@ -79,12 +79,14 @@ function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
 
 /**
  * Açılış önerisi (kasa zinciri, docs/03-ENTEGRASYON.md §4.6): rakam gören kullanıcıya beklenen açılış, kaynağı ve
- * devrin günü; kör kasiyere yalnız "beklenen var, sayın" (`check`). Beklenen bilinmiyorsa null
+ * devrin günü; kör kasiyere yalnız "beklenen var, sayın" (`check`). Beklenen bilinmiyorsa null. Kaynak lafmaliyet'se
+ * onun kaynağı da (`ladminSource`): `kasa_raporu` panelin Kasa raporu, `lafpos` rapor yokken geri söylenen sayım
  */
 function openingFor(user: AuthUser) {
   const exp = expectedOpening(db);
   if (!exp) return null;
-  return seesNumbers(user) ? { suggested: exp.amount, source: exp.source, fromDate: exp.fromDate } : { check: true as const };
+  if (!seesNumbers(user)) return { check: true as const };
+  return { suggested: exp.amount, source: exp.source, ...(exp.source === 'lafmaliyet' && exp.ladminSource ? { ladminSource: exp.ladminSource } : {}), fromDate: exp.fromDate };
 }
 
 /** Açık gün, ara rapor (X) ve kasa hareketleri */

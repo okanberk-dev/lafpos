@@ -985,10 +985,13 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
   yeniden kapanışta da (lafmaliyet raporun sayımını korur). Günün son gönderiminden önce okunan devir de eskidir.
   Doğrusu ertesi sabahki tembel devir okumasıyla gelir (lafmaliyet o anda raporu yazmıştır).
 - **`GET /api/cash/day`** gün kapalıyken `opening` döner: kasa rakamlarını gören kullanıcıya (`kasa.rakam` ya da
-  `rapor.gor`) `{ suggested, source, fromDate }` (`suggested` kuruş, `source` `lafmaliyet` | `lafpos`, `fromDate`
-  devrin günü); kör kasiyere yalnız `{ check: true }`; beklenen yoksa `null`. Kasa ekranı "Günü aç" kartında beklenen
-  tutarı, kaynağını ve "Bu tutarı yaz"ı gösterir (sayım yerine geçmez); kör kasiyere "Çekmeceyi sayıp girin; önceki
-  günün devriyle karşılaştırılır" der.
+  `rapor.gor`) `{ suggested, source, ladminSource?, fromDate }` (`suggested` kuruş, `source` `lafmaliyet` | `lafpos`,
+  `fromDate` devrin günü; `ladminSource` yalnız `source: "lafmaliyet"`'te, lafmaliyet'in kaynağı `kasa_raporu` |
+  `lafpos`); kör kasiyere yalnız `{ check: true }`; beklenen yoksa `null`. Kasa ekranı "Günü aç" kartında beklenen
+  tutarı, kaynağını ve "Bu tutarı yaz"ı gösterir (sayım yerine geçmez): "22 Kasım 2026 Pazar devri, lafmaliyet kasa
+  raporundan" yalnız lafmaliyet devri Kasa raporundan hesapladıysa; rapor yokken lafmaliyet kasanın sayımını geri
+  söyler, kart "… gün sonu sayımı, lafmaliyet'ten" der; yerel sayımda "… gün sonu sayımı". Kör kasiyere "Çekmeceyi
+  sayıp girin; önceki günün devriyle karşılaştırılır" der.
 - **Neden zorunlu:** `POST /api/cash/day/open { openingCash, reason? }`. Beklenen varsa ve |açılış − beklenen| ≥ ₺1,00
   (100 kuruş; lafmaliyet'in kasa raporu toleransı) ve neden boşsa 422 `opening_reason_required`, gün açılmaz. Kör
   kasiyere ileti yalnız "Sayımınız beklenenden farklı; nedenini yazın" (tutar, yön ve beklenen yok); rakam görene

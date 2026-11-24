@@ -1399,6 +1399,9 @@ export async function runFlows(ctx) {
             await go(ctx, page, '/kasa');
             await page.getByRole('heading', { name: 'Günü aç', exact: true }).waitFor();
             await page.getByText('₺1.500,00', { exact: true }).waitFor();
+            // Kaynak: bağlantısız kasada kendi gün sonu sayımı (kasa raporu anılmaz)
+            await page.getByText(/ gün sonu sayımı$/).waitFor();
+            assert(!(await page.getByText(/kasa raporundan/).count()), 'yerel sayım kasa raporu diye gösteriliyor');
             for (const d of '1400') await page.getByRole('button', { name: d, exact: true }).click();
             const reason = page.getByRole('textbox', { name: /^Farkın nedeni/ });
             await reason.waitFor();

@@ -17,6 +17,7 @@ import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { closeDayBody, countStarted, type CountResult, emptyCount, savedCount } from '@/lib/cashCount';
+import { type OpeningSuggestion, openingSourceText } from '@/lib/lafmaliyet';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { TypedAmount } from '../order/TypedAmount';
@@ -49,7 +50,7 @@ interface ExpenseCategory {
  * Açılış önerisi (kasa zinciri): rakam gören kullanıcıya beklenen tutar, kaynağı ve devrin günü; kör kasiyere yalnız
  * "beklenen var" (`check`). Beklenen bilinmiyorsa null
  */
-type OpeningHint = { suggested: number; source: 'lafmaliyet' | 'lafpos'; fromDate: string } | { check: true };
+type OpeningHint = OpeningSuggestion | { check: true };
 interface DayResponse {
   day: BusinessDayDTO | null;
   summary: ZSummary | null;
@@ -90,8 +91,6 @@ const MOVE_SAVE: Record<MoveKind, string> = { harcama: 'Harcamayı kaydet', tesl
 
 /** En az bu kadar farkta (kuruş) açılışın nedeni zorunlu (sunucudaki `OPENING_REASON_MIN`, lafmaliyet'in 1 TL toleransı) */
 const OPENING_REASON_MIN = 100;
-const openingSourceText = (o: { source: 'lafmaliyet' | 'lafpos'; fromDate: string }) =>
-  o.source === 'lafmaliyet' ? `${fmtDateLong(o.fromDate)} devri, lafmaliyet kasa raporundan` : `${fmtDateLong(o.fromDate)} gün sonu sayımı`;
 
 export default function CashPage() {
   const boot = useBoot();
