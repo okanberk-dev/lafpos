@@ -45,6 +45,39 @@ Aşağıdaki metin yeni bir Claude Code oturumuna olduğu gibi verilir.
 6. Temel kontrol: lafpos `npm run typecheck && npm test`; lafmaliyet `npx next typegen && npx tsc --noEmit && npm run lint &&
    npm test && TEST_DATABASE_URL=postgres://ci:ci@localhost:5432/test TEST_DB_FILE_TIMEOUT_MS=120000 npm run test:db`.
 
+## 2b. Yerel bilgisayarda (masaüstü Claude Code) kurulum
+
+Bulut kapsayıcısı yerine sahibin bilgisayarında çalışılacaksa §2'nin yerine bunu uygula. Yollar `/home/user/...` yerine
+`$LAF` (ör. `~/laf`; Windows'ta WSL içinde `~/laf`) altındadır; betiklerdeki ve bu belgedeki bütün `/home/user/` yollarını
+`$LAF/`'a çevir.
+
+1. Gerekenler: git, GitHub erişimi (`gh auth login` ya da SSH anahtarı; okanberk-dev depolarına yazma izni), Node 22+ (24
+   önerilir; `node -v`), npm, Postgres 16, Chromium (Playwright), `flock` (macOS: `brew install flock`; Linux/WSL'de var).
+   Windows'ta WSL2 (Ubuntu) içinde çalış; LafPOS'un Windows paketi testi (`npm run kurulum:windows`) gerekmedikçe koşma.
+2. Klonla: `mkdir -p $LAF/wt $LAF/scripts && cd $LAF && git clone https://github.com/okanberk-dev/lafpos.git &&
+   git clone https://github.com/okanberk-dev/lafmaliyet.git && git clone https://github.com/okanberk-dev/laffogato.git`;
+   her birinde `npm ci`. lafpos'ta e2e için `npx playwright install chromium` (yerelde gerekli).
+3. Postgres: Docker varsa `docker run -d --name laf-pg -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=test
+   -p 5432:5432 postgres:16` ve `docker exec laf-pg createdb -U ci laffogato_test`; yoksa yerel Postgres'te
+   `CREATE USER ci WITH PASSWORD 'ci' SUPERUSER; CREATE DATABASE test OWNER ci; CREATE DATABASE laffogato_test OWNER ci;`.
+   Bağlantı: `postgres://ci:ci@localhost:5432/test`.
+4. Notlar ve betikler: `git -C $LAF/lafpos fetch origin claude/hesap-uyumu-notlar` ve
+   `git -C $LAF/lafpos worktree add $LAF/wt/lafpos-notlar claude/hesap-uyumu-notlar`; `docs/devam/hesap-uyumu/*.js`'i
+   `$LAF/scripts`'e kopyala, içlerindeki eski scratchpad yolunu `$LAF/wt/lafpos-notlar/docs/devam/hesap-uyumu` ile, `/home/user/`'ı
+   `$LAF/` ile değiştir (`sed -i` / macOS'ta `sed -i ''`).
+5. Worktree'ler (her birinde `ln -s <ana klon>/node_modules node_modules`):
+   `git -C $LAF/lafpos worktree add $LAF/wt/lafpos-gunsonu claude/gun-sonu-tam`;
+   `git -C $LAF/lafmaliyet worktree add $LAF/wt/lafmaliyet-gunsonu claude/gun-sonu-tam`;
+   `git -C $LAF/lafmaliyet worktree add $LAF/wt/lafmaliyet-faz5 claude/personel-sube-kira`.
+6. Temel kontrol (§2 madde 6) yeşil olmadan işe başlama; kırmızıysa nedenini bul (çoğunlukla Node sürümü, Postgres ya da
+   Chromium eksikliği).
+7. Paralellik makinenin çekirdek sayısına göre: `nproc` / `sysctl -n hw.ncpu`; iş akışı başına aynı anda en çok
+   (çekirdek − 2) / 2 ajan, e2e ve test:db yine `flock` kilitleriyle (`/tmp/lafpos-e2e.lock`, `/tmp/lafmaliyet-db.lock`).
+   Workflow aracı yoksa paketleri sırayla alt ajanlarla (ya da kendin) aynı adımlarla yap: uygulama (önce düşen test) →
+   bağımsız inceleme → düzeltme.
+8. Canlı sistemlere istek yok: yerel `.env` dosyalarına canlı anahtar ya da canlı veritabanı adresi koyma; testler ve
+   uçtan uca deneme yalnız yerel geçici veritabanlarıyla.
+
 ## 3. Şu ana kadar main'de olanlar
 
 - laffogato#301: şube satış fiyatı (LF-1).
