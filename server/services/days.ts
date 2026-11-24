@@ -6,13 +6,14 @@ import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
 import { nextZNo } from '@shared/z-no';
 import { type DB, schema, type Tx } from '../db/client';
-import type { ZField, ZSummary } from '../db/schema';
+import type { FiscalStatus, ZField, ZSummary } from '../db/schema';
 import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, trainingDayNow } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
+import { dropPending } from '../sync/outbox-flight';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
@@ -179,10 +180,10 @@ const Z_FIELDS: ZField[] = ['cash', 'card', 'meal_card', 'online', 'other'];
  * (birleştirmede ikisi birlikte taşınır, gün aşırı ödemede de). Adisyonlar alt sorguyla seçilir: uzun dönemde kimlik
  * listesi SQLite'ın değişken sınırına takılmaz (günler en çok 400)
  */
-export function deviceReceipts(t: Tx | DB, dayIds: string[]): { paymentIds: string[] }[] {
+export function deviceReceipts(t: Tx | DB, dayIds: string[]): { paymentIds: string[]; status: FiscalStatus }[] {
   const orderIds = t.select({ id: schema.payments.orderId }).from(schema.payments).where(inArray(schema.payments.dayId, dayIds));
   return t
-    .select({ paymentIds: schema.fiscalReceipts.paymentIds })
+    .select({ paymentIds: schema.fiscalReceipts.paymentIds, status: schema.fiscalReceipts.status })
     .from(schema.fiscalReceipts)
     .where(and(inArray(schema.fiscalReceipts.orderId, orderIds), sql`${schema.fiscalReceipts.paymentIds} <> '[]'`))
     .all();
@@ -340,11 +341,28 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
     throw conflict('Yalnız bugünün son gün sonu yeniden açılabilir', 'day_not_reopenable');
   }
   t.update(schema.businessDays)
-    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null, trainingDay: null, reopenedAt: Date.now() })
+    .set({
+      closedAt: null,
+      closedBy: null,
+      countedCash: null,
+      cashCounts: null,
+      expectedCash: null,
+      cashDiff: null,
+      summary: null,
+      exportedAt: null,
+      trainingDay: null,
+      reopenedAt: Date.now(),
+      // lafmaliyet'e giden gövdenin düzeltmesi (`correction`): neden saklanır; önceki sayım düzeltmesi yeni kapanışın
+      // sayımıyla geçersiz
+      reopenReason: reason.trim().slice(0, 200),
+      recountReason: null,
+      recountedAt: null,
+    })
     .where(eq(schema.businessDays.id, dayId))
     .run();
-  // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
-  t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, `gun:${day.date}`), isNull(schema.outbox.sentAt))).run();
+  // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer. Yoldaki
+  // (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, almazsa gönderen onu atar (gün açık)
+  dropPending(t, 'lafmaliyet', `gun:${day.date}`);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -626,7 +644,13 @@ export function recordCount(
   for (const [k, v] of Object.entries(input.methodCounts ?? {})) counts[`m:${k}`] = Math.max(0, Math.trunc(v));
   // Not gönderilmezse (ya da null) kalır; gönderilen metin yerine geçer, boş metin notu siler (föy kayıtlı notla açılır)
   const note = input.note == null ? day.note : input.note.trim() || null;
-  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note }).where(eq(schema.businessDays.id, dayId)).run();
+  // Kaydedilmiş sayımın değişmesi lafmaliyet'e giden günün düzeltmesidir (`correction` recount); ilk sayım değil, aynı
+  // tutarla yeniden kaydetmek de değil (föyün notu ya da dökümü sayımla birlikte kaydedilir): önceki neden kalır
+  const recounted = day.countedCash != null && day.countedCash !== counted;
+  const recountReason = recounted ? `Kasa sayımı değiştirildi: ${tl(day.countedCash!)} → ${tl(counted)}` : day.recountReason;
+  // Düzeltmenin anı: yalnız ondan sonra kurulan ilk kabul edilen gövde düzeltmeyi taşır (sync/lafmaliyet.ts correctionFor)
+  const recountedAt = recounted ? Date.now() : day.recountedAt;
+  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note, recountReason, recountedAt }).where(eq(schema.businessDays.id, dayId)).run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
     userId: actor.user.id,

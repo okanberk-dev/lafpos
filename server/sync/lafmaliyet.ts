@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { z } from 'zod';
 import { compReasonText } from '@shared/comp';
 import { allocate } from '@shared/money';
-import { calcOrder } from '@shared/order-calc';
+import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { PLATFORM_FEE_POS_NAME, posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
 import { addDays, businessDate, isCalendarDate } from '@shared/time';
 import type { SelectedOption } from '@shared/types';
@@ -15,7 +15,9 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { computeSummary, lafmaliyetZ } from '../services/days';
+import { computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
+import { REFUND_REWRITE, REFUND_VOID } from '../services/orders';
+import { dropPending, land, takeOff } from './outbox-flight';
 
 /**
  * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
@@ -31,7 +33,11 @@ export interface SaleLine {
   qty: number;
   /** kuruş, KDV dahil */
   revenue: number;
+  /** kuruş: satırın liste değeri, indirim öncesi (mutlu saat birim fiyata işlenmiş); servis satırında servis ücreti */
+  gross: number;
   isService: boolean;
+  /** Birleşen satırda ek parçası var (EXTRA SHOT, SYRUP, ALTERNATIF SÜT: içeceğin seçeneğinden gelen) */
+  isAddon: boolean;
 }
 
 type ItemRow = typeof schema.orderItems.$inferSelect;
@@ -115,10 +121,12 @@ interface Part {
   /** kuruş: satışta net ciro, ikramda menü değeri */
   value: number;
   isService: boolean;
+  /** Ekin parçası (kalemin seçeneğinden ayrılan EXTRA SHOT, SYRUP, ALTERNATIF SÜT) */
+  isAddon: boolean;
 }
 
 /** Kalemin değerini ana ürün ve ekleri arasında liste fiyatları oranında böler (satışta ve ikramda aynı oran) */
-function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
+function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'size' | 'posName' | 'name' | 'isService' | 'extProductId' | 'qty'>, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
   const addons = addonsOf(i.options);
   const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
   const shares = allocate(value, weights);
@@ -127,7 +135,7 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
   // Platform ücreti hizmettir (mal maliyeti yok, KDV hizmet oranıyla); ürünün işareti oda sayacı için bilerek kapalı
   const isService = i.isService || posNameKey(posName) === posNameKey(PLATFORM_FEE_POS_NAME);
   return [
-    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService },
+    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService, isAddon: false },
     ...addons.map((op, k) => ({
       posName: ADDON_NAMES[op.key],
       siteMenuId: addonIds[op.key],
@@ -135,6 +143,7 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
       qty: i.qty * op.qty,
       value: shares[k + 1] ?? 0,
       isService: false,
+      isAddon: true,
     })),
   ];
 }
@@ -146,7 +155,7 @@ const partKey = (p: Pick<Part, 'posName' | 'siteMenuId' | 'slot'>) => `${posName
  * `parsePosDay`) sağlar: aynı ad iki farklı kaleme / boya düşerse ikinciye boy eki, yine çakışırsa site kimliği
  * eklenir. Siteye bağlı satır kalemiyle eşleştiği için ad yalnız bağsız üründe önemlidir; bağsız satır adını korur.
  */
-function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, string> } {
+function mergeParts(parts: (Part & { gross: number })[]): { lines: SaleLine[]; names: Map<string, string> } {
   const groups = new Map<string, SaleLine>();
   for (const p of parts) {
     const k = partKey(p);
@@ -154,7 +163,9 @@ function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, stri
     if (cur) {
       cur.qty += p.qty;
       cur.revenue += p.value;
-    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, isService: p.isService });
+      cur.gross += p.gross;
+      cur.isAddon ||= p.isAddon;
+    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, gross: p.gross, isService: p.isService, isAddon: p.isAddon });
   }
   const suffix = getSettings().posSizeSuffix;
   const rank = (l: SaleLine) => (l.siteMenuId ? 1 : 0);
@@ -195,14 +206,16 @@ function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
   const saleIds = db.select({ id: schema.orders.id }).from(schema.orders).where(closedPosWhere(dayIds));
   const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, saleIds)).all();
   const totals = new Map(orders.map((o) => [o.id, o.totals ?? calcOrder({ lines: [] })]));
-  const parts: Part[] = [];
+  const parts: (Part & { gross: number })[] = [];
   for (const i of items) {
     if (i.voided || i.complimentary) continue;
-    parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds));
+    // Liste değeri aynı oranla bölünür (indirim öncesi): satırın liste − ciro farkı indirim payıdır
+    const gross = itemParts(i, i.qty * i.unitPrice, addonIds);
+    parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds).map((p, k) => ({ ...p, gross: gross[k]?.value ?? 0 })));
   }
   // Servis ücreti ayrı hizmet satırı, adedi servis ücretli adisyon sayısı
   for (const t of totals.values()) {
-    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, isService: true });
+    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, gross: t.service, isService: true, isAddon: false });
   }
   return mergeParts(parts);
 }
@@ -236,6 +249,82 @@ export function salesCsv(from: string, to: string): string {
 
 const toTL = (k: number) => Math.round(k) / 100;
 
+/** Gövdedeki serbest metin (neden) en çok 200 karakter (docs/03-ENTEGRASYON.md §4) */
+const cap = (text: string | null | undefined) => (text == null ? null : text.slice(0, 200));
+/** `refunds[]` ve `iptal[]` en çok bu kadar satır (gövde büyümesin; lafmaliyet de aynı sınırla okur) */
+const LIST_MAX = 2000;
+
+/** İkram türü: eski kayıtta boş = ikram */
+const compKindOf = (k: string | null): 'ikram' | 'odenmez' | 'zayi' => (k === 'odenmez' || k === 'zayi' ? k : 'ikram');
+
+/**
+ * Ödenmezin kişi türü (kişinin kendisi, adı ve kimliği gitmez; KVKK): kayıtlı müşteri `musteri`, personelden patron rolü
+ * `patron`, öteki personel `personel`. Kişisiz ödenmez ve ikram, zayi null
+ */
+function personKindOf(i: Pick<ItemRow, 'compKind' | 'compPersonKind' | 'compPersonId'>, roles: Map<string, string>): 'personel' | 'musteri' | 'patron' | null {
+  if (i.compKind !== 'odenmez' || !i.compPersonKind) return null;
+  if (i.compPersonKind === 'customer') return 'musteri';
+  return i.compPersonId && roles.get(i.compPersonId) === 'patron' ? 'patron' : 'personel';
+}
+
+/** Bu günün (aynı tarih) lafmaliyet'ten 200 almış gövdeleri */
+const sentDayRows = (date: string) =>
+  db
+    .select({ createdAt: schema.outbox.createdAt })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, `gun:${date}`), isNotNull(schema.outbox.sentAt)))
+    .all();
+
+/**
+ * Gönderim sırası: bu günün lafmaliyet'ten 200 almış kayıt sayısı + 1. Tarihe ya da saate bağlı değil (altın gövde
+ * sabit kalır). Gövde kurulurken önizleme için yazılır, gönderilirken yeniden (`sendDue`, gönderimler sırayla): yanıtı
+ * beklenen gönderim sürerken kuyruğa giren gövde aynı sırayı almaz
+ */
+function revisionOf(date: string): number {
+  return sentDayRows(date).length + 1;
+}
+
+type DayCorrectionState = Pick<typeof schema.businessDays.$inferSelect, 'date' | 'reopenedAt' | 'reopenReason' | 'recountReason' | 'recountedAt'>;
+
+/**
+ * Günün son düzeltmesi ve anı: kapandıktan sonra kaydedilmiş sayımı değiştirmek (`recount`) ya da günü yeniden açmak
+ * (`reopen`). Yeniden açılış sayım düzeltmesini siler: ikisi de varsa sayım yeniden açılıştan sonradır
+ */
+function correctionOf(day: DayCorrectionState) {
+  if (day.recountReason) return { kind: 'recount' as const, reason: cap(day.recountReason)!, at: day.recountedAt ?? 0 };
+  if (day.reopenedAt != null) return { kind: 'reopen' as const, reason: cap(day.reopenReason) ?? '', at: day.reopenedAt };
+  return null;
+}
+
+/**
+ * `builtAt`'te kurulan gövdenin düzeltmesi. Düzeltme yalnız ondan sonra kurulan ve lafmaliyet'in kabul ettiği (200)
+ * İLK gövdeyle gider: sonraki gönderim (Pavo'nun gün sonu sonucu, elle "Gönder", geçmiş günler) yeni sıradır ama düzeltme
+ * değildir. Düzeltmeden önce kurulan gövde (yoldayken düzeltme geldi) onu taşımaz: verisi düzeltmeden öncedir
+ */
+function correctionFor(day: DayCorrectionState, builtAt: number): { kind: 'reopen' | 'recount'; reason: string } | null {
+  const c = correctionOf(day);
+  if (!c || builtAt < c.at) return null;
+  // Düzeltmeden sonra kurulmuş bir gövde 200 aldıysa ulaştı (gönderimler sırayla: ilki onu taşıdı)
+  const delivered = sentDayRows(day.date).some((r) => r.createdAt >= c.at);
+  return delivered ? null : { kind: c.kind, reason: c.reason };
+}
+
+/**
+ * Günün iadeleri (iptal edilen ödemeler): kalem iadesinde iptal edilip kalanı yeniden yazılan ödemenin yeniden yazılan
+ * kısmı düşer, iade raporundaki gibi (reports.ts `refundReport`). Ad ödeme türünün adıdır, kişi değil
+ */
+function refundsOf(dayId: string) {
+  const pays = db.select().from(schema.payments).where(eq(schema.payments.dayId, dayId)).orderBy(asc(schema.payments.createdAt), asc(schema.payments.id)).all();
+  const channels = new Map(db.select({ id: schema.paymentMethods.id, channel: schema.paymentMethods.channel }).from(schema.paymentMethods).all().map((m) => [m.id, m.channel]));
+  const rewritten = new Map<string, number>();
+  for (const p of pays) if (p.note?.startsWith(REFUND_REWRITE)) rewritten.set(p.note.slice(REFUND_REWRITE.length), p.amount);
+  return pays
+    .filter((p) => p.refundedAt != null && p.amount - (rewritten.get(p.id) ?? 0) > 0)
+    .sort((a, b) => a.refundedAt! - b.refundedAt! || a.id.localeCompare(b.id))
+    .slice(0, LIST_MAX)
+    .map((p) => ({ amount: toTL(p.amount - (rewritten.get(p.id) ?? 0)), zField: p.zField, name: p.methodName, channel: channels.get(p.methodId) ?? null, reason: cap(p.refundReason) }));
+}
+
 /** Sözleşme §4: bir iş gününün paketi (tutarlar TL) */
 export function buildDayPayload(dayId: string) {
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
@@ -250,6 +339,34 @@ export function buildDayPayload(dayId: string) {
   const comps = closedIds.length
     ? db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, closedIds), eq(schema.orderItems.complimentary, true), eq(schema.orderItems.voided, false))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all()
     : [];
+  // İptaller: günün bütün kasa adisyonlarından (kapanmış, açık, iptal edilmiş; Z'nin iptal toplamı gibi), online hariç
+  const posIds = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.source, 'pos')));
+  const voids = db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, posIds), eq(schema.orderItems.voided, true))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all();
+  const roles = new Map(db.select({ id: schema.users.id, role: schema.users.role }).from(schema.users).all().map((u) => [u.id, u.role as string]));
+  const compTotal = (kind: 'ikram' | 'odenmez' | 'zayi') => comps.filter((i) => compKindOf(i.compKind) === kind).reduce((a, i) => a + i.qty * i.unitPrice, 0);
+  const ikramTotal = compTotal('ikram');
+  const odenmezTotal = compTotal('odenmez');
+  // Yazarkasadan geçmeyen: eski Z'de yok, ödemelerden yeniden hesaplanır (kural tek: shared/order-calc.ts)
+  const offDevice =
+    summary.offDevice ??
+    offDeviceTotals(
+      db.select().from(schema.payments).where(and(eq(schema.payments.dayId, day.id), isNull(schema.payments.refundedAt))).all(),
+      deviceReceipts(db, [day.id]),
+    );
+  // Yazarkasanın (ÖKC) mali Z'si: günün en son tamamlanan cihaz fişinden; Pavo satış sonucunda Z yok (boş)
+  const okc = db
+    .select({ zNo: schema.fiscalReceipts.zNo })
+    .from(schema.fiscalReceipts)
+    .where(
+      and(
+        inArray(schema.fiscalReceipts.orderId, db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, day.id))),
+        eq(schema.fiscalReceipts.status, 'tamamlandi'),
+        isNotNull(schema.fiscalReceipts.zNo),
+      ),
+    )
+    .orderBy(desc(schema.fiscalReceipts.completedAt), desc(schema.fiscalReceipts.id))
+    .get();
+  const correction = correctionFor(day, Date.now());
   // Banka POS'unun gördüğü ama Z'nin kart alanına girmeyen tutarlar (lafmaliyet kart farkını bunlarla açıklar)
   const cardPays = db
     .select({ orderId: schema.payments.orderId, amount: schema.payments.amount, tip: schema.payments.tip })
@@ -265,6 +382,7 @@ export function buildDayPayload(dayId: string) {
     grandTotalKurus: number | null;
     dayCardKurus: number | null;
     message: string | null;
+    errorCode?: string | null;
     acquirers: { name: string; count: number | null; totalKurus: number | null }[];
   }>(`pavo.eod.${day.id}`);
   // 'running' (cihazda gün sonu sürüyor) sözleşmede yok: lafmaliyet bilinmeyen durumu sessizce atardı. Gün sonu bitince
@@ -280,11 +398,16 @@ export function buildDayPayload(dayId: string) {
           diff: eod.grandTotalKurus != null && eod.dayCardKurus != null ? toTL(eod.grandTotalKurus - eod.dayCardKurus) : null,
           acquirers: eod.acquirers.map((a) => ({ name: a.name, count: a.count, total: a.totalKurus != null ? toTL(a.totalKurus) : null })),
           message: eod.message,
+          // Cihazın hata kodu (alınamayan gün sonu, ör. 5085); alındıysa boş
+          errorCode: eod.errorCode ?? null,
         }
       : null;
   return {
     version: 1,
     source: 'lafpos',
+    // Bu günün kaçıncı gönderimi (lafmaliyet sürüm geçmişini tutar) ve varsa düzeltmenin türü ve nedeni
+    revision: revisionOf(day.date),
+    ...(correction ? { correction } : {}),
     ...(bankPos ? { bankPos } : {}),
     // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel yalnız kendi şubesinin (marina) gününü alır, başkasına 409
     // wrong_branch (docs/03-ENTEGRASYON.md §4). Gönderirken güncel ayardan yeniden yazılır (sendDue)
@@ -312,8 +435,19 @@ export function buildDayPayload(dayId: string) {
       // Kartla bahşiş ve kartla cari tahsilatı: banka POS'unda var, Z'nin `card` alanında yok (isteğe bağlı alanlar)
       cardTips: toTL(cardPays.reduce((a, p) => a + (p.orderId ? p.tip : 0), 0)),
       cardCollections: toTL(cardPays.reduce((a, p) => a + (p.orderId ? 0 : p.amount), 0)),
+      // Hesap sözleşmesi §5 (docs/hesap-sozlesmesi.md): liste değeri = satılan + ikram + ödenmez (servis dahil, zayi
+      // hariç); ciro = liste − indirim − ikram − ödenmez; ikram + ödenmez + zayi = offRevenue
+      listValue: toTL(lines.reduce((a, l) => a + l.gross, 0) + ikramTotal + odenmezTotal),
+      ikramTotal: toTL(ikramTotal),
+      odenmezTotal: toTL(odenmezTotal),
+      zayiTotal: toTL(compTotal('zayi')),
+      // Günün KDV'si LafPOS'un dökümü (adisyon başına yuvarlanmış, oran başına toplam); lafmaliyet yeniden hesaplamaz
+      vat: (summary.kdv ?? []).map((k) => ({ rate: k.rate, base: toTL(k.base), vat: toTL(k.kdv) })),
+      openedAt: new Date(day.openedAt).toISOString(),
+      closedAt: day.closedAt != null ? new Date(day.closedAt).toISOString() : null,
+      okcZNo: okc?.zNo != null ? String(okc.zNo) : null,
     },
-    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), isService: l.isService })),
+    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon })),
     ikram: comps.flatMap((i) =>
       itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
         // Satış satırı yeniden adlandırıldıysa (aynı ad iki kaleme düştü) ikram da aynı adı taşır
@@ -322,11 +456,34 @@ export function buildDayPayload(dayId: string) {
         slot: p.slot,
         qty: p.qty,
         menuValue: toTL(p.value),
-        // Sözleşmede tür alanı yok (docs/03-ENTEGRASYON.md): ödenmez ve zayi nedenin başında yazılır
-        reason: compReasonText(i.compKind, i.compReason),
+        // Ödenmez ve zayi nedenin başında da yazılır (`kind`'ı bilmeyen eski lafmaliyet buradan okur); önekiyle en çok
+        // 200 karakter (neden 200'e kadar yazılır, "Ödenmez: " onu aşırırdı)
+        reason: cap(compReasonText(i.compKind, i.compReason)),
+        kind: compKindOf(i.compKind),
+        personKind: personKindOf(i, roles),
       })),
     ),
     payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
+    // Mali fişi yazarkasada kesilmeyen satış ödemeleri (bahşiş hariç): banka POS'u ve ÖKC kıyasında açıklanır
+    offDevice: { card: toTL(offDevice.card), cash: toTL(offDevice.cash) },
+    refunds: refundsOf(day.id),
+    // İptal edilen kalemler ana ürün ve ek parçalarına bölünür (satır anahtarıyla). Hazırlanmış: bar ya da mutfak
+    // başlamıştı (`startedAt`) ya da hazırdı (`readyAt`); "bara gönderildi" hazırlandı demek değil. Kalem iadesi
+    // (`İade: `) `refunds[]`'ta da görünür
+    iptal: voids
+      .flatMap((i) =>
+        itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
+          posName: names.get(partKey(p)) ?? p.posName,
+          siteMenuId: p.siteMenuId,
+          slot: p.slot,
+          qty: p.qty,
+          listValue: toTL(p.value),
+          prepared: i.startedAt != null || i.readyAt != null,
+          reason: cap(i.voidReason),
+          refund: !!i.voidReason?.startsWith(REFUND_VOID),
+        })),
+      )
+      .slice(0, LIST_MAX),
   };
 }
 
@@ -363,7 +520,8 @@ export function enqueueDay(dayId: string): string | null {
   const key = `gun:${payload.date}`;
   const now = Date.now();
   tx((t) => {
-    t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
+    // Yoldaki (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, sıra ve düzeltme ona göre (sendDue)
+    dropPending(t, 'lafmaliyet', key);
     t.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now }).run();
   });
   return key;
@@ -496,6 +654,8 @@ interface PushState {
   failed?: number;
   /** En son gönderilen günün yanıtı */
   lastAnswer?: DayAnswer;
+  /** lafmaliyet'in en son kabul ettiği (200) gövdenin şubesi: şube kilidi bunu söyler, şu anki ayarı değil */
+  acceptedBranch?: string;
 }
 
 const dateOf = (payload: unknown) => {
@@ -503,10 +663,45 @@ const dateOf = (payload: unknown) => {
   return typeof d === 'string' ? d : '';
 };
 
+/**
+ * Kayıttaki gövdenin gönderilen hâli. Sıra ve düzeltme gönderim anında yeniden yazılır (gönderimler sırayla gider):
+ * sıra o ana dek 200 almış gövdeler + 1, düzeltme yalnız ondan sonra kurulan ilk kabul edilen gövdede. Şube kasanın
+ * ayarıdır, günün değil: kuyruktaki kayıt şube düzeltilmeden önce hazırlandıysa güncelini taşır
+ */
+function finalBody(row: typeof schema.outbox.$inferSelect): Record<string, unknown> {
+  const date = dateOf(row.payload);
+  const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.date, date)).orderBy(desc(schema.businessDays.zNo)).get();
+  const correction = day ? correctionFor(day, row.createdAt) : null;
+  const { revision: _revision, correction: _built, ...rest } = row.payload as Record<string, unknown>;
+  const body: Record<string, unknown> = { version: rest.version, source: rest.source, revision: revisionOf(date), ...(correction ? { correction } : {}), ...rest };
+  body.sube = getSettings().branchId;
+  return body;
+}
+
+/**
+ * Gidemeyen kayıt, yanıtı beklenirken yerine yenisi kuyruğa girdiyse ya da gün yeniden açıldıysa atılır: sonra yeniden
+ * denenip yeni gövdeyi eskisiyle ezmesin, gün açıkken eski Z gitmesin (outbox-flight.ts)
+ */
+function dropIfStale(row: typeof schema.outbox.$inferSelect) {
+  if (!row.dedupeKey) return;
+  const newer = db
+    .select({ id: schema.outbox.id })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, row.dedupeKey), isNull(schema.outbox.sentAt), gt(schema.outbox.id, row.id)))
+    .get();
+  const reopened = db
+    .select({ id: schema.businessDays.id })
+    .from(schema.businessDays)
+    .where(and(eq(schema.businessDays.date, dateOf(row.payload)), isNull(schema.businessDays.closedAt)))
+    .get();
+  if (newer || reopened) db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+}
+
 async function sendDue(): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
   let lastAnswer: DayAnswer | null = null;
+  let acceptedBranch: string | null = null;
   const due = db
     .select()
     .from(schema.outbox)
@@ -515,10 +710,17 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
     .orderBy(asc(schema.outbox.id))
     .limit(20)
     .all();
-  for (const row of due) {
+  for (const listed of due) {
+    // Liste turun başında alındı: önceki isteğin yanıtı beklenirken kayıt yenisiyle değiştiyse silineni göndermez
+    const row = db
+      .select()
+      .from(schema.outbox)
+      .where(and(eq(schema.outbox.id, listed.id), isNull(schema.outbox.sentAt)))
+      .get();
+    if (!row) continue;
+    const body = finalBody(row);
+    takeOff(row.id);
     try {
-      // Şube kasanın ayarıdır, günün değil: kuyruktaki kayıt şube düzeltilmeden önce hazırlandıysa güncelini taşır
-      const body = { ...(row.payload as object), sube: getSettings().branchId };
       const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL('/api/pos/gun', env.lafmaliyetUrl), body, 15_000);
       // 400/413/422 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
       // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
@@ -527,6 +729,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
           .set({ attempts: row.attempts + 1, lastError: pushErrorText(status, json, row.payload), nextAttemptAt: Date.now() + PARKED_MS })
           .where(eq(schema.outbox.id, row.id))
           .run();
+        dropIfStale(row);
         failed++;
         continue;
       }
@@ -539,7 +742,8 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       const answer = readDayAnswer(json, date);
       const now = Date.now();
       tx((t) => {
-        t.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1, response: { ...answer } }).where(eq(schema.outbox.id, row.id)).run();
+        // Kayıt gönderilen hâlini saklar (sıra, düzeltme, şube): sonraki sıra ve düzeltme buna göre
+        t.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1, response: { ...answer }, payload: body }).where(eq(schema.outbox.id, row.id)).run();
         // Gün gönderildi: paket günün son kapanışından sonra hazırlandıysa (arada yeniden açılmadıysa) işaretlenir.
         // "Geçmiş günleri gönder" bu işareti olmayan kapanmış günleri sayar
         t.update(schema.businessDays)
@@ -548,6 +752,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
           .run();
       });
       lastAnswer = answer;
+      acceptedBranch = String(body.sube);
       sent++;
     } catch (e) {
       const attempts = row.attempts + 1;
@@ -556,14 +761,25 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
         .set({ attempts, lastError: networkErrorText(e), nextAttemptAt: Date.now() + wait })
         .where(eq(schema.outbox.id, row.id))
         .run();
+      dropIfStale(row);
       failed++;
+    } finally {
+      land(row.id);
     }
   }
   if (sent || failed) {
     const prev = getSyncState<PushState>('lafmaliyet.push') ?? {};
     // Yanıtta gelmeyen geçiş günü bilinen eskisini silmez (eski ya da kısa yanıt "bilinmiyor" demek, "seçilmedi" değil)
     const kept = lastAnswer && !('switchDay' in lastAnswer) && prev.lastAnswer && 'switchDay' in prev.lastAnswer ? { ...lastAnswer, switchDay: prev.lastAnswer.switchDay } : lastAnswer;
-    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(sent ? { lastSuccessAt: Date.now() } : {}), ...(kept ? { lastAnswer: kept } : {}) } satisfies PushState);
+    setSyncState('lafmaliyet.push', {
+      ...prev,
+      lastRunAt: Date.now(),
+      sent,
+      failed,
+      ...(sent ? { lastSuccessAt: Date.now() } : {}),
+      ...(kept ? { lastAnswer: kept } : {}),
+      ...(acceptedBranch ? { acceptedBranch } : {}),
+    } satisfies PushState);
     bus.publish({ topic: 'sync', kind: 'lafmaliyet.push' });
   }
   return { sent, failed };
@@ -607,6 +823,36 @@ export async function pushDayNow(dayId: string) {
     throw new HttpError(502, `lafmaliyet'e gönderilemedi: ${row?.lastError ?? 'sırası gelmedi'}${parked ? '' : '. Giden kutusunda bekliyor, sonra tekrar denenecek'}`, 'lafmaliyet_push');
   }
   return { ...total, answer: (row.response as DayAnswer | null) ?? null };
+}
+
+/**
+ * Şube kimliği kilitli mi: lafmaliyet bu kasanın bir gününü kabul etti (200). Kimlik bundan sonra değişirse sonraki
+ * günler başka şubeye yazılır ya da 409 wrong_branch alır; Yönetim › Ayarlar yalnız patronun ayrıca onayıyla değiştirir
+ */
+export function branchLocked(): boolean {
+  if (getSyncState<PushState>('lafmaliyet.push')?.lastSuccessAt) return true;
+  return !!db
+    .select({ id: schema.outbox.id })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
+    .get();
+}
+
+/**
+ * lafmaliyet'in en son kabul ettiği (200) gövdenin şubesi: şube kilidinin metni ve onaysız dönülebilen kimlik. Bu alan
+ * tutulmadan önce gönderilmiş günde son gönderilen gövdeden; hiç gün kabul edilmemişse null
+ */
+export function acceptedBranch(): string | null {
+  const known = getSyncState<PushState>('lafmaliyet.push')?.acceptedBranch;
+  if (known) return known;
+  const last = db
+    .select({ payload: schema.outbox.payload })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
+    .orderBy(desc(schema.outbox.sentAt), desc(schema.outbox.id))
+    .get();
+  const sube = (last?.payload as { sube?: unknown } | null)?.sube;
+  return typeof sube === 'string' && sube ? sube : null;
 }
 
 /** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */

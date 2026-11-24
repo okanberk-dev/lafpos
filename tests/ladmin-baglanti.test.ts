@@ -233,6 +233,45 @@ describe('banka gün sonu kıyası', () => {
     const batch = { batchNo: '000301', deviceDateTime: null, grandTotalKurus: 7300, at: at + 60_000, trigger: 'elle' as const, dayClosed: false };
     expect(cardBasis(d.id, [batch as never])).toEqual({ dayCardKurus: 450, dayCardSinceBatch: '000301' });
   });
+
+  it("22.11: yazarkasadan geçmeyen kart (₺870) ve gün kapandıktan sonra cihazda fişi iptal edilen kart Pavo'nun batch'inde beklenmez", async () => {
+    const m = await mod();
+    const { cardBasis } = await import('../server/okc/service');
+    const { ulid } = await import('../server/lib/ids');
+    const card = h.boot.paymentMethods.find((x) => x.zField === 'card')!;
+    const d = m.insertDay();
+    const at = Date.now() - 1800_000;
+    let no = 0;
+    /** Kapanmış adisyon ve kart ödemesi; `receipt` verilirse ödeme o yazarkasa fişinin (cihazdan geçti) */
+    const sale = (amount: number, receipt: 'tamamlandi' | 'fis_iptal' | null, createdAt = at, tip = 0) => {
+      const orderId = ulid();
+      m.db.insert(m.schema.orders).values({ id: orderId, dayId: d.id, no: ++no, type: 'tezgah', status: 'kapali', openedAt: createdAt, closedAt: createdAt, total: amount, paid: amount, updatedAt: createdAt }).run();
+      const paymentId = ulid();
+      m.db.insert(m.schema.payments).values({ id: paymentId, orderId, dayId: d.id, methodId: card.id, methodName: card.name, zField: 'card', amount, tip, createdAt }).run();
+      if (receipt) {
+        m.db
+          .insert(m.schema.fiscalReceipts)
+          .values({ id: ulid(), orderId, provider: 'pavo', mode: 'anlik', status: receipt, amount, items: [], basket: {}, paymentIds: [paymentId], createdAt, updatedAt: createdAt })
+          .run();
+      }
+    };
+    // Cihazdan geçen kart ₺4.160, cihazdan geçmeyen kart ₺870 (bahşişiyle ₺20), gün kapandıktan sonra cihazda fişi
+    // iptal edilen kart ₺125 (LafPOS'ta ödeme canlı kalır, Z'nin kartında durur ama bankanın batch'inde yok)
+    sale(300000, 'tamamlandi');
+    sale(116000, 'tamamlandi');
+    sale(87000, null, at, 2000);
+    sale(12500, 'fis_iptal');
+    const zCard = 300000 + 116000 + 87000 + 12500;
+    const summary = { byZField: { cash: 0, card: zCard, meal_card: 0, online: 0, other: 0 }, payments: [{ methodId: card.id, name: card.name, zField: 'card', channel: null, count: 4, amount: zCard, tips: 2000 }] };
+    m.db.update(m.schema.businessDays).set({ summary: summary as never }).where(m.eq(m.schema.businessDays.id, d.id)).run();
+    expect(cardBasis(d.id, [])).toEqual({ dayCardKurus: 416000, dayCardSinceBatch: null });
+    // Sonraki gün sonunda da: önceki batch'ten sonraki kart ödemelerinden cihazdan geçmeyen ve fişi iptal edilen düşer
+    sale(4500, 'tamamlandi', at + 120_000);
+    sale(3000, null, at + 120_000);
+    sale(1500, 'fis_iptal', at + 120_000);
+    const batch = { batchNo: '000401', deviceDateTime: null, grandTotalKurus: 416000, at: at + 60_000, trigger: 'elle' as const, dayClosed: false };
+    expect(cardBasis(d.id, [batch as never])).toEqual({ dayCardKurus: 4500, dayCardSinceBatch: '000401' });
+  });
 });
 
 describe('kasanın kendi satır adları', () => {
