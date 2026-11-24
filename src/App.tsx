@@ -38,6 +38,7 @@ import CustomerDisplayPage from './pages/CustomerDisplayPage';
 const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const MerkezPage = lazy(() => import('./pages/MerkezPage'));
 const KontrolPage = lazy(() => import('./pages/kontrol/KontrolPage'));
+const HelpPage = lazy(() => import('./pages/HelpPage'));
 const StandaloneDownloadPage = lazy(() => import('./pages/DownloadPage').then((m) => ({ default: m.StandaloneDownloadPage })));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
@@ -143,6 +144,8 @@ function Authed() {
           <Route path="/rezervasyon" element={<Guard perm="rezervasyon.yonet"><ReservationsPage /></Guard>} />
           <Route path="/raporlar/*" element={<Guard perm="rapor.gor"><ReportsPage /></Guard>} />
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
+          {/* Sık sorulan sorular: oturum açan herkese; sorular kişinin yetkisine göre süzülür (src/lib/faq.ts). Uzaktan görünümde yok */}
+          {!REMOTE && <Route path="/yardim" element={<HelpPage />} />}
           {/* Siteden kurulum: yalnız LafPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
           {REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}
           {REMOTE && <Route path={MERKEZ_PATH} element={<MerkezPage />} />}

@@ -98,6 +98,15 @@ describe('yönetim paneli bölümleri', () => {
   });
 });
 
+describe('kasa ekranları e2e taramasında', () => {
+  it('App.tsx’teki her sabit adres (Sık sorulan sorular dahil) e2e/run.mjs ROUTES’ta', () => {
+    const sweep = read('e2e/run.mjs');
+    const paths = [...read('src/App.tsx').matchAll(/<Route path="(\/[a-z-]+)(?:\/\*)?"/g)].map((m) => m[1]!);
+    expect(paths).toContain('/yardim');
+    for (const p of paths) expect(sweep, p).toContain(`'${p}'`);
+  });
+});
+
 describe('ilk karede koyu açılan ekranlar (beyaz flaş olmasın)', () => {
   it('çağrı ekranı hep, müşteri ekranı ?tema=acik değilse, bar ekranı cihaz tercihi koyuysa', () => {
     expect(bootDarkFor('/cagri', '', 'koyu')).toBe(true);

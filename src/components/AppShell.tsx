@@ -666,6 +666,15 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           )}
         </DrawerGroup>
         {!REMOTE && <AlertSoundGroup {...alertPerms(can)} delay={160 + items.length * 35} />}
+        {/* Yardım en sonda: sık sorulan sorular, kişinin yetkisine göre (src/lib/faq.ts); uzaktan görünümde yok */}
+        {!REMOTE && (
+          <DrawerGroup label="Yardım">
+            <NavLink to="/yardim" onClick={closeTools} aria-current={isAt('/yardim') ? 'page' : undefined} className={cn(drawerRow, isAt('/yardim') && 'text-[var(--band-accent)]')}>
+              <DrawerLabel hint="Gün sonu, iade, yazıcı, PIN… yanıtlar ekrandaki adlarla">Sık sorulan sorular</DrawerLabel>
+              <DrawerArrow />
+            </NavLink>
+          </DrawerGroup>
+        )}
       </ToolsDrawer>
       <CommandPalette />
     </div>

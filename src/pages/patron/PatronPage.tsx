@@ -7,6 +7,7 @@ import { businessHourIndex } from '@shared/time';
 import type { OffDeviceTotals } from '@shared/order-calc';
 import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { agoText, cutoffMinute, dayLabel, type PatronStats, statsSource, summaryCompares, todayStats, topCompare } from '@shared/today-stats';
+import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { Button, IconButton } from '@/components/ui/Button';
 import { ErrorState, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
@@ -266,19 +267,23 @@ export default function PatronPage() {
   const dunSame = cmpDun?.change != null && cmpDun.value ? cmpDun.value : null;
   const dunAvg = dunSame && dunSame.receipts > 0 ? dunSame.netSales / dunSame.receipts : null;
   const haftaDonem = st?.periods.find((p) => p.key === 'hafta');
-  const tiles: { label: string; value: ReactNode; pill?: ReactNode }[] = [
+  // Rakamlar yenilenince kayan sayaçla döner (yazı tl/tlShort'un aynısı); anahtar karonun kendisi, etiketteki sayı değil
+  const count = (n: number) => n.toLocaleString('tr-TR');
+  const roll = (k: number) => <AnimatedCounter value={k} format={tlShort} />;
+  const tiles: { id: string; label: string; value: ReactNode; pill?: ReactNode }[] = [
     {
+      id: 'fis',
       label: 'Fiş sayısı',
-      value: d.orders.toLocaleString('tr-TR'),
+      value: <AnimatedCounter value={d.orders} format={count} />,
       pill: dunSame && d.orders !== dunSame.receipts ? <KPill dir={d.orders > dunSame.receipts ? 'up' : 'down'}>{Math.abs(d.orders - dunSame.receipts)}</KPill> : undefined,
     },
-    { label: 'Ortalama sepet', value: d.orders > 0 ? tlShort(d.avgCheck) : '—', pill: d.orders > 0 && dunAvg ? <PctPill value={Math.round(((d.avgCheck - dunAvg) / dunAvg) * 1000) / 10} /> : undefined },
-    { label: d.open.count > 0 ? `Açık hesap · ${d.open.count}` : 'Açık hesap', value: d.open.count > 0 ? tlShort(d.open.total) : '—' },
+    { id: 'sepet', label: 'Ortalama sepet', value: d.orders > 0 ? roll(d.avgCheck) : '—', pill: d.orders > 0 && dunAvg ? <PctPill value={Math.round(((d.avgCheck - dunAvg) / dunAvg) * 1000) / 10} /> : undefined },
+    { id: 'acik', label: d.open.count > 0 ? `Açık hesap · ${d.open.count}` : 'Açık hesap', value: d.open.count > 0 ? roll(d.open.total) : '—' },
     st?.forecast
-      ? { label: 'Gün sonu tahmini', value: tlShort(Math.round(st.forecast.value / 100) * 100) }
+      ? { id: 'tahmin', label: 'Gün sonu tahmini', value: roll(Math.round(st.forecast.value / 100) * 100) }
       : haftaDonem
-        ? { label: 'Hafta başından', value: tlShort(haftaDonem.cur.netSales), pill: <PctPill value={haftaDonem.change} /> }
-        : { label: 'İndirim ve ikram', value: loss > 0 ? tlShort(loss) : '—' },
+        ? { id: 'hafta', label: 'Hafta başından', value: roll(haftaDonem.cur.netSales), pill: <PctPill value={haftaDonem.change} /> }
+        : { id: 'kayip', label: 'İndirim ve ikram', value: loss > 0 ? roll(loss) : '—' },
   ];
   // İnce çubuk grafiği: kasa kapanış dakikalarını gönderdiyse 10 dakikalık gerçek dilimler (saat başına altı)
   const hourStart = (key: string) => (key.startsWith('g') ? businessHourIndex(Number(key.slice(1))) : 24 + Number(key.slice(1))) * 60;
@@ -360,7 +365,7 @@ export default function PatronPage() {
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2 xl:grid-cols-4">
                 {tiles.map((t) => (
-                  <KpiTile key={t.label} value={t.value} label={t.label} pill={t.pill} />
+                  <KpiTile key={t.id} value={t.value} label={t.label} pill={t.pill} />
                 ))}
               </div>
             </section>

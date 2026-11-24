@@ -1,6 +1,7 @@
 import { tl, tlShort } from '@shared/money';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { cn } from '@/lib/cn';
 import { PAY_KINDS, payKind } from './TodayStats';
 
@@ -61,15 +62,10 @@ export function HeroNumber({ k, label }: { k: number; label: string }) {
   const frac = cut > 0 ? text.slice(cut) : '';
   const digits = int.replace(/[^\d₺-]/g, '').length + frac.length;
   const units = 0.62 * digits + 0.28 * (int.split('.').length - 1) + 0.1;
+  // Ciro yenilenince basamaklar kendi çarkında döner (kayan sayaç); yazı tl()'nin aynısı, kuruş soluk
   return (
     <p className="tabular whitespace-nowrap font-headline font-medium leading-[0.95] tracking-[-0.045em] text-ink" style={{ fontSize: `min(6rem, calc(100cqi / ${units.toFixed(2)}))` }}>
-      <span className="sr-only">
-        {label} {text}
-      </span>
-      <span aria-hidden="true">
-        {int}
-        <span className="text-[var(--k-faint)]">{frac}</span>
-      </span>
+      <AnimatedCounter value={k} format={tl} srPrefix={label} fractionClassName="text-[var(--k-faint)]" />
     </p>
   );
 }
