@@ -415,7 +415,10 @@ interface Summary {
    */
   offDevice?: OffDeviceTotals;
   days: number;
-  byDay: { date: string; netSales: number; receipts: number }[];
+  /** Geçmiş ciro günü (LafPOS öncesi, ModPOS): kaynağın adı ve önceki programın Z numarası */
+  byDay: { date: string; netSales: number; receipts: number; kaynak?: string; zText?: string | null }[];
+  /** Dönemde geçmiş ciro günü varsa: kaynak, gün sayısı, ilk ve son gün (sayfanın notu) */
+  history?: HistorySpan;
   payments: { name: string; amount: number; count: number; share: number }[];
   types: { type: string; orders: number; amount: number }[];
   online: { orders: number; amount: number };
@@ -431,6 +434,19 @@ interface Summary {
 }
 
 const TYPE_LABEL: Record<string, string> = ORDER_TYPE_LABEL;
+
+interface HistorySpan {
+  kaynak: string;
+  days: number;
+  from: string;
+  to: string;
+  /** İndirimi bilinmeyen (yalnız ModPOS föyünden gelen) gün sayısı */
+  indirimBilinmiyor?: number;
+}
+/** Geçmiş ciro günlerinin kısa adı: "13 Kas – 21 Kas ModPOS'tan (9 gün)" */
+const historyText = (h: HistorySpan) => `${rangeLabel(h)} ${h.kaynak} günleri (${h.days} gün)`;
+/** Günlük grafikte günün ipucu: ModPOS günü kaynağın adı ve önceki programın Z numarasıyla */
+const dayTitle = (d: Summary['byDay'][number]) => (d.kaynak ? `${fmtShortDate(d.date)} · ${d.kaynak}${d.zText ? ` ${d.zText}` : ''}` : undefined);
 
 /**
  * Rapor sorgusu: dönem değişince önceki dönemin rakamları yeni gelene dek yerinde (soluk) kalır; sayfa spinner'a
@@ -513,6 +529,12 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
         const compared = `Kıyas: ${s.previous.label}`;
         // Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda. Renk anlam
         // taşır: ciro yeşil (grafik serisi), online mor (her ekranda), kayıp pembe, durumsuz sayılar nötr
+        // Yalnız föyden gelen ModPOS gününde indirim bilinmez: dönemin bütün günleri öyleyse ₺0 değil "bilinmiyor" yazılır
+        const unknownDisc = s.history?.indirimBilinmiyor ?? 0;
+        const discLabel = unknownDisc ? `İndirim (${fmtN(unknownDisc)} ${s.history!.kaynak} gününde bilinmiyor)` : 'İndirim';
+        const discValue: number | string = unknownDisc && unknownDisc === s.days && !s.waterfall.discounts ? 'bilinmiyor' : -s.waterfall.discounts;
+        // Tek gün ModPOS günüyse saat kırılımı yok: "satış yok" diyen boş saatlik grafik yerine günün toplamı
+        const byHour = single && !(s.history && hourly.data?.total === 0);
         const cells: KpiCell[] = [
           {
             key: 'ciro',
@@ -572,10 +594,10 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           <div className="space-y-4">
             <KpiStrip cells={cells} />
             <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-              <Card flush title={single ? 'Saatlik ciro' : 'Günlük ciro'}>
+              <Card flush title={byHour ? 'Saatlik ciro' : 'Günlük ciro'}>
                 <div className="p-4 sm:px-5">
-                  {!single ? (
-                    <ColumnChart data={s.byDay.map((d) => ({ label: fmtShortDate(d.date), value: d.netSales }))} format={tl} seriesLabel="Ciro" ariaLabel="Günlük ciro" emptyLabel={noSales} />
+                  {!byHour ? (
+                    <ColumnChart data={s.byDay.map((d) => ({ label: fmtShortDate(d.date), title: dayTitle(d), value: d.netSales }))} format={tl} seriesLabel="Ciro" ariaLabel="Günlük ciro" emptyLabel={noSales} />
                   ) : hourly.isPending ? (
                     <Skeleton className="h-[220px] rounded-[var(--r-tile)]" />
                   ) : hourly.data ? (
@@ -583,12 +605,18 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   ) : (
                     <ErrorState compact title="Saatlik ciro alınamadı" error={hourly.error} onRetry={() => void hourly.refetch()} retrying={hourly.isFetching} />
                   )}
+                  {/* LafPOS öncesi günler (ModPOS): gün toplamlarıyla; saat, ürün ve personel kırılımı yok */}
+                  {s.history && (
+                    <p className="mt-3 text-pretty text-xs text-muted">
+                      {historyText(s.history)}: önceki kasa programının gün toplamları; saat ve personel kırılımı yok, Z’ye girmez
+                    </p>
+                  )}
                 </div>
               </Card>
               <Card flush title="Ödeme türleri">
                 <div className="p-4 sm:px-5">
                   {s.payments.length ? (
-                    <BarList items={s.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')} · ${p.count} işlem`, color: PAY_COLOR[payKind(p)] }))} format={tl} />
+                    <BarList items={s.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: joinMeta([`%${p.share.toLocaleString('tr-TR')}`, p.count > 0 && `${p.count} işlem`]), color: PAY_COLOR[payKind(p)] }))} format={tl} />
                   ) : (
                     <EmptyState compact icon={<CreditCard />} title={emptyTitle(range, today, 'ödeme')}>
                       Adisyonlar kapandıkça ödeme türleri burada toplanır
@@ -606,7 +634,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
               </Card>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card flush title="Ciro dökümü" subtitle="Kapanmış adisyonlar; iptaller düşülmez, bilgi olarak">
+              <Card flush title="Ciro dökümü" subtitle={s.history ? `Kapanmış adisyonlar ve ${s.history.kaynak} gün toplamları; iptaller düşülmez, bilgi olarak` : 'Kapanmış adisyonlar; iptaller düşülmez, bilgi olarak'}>
                 {/* Gelir tablosu gibi: düşülen kalem (ikram, indirim, KDV) ikincil tonda, ara toplam ve sonuç açık gri
                     şeritte ve kalın; iptal yalnız bilgi, en altta soluk. Rakamlar aynı, yalnız görünüm */}
                 <dl className="divide-y divide-[var(--admin-divider)] pb-1.5 text-sm">
@@ -614,7 +642,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                     [
                       ['Liste değeri', s.waterfall.list, 'base'],
                       [s.odenmez || s.zayi ? 'Ciro dışı (ikram, ödenmez, zayi)' : 'İkram', -s.waterfall.complimentary, 'minus'],
-                      ['İndirim', -s.waterfall.discounts, 'minus'],
+                      [discLabel, discValue, 'minus'],
                       ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, 'base'] as const] : []),
                       ['Ciro (KDV dahil)', s.waterfall.revenue, 'total'],
                       ['KDV', -s.waterfall.kdv, 'minus'],
@@ -631,7 +659,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                     >
                       <dt>{label}</dt>
                       {/* Sıfır eksi işaretsiz (-0 da sıfırdır); düşülen tutar matematik eksisiyle */}
-                      <dd className={cn('tabular whitespace-nowrap', kind === 'total' && 'text-[15px]')}>{v === 0 ? tl(0) : v < 0 ? `−${tl(-v)}` : tl(v)}</dd>
+                      <dd className={cn('tabular whitespace-nowrap', kind === 'total' && 'text-[15px]')}>{typeof v === 'string' ? v : v === 0 ? tl(0) : v < 0 ? `−${tl(-v)}` : tl(v)}</dd>
                     </div>
                   ))}
                   <div className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-muted sm:px-5">
@@ -645,9 +673,11 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   <div className="p-4 sm:px-5">
                     {s.types.length ? (
                       <BarList items={s.types.map((t) => ({ key: t.type, label: TYPE_LABEL[t.type] ?? t.type, value: t.amount, sub: `${t.orders} adisyon` }))} format={tl} />
-                    ) : (
+                    ) : s.history ? null : (
                       <EmptyState compact icon={<ShoppingBag />} title={noSales} />
                     )}
+                    {/* ModPOS günlerinin satış türü bilinmez (yalnız gün toplamı): liste LafPOS günlerinin */}
+                    {s.history && <p className={cn('text-pretty text-xs text-muted', s.types.length > 0 && 'mt-3')}>{s.history.kaynak} günlerinin satış türü bilinmiyor; liste yalnız LafPOS günlerinin</p>}
                   </div>
                 </Card>
                 <Card flush title="KDV oranlarına göre" subtitle="KDV dahil ciro, oranlara göre" className="overflow-hidden">
@@ -682,7 +712,10 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                 </Card>
               </div>
             </div>
-            <p className="text-xs text-muted">{fmtDateTime(s.asOf)} itibarıyla · ciro kapanmış adisyonlardan, adisyonun açıldığı iş gününe göre</p>
+            <p className="text-xs text-muted">
+              {fmtDateTime(s.asOf)} itibarıyla · ciro kapanmış adisyonlardan, adisyonun açıldığı iş gününe göre
+              {s.history && ` · ${historyText(s.history)} gün toplamlarıyla`}
+            </p>
           </div>
         );
       }}
@@ -698,8 +731,64 @@ interface ProductsData {
   categories: { name: string; qty: number; revenue: number; share: number }[];
   /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir */
   costsAt?: number | null;
+  /**
+   * LafPOS öncesi dönemin (ModPOS) ürün listesi: indirim öncesi tutarlar, ürün cirosuna eklenmez. Dönem listenin bütün
+   * günlerini kapsıyorsa satırlarıyla (`covered`), yalnız bir kısmını kapsıyorsa yalnız dönemi (liste günlere bölünemez)
+   */
+  history?: { kaynak: string; from: string; to: string; covered: true; qty: number; amount: number; rows: HistoryProductRow[] } | { kaynak: string; from: string; to: string; covered: false };
 }
 type ProductRow = ProductsData['products'][number];
+interface HistoryProductRow {
+  name: string;
+  size: string;
+  qty: number;
+  amount: number;
+}
+
+/** Önceki kasa programının dönem ürün listesi (indirim öncesi), LafPOS ürünlerinden ayrı kart; kısmi dönemde not */
+function HistoryProducts({ h }: { h: NonNullable<ProductsData['history']> }) {
+  const sizeName = useSizeName();
+  if (!h.covered)
+    return (
+      <Notice tone="info" className="text-[13px]">
+        {h.kaynak} ürün listesi {rangeLabel(h)} dönemi için tek parça; görmek için o günlerin hepsini kapsayan bir dönem seçin
+      </Notice>
+    );
+  return (
+    <Card flush title={`${h.kaynak} · indirim öncesi`} subtitle={joinMeta([rangeLabel(h), `${fmtN(h.rows.length)} ürün`, `${fmtN(h.qty)} adet`, tl(h.amount)])} className="overflow-hidden">
+      <ReportTable
+        caption={`${h.kaynak} ürün listesi`}
+        rows={h.rows}
+        rowKey={(r) => `${r.name}|${r.size}`}
+        columns={[
+          {
+            key: 'urun',
+            header: 'Ürün',
+            cell: (r) => (
+              <>
+                <span className="font-medium">{r.name}</span>
+                {r.size && <SizeTag>{sizeName(r.size)}</SizeTag>}
+              </>
+            ),
+          },
+          { key: 'adet', header: 'Adet', align: 'right', cell: (r) => fmtN(r.qty) },
+          { key: 'tutar', header: 'Tutar', align: 'right', className: 'whitespace-nowrap', cell: (r) => <span className="font-semibold">{tl(r.amount)}</span> },
+        ]}
+        phoneTitle={(r) => (
+          <>
+            {r.name}
+            {r.size && <SizeTag>{sizeName(r.size)}</SizeTag>}
+          </>
+        )}
+        phoneMeta={(r) => `${fmtN(r.qty)} adet`}
+        phoneAside={(r) => tl(r.amount)}
+      />
+      <p className="border-t border-[var(--admin-divider)] px-4 py-3 text-xs text-muted sm:px-5">
+        Önceki kasa programının listesi, indirimden önceki tutarlarla; LafPOS ürün cirosuna eklenmez (ciro {h.kaynak} gün toplamlarında)
+      </p>
+    </Card>
+  );
+}
 
 /**
  * Ürünler: görünüm, arama ve CSV tek araç çubuğunda (kartın üstünde); kart yalnız tablo. Sıra numarası ürünün dönemdeki
@@ -761,6 +850,7 @@ function ProductsReport({
                   ) : (
                     noSales
                   )}
+                  {d.history && <p className="mt-3 text-pretty text-xs text-muted">{d.history.kaynak} ürün listesi kategorisiz; Ürün görünümünde ayrı</p>}
                 </div>
               </Card>
             );
@@ -819,56 +909,61 @@ function ProductsReport({
             { key: 'ort', header: 'Ort. fiyat', align: 'right', hideBelow: 'xl', className: 'whitespace-nowrap', cell: (p) => (p.qty ? tl(p.avgPrice) : <Dash />) },
             ...(withCost ? [costCol] : []),
           ];
+          // Dönem yalnız LafPOS öncesi günlerse (ModPOS) LafPOS'un boş kartı "satış yok" demez: yalnız geçmişin listesi
+          if (!d.products.length && d.history) return <HistoryProducts h={d.history} />;
           return (
-            <Card flush title="Ürün satışları" subtitle={d.products.length ? joinMeta([`Toplam ${tl(d.total)}`, d.service > 0 && `servis ücreti ${tl(d.service)} ayrı`]) : undefined} className="overflow-hidden">
-              {rows.length === 0 ? (
-                needle && d.products.length ? (
-                  <EmptyState
-                    compact
-                    icon={<SearchX />}
-                    title={`“${q.trim()}” ile eşleşen ürün yok`}
-                    action={
-                      <Button size="sm" onClick={() => setQ('')}>
-                        Aramayı temizle
-                      </Button>
-                    }
-                  />
+            <div className="space-y-3">
+              <Card flush title="Ürün satışları" subtitle={d.products.length ? joinMeta([`Toplam ${tl(d.total)}`, d.service > 0 && `servis ücreti ${tl(d.service)} ayrı`]) : undefined} className="overflow-hidden">
+                {rows.length === 0 ? (
+                  needle && d.products.length ? (
+                    <EmptyState
+                      compact
+                      icon={<SearchX />}
+                      title={`“${q.trim()}” ile eşleşen ürün yok`}
+                      action={
+                        <Button size="sm" onClick={() => setQ('')}>
+                          Aramayı temizle
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    noSales
+                  )
                 ) : (
-                  noSales
-                )
-              ) : (
-                <ReportTable
-                  caption="Ürün satışları"
-                  rows={rows}
-                  rowKey={(p) => p.key}
-                  columns={columns}
-                  phoneTitle={(p) => (
-                    <>
-                      {p.name}
-                      <SizeTag>{sizeName(p.size)}</SizeTag>
-                    </>
-                  )}
-                  phoneMeta={(p) =>
-                    joinMeta([
-                      `${fmtN(p.qty)} adet`,
-                      p.category,
-                      `%${p.share.toLocaleString('tr-TR')}`,
-                      p.complimentary > 0 && `${p.complimentary} ikram`,
-                      p.voided > 0 && `${p.voided} iptal`,
-                      // Tablonun Brüt kâr sütunu ve alttaki açıklamayla aynı: maliyeti girilmemiş üründe —
-                      withCost && p.qty > 0 && `brüt kâr ${p.margin == null ? '—' : tl(p.margin)}`,
-                    ])
-                  }
-                  phoneAside={(p) => tl(p.revenue)}
-                />
-              )}
-              {withCost && rows.length > 0 && (
-                <p className="border-t border-[var(--admin-divider)] px-4 py-3 text-xs text-muted sm:px-5">
-                  Brüt kâr: KDV hariç ciro − lafmaliyet reçete maliyeti (maliyeti girilmemiş üründe —). Maliyetler gün sonunda günde bir kendiliğinden, Yönetim › Site ve lafmaliyet’ten elle çekilir
-                  {stale && <span className="block font-medium text-[var(--admin-warning)]">{stale}</span>}
-                </p>
-              )}
-            </Card>
+                  <ReportTable
+                    caption="Ürün satışları"
+                    rows={rows}
+                    rowKey={(p) => p.key}
+                    columns={columns}
+                    phoneTitle={(p) => (
+                      <>
+                        {p.name}
+                        <SizeTag>{sizeName(p.size)}</SizeTag>
+                      </>
+                    )}
+                    phoneMeta={(p) =>
+                      joinMeta([
+                        `${fmtN(p.qty)} adet`,
+                        p.category,
+                        `%${p.share.toLocaleString('tr-TR')}`,
+                        p.complimentary > 0 && `${p.complimentary} ikram`,
+                        p.voided > 0 && `${p.voided} iptal`,
+                        // Tablonun Brüt kâr sütunu ve alttaki açıklamayla aynı: maliyeti girilmemiş üründe —
+                        withCost && p.qty > 0 && `brüt kâr ${p.margin == null ? '—' : tl(p.margin)}`,
+                      ])
+                    }
+                    phoneAside={(p) => tl(p.revenue)}
+                  />
+                )}
+                {withCost && rows.length > 0 && (
+                  <p className="border-t border-[var(--admin-divider)] px-4 py-3 text-xs text-muted sm:px-5">
+                    Brüt kâr: KDV hariç ciro − lafmaliyet reçete maliyeti (maliyeti girilmemiş üründe —). Maliyetler gün sonunda günde bir kendiliğinden, Yönetim › Site ve lafmaliyet’ten elle çekilir
+                    {stale && <span className="block font-medium text-[var(--admin-warning)]">{stale}</span>}
+                  </p>
+                )}
+              </Card>
+              {d.history && <HistoryProducts h={d.history} />}
+            </div>
           );
         }}
       </ReportBody>
@@ -1251,6 +1346,8 @@ interface ChecksData {
   /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (sayı tam) */
   truncated?: boolean;
   rows: { id: string; no: number; status: string; type: string; place: string | null; openedAt: number; closedAt: number | null; waiter: string | null; qty: number; total: number; methods: string[] }[];
+  /** Dönemde LafPOS öncesi günler (ModPOS) varsa: o günlerin adisyonu listede yok, yalnız sayısı */
+  history?: { kaynak: string; days: number; receipts: number };
 }
 type CheckRow = ChecksData['rows'][number];
 
@@ -1285,41 +1382,48 @@ function ChecksReport({ range, today, onExport, exporting }: { range: Range; tod
   ];
   return (
     <ReportBody q={data} skeleton={<TableSkeleton />}>
-      {({ rows, count, truncated }) => (
-        <Card
-          flush
-          title="Adisyonlar"
-          subtitle={count ? (truncated ? `${fmtN(count)} adisyon · liste kısaltıldı, hepsi kafedeki kasada` : rows.length < count ? `${fmtN(count)} adisyon · ekranda en yeni ${fmtN(rows.length)}, hepsi CSV’de` : `${fmtN(count)} adisyon`) : undefined}
-          actions={
-            count > 0 ? (
-              <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
-                CSV
-              </Button>
-            ) : undefined
-          }
-          className="overflow-hidden"
-        >
-          {rows.length === 0 ? (
-            <EmptyState compact icon={<ReceiptText />} title={emptyTitle(range, today, 'adisyon')}>
-              {emptyHint(range, today, 'Açık adisyonlar kapanınca burada sayılır')}
-            </EmptyState>
-          ) : (
-            <ReportTable
-              caption="Adisyonlar"
-              rows={rows}
-              rowKey={(o) => o.id}
-              columns={columns}
-              phoneTitle={(o) => (
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                  #{o.no} · {place(o)}
-                  {o.status === 'iptal' && <Badge tone="danger">İptal</Badge>}
-                </span>
-              )}
-              phoneMeta={(o) => joinMeta([span(o), `${fmtN(o.qty)} adet`, o.methods.join(', '), withWaiter && o.waiter])}
-              phoneAside={(o) => tl(o.total)}
-            />
+      {({ rows, count, truncated, history }) => (
+        <div className="space-y-3">
+          {history && (
+            <Notice tone="info" className="text-[13px]">
+              {history.kaynak} günlerinin {fmtN(history.receipts)} adisyonu ({fmtN(history.days)} gün) bu listede yok: önceki kasa programından yalnız gün toplamları geldi
+            </Notice>
           )}
-        </Card>
+          <Card
+            flush
+            title="Adisyonlar"
+            subtitle={count ? (truncated ? `${fmtN(count)} adisyon · liste kısaltıldı, hepsi kafedeki kasada` : rows.length < count ? `${fmtN(count)} adisyon · ekranda en yeni ${fmtN(rows.length)}, hepsi CSV’de` : `${fmtN(count)} adisyon`) : undefined}
+            actions={
+              count > 0 ? (
+                <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
+                  CSV
+                </Button>
+              ) : undefined
+            }
+            className="overflow-hidden"
+          >
+            {rows.length === 0 ? (
+              <EmptyState compact icon={<ReceiptText />} title={emptyTitle(range, today, 'adisyon')}>
+                {emptyHint(range, today, 'Açık adisyonlar kapanınca burada sayılır')}
+              </EmptyState>
+            ) : (
+              <ReportTable
+                caption="Adisyonlar"
+                rows={rows}
+                rowKey={(o) => o.id}
+                columns={columns}
+                phoneTitle={(o) => (
+                  <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    #{o.no} · {place(o)}
+                    {o.status === 'iptal' && <Badge tone="danger">İptal</Badge>}
+                  </span>
+                )}
+                phoneMeta={(o) => joinMeta([span(o), `${fmtN(o.qty)} adet`, o.methods.join(', '), withWaiter && o.waiter])}
+                phoneAside={(o) => tl(o.total)}
+              />
+            )}
+          </Card>
+        </div>
       )}
     </ReportBody>
   );
@@ -1506,6 +1610,20 @@ interface ItemsData {
   odenmezPeople: OdenmezPersonDTO[];
   /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (toplam ve sayı tam) */
   truncated?: boolean;
+  /**
+   * Dönemde LafPOS öncesi günler (ModPOS) varsa: kalem kaydı yok. İndirim ve İkram listesinde o günlerin toplamı (Ciro
+   * dökümüyle aynı), öbürlerinde tutarsız
+   */
+  history?: { kaynak: string; days: number; amount?: number; indirimBilinmiyor?: number };
+}
+
+const ITEM_HISTORY_NOUN: Record<ItemKind, string> = { iptal: 'iptal', ikram: 'ikram ve ödenmez', indirim: 'indirim', happy: 'happy hour satışı' };
+/** Kalem listesinin ModPOS notu: toplam biliniyorsa tutarıyla, değilse yalnız kaydın olmadığı */
+function historyItemsText(h: NonNullable<ItemsData['history']>, kind: ItemKind) {
+  const head = `${h.kaynak} günlerinde (${fmtN(h.days)} gün)`;
+  if (h.amount == null) return `${head} ${ITEM_HISTORY_NOUN[kind]} kaydı yok: önceki kasa programından yalnız gün toplamları geldi`;
+  const unknown = h.indirimBilinmiyor ? ` (${fmtN(h.indirimBilinmiyor)} gününde indirim bilinmiyor: yalnız föy var)` : '';
+  return `${head} ${ITEM_HISTORY_NOUN[kind]} ${tl(h.amount)}${unknown}; kalem kalem kaydı yok, bu listede değil`;
 }
 
 /** Ödenmez kişisinin türü sözle: tablo ve satır kartı */
@@ -1602,6 +1720,11 @@ function ItemsReport({ range, today, kind, onExport, exporting }: { range: Range
     <ReportBody q={data} skeleton={<TableSkeleton rows={6} />}>
       {(d) => (
         <div className="space-y-3">
+          {d.history && (
+            <Notice tone="info" className="text-[13px]">
+              {historyItemsText(d.history, kind)}
+            </Notice>
+          )}
           <Card
             flush
             title={ITEM_TITLES[kind]}

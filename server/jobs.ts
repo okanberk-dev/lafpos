@@ -15,6 +15,7 @@ import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
 import { afterDayClosed, flushOutbox } from './sync/lafmaliyet';
+import { modposTick } from './sync/modpos';
 import { siteLinked } from './sync/laffogato-link';
 import { onlineOrdersTick } from './sync/laffogato-orders';
 import { flushSiteOutbox } from './sync/site-outbox';
@@ -280,6 +281,9 @@ export function startJobs() {
   timers.push(setTimeout(onlineOrdersTick, 12_000));
   timers.push(setInterval(onlineOrdersTick, 20_000));
   timers.push(setInterval(() => void flushOutbox(), 60_000));
+  // ModPOS dönemi lafmaliyet'ten: iş günü başına bir kez (05:00'ten ya da açılıştan sonraki ilk tur); bağlantı yoksa istek yok
+  timers.push(setTimeout(() => void modposTick(), 25_000));
+  timers.push(setInterval(() => void modposTick(), 60_000));
   // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(() => autoDayEndTick(), 60_000));

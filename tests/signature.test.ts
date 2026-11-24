@@ -23,6 +23,8 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     const dayBody = '{"version":1,"source":"lafpos","date":"2026-10-26"}';
     expect(sign(SECRET, { timestamp: TS, method: 'POST', url: new URL('https://ladmin.laffogato.net/api/pos/gun'), body: dayBody })).toBe('5ab02280859d09c6afb003f9cc62bbfdd46b1738f6a25c9a6cf8a475113639cb');
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/urunler'), body: '' })).toBe('4693defb7ef97b132908d552133471db2827261b6468b2ef565effa6fcbf8a3c');
+    // ModPOS dönemi (server/sync/modpos.ts): şube sorguda, imzaya girer
+    expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/modpos-gunler?sube=marina'), body: '' })).toBe('e653d2f73b92e4fa1f6acc750f6702872e7e3a68204f9adad8f17e5bf6dd9023');
   });
 
   it('kasa zinciri uçları (docs/03-ENTEGRASYON.md §4.6, §4.7; lafmaliyet tests/lafpos.test.ts aynı vektörler)', () => {
