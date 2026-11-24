@@ -5,7 +5,8 @@ import { tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
 import type { ShiftCountDTO, ZSummary } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { Field, Select, Textarea } from '@/components/ui/Field';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, Card } from '@/components/ui/misc';
 import { errorMessage, post } from '@/lib/api';
@@ -118,9 +119,11 @@ export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { o
             </Select>
           </Field>
           <Field label="Devralanın PIN'i" hint={pinDropped && !pin ? "sayım değişti; devralan PIN'ini yeniden girsin" : 'isteğe bağlı, sayımdan sonra'}>
-            <Input
-              type="password"
+            <PasswordInput
               inputMode="numeric"
+              wide
+              showLabel="PIN'i göster"
+              hideLabel="PIN'i gizle"
               autoComplete="off"
               maxLength={6}
               value={pin}

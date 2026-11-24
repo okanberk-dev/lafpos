@@ -861,6 +861,88 @@ html[class~='dark'] {
 .toast-out {
   animation: lp-leave 0.15s ease-in forwards;
 }
+/*
+ * Bildirimin ikon karosu (rare-ui toast'tan): kart yerine oturunca karo hafifçe büyüyerek belirir, ardından işaret
+ * (tik, çarpı, ünlem, i) çizilir. Çizgi `pathLength="1"` ile: tire boyu 1, ofset 1'den 0'a. Yalnız CSS: satış ekranına
+ * hareket kütüphanesi inmez
+ */
+@keyframes lp-tile-in {
+  from {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+}
+@keyframes lp-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes lp-dot-in {
+  from {
+    transform: scale(0);
+  }
+}
+.toast-tile {
+  animation: lp-tile-in 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) 0.12s both;
+}
+.toast-tile .draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: lp-draw 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.26s forwards;
+}
+.toast-tile .draw + .draw {
+  animation-delay: 0.34s;
+}
+.toast-tile .dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-dot-in 0.22s cubic-bezier(0.34, 1.4, 0.64, 1) 0.3s both;
+}
+
+/*
+ * Şifre kutusu (src/components/ui/PasswordInput.tsx): gizliyken yalnız noktalar çizilir (gerçek karakter DOM'a
+ * yazılmaz); gösterilince her karakter noktasının yerinde belirir, noktalar söner. İmleç yazarken sabit, durunca yanıp
+ * söner. Güç çubuğu soldan dolar
+ */
+@keyframes lp-pw-char {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+@keyframes lp-pw-caret {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+.pw-char {
+  animation: lp-pw-char 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pw-dot {
+  transition:
+    opacity 0.12s ease-out,
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pw-caret {
+  animation: lp-pw-caret 1.1s linear 0.5s infinite;
+}
+.pw-bar {
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.28s ease-out;
+}
+.pw-eye path,
+.pw-eye circle {
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.16s ease-out,
+    stroke-dashoffset 0.2s ease-out;
+}
 
 /* Hareket azaltma: giriş, çıkış ve nabız animasyonları yok, durum geçişleri (renk) kalır */
 @media (prefers-reduced-motion: reduce) {
@@ -869,8 +951,24 @@ html[class~='dark'] {
   .animate-delayed,
   .toast-in,
   .toast-out,
+  .toast-tile,
+  .toast-tile .draw,
+  .toast-tile .dot,
+  .pw-char,
   .animate-pulse,
   .skeleton {
+    animation: none;
+  }
+  .toast-tile .draw {
+    stroke-dashoffset: 0;
+  }
+  .pw-dot,
+  .pw-bar,
+  .pw-eye path,
+  .pw-eye circle {
+    transition: none;
+  }
+  .pw-caret {
     animation: none;
   }
   .animate-ring::after {

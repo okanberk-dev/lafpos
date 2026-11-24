@@ -45,6 +45,9 @@ export function Label({ children, hint, className }: { children: ReactNode; hint
  * Kısa ipucu (16 karaktere kadar: "zorunlu", "düğme ve fişte") etiketin sağında; uzunu ("boşsa takip edilmez")
  * alanın altında yardım metni olur: etiket satırı hep tek satır kalır, iki sütunlu formda yan yana alanlar hizalı
  * durur. Yardım metni alanın açıklamasıdır (`aria-describedby`), adına karışmaz.
+ * İçinde düğmesi olan denetim (şifre kutusunun göz düğmesi) `labelOutside` işaretini taşır: o zaman `<label>` yalnız
+ * etiketin yazısını sarar ve alana `for` ile bağlanır. Düğme etiketin içinde kalsaydı adı alanın adına karışırdı
+ * ("Parola Parolayı göster").
  */
 export function Field({
   label,
@@ -63,26 +66,40 @@ export function Field({
 }) {
   const errorId = useId();
   const hintId = useId();
+  const controlId = useId();
   const help = typeof hint === 'string' && hint.length > 16 ? hint : null;
   const requiredHint = required ? 'zorunlu' : undefined;
   let control = children;
   // Alanın kendisine (Input, Select, NumberInput ya da yerli input) aria-invalid ve açıklama geçer; alan bir kabın
   // içindeyse kenarı sarmalayıcıdaki data-invalid boyar. Sarmalayıcı hata yokken de durur: hata çıkıp kaybolunca ağaç
   // değişmesin, alan yeniden kurulup yazarken odağı kaybetmesin
-  const el = isValidElement(children) ? (children as ReactElement<{ 'aria-invalid'?: boolean; 'aria-describedby'?: string }>) : null;
+  const el = isValidElement(children) ? (children as ReactElement<{ id?: string; 'aria-invalid'?: boolean; 'aria-describedby'?: string }>) : null;
   const own = !!el && (typeof el.type !== 'string' || ['input', 'select', 'textarea'].includes(el.type));
+  // Denetim kendi düğmesini taşıyor (şifre kutusu): etiket yalnız yazıyı sarar, alana for ile bağlanır. Bileşen burada
+  // içe aktarılmaz (işaretle tanınır): şifre kutusu ana pakete inmez, kullanan ekranla gelir
+  const outside = !!el && typeof el.type !== 'string' && !!(el.type as { labelOutside?: boolean }).labelOutside;
+  const inputId = outside ? (el.props.id ?? controlId) : undefined;
   // Yardım metni yalnız özniteliği alana kesin ulaştıran denetime bağlanır (yerli alan ya da kitin alanı); sayfanın
   // kendi sarmalayıcısında (ör. satır listesi) etiketin metni olarak kalır, kaybolmaz
-  const describes = !!help && !!el && (typeof el.type === 'string' ? own : el.type === Input || el.type === Textarea || el.type === Select || el.type === NumberInput);
-  if (el && own && (error || describes)) {
+  const describes = !!help && !!el && (typeof el.type === 'string' ? own : outside || el.type === Input || el.type === Textarea || el.type === Select || el.type === NumberInput);
+  if (el && own && (error || describes || outside)) {
     control = cloneElement(el, {
+      ...(outside ? { id: inputId } : {}),
       ...(error ? { 'aria-invalid': true } : {}),
-      'aria-describedby': [el.props['aria-describedby'], describes && hintId, error && errorId].filter(Boolean).join(' '),
+      'aria-describedby': [el.props['aria-describedby'], describes && hintId, error && errorId].filter(Boolean).join(' ') || undefined,
     });
   }
+  const Root = outside ? 'div' : 'label';
   return (
-    <label className={cn('block', className)}>
-      {label && <Label hint={help ? requiredHint : (hint ?? requiredHint)}>{label}</Label>}
+    <Root className={cn('block', className)}>
+      {label &&
+        (outside ? (
+          <label htmlFor={inputId} className="block">
+            <Label hint={help ? requiredHint : (hint ?? requiredHint)}>{label}</Label>
+          </label>
+        ) : (
+          <Label hint={help ? requiredHint : (hint ?? requiredHint)}>{label}</Label>
+        ))}
       <span data-invalid={error ? '' : undefined} className="contents">
         {control}
       </span>
@@ -98,7 +115,7 @@ export function Field({
           {error}
         </span>
       )}
-    </label>
+    </Root>
   );
 }
 

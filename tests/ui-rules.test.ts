@@ -54,8 +54,8 @@ describe('kaynak taraması', () => {
       'src/pages/KitchenPage.tsx': { tokens: ['bg-danger-600'], why: 'bar ekranında alarm süre rozeti ve iptal edilen kalemin adedi, beyaz yazı' },
       'src/pages/FloorPage.tsx': { tokens: ['bg-success-600'], why: 'masa kartında hazır rozeti, beyaz yazı' },
       'src/lib/toast.tsx': {
-        tokens: ['[&_.toast-ic]:text-success-300', '[&_.toast-ic]:text-danger-300', '[&_.toast-ic]:text-warn-300'],
-        why: 'bildirimin ikonu gece mürekkebi zeminde (iki temada koyu); koyu temada dark: ile belirtece döner',
+        tokens: ['[&_.toast-ic]:bg-success-300', '[&_.toast-ic]:bg-danger-300', '[&_.toast-ic]:bg-warn-300'],
+        why: 'bildirimin ikon karosu gece mürekkebi zeminde (iki temada koyu), üstünde mürekkep işaret; koyu temada dark: ile belirtece döner',
       },
     };
     const RAW = /(?:^|[\s'"`])((?:[^\s'"`]*:)?(?:text|bg|border|ring|outline|fill|stroke|divide|from|via|to|decoration|accent|caret|shadow|placeholder)-(?:brand|warn|danger|rose|success)-\d{2,3}(?:\/\d{1,3})?)(?=[\s'"`]|$)/gm;
@@ -95,6 +95,15 @@ describe('yönetim paneli bölümleri', () => {
   it('Innex tarifi ve skill depoda', () => {
     expect(existsSync(join(root, 'docs/ADMIN-INNEX.md'))).toBe(true);
     expect(read('.claude/skills/build-admin-panel/SKILL.md')).toMatch(/docs\/ADMIN-INNEX\.md/);
+  });
+});
+
+describe('kasa ekranları e2e taramasında', () => {
+  it('App.tsx’teki her sabit adres (Sık sorulan sorular dahil) e2e/run.mjs ROUTES’ta', () => {
+    const sweep = read('e2e/run.mjs');
+    const paths = [...read('src/App.tsx').matchAll(/<Route path="(\/[a-z-]+)(?:\/\*)?"/g)].map((m) => m[1]!);
+    expect(paths).toContain('/yardim');
+    for (const p of paths) expect(sweep, p).toContain(`'${p}'`);
   });
 });
 

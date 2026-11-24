@@ -31,6 +31,7 @@ import type { CompKind, CompPersonKind, OdenmezPersonDTO } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { PAY_KINDS, payKind } from '../patron/TodayStats';
+import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { ADMIN_SECTIONS } from '@/components/admin/sections';
@@ -261,10 +262,16 @@ function stamper(r: Range): (ms: number) => string {
 const changeOf = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 const deltaOf = (c: number | null): KpiCell['delta'] => (c == null ? null : { text: `${c >= 0 ? '▲' : '▼'} %${Math.abs(c).toLocaleString('tr-TR')}`, good: c >= 0 });
 
-/** KPI tutarı: milyondan sonra kuruş düşer (28 px rakam hücreye sığsın); tam tutar ipucunda ve Ciro dökümünde */
+/**
+ * KPI tutarı: milyondan sonra kuruş düşer (28 px rakam hücreye sığsın); tam tutar ipucunda ve Ciro dökümünde. Dönem
+ * değişince ya da gün içinde yenilenince basamaklar kayan sayaçla döner (yazı tl/tlShort'un aynısı)
+ */
 function KpiAmount({ value }: { value: number }) {
-  return Math.abs(value) >= 100_000_000 ? <span title={tl(value)}>{tlShort(Math.round(value / 100) * 100)}</span> : <>{tl(value)}</>;
+  return Math.abs(value) >= 100_000_000 ? <AnimatedCounter title={tl(value)} value={Math.round(value / 100) * 100} format={tlShort} /> : <AnimatedCounter value={value} format={tl} />;
 }
+
+/** KPI sayısı (adisyon, satılan ürün, sipariş): `fmtN` yazısıyla kayan sayaç */
+const KpiCount = ({ value }: { value: number }) => <AnimatedCounter value={value} format={fmtN} />;
 
 /** Boyun ayardaki adı (Orta, Büyük); tek boylu üründe null */
 function useSizeName() {
@@ -550,7 +557,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             key: 'adisyon',
             label: 'Adisyon',
             icon: <ReceiptText />,
-            value: fmtN(s.receipts),
+            value: <KpiCount value={s.receipts} />,
             delta: deltaOf(s.previous.receipts == null ? null : changeOf(s.receipts, s.previous.receipts)),
             reference: (
               <>
@@ -567,7 +574,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             key: 'urun',
             label: 'Satılan ürün',
             icon: <Package />,
-            value: fmtN(s.itemsSold),
+            value: <KpiCount value={s.itemsSold} />,
             reference: s.days > 1 ? `${s.days} iş günü` : s.days === 1 ? 'Tek iş günü' : 'Gün açılmadı',
             onClick: () => onOpen('urunler', { product: 'urun' }),
           },
@@ -1512,10 +1519,10 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
         // Ciro yeşil, durumsuz sayılar nötr, bekleyen amber (zaman), kaçan pembe (kayıp)
         const cells: KpiCell[] = [
           { key: 'ciro', label: 'Platform cirosu', icon: <Bike />, hue: 'green', value: <KpiAmount value={d.revenue} />, reference: `Toplam ciroda pay %${d.share.toLocaleString('tr-TR')}` },
-          { key: 'siparis', label: 'Sipariş', icon: <ReceiptText />, value: fmtN(d.orders), reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
+          { key: 'siparis', label: 'Sipariş', icon: <ReceiptText />, value: <KpiCount value={d.orders} />, reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
           ...(showCost ? [commission] : []),
-          { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'amber', value: fmtN(d.open.orders), reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
-          { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: fmtN(d.missed.orders), reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },
+          { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'amber', value: <KpiCount value={d.open.orders} />, reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
+          { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: <KpiCount value={d.missed.orders} />, reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },
         ];
         return (
           <div className="space-y-4">

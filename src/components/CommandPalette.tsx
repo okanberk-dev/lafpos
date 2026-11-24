@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Coffee, CornerDownLeft, Lock, LogOut, Moon, Plus, Search, Sun, UserPlus, UserRound } from 'lucide-react';
+import { CircleQuestionMark, Coffee, CornerDownLeft, Lock, LogOut, Moon, Plus, Search, Sun, UserPlus, UserRound } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
@@ -102,6 +102,8 @@ function Palette({ onClose }: { onClose: () => void }) {
       if (out.some((e) => e.id === `ekran:${s.to}`)) continue;
       out.push({ id: `yonetim:${s.key}`, group: 'Yönetim', label: s.label, icon: <s.icon />, keywords: `${s.keywords ?? ''} ${s.desc}`, run: go(s.to) });
     }
+    // Sık sorulan sorular (kasada; uzaktan görünümde yok): "yardım", "nasıl" ve sorunun konusu ("iade") da bulur
+    if (!REMOTE) out.push({ id: 'yardim', group: 'Yardım', label: 'Sık sorulan sorular', icon: <CircleQuestionMark />, keywords: 'yardım sss soru nasıl gün sonu iade iptal ikram yazıcı pin bahşiş internet', run: go('/yardim') });
     if (can('menu.yonet')) {
       out.push({ id: 'eylem:urun', group: 'Eylemler', label: 'Yerel ürün ekle', icon: <Plus />, keywords: 'yeni ürün', run: go('/yonetim/menu?urun=yeni') });
       for (const p of boot.products) {

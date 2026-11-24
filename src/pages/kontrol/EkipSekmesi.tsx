@@ -5,6 +5,7 @@ import { type Role, ROLE_LABELS, ROLES } from '@shared/permissions';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Avatar, Badge, Card, EmptyState } from '@/components/ui/misc';
 import { errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -154,14 +155,15 @@ function KisiSatiri({
  */
 function PinAlanlari({ pin, tekrar, setPin, setTekrar, goster, yeni }: { pin: string; tekrar: string; setPin: (v: string) => void; setTekrar: (v: string) => void; goster: boolean; yeni?: boolean }) {
   const h = pinHatasi(pin, tekrar);
-  const ortak = { type: 'password', inputMode: 'numeric', pattern: '[0-9]*', autoComplete: 'off', spellCheck: false, 'data-1p-ignore': '', 'data-lpignore': 'true', className: 'tracking-[0.3em]' } as const;
+  // Şifre kutusu: gizliyken rakamlar sayfaya yazılmaz, göz düğmesiyle gösterilir; parola yöneticisi karışmaz
+  const ortak = { inputMode: 'numeric', pattern: '[0-9]*', autoComplete: 'off', 'data-1p-ignore': '', 'data-lpignore': 'true', wide: true, showLabel: 'PIN’i göster', hideLabel: 'PIN’i gizle' } as const;
   return (
     <>
       <Field label={yeni ? 'Yeni PIN' : 'PIN'} hint="4–6 rakam" error={goster ? h.pin : null}>
-        <Input {...ortak} value={pin} onChange={(e) => setPin(pinGirdisi(e.target.value))} />
+        <PasswordInput {...ortak} value={pin} onChange={(e) => setPin(pinGirdisi(e.target.value))} />
       </Field>
       <Field label={yeni ? 'Yeni PIN tekrar' : 'PIN tekrar'} error={goster ? h.tekrar : null}>
-        <Input {...ortak} value={tekrar} onChange={(e) => setTekrar(pinGirdisi(e.target.value))} />
+        <PasswordInput {...ortak} value={tekrar} onChange={(e) => setTekrar(pinGirdisi(e.target.value))} />
       </Field>
     </>
   );

@@ -272,6 +272,13 @@ const ROUTES = {
     '/yonetim/ag',
     '/yonetim/ayarlar',
     '/yonetim/denetim',
+    // Sık sorulan sorular (sohbet balonları) ve açık bir yanıt: yanıt balonu, L'Af karosu, ekran adı etiketleri
+    '/yardim',
+    state('/yardim', 'yanit', async (page) => {
+      await page.getByRole('button', { name: 'Gün sonunu (Z) nasıl alırım?', exact: true }).click({ timeout: 5000 });
+      await page.getByRole('region', { name: 'Gün sonunu (Z) nasıl alırım?' }).waitFor({ timeout: 5000 });
+    }),
+    state('/yardim', 'arama', (page) => page.getByRole('searchbox', { name: 'Sorularda ara' }).fill('yazıcı', { timeout: 5000 })),
   ],
   garson: [
     '/masalar',
@@ -284,6 +291,7 @@ const ROUTES = {
     }),
     '/mutfak',
     '@s1',
+    '/yardim',
   ],
   kasa: [
     '/kasa',
@@ -295,6 +303,7 @@ const ROUTES = {
     '@tz',
     pending,
     '/cihaz',
+    '/yardim',
   ],
   bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })), state('/mutfak', 'gecmis', (page) => page.getByRole('tab', { name: /^Geçmiş/ }).click({ timeout: 5000 })), barLight],
 };

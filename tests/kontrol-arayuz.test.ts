@@ -406,7 +406,9 @@ describe('ekran bağlantıları', () => {
   });
   it('PIN alanı gizli yazılır, rakam klavyesi açar, tarayıcı saklamaz; gönderimden sonra boşalır', () => {
     const ekip = read('src/pages/kontrol/EkipSekmesi.tsx');
-    expect(ekip).toMatch(/type: 'password', inputMode: 'numeric'[^}]*autoComplete: 'off'/);
+    // Şifre kutusu (PasswordInput): kapalıyken type="password", rakamlar sayfaya yazılmaz
+    expect(ekip).toMatch(/const ortak = \{ inputMode: 'numeric'[^}]*autoComplete: 'off'/);
+    expect(ekip.match(/<PasswordInput \{\.\.\.ortak\}/g)).toHaveLength(2);
     // Her PIN gönderiminin finally bloğu alanı boşaltır
     const gonderim = ekip.match(/finally \{[^}]*\}/g) ?? [];
     expect(gonderim.filter((b) => b.includes("setPin('')") && b.includes("setTekrar('')"))).toHaveLength(2);

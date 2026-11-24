@@ -115,7 +115,7 @@ export function navAlias(pathname: string, origin: string | null): string | null
 }
 
 /** Menüde olmayan ekranların telefon üst şeridindeki adı */
-export const EXTRA_TITLES: Record<string, string> = { '/cihaz': 'Eğitim cihazı' };
+export const EXTRA_TITLES: Record<string, string> = { '/cihaz': 'Eğitim cihazı', '/yardim': 'Yardım' };
 
 /** Yönetim paneli ve raporlar Innex kabuğunda açılır; kasanın sol menüsü ve üst şeridi orada çizilmez */
 export function isAdminArea(pathname: string): boolean {

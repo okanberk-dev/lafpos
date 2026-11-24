@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellRing, Globe, VolumeX } from 'lucide-react';
+import { VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { type OnlineAlertDTO, type SiteAlertsDTO, type TableCallDTO, tableCallReasonText } from '@shared/site-alerts';
 import { fmtAgo, fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
+import { InboxBell } from '@/components/ui/InboxBell';
 import { Modal } from '@/components/ui/Modal';
 import { useAlertPrefs } from '@/lib/alertPrefs';
 import { ApiError, errorMessage, get, post } from '@/lib/api';
@@ -247,7 +248,7 @@ export function SiteInbox() {
   return (
     <>
       {/* Şerit (platform şeridinin kardeşi): online siparişin rengi mor (Masalar ve Siparişler'de olduğu gibi), başında
-          dolu mor daire; dokununca liste, sağda "Gördüm". Telefonda tam genişlik, tablet ve bilgisayarda sahnenin üstünde hap */}
+          dolu mor dairede zil (yeni çağrı ya da sipariş gelince sallanır, rozetin rakamı döner); dokununca liste, sağda "Gördüm". Telefonda tam genişlik, tablet ve bilgisayarda sahnenin üstünde hap */}
       <div
         role="region"
         aria-label="Sitenin uyarıları"
@@ -255,9 +256,7 @@ export function SiteInbox() {
       >
         {firstCall ? (
           <button type="button" onClick={() => setOpen(true)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 text-left transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95">
-            <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-hue-violet)] text-[var(--admin-surface)]">
-              <BellRing className="size-3.5 stroke-[2.25]" />
-            </span>
+            <InboxBell count={total} tone="violet" />
             <span className="min-w-0 flex-1 truncate font-semibold text-violet-ink">
               {callsTitle(calls.length)}
               <span className="font-normal text-ink-2">
@@ -270,9 +269,7 @@ export function SiteInbox() {
           </button>
         ) : first ? (
           <button type="button" onClick={() => setOpen(true)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 text-left transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95">
-            <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-hue-violet)] text-[var(--admin-surface)]">
-              <Globe className="size-3.5 stroke-[2.25]" />
-            </span>
+            <InboxBell count={total} tone="violet" />
             <span className="min-w-0 flex-1 truncate font-semibold text-violet-ink">
               {pendingTitle(pending.length)}
               <span className="font-normal text-ink-2">
