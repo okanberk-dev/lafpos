@@ -43,6 +43,12 @@ export interface SaleLine {
   isService: boolean;
   /** Birleşen satırda ek parçası var (EXTRA SHOT, SYRUP, ALTERNATIF SÜT: içeceğin seçeneğinden gelen) */
   isAddon: boolean;
+  /**
+   * Satılan parçaların dondurulan liste birim fiyatları (kuruş) → adet: ana parçada kalemin `basePrice`'ı (boyun liste
+   * fiyatı, seçenek, indirim ve mutlu saat öncesi), ekte seçeneğin fiyatı. Fiyatın değiştiği günde birleşen satır iki
+   * fiyat taşır (şube fiyatı; gövdede `lines[].listPrices`). Hizmet satırında boş
+   */
+  listPrices: Map<number, number>;
 }
 
 type ItemRow = typeof schema.orderItems.$inferSelect;
@@ -128,10 +134,15 @@ interface Part {
   isService: boolean;
   /** Ekin parçası (kalemin seçeneğinden ayrılan EXTRA SHOT, SYRUP, ALTERNATIF SÜT) */
   isAddon: boolean;
+  /**
+   * Parçanın dondurulan liste birim fiyatı (kuruş): ana parçada `basePrice`, ekte seçeneğin fiyatı. Hizmette (servis
+   * ücreti, platform ücreti, karaoke odası: menü fiyatı değil, süreden ya da orandan hesaplanır) null
+   */
+  listPrice: number | null;
 }
 
 /** Kalemin değerini ana ürün ve ekleri arasında liste fiyatları oranında böler (satışta ve ikramda aynı oran) */
-function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'size' | 'posName' | 'name' | 'isService' | 'extProductId' | 'qty'>, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
+function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'basePrice' | 'size' | 'posName' | 'name' | 'isService' | 'extProductId' | 'qty'>, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
   const addons = addonsOf(i.options);
   const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
   const shares = allocate(value, weights);
@@ -140,7 +151,7 @@ function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'size' | 'posName'
   // Platform ücreti hizmettir (mal maliyeti yok, KDV hizmet oranıyla); ürünün işareti oda sayacı için bilerek kapalı
   const isService = i.isService || posNameKey(posName) === posNameKey(PLATFORM_FEE_POS_NAME);
   return [
-    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService, isAddon: false },
+    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService, isAddon: false, listPrice: isService ? null : i.basePrice },
     ...addons.map((op, k) => ({
       posName: ADDON_NAMES[op.key],
       siteMenuId: addonIds[op.key],
@@ -149,6 +160,7 @@ function itemParts(i: Pick<ItemRow, 'options' | 'unitPrice' | 'size' | 'posName'
       value: shares[k + 1] ?? 0,
       isService: false,
       isAddon: true,
+      listPrice: op.price,
     })),
   ];
 }
@@ -165,12 +177,13 @@ function mergeParts(parts: (Part & { gross: number })[]): { lines: SaleLine[]; n
   for (const p of parts) {
     const k = partKey(p);
     const cur = groups.get(k);
-    if (cur) {
-      cur.qty += p.qty;
-      cur.revenue += p.value;
-      cur.gross += p.gross;
-      cur.isAddon ||= p.isAddon;
-    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, gross: p.gross, isService: p.isService, isAddon: p.isAddon });
+    const line = cur ?? { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: 0, revenue: 0, gross: 0, isService: p.isService, isAddon: false, listPrices: new Map<number, number>() };
+    if (!cur) groups.set(k, line);
+    line.qty += p.qty;
+    line.revenue += p.value;
+    line.gross += p.gross;
+    line.isAddon ||= p.isAddon;
+    if (p.listPrice != null && Number.isInteger(p.listPrice) && p.listPrice >= 0) line.listPrices.set(p.listPrice, (line.listPrices.get(p.listPrice) ?? 0) + p.qty);
   }
   const suffix = getSettings().posSizeSuffix;
   const rank = (l: SaleLine) => (l.siteMenuId ? 1 : 0);
@@ -220,7 +233,7 @@ function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
   }
   // Servis ücreti ayrı hizmet satırı, adedi servis ücretli adisyon sayısı
   for (const t of totals.values()) {
-    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, gross: t.service, isService: true, isAddon: false });
+    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, gross: t.service, isService: true, isAddon: false, listPrice: null });
   }
   return mergeParts(parts);
 }
@@ -258,6 +271,19 @@ const toTL = (k: number) => Math.round(k) / 100;
 const cap = (text: string | null | undefined) => (text == null ? null : text.slice(0, 200));
 /** `refunds[]` ve `iptal[]` en çok bu kadar satır (gövde büyümesin; lafmaliyet de aynı sınırla okur) */
 const LIST_MAX = 2000;
+/** `lines[].listPrices` en çok bu kadar fiyat (docs/03-ENTEGRASYON.md §4) */
+const LIST_PRICES_MAX = 20;
+
+/**
+ * Satırın dondurulan liste fiyatları gövdede (`lines[].listPrices`, şube fiyatı): `[{ price: TL, qty }]`, fiyat sırasıyla.
+ * 20'den çok fiyat varsa en çok satılan 20'si (eşitlikte ucuzu) kalır; fiyatsız satırda (hizmet: servis, platform ücreti,
+ * oda) alan yok. Ad, kişi yok
+ */
+function listPricesOf(prices: Map<number, number>): { listPrices?: { price: number; qty: number }[] } {
+  if (!prices.size) return {};
+  const kept = [...prices.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, LIST_PRICES_MAX);
+  return { listPrices: kept.sort((a, b) => a[0] - b[0]).map(([price, qty]) => ({ price: toTL(price), qty })) };
+}
 
 /** İkram türü: eski kayıtta boş = ikram */
 const compKindOf = (k: string | null): 'ikram' | 'odenmez' | 'zayi' => (k === 'odenmez' || k === 'zayi' ? k : 'ikram');
@@ -471,7 +497,7 @@ export function buildDayPayload(dayId: string) {
       closeNote: cap(day.note?.trim() || null),
       ...methodCountsOf(day.cashCounts, methods),
     },
-    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon })),
+    lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon, ...listPricesOf(l.listPrices) })),
     ikram: comps.flatMap((i) =>
       itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
         // Satış satırı yeniden adlandırıldıysa (aynı ad iki kaleme düştü) ikram da aynı adı taşır

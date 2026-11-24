@@ -58,7 +58,9 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
   "çağrı başka şubenin"). Masa kodlarında liste park edilir; Site ve lafmaliyet "bir kod sitede başka şubenin masası" der,
   düzeltme sitenin panelinde (Masalar › masa › Düzenle › Şube).
 - Karaoke odası Tuzla'dadır: başka şube adına site boş liste (`complete: true`) verir.
-- Fiyat her şube için tektir ve sitenindir; LafPOS yazamaz.
+- Fiyat sitenindir; LafPOS yazamaz. 23 Kasım 2026'dan beri (laffogato #301) şubenin kendi satış fiyatı olabilir: imzalı
+  okumada fiyat kasanın şubesinde **şu an geçerli** fiyattır, herkese açık menü ise Tuzla'nın (ana şube) fiyatıdır.
+  Ayrıntı §2.1 "Şube fiyatı".
 
 ### 2.1 Herkese açık menü
 
@@ -83,7 +85,35 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
 - **Fiyatın taze kaynağı imzalı panel listesidir** (anahtar varsa, `GET /api/panel/menu`; `withPanelPrices`): CDN'deki
   herkese açık menü 2 dakikaya kadar bayat olabilir, kasa eski fiyattan satmasın. Herkese açık listede olmayan bağlı
   ürünün (sitede Tükendi, ya da yeniden açıldı ama CDN henüz eski) fiyatı da panelden yazılır; önizleme bunu "fiyat" ve
-  "boy" diye gösterir. Panel alınamazsa herkese açık menünün fiyatı.
+  "boy" diye gösterir. Panel alınamazsa var olan bağlı ürünün fiyatı değişmez (son imzalı fiyat kalır, aşağıda "Şube
+  fiyatı"); yalnız yeni ürün herkese açık menünün fiyatıyla oluşur, sonraki imzalı okuma düzeltir. Anahtar yoksa fiyat
+  herkese açık menünün (Tuzla'nın) fiyatıdır.
+- **Şube fiyatı** (sahibin 23.11.2026 kararı 1; laffogato #301, laffogato `docs/PANEL-MENU.md` "Şube fiyatı"): köşkün
+  paneli (lafmaliyet) bir kalemin Marina'daki satış fiyatını bir andan itibaren yazar. Marina adına imzalı okumada
+  `priceMinor` / `priceMinorL` o an Marina'da geçerli fiyattır: kasa onu hiçbir değişiklik yapmadan alır (yanındaki
+  `basePriceMinor`, `basePriceMinorL`, `priceFrom` okunmaz). Herkese açık menü Tuzla'nın fiyatıdır; bu yüzden imzalı
+  okuma alınamazsa (saat kayması, anahtar, site hatası, tanınmayan biçim, başka şubenin listesi) **var olan bağlı
+  ürünün M ve L fiyatı herkese açık menüden yazılmaz**, son imzalı fiyat kalır (`applyMenu` `keep`; önizleme de "fiyat"
+  / "boy" göstermez). Ad, KDV, görsel ve yeni ürünler yine uygulanır. Eşitleme uyarısı ve Yönetim › Site ve
+  lafmaliyet'teki hata "Satışta ve fiyat bilgisi alınamadı, ürünlerin Satışta durumu ve fiyatı değişmedi: …" der, ETag
+  yazılmaz, sonraki tur yeniden dener.
+  **Fiyat anı.** Okumanın en üstündeki `nextPriceAt` şubenin bir sonraki fiyat anıdır (yoksa `null`; alanı göndermeyen
+  eski site ve bozuk değer yok sayılır). O an gelince site hiçbir şey yazmaz: ne herkese açık menünün ETag'i ne `menu`
+  işareti değişir. Kasa uygulanan her imzalı okumadan sonra anı ve okumanın anını sitenin saatiyle (`now`) ve kendi
+  saatiyle durum kaydına yazar (`laffogato.menu` `nextPriceAt`, `priceReadAt`, `priceReadLocalAt`) ve **gün açıkken o
+  andan 5 saniye sonrasına tek bir ETag'siz eşitleme** kurar (`server/jobs.ts` `schedulePriceSync`,
+  `PRICE_SYNC_DELAY_MS`). An kasanın saatine okumadaki iki saatin farkıyla çevrilir (en çok 10 dk; imza 300 sn'den
+  büyük kaymayı zaten reddeder): kasanın saati ileriyse eşitleme de o kadar geç kurulur, site anı geçmeden okunmaz. O
+  eşitleme yeni fiyatı ve bir sonraki anı okur; aynı an ikinci kez kurulmaz. Zorunlu eşitlemeler (işaret ve fiyat anı)
+  arası en az 60 sn (`MARKER_SYNC_MIN_MS`): yakın fiyat anları tek okumada toplanır. Bekleyen daha erken bir eşitleme
+  varsa ona katılmaz (onu ETag'siz yapmaz), o eşitlemeden sonra kurulur. 24 saatten uzak an zamanlayıcıya kurulmaz
+  (site 90 güne kadar ileri yazar), gün açıkken her yoklama yeniden bakar. Gün kapalıyken kurulmaz; an gece geçtiyse
+  gün açılınca ilk eşitleme ETag'siz olur (herkese açık menü değişmediği için 304 dönüp imzalı okuma yapılmazdı). An
+  son okumadan sonra geçmiş ama okunamamışsa (site yanıt vermedi) 15 dakikalık yoklama ETag'siz eşitler, okununca
+  biter; geçmiş ana zamanlayıcı kurulmaz (döngü yok). **Kasa yeniden başlayınca** (gece kapalı bilgisayar, güncelleme)
+  ilk eşitleme (ilk yoklama ya da gün açılışı) bir kez ETag'siz olur (`processSynced`): menü işareti ve fiyat anı
+  bellekte ya da son okumadadır, kasa kapalıyken yazılan şube fiyatını herkese açık menü göstermez. Bütçe: fiyat anı
+  başına en çok bir, süreç başına bir imzalı okuma (AGENTS.md kural 6).
 - **CDN bayatlığı:** panelde satışta olan bağlı ürün herkese açık listede yoksa liste CDN'de eskidir (`cdnStale`):
   2 dakika sonra (s-maxage + swr) **bir kez** ETag'siz yeniden eşitler, ad, KDV ve görsel de taze listeden gelsin. Yine
   bayatsa 15 dakikalık yoklama bekler (döngü yok). ETag yine yazılır: CDN yenilenince ETag değişir, yoklama taze listeyi
@@ -99,9 +129,9 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
   listesinindir** (anahtar varsa, §2.3 `GET /api/panel/menu`; her kalemi satışta olsun olmasın veritabanından taze
   verir): herkese açık listede görünen ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık kalem
   kapanmaz (kapalıysa açılır), panelde hiç olmayan kalem sitede silinmiştir. Anahtar varken panel listesi alınamazsa
-  (saat kayması, anahtar uyuşmazlığı, site hatası) fiyat, ad, KDV, açıklama, görsel ve yeni ürünler yine uygulanır,
-  var olan ürünlerin Satışta bilgisine dokunulmaz: bayat liste Tükendi ürünü yeniden açmasın, kasa eski fiyattan da
-  satmasın. Hata Yönetim › Site ve lafmaliyet'te görünür, ETag yazılmaz, sonraki tur yeniden dener. Anahtar yoksa listede
+  (saat kayması, anahtar uyuşmazlığı, site hatası) ad, KDV, açıklama, görsel ve yeni ürünler yine uygulanır, var olan
+  ürünlerin Satışta bilgisine ve fiyatına dokunulmaz: bayat liste Tükendi ürünü yeniden açmasın, Tuzla'nın fiyatı
+  Marina'nınkinin üstüne yazılmasın (yukarıda "Şube fiyatı"). Hata Yönetim › Site ve lafmaliyet'te görünür, ETag yazılmaz, sonraki tur yeniden dener. Anahtar yoksa listede
   olmayan bağlı ürün "sitede satışta değil" sayılır. Kapanan ürün POS'ta Tükendi olur (silinmez,
   geçmiş satışlar bozulmasın); porsiyonu biten ürünü site açamaz.
 - Ürün kartının görseli bir kez indirilip veri klasöründe kalır: sitenin küçültme ucuna (`/_next/image`, 256 px)
@@ -165,7 +195,7 @@ Sitenin kendi imza testi 16 Kasım 2026'da kaldırıldı.
 
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
-| `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok) ve elle |
+| `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1); şubenin şu anki fiyatı ve bir sonraki fiyat anı (`nextPriceAt`, §2.1 "Şube fiyatı") | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok), şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca), kasa yeniden başlayınca bir kez ve elle |
 | `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version?branch=<id>` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; site veritabanını yalnız genel işaret değişince, şubenin özeti için bir kez okur |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
@@ -665,8 +695,10 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "methodCounts": [{ "name": "Kredi kartı", "zField": "card", "channel": null, "counted": 995 }]
   },
   "lines": [
-    { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0007", "slot": "M", "qty": 42, "revenue": 8190, "gross": 8190, "isService": false, "isAddon": false },
-    { "posName": "ALTERNATIF SÜT", "siteMenuId": "mnu-0082", "slot": "M", "qty": 9, "revenue": 175, "gross": 175, "isService": false, "isAddon": true }
+    { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0007", "slot": "M", "qty": 42, "revenue": 8190, "gross": 8190, "isService": false, "isAddon": false,
+      "listPrices": [{ "price": 195, "qty": 42 }] },
+    { "posName": "ALTERNATIF SÜT", "siteMenuId": "mnu-0082", "slot": "M", "qty": 9, "revenue": 175, "gross": 175, "isService": false, "isAddon": true,
+      "listPrices": [{ "price": 0, "qty": 2 }, { "price": 25, "qty": 7 }] }
   ],
   "ikram": [
     { "posName": "LATTE LARGE", "siteMenuId": "mnu-0007", "slot": "L", "qty": 1, "menuValue": 210, "reason": "Doğum günü", "kind": "ikram", "personKind": null },
@@ -842,6 +874,14 @@ kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondal
 - `lines[].gross`: satırın liste değeri, indirimden önce (mutlu saat birim fiyata işlenmiştir, indirim sayılmaz);
   servis satırında servis ücreti. `Σ (gross − revenue) = z.discounts`. `lines[].isAddon`: birleşen satırda içeceğin
   seçeneğinden ayrılan ek parçası var (EXTRA SHOT, SYRUP, ALTERNATIF SÜT); satır anahtarı değişmez.
+- `lines[].listPrices` (şube fiyatı, 24 Kasım 2026): `[{ price, qty }]`, satırın satılan parçalarının **dondurulan liste
+  birim fiyatları** (TL) ve adetleri, fiyat sırasıyla. Ana parçada kalemin `basePrice`'ı (boyun satış anındaki liste
+  fiyatı; seçenek, indirim, mutlu saat ve elle fiyat öncesi), ekte seçeneğin fiyatı. Fiyatın değiştiği gün birleşen satır
+  iki fiyat taşır (eski fiyattan açılmış adisyonun kalemi eski fiyatıyla): lafmaliyet "Eski fiyattan satılanlar"ı ve
+  fiyat değişikliğinin "Uygulandı" durumunu buradan okur; `revenue / qty` liste fiyatı değildir. En çok 20 fiyat (daha
+  çoksa en çok satılan 20'si, eşitlikte ucuzu); hizmet satırında (servis ücreti, platform ücreti, karaoke odası: menü
+  fiyatı değil) alan yok. Ad ve kişi yok. Mutlu saat yokken ana satırda `Σ price × qty = gross`. Eski lafmaliyet alanı
+  okumaz (bilinmeyen alan atılır).
 - `ikram[].kind`: `"ikram" | "odenmez" | "zayi"` (eski kayıtta tür boşsa ikram); `reason`'ın ön eki ("Ödenmez: ",
   "Zayi: ") eski lafmaliyet için kalır. `ikram[].personKind`: yalnız ödenmezde, `"personel" | "musteri" | "patron"`
   (kayıtlı müşteri musteri; kullanıcı rolü patron ise patron, öteki kullanıcı personel), kişisiz ödenmezde ve
@@ -1238,8 +1278,8 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 
 | İş | Sıklık | Neon'a etkisi |
 | --- | --- | --- |
-| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; `menu` işareti değişince gün açıkken en sık 60 sn, sonda tek eşitleme, gece yok (gün açılınca bir kez ETag'siz); CDN bayatsa 2 dk sonra bir kez; elle | CDN ıskasında okuma (uyanma) |
-| İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle | küçük okuma |
+| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; `menu` işareti değişince gün açıkken en sık 60 sn, sonda tek eşitleme, gece yok (gün açılınca bir kez ETag'siz); CDN bayatsa 2 dk sonra bir kez; şubenin fiyat anında bir kez ETag'siz (§2.1 "Şube fiyatı"); kasa yeniden başlayınca ilk eşitleme bir kez ETag'siz; elle | CDN ıskasında okuma (uyanma) |
+| İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle; şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca; okunamazsa 15 dk'lık yoklamada yeniden); kasa yeniden başlayınca bir kez | küçük okuma |
 | Sipariş sürüm sinyali | gün açıkken 20 sn, gece en sık 3 dk; hiç iş günü yokken hiç; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | genel işaret yerinde durdukça yok (veri önbelleği); bir yazımdan sonra şubenin özeti için bir okuma |
 | Online sipariş okuma (masa çağrıları dahil; kasanın şubesinin, §2 "Şube") | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
 | Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si ve internetsiz basılan Tükendi / Satışa aç giden kutusundan (internet yokken istek denenmez, internet gelince tek yazım) | tek yazım |

@@ -110,17 +110,39 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
 export type PanelMenu = Map<string, { isActive: boolean; onMenu?: boolean; priceMinor: number; priceMinorL: number }>;
 
 /**
- * İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde ve tanınmayan biçim
- * (`version` 1 değil; alanı göndermeyen eski site tanınır) liste sayılmaz: çağıran Satışta bilgisine dokunmaz.
+ * İmzalı panel okuması: kalemler ve şube fiyatının zamanı (laffogato #301, docs/03-ENTEGRASYON.md §2.1 "Şube fiyatı").
+ * `nextPriceAt` şubenin bir sonraki fiyat anı (yoksa, eski sitede ya da bozuksa null), `readAt` okumanın anı sitenin
+ * saatiyle (`now`; yoksa kasanın saati), `readLocalAt` aynı an kasanın saatiyle (ikisinin farkı iki saat arasındaki
+ * kayma): o an gelince site hiçbir şey yazmaz, kasa o anda kendisi çeker
  */
-export async function fetchPanelMenu(): Promise<PanelMenu | null> {
+export interface PanelRead {
+  items: PanelMenu;
+  nextPriceAt: string | null;
+  readAt: string;
+  readLocalAt: string;
+}
+
+/** Sitenin ISO anı (saat dilimli); değilse null. Bozuk değer okumayı bozmaz, yalnız yok sayılır */
+function isoInstant(v: unknown): string | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:?\d{2})$/.test(v)) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/**
+ * İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde ve tanınmayan biçim
+ * (`version` 1 değil; alanı göndermeyen eski site tanınır) liste sayılmaz: çağıran Satışta bilgisine ve bağlı ürünlerin
+ * fiyatına dokunmaz.
+ */
+export async function fetchPanelMenu(): Promise<PanelRead | null> {
   if (!siteSigned()) return null;
   // Satışta bilgisi bu kasanın şubesinin (`?branch=`, §2.3 "Şube")
   const url = new URL(`${env.laffogatoUrl}/api/panel/menu`);
   url.searchParams.set('branch', siteBranch());
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', url);
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
-  const body = json as { version?: unknown; branch?: unknown; items?: unknown } | null;
+  const localNow = new Date().toISOString();
+  const body = json as { version?: unknown; branch?: unknown; items?: unknown; now?: unknown; nextPriceAt?: unknown } | null;
   const items = body?.items;
   if (!body || !Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
   const version = unknownSiteListVersion(body);
@@ -128,7 +150,7 @@ export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   // Başka şubenin Satışta'sı bu kasaya yazılmaz (alanı göndermeyen eski site tanınır)
   const other = wrongSiteBranch(body.branch);
   if (other) throw new Error(`Panel menüsü başka şubenin (${other}); bu kasanın şubesi ${siteBranch()}`);
-  return new Map(
+  const map: PanelMenu = new Map(
     (items as { id?: unknown; isActive?: unknown; onMenu?: unknown; priceMinor: number; priceMinorL: number }[])
       .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')
       .map((i) => [
@@ -136,6 +158,38 @@ export async function fetchPanelMenu(): Promise<PanelMenu | null> {
         { isActive: i.isActive as boolean, ...(typeof i.onMenu === 'boolean' ? { onMenu: i.onMenu } : {}), priceMinor: i.priceMinor, priceMinorL: i.priceMinorL },
       ]),
   );
+  // Şube fiyatı öncesi site alanları göndermez: bir sonraki an yok, okuma bugünkü gibi
+  return { items: map, nextPriceAt: isoInstant(body.nextPriceAt), readAt: isoInstant(body.now) ?? localNow, readLocalAt: localNow };
+}
+
+/**
+ * Şube fiyatının kayıtlı zamanı (`laffogato.menu` durum kaydı): son imzalı okumanın `nextPriceAt`'i, okuma anı sitenin
+ * saatiyle (`priceReadAt`) ve kasanın saatiyle (`priceReadLocalAt`; eski kayıtta yok, fark 0 sayılır)
+ */
+export interface PriceTiming {
+  nextPriceAt?: string | null;
+  priceReadAt?: string | null;
+  priceReadLocalAt?: string | null;
+}
+
+/** İki saat arasındaki fark bundan büyükse yok sayılır (imza zaten 300 sn'den büyük kaymayı reddeder) */
+const MAX_CLOCK_SKEW_MS = 10 * 60_000;
+
+/**
+ * Şubenin bir sonraki fiyat anı kasada ne ister. An son imzalı okumadan (sitenin saatiyle) sonraysa: kasanın saatine
+ * çevrilir (okumadaki iki saatin farkıyla; kasa ileriyse an kasada daha geç gelir), gelecekteyse o an (`at`, zamanlayıcı
+ * kurar), geçtiyse zorunlu eşitleme (`due`: gün açılışında ya da yoklamada ETag'siz, imzalı okuma da yapılsın; herkese
+ * açık menü değişmediği için 304 dönerdi). An okumadan önceyse o fiyat zaten okundu.
+ */
+export function priceInstant(state: PriceTiming | null | undefined, now: number): { due: boolean; at: number | null } {
+  const siteAt = Date.parse(state?.nextPriceAt ?? '');
+  if (!Number.isFinite(siteAt)) return { due: false, at: null };
+  const read = Date.parse(state?.priceReadAt ?? '');
+  if (Number.isFinite(read) && siteAt <= read) return { due: false, at: null };
+  // Kasanın saati - sitenin saati, okuma anında
+  const skew = Number.isFinite(read) ? Date.parse(state?.priceReadLocalAt ?? '') - read : Number.NaN;
+  const at = siteAt + (Number.isFinite(skew) && Math.abs(skew) <= MAX_CLOCK_SKEW_MS ? skew : 0);
+  return now >= at ? { due: true, at: null } : { due: false, at };
 }
 
 type LocalProduct = typeof schema.products.$inferSelect;
@@ -248,13 +302,15 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu |
       if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede yeniden satışta' });
       if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: i.id, name: i.name, detail: p.portionsLeft === 0 ? 'Porsiyon bitti' : 'Sitede Tükendi' });
     }
-    if (p.price !== i.priceMinor) changes.push({ kind: 'fiyat', productId: p.id, extId: i.id, name: i.name, detail: `${tl(p.price)} → ${tl(i.priceMinor)}` });
-    if ((p.priceL ?? null) !== (i.priceLargeMinor ?? null)) {
+    // İmzalı okuma alınamadı: herkese açık menünün fiyatı ana şubenin (Tuzla); bağlı ürünün son imzalı fiyatı kalır
+    if (!rule.keep && p.price !== i.priceMinor) changes.push({ kind: 'fiyat', productId: p.id, extId: i.id, name: i.name, detail: `${tl(p.price)} → ${tl(i.priceMinor)}` });
+    if (!rule.keep && (p.priceL ?? null) !== (i.priceLargeMinor ?? null)) {
       changes.push({ kind: 'boy', productId: p.id, extId: i.id, name: i.name, detail: `L: ${p.priceL ? tl(p.priceL) : 'yok'} → ${i.priceLargeMinor ? tl(i.priceLargeMinor) : 'yok'}` });
     }
     if (p.name !== i.name) changes.push({ kind: 'ad', productId: p.id, extId: i.id, name: i.name, detail: `"${p.name}" → "${i.name}"` });
     if (p.kdvRate !== (i.taxRatePct ?? 10)) changes.push({ kind: 'kdv', productId: p.id, extId: i.id, name: i.name, detail: `%${p.kdvRate} → %${i.taxRatePct ?? 10}` });
-    else if (p.extHash && p.extHash !== hashItem(i) && !changes.some((c) => c.extId === i.id)) {
+    // `keep`: saklanan özet korunan fiyatla yazıldı (applyMenu); karşılaştırma da onunla (sahte "diğer" çıkmasın)
+    else if (p.extHash && p.extHash !== hashItem(rule.keep ? { ...i, priceMinor: p.price, priceLargeMinor: p.priceL ?? null } : i) && !changes.some((c) => c.extId === i.id)) {
       changes.push({ kind: 'diger', productId: p.id, extId: i.id, name: i.name, detail: 'Açıklama, görsel ya da alerjen değişti' });
     }
   }
@@ -319,7 +375,9 @@ function upsertOptionGroups(t: Tx | DB, menu: SiteMenu): string[] {
  * Satışta bilgisi `shouldBeActive` kuralıyla (imzalı panel verildiyse onun Satışta bilgisi geçerlidir): sitede
  * satışta olmayan bağlı ürün Tükendi yapılır (silinmez, geçmiş satışlar bozulmasın), porsiyonu biten ürünü site
  * açamaz. Tükendi'nin sahibi `soldOutBy`'a yazılır. `keep` ve `held` ürünlerin Satışta bilgisine dokunulmaz
- * (`AvailabilityRule`).
+ * (`AvailabilityRule`). `keep`'te (imzalı okuma alınamadı) var olan bağlı ürünün fiyatı da değişmez: herkese açık menü
+ * ana şubenin (Tuzla) fiyatıdır, kasanın şubesinin fiyatı yalnız imzalı okumadadır (şube fiyatı, laffogato #301); yeni
+ * ürün herkese açık listenin fiyatıyla oluşur, sonraki imzalı okuma düzeltir.
  */
 export function applyMenu(
   t: Tx,
@@ -386,12 +444,15 @@ export function applyMenu(
     const existing = t.select().from(schema.products).where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, i.id))).get();
     let productId: string;
     if (existing) {
+      // İmzalı okuma yok: son imzalı fiyat kalır; özet de saklanan fiyatla (sonraki okumada sahte "diğer" değişikliği çıkmasın)
+      const kept = { priceMinor: existing.price, priceLargeMinor: existing.priceL ?? null };
+      const own = rule.keep ? { ...values, price: existing.price, priceL: existing.priceL ?? null, extHash: hashItem({ ...i, ...kept }) } : values;
       if (decides(rule, i.id)) {
         const active = shouldBeActive(existing, true, panel, lastSync);
         if (existing.active && !active) deactivated++;
         if (!existing.active && active) reactivated++;
-        t.update(schema.products).set({ ...values, active, soldOutBy: soldOutByAfterSync(existing, active, panel?.get(i.id)?.onMenu) }).where(eq(schema.products.id, existing.id)).run();
-      } else t.update(schema.products).set(values).where(eq(schema.products.id, existing.id)).run();
+        t.update(schema.products).set({ ...own, active, soldOutBy: soldOutByAfterSync(existing, active, panel?.get(i.id)?.onMenu) }).where(eq(schema.products.id, existing.id)).run();
+      } else t.update(schema.products).set(own).where(eq(schema.products.id, existing.id)).run();
       productId = existing.id;
       updated++;
     } else {
@@ -450,10 +511,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   extras: '#7a6a5f',
 };
 
-export function recordMenuSync(result: { etag?: string | null; changes?: number; error?: string | null }) {
+export function recordMenuSync(result: { etag?: string | null; changes?: number; error?: string | null; prices?: { nextPriceAt: string | null; readAt: string; readLocalAt: string } }) {
   const prev = getSyncState<Record<string, unknown>>('laffogato.menu') ?? {};
   setSyncState('laffogato.menu', {
     ...prev,
+    // Şube fiyatının zamanı yalnız uygulanmış imzalı okumadan (jobs.ts bir sonraki ana eşitleme kurar)
+    ...(result.prices ? { nextPriceAt: result.prices.nextPriceAt, priceReadAt: result.prices.readAt, priceReadLocalAt: result.prices.readLocalAt } : {}),
     ...(result.etag !== undefined ? { etag: result.etag } : {}),
     lastCheckAt: Date.now(),
     ...(result.error ? { lastError: result.error, lastErrorAt: Date.now() } : { lastError: null, lastSuccessAt: Date.now() }),

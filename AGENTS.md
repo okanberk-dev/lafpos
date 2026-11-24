@@ -26,7 +26,8 @@ Bu repoda çalışan her ajan ve geliştirici için.
 6. **Senkron bütçesi:** laffogato'nun imzalı uçlarına 5 dakikadan sık otomatik istek yok; istisnalar sürüm sinyali
    (`/api/pos/orders/version`, 20 sn; site veritabanını yalnız bir yazımdan sonra, şubenin özeti için okur) ve onun
    değişen işaretinin tetiklediği çekimler (siparişler; imzalı menü gün açıkken en sık 60 sn), çünkü veritabanı o
-   yazımla zaten uyanıktır. Herkese açık menü ucu ETag ile, gün açıkken 15 dakikada bir çekilir, gece hiç. `.env`'de
+   yazımla zaten uyanıktır; ayrıca şubenin fiyat anında bir imzalı menü okuması (sitenin `nextPriceAt`'i; zorunlu
+   eşitlemelerle arası en az 60 sn) ve kasa yeniden başlayınca bir kez. Herkese açık menü ucu ETag ile, gün açıkken 15 dakikada bir çekilir, gece hiç. `.env`'de
    `LAFFOGATO_URL` yoksa siteye hiç istek gitmez (varsayılan kapalı).
 7. **Online ödenmiş sipariş tahsil edilmez** ve lafmaliyet satış listesine girmez.
 8. **Arayüz metinleri Türkçe ve doğal**; başlıklarda sonda nokta yok. Dokunmatik hedefler en az 44 px.
