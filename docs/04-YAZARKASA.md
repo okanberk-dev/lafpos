@@ -283,7 +283,10 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
 ## 8. Pavo (N86) yerel ağ bağlantısı
 
 Pavo cihazı kafenin ağında bir HTTP sunucusudur; LafPOS (kasa bilgisayarı) satışı ona gönderir, kasiyer ödemeyi
-cihazda (nakit, kart; bölünmüş de) alır, cihaz VUK 507 belgesini keser (e-Arşiv, e-Fatura ya da bilgi fişi; Z yok).
+cihazda (nakit, kart; bölünmüş de) alır, cihaz VUK 507 belgesini keser (e-Arşiv, e-Fatura ya da bilgi fişi). Satış
+belgelerinde Z no yoktur (`z.okcZNo` boş gider); ama cihazdan istenince gün sonunda ayrıntılı bir Z fişi basılır
+(sahip, 24.11.2026). Personel lafmaliyet'e bu fişin fotoğrafını ekler; lafmaliyet fotoğraftaki banka ve Z rakamlarını
+LafPOS'un gövdesiyle karşılaştırır (lafmaliyet `docs/LAFPOS.md` "Gün sonu otomasyonu").
 İnternet ya da bulut gerekmez; cihaz ile kasa bilgisayarı aynı ağda olmalı. Kod: istemci `server/okc/pavo.ts`,
 sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
 
