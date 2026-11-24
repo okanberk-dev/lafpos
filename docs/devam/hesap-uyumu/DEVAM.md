@@ -21,22 +21,24 @@ sahip kararları `NOTES.md` ve `CONTRACT.md` §1'de, kod haritaları `maps/`'te.
 5. Temel kontrol: lafpos `npm run typecheck && npm test`; lafmaliyet `npx next typegen && npx tsc --noEmit && npm run
    lint && npm test && TEST_DATABASE_URL=postgres://ci:ci@localhost:5432/test npm run test:db`.
 
-## 2. Durum (devretme anında doldurulur)
+## 2. Durum (24.11.2026 00:05 UTC, devam turu 1 sonu; 5 saatlik kullanım %95, haftalık %66)
 
-Devretme anı: 23.11.2026 18:10 UTC (21:10 TR), 5 saatlik kullanım %95. Bütün ajanlar durduruldu; yarım iş her dalın
-ucunda "WIP (devam): …" commit'i olarak push'landı (o commit'i inceleyip düzgün commit'lerle tamamla, WIP'i ayrı bırakma
-ya da squash'la).
+Bitmiş, taslak PR'ı açık ve izleniyor (birleştirme sahibin işi):
+| PR | Paket | Dal | CI |
+| --- | --- | --- | --- |
+| okanberk-dev/laffogato#301 | LF-1 site şube fiyatı | claude/branch-prices | ✓ |
+| okanberk-dev/lafmaliyet#123 | LM-M ModPOS dönemi ucu + LM-M2 Satışlar kapsamı şube şube | claude/modpos-donemi | ✓ |
+| okanberk-dev/lafmaliyet#124 | LM-1 Faz 1 | claude/hesap-uyumu-faz1 | ✓ |
+| okanberk-dev/lafpos#167 | LP-A Faz 2 gönderen | claude/sleepy-knuth-144kr7 | ✓ |
+| okanberk-dev/lafpos#168 | LP-D Faz 4 + Uzaktan | claude/modpos-gecmis | CodeQL düzeltmesi (b094866) sonrası yeniden koşuyordu; denetle |
 
-| Paket | Dal | Durum |
-| --- | --- | --- |
-| LP-A (LafPOS Faz 2 gönderen) | lafpos `claude/sleepy-knuth-144kr7` | 3 commit (3269249 cardBasis, 7badde9 Faz 2 alanları + hesap sözleşmesi + kabul günü, 13085df şube kilidi). Uygulayıcı son kontrol/raporda durdu: tam kontrolü (typecheck, test, build, e2e) yeniden koş, kapsamı CONTRACT §4 LP-A'ya göre denetle, sonra bağımsız inceleme + düzeltme. |
-| LP-D (Faz 4 + Uzaktan, REVİZE) | lafpos `claude/modpos-gecmis` (worktree /home/user/wt/lafpos-modpos) | Uygulama neredeyse bitti (e2e koşarken durdu); her şey WIP commit'inde. Görev listesi: ModPOS alanları, historyReport, Uzaktan etiketleri, ürün bloğu, pullModposDays + Entegrasyon düğmesi + imza vektörü, historyDays + kasa Raporlar + patronStats + buluta itme + liveTag yapıldı; kalan: tam kontrol + e2e + düzgün commit + rapor, sonra inceleme + düzeltme. CONTRACT §9 (föy günü kaynak/indirim null, KDV kuralı) uygulandığını denetle. |
-| LM-1 (ladmin Faz 1) | lafmaliyet `claude/hesap-uyumu-faz1` | 2 commit (d6b88de −90, %8, POS komisyonu + şube oranı, hesap sözleşmesi; 7f8f8d9 komisyon şube kapsamı + marka belirsiz). Yarım: madde 6 (sabit gider bitişi + mükerrer gider uyarısı: src/lib/fixed-expense-rules.ts, src/lib/calc/duplicate-expense.ts, test) WIP'te. Kalan: madde 6'yı bitir, tam kontrol (test:db dahil), inceleme + düzeltme. |
-| LM-M (ladmin ModPOS günleri ucu) | lafmaliyet `claude/modpos-donemi` (worktree /home/user/wt/lafmaliyet-modpos) | Uygulandı (682fc28), kontroller yeşil (rapor: scratchpad LM-M-impl.json, notlar dalında). İnceleme yarıda kaldı. Kalan: inceleme + düzeltme + CONTRACT §9 eki (föy günleri her zaman, `kaynak`, föy'de `indirim: null`, KDV: rapor dökümü → ModPOS dökümü → %10). |
-| LF-1 (site şube fiyatı) | laffogato `claude/branch-prices` | Uygulandı (fcf6969, 0338e2c). İnceleme bitti: 3 küçük bulgu (LF-1-review.json): API-MOBILE.md lafmobil kopyası, CLAUDE.md:641 "fiyatın tek kaynağı" cümlesi, yeniden gönderilen branchPrice ile çakışanın ayrılamaması. Düzeltme ajanı yarıda kaldı (tests/sube/branch-price-routes.test.ts WIP'te). Kalan: düzeltmeyi bitir. |
+Yarıda kalan (dalın ucunda "WIP (devam)" commit'i):
+- **LP-B** kasa zinciri: lafpos `claude/kasa-zinciri` (LP-A'nın ucu 61aff3b'den). Yapılanlar (ajanın görev listesine göre): açılış önerisi + neden + sütunlar + denetim; nextOpening (giden kutusu yanıtı) + tembel devir GET; gider kategorileri + kasa hareketi kategorisi + cashMoves gövdesi. Kalan: arayüz (Günü aç öneri/neden, harcama kategori çipleri) + e2e akışı; docs/03, imza vektörleri, altın gövde + kabul günü yeniden üretimi, tam kontrol, commit; sonra bağımsız inceleme + düzeltme; taslak PR.
+- **LM-2** ladmin Faz 2 okuyucu: lafmaliyet `claude/lafpos-gun-alanlari` (LM-1'in ucu c8559b8'den). Yapılanlar: şemalar (.catch), altın gövde + kabul günü kopyası, saklama sütunları + pos_day_revisions + göç, iptal→zayi, kind/personKind, errorCode, okcZNo, z toplamları, z.vat ile KDV hariç, Satışlar brüt/indirim sonrası + tutarlılık, kasa raporu/gün görünümü. Kalan: kabul DB testi (Marina Kasım), docs/LAFPOS.md, tam kontrol, commit; inceleme + düzeltme; taslak PR. NOT: LP-B'den sonra altın gövde değişecek; LM-2'nin altın kopyası LP-A'nınkiyle (61aff3b) eşleşmeli.
 
-Henüz başlanmayanlar: LP-B, LP-C, LP-E, LM-2, LM-3, LM-4, LM-5 (CONTRACT §4). PR'lar henüz açılmadı (paket inceleme +
-düzeltmeden geçince taslak PR). Sahip kararları CONTRACT §1 ve §9, NOTES.md.
+Henüz başlanmayanlar: LP-C, LM-3, LP-E, LM-4, LM-5 (CONTRACT §4). Sıradaki dalgalar: 3 = LP-C + LM-3, 4 = LP-E + LM-4, 5 = LM-5.
+Betikler: /home/user/wt/scripts/ (cont.js finish→review→fix; wave2.js impl→review→fix); notlar dalında da kopyaları var.
+Haftalık limit %66 (30 Kasım ~18:20 UTC'de yenilenir); bir 5 saatlik pencere ~%15 harcıyor.
 
 ## 3. Kalan iş sırası
 
