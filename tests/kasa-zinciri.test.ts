@@ -297,3 +297,25 @@ describe('kasa hareketleri satır satır ve harcama kategorisi', () => {
     expect(p.z).toMatchObject({ expectedOpening: 1300, openingDiff: 0, openingReason: null });
   });
 });
+
+describe('bugünün günü kapandıktan sonra', () => {
+  it('devir sorulmaz: gün 05:00\'e kadar açılamaz, kapalı ekran gece boyu lafmaliyet\'i uyandırmaz', async () => {
+    const { settings, lm, db, schema, eq, openRow } = await mod();
+    dayReply = (date) => ({ status: 200, body: { ok: true, date, counted: true, switchDay: '2026-11-22' } });
+    const id = openRow()!.id;
+    // Bugünün günü kapanır (tarihi kaydırılmaz) ve lafmaliyet'e gider
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: 130000 });
+    await lm.flushOutbox();
+    settings.setSyncState('lafmaliyet.devir', { ...(settings.getSyncState<Record<string, unknown>>('lafmaliyet.devir') ?? {}), attemptAt: 0 });
+    const before = devirGets().length;
+    const seen = await h.ok<DayResponse & { closedToday: { id: string } | null }>('mudur', 'GET', '/cash/day');
+    expect(seen.closedToday?.id).toBe(id);
+    expect(await lm.devirIfStale()).toBe(false);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(devirGets()).toHaveLength(before);
+    // Ertesi iş günü (gün dünün tarihine alınır): ekran yine sorar
+    db.update(schema.businessDays).set({ date: addDays(today, -1) }).where(eq(schema.businessDays.id, id)).run();
+    await h.ok('mudur', 'GET', '/cash/day');
+    await vi.waitFor(() => expect(devirGets()).toHaveLength(before + 1), { timeout: 5000, interval: 25 });
+  });
+});

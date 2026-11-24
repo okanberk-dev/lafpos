@@ -999,7 +999,8 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
   ```
   `nextOpening` gün sonu yanıtındakiyle aynı nesne. Yalnız bağlantı tanımlıyken, gün kapalıyken (Kasa ekranı
   `GET /api/cash/day`'i sorunca), devrin günü varken ve onun gönderilmemiş kaydı yokken, son denemeden en az 5 dakika
-  sonra sorulur (`devirIfStale`, sync_state `lafmaliyet.devir`). Bozuk yanıt (başka gün, başka sürüm), HTTP hatası ya
+  sonra sorulur (`devirIfStale`, sync_state `lafmaliyet.devir`). Bugünün günü kapandıysa sorulmaz: yeni gün 05:00'ten
+  önce açılmaz, gece açık kalan Kasa ekranı lafmaliyet'i uyandırmaz; ertesi iş gününde ekran yine sorar. Bozuk yanıt (başka gün, başka sürüm), HTTP hatası ya
   da internet yokken önceki değer kalır, hata saklanır. Değer değişince Kasa ekranı yenilenir (`cash` olayı).
 
 ### 4.7 Kasa hareketleri satır satır ve gider kategorileri (23 Kasım 2026)
@@ -1043,7 +1044,7 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 | Sesli uyarılar (§2.5) | yeni istek yok: sipariş (masa çağrıları dahil) ve karaoke çekimlerinin listesinden | yok |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
-| lafmaliyet devir okuma (§4.6) | yalnız Kasa ekranı gün kapalıyken sorunca (tembel), en sık 5 dakikada bir; gün açıkken, devrin günü yokken ya da günün gönderilmemiş kaydı varken hiç; bağlantı yoksa hiç | yok |
+| lafmaliyet devir okuma (§4.6) | yalnız Kasa ekranı gün kapalıyken sorunca (tembel), en sık 5 dakikada bir; gün açıkken, bugünün günü kapandıktan sonra (gece), devrin günü yokken ya da günün gönderilmemiş kaydı varken hiç; bağlantı yoksa hiç | yok |
 | lafmaliyet gider kategorileri (§4.7) | yalnız harcama penceresi açılınca (tembel), gün açıkken, en sık 5 dakikada bir; bağlantı yoksa hiç | yok |
 
 ## 6. Durum (23 Kasım 2026)

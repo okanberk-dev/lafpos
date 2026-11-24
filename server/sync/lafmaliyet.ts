@@ -15,7 +15,7 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
+import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ } from '../services/days';
 import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../services/devir';
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { dropPending, land, takeOff } from './outbox-flight';
@@ -1079,11 +1079,13 @@ let devirRunning: Promise<boolean> | null = null;
 /**
  * Devri lafmaliyet'ten tembel okur: yalnız bağlantı tanımlıyken, gün kapalıyken (Kasa ekranı "Günü aç"ı gösterirken),
  * son gerçek gün varken, onun gönderilmemiş kaydı yokken (varsa yerel sayım geçer) ve son denemeden 5 dakika geçtiyse.
- * Değer değişince ekranlar yenilenir. Hata öncekini silmez. İstek gittiyse true
+ * Bugünün günü kapandıysa sorulmaz: yeni gün 05:00'ten önce açılmaz, gece açık kalan Kasa ekranı lafmaliyet'i
+ * uyandırmaz (ertesi iş gününde ekran yine sorar). Değer değişince ekranlar yenilenir. Hata öncekini silmez. İstek
+ * gittiyse true
  */
 export function devirIfStale(now = Date.now()): Promise<boolean> {
   if (!configured() || devirRunning) return Promise.resolve(false);
-  if (getOpenDay(db)) return Promise.resolve(false);
+  if (getOpenDay(db) || closedToday(db)) return Promise.resolve(false);
   const day = lastClosedRealDay(db);
   if (!day || dayPushPending(db, day.date)) return Promise.resolve(false);
   const prev = getSyncState<DevirState>('lafmaliyet.devir');
