@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { compReasonText } from '@shared/comp';
-import { allocate } from '@shared/money';
+import { allocate, splitKdv } from '@shared/money';
 import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { PLATFORM_FEE_POS_NAME, posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
 import { addDays, businessDate, isCalendarDate } from '@shared/time';
@@ -15,7 +15,11 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { isNetworkError } from '../lib/internet';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
-import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ, workedUserIdsOf } from '../services/days';
+import { basketByRate } from '../okc/basket';
+import { batchesOf, cardBasis } from '../okc/card-basis';
+import type { PavoEodRecord } from '../okc/service';
+import type { TokenxBasket } from '../okc/tokenx';
+import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ, shiftCountsOf, workedUserIdsOf } from '../services/days';
 import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../services/devir';
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { dropPending, land, takeOff } from './outbox-flight';
@@ -344,6 +348,7 @@ export function buildDayPayload(dayId: string) {
   const posIds = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.source, 'pos')));
   const voids = db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, posIds), eq(schema.orderItems.voided, true))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all();
   const roles = new Map(db.select({ id: schema.users.id, role: schema.users.role }).from(schema.users).all().map((u) => [u.id, u.role as string]));
+  const methods = methodsById();
   const compTotal = (kind: 'ikram' | 'odenmez' | 'zayi') => comps.filter((i) => compKindOf(i.compKind) === kind).reduce((a, i) => a + i.qty * i.unitPrice, 0);
   const ikramTotal = compTotal('ikram');
   const odenmezTotal = compTotal('odenmez');
@@ -376,16 +381,10 @@ export function buildDayPayload(dayId: string) {
     .all();
   // Pavo banka gün sonu ve LafPOS kıyası (gün kapandıktan sonra gelir; gelince gün yeniden gönderilir, okc/service.ts
   // saveEod). Pavo yoksa ya da henüz denenmediyse alan gitmez; eski panel bilmediği alanı yok sayar
-  const eod = getSyncState<{
-    status: string;
-    batchNo: string | null;
-    at: number;
-    grandTotalKurus: number | null;
-    dayCardKurus: number | null;
-    message: string | null;
-    errorCode?: string | null;
-    acquirers: { name: string; count: number | null; totalKurus: number | null }[];
-  }>(`pavo.eod.${day.id}`);
+  const eod = getSyncState<
+    Pick<PavoEodRecord, 'status' | 'batchNo' | 'at' | 'grandTotalKurus' | 'dayCardKurus' | 'message' | 'acquirers'> &
+      Partial<Pick<PavoEodRecord, 'errorCode' | 'deviceDateTime' | 'trigger' | 'dayClosed' | 'earlier'>>
+  >(`pavo.eod.${day.id}`);
   // 'running' (cihazda gün sonu sürüyor) sözleşmede yok: lafmaliyet bilinmeyen durumu sessizce atardı. Gün sonu bitince
   // gün yeniden gönderilir
   const bankPos =
@@ -401,6 +400,20 @@ export function buildDayPayload(dayId: string) {
           message: eod.message,
           // Cihazın hata kodu (alınamayan gün sonu, ör. 5085); alındıysa boş
           errorCode: eod.errorCode ?? null,
+          // Günün bütün başarılı banka gün sonları (gün içinde elle alınan dahil), eskiden yeniye: yukarıdaki kıyas yalnız
+          // son batch'indir, öncekinin tutarı yalnız burada (§4.9)
+          batches: batchesOf({ deviceDateTime: null, trigger: 'otomatik', ...eod } as PavoEodRecord)
+            .slice(-BATCH_MAX)
+            .map((b) => ({
+              batchNo: b.batchNo,
+              at: new Date(b.at).toISOString(),
+              total: b.grandTotalKurus != null ? toTL(b.grandTotalKurus) : null,
+              trigger: b.trigger === 'elle' ? ('elle' as const) : ('otomatik' as const),
+              dayClosed: b.dayClosed !== false,
+            })),
+          // LafPOS'ta günün bankaya giden bütün kartı (Z kartı + kart bahşişi + kartla tahsilat − yazarkasadan geçmeyen,
+          // bahşişiyle − cihazda fişi iptal edilen); gün açıkken null
+          dayCard: dayCardOf(day.id),
         }
       : null;
   return {
@@ -452,6 +465,11 @@ export function buildDayPayload(dayId: string) {
       expectedOpening: day.expectedOpening != null ? toTL(day.expectedOpening) : null,
       openingDiff: day.openingDiff != null ? toTL(day.openingDiff) : null,
       openingReason: cap(day.openingReason),
+      // Gün sonu tamlığı (§4.9): nakit satışın bahşişi (cashIn'in içinde kalır), gün sonu ya da föy notu, föyde ödeme
+      // türü başına yazılan tutarlar (banka POS slipi, yemek kartı raporu; yazılmadıysa alan yok)
+      cashTips: toTL(cashTipsOf(day.id)),
+      closeNote: cap(day.note?.trim() || null),
+      ...methodCountsOf(day.cashCounts, methods),
     },
     lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), gross: toTL(l.gross), isService: l.isService, isAddon: l.isAddon })),
     ikram: comps.flatMap((i) =>
@@ -469,9 +487,11 @@ export function buildDayPayload(dayId: string) {
         personKind: personKindOf(i, roles),
       })),
     ),
-    payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
+    // `kind` ödeme türünün türü (açık hesap ile havale ikisi de "Diğer"de; lafmaliyet ada bakmadan ayırır)
+    payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount), kind: kindOf(methods, p.methodId, p.zField) })),
     // Mali fişi yazarkasada kesilmeyen satış ödemeleri (bahşiş hariç): banka POS'u ve ÖKC kıyasında açıklanır
-    offDevice: { card: toTL(offDevice.card), cash: toTL(offDevice.cash) },
+    // `cardTips`: o kart satışlarının bahşişi (bankanın batch'inde yok; lafmaliyet kart farkını bununla açıklar)
+    offDevice: { card: toTL(offDevice.card), cash: toTL(offDevice.cash), cardTips: toTL(offDeviceCardTips(day.id)) },
     refunds: refundsOf(day.id),
     // İptal edilen kalemler ana ürün ve ek parçalarına bölünür (satır anahtarıyla). Hazırlanmış: bar ya da mutfak
     // başlamıştı (`startedAt`) ya da hazırdı (`readyAt`); "bara gönderildi" hazırlandı demek değil. Kalem iadesi
@@ -494,6 +514,15 @@ export function buildDayPayload(dayId: string) {
     // LafPOS'tan ayrılsın). Kişi gitmez; harcamanın kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut,
     // Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit tahsilatı ve bahşişi de sayar)
     cashMoves: cashMovesOf(day.id),
+    // Gün sonu tamlığı (§4.9): yazarkasanın (ÖKC) kendi belgeleri; cihaz yoksa alan yok
+    ...okcField(day.id),
+    // Siparişsiz ödemeler (açık hesap tahsilatı) ödeme türüne göre, müşterisiz; vardiya sayımları kişisiz; indirimler
+    // satır satır nedeniyle (indirimi yapan gitmez). Üçü de hep gider, yoksa boş dizi
+    collections: collectionsOf(day.id, methods),
+    shiftCounts: shiftCountsOf(db, day.id)
+      .slice(0, SHIFT_MAX)
+      .map((s) => ({ at: new Date(s.createdAt).toISOString(), counted: toTL(s.counted), expected: toTL(s.expected), diff: toTL(s.diff), confirmed: s.confirmed })),
+    discountLines: discountLinesOf(day.id, names, addonIds),
     // O gün çalışanların lafmaliyet personel kimlikleri (§4.8): yalnız en az bir kullanıcı bağlıyken; ad gitmez.
     // Gönderirken güncel bağlantıdan yeniden çözülür (finalBody)
     ...workedStaffField(day),
@@ -534,6 +563,188 @@ function cashMovesOf(dayId: string) {
     .orderBy(asc(schema.cashMovements.createdAt), asc(schema.cashMovements.id))
     .all()
     .map((m) => ({ id: m.id, kind: m.kind, amount: toTL(m.amount), description: cap(m.description) ?? '', at: new Date(m.createdAt).toISOString(), categoryId: m.kind === 'harcama' ? m.categoryId : null }));
+}
+
+// ─── Gün sonu tamlığı (§4.9, 24 Kasım 2026) ──────────────────────────────────
+
+/** `bankPos.batches` en çok bu kadar (yenileri kalır), `shiftCounts` ve `collections` sınırları */
+const BATCH_MAX = 20;
+const SHIFT_MAX = 50;
+const COLLECTIONS_MAX = 200;
+
+type MethodKind = (typeof schema.paymentMethods.$inferSelect)['kind'];
+type MethodRow = { name: string; kind: MethodKind; zField: string; channel: string | null; sort: number };
+
+function methodsById(): Map<string, MethodRow> {
+  return new Map(
+    db
+      .select({ id: schema.paymentMethods.id, name: schema.paymentMethods.name, kind: schema.paymentMethods.kind, zField: schema.paymentMethods.zField, channel: schema.paymentMethods.channel, sort: schema.paymentMethods.sort })
+      .from(schema.paymentMethods)
+      .all()
+      .map(({ id, ...m }) => [id, m]),
+  );
+}
+
+/** Kaydı silinmiş ödeme türünde tür, ödemenin Z alanından */
+const KIND_OF_FIELD: Record<string, MethodKind> = { cash: 'nakit', card: 'kart', meal_card: 'yemek', online: 'online' };
+const kindOf = (methods: Map<string, MethodRow>, methodId: string | undefined, zField: string): MethodKind =>
+  (methodId ? methods.get(methodId)?.kind : undefined) ?? KIND_OF_FIELD[zField] ?? 'diger';
+
+/** LafPOS'un günün bütün kartıyla kıyas tutarı (okc/card-basis.ts `cardBasis`, önceki batch'siz); gün açıkken null */
+function dayCardOf(dayId: string): number | null {
+  const k = cardBasis(dayId, []).dayCardKurus;
+  return k == null ? null : toTL(k);
+}
+
+/** İade edilmemiş satış ödemeleri (açık hesap tahsilatı hariç) */
+const liveSales = (dayId: string) =>
+  db
+    .select({ id: schema.payments.id, zField: schema.payments.zField, amount: schema.payments.amount, tip: schema.payments.tip })
+    .from(schema.payments)
+    .where(and(eq(schema.payments.dayId, dayId), isNull(schema.payments.refundedAt), isNotNull(schema.payments.orderId)))
+    .all();
+
+/** Nakit satışın bahşişi (kuruş): çekmeceye girer, Z'nin `cashIn`'inde kalır */
+const cashTipsOf = (dayId: string) => liveSales(dayId).reduce((a, p) => a + (p.zField === 'cash' ? p.tip : 0), 0);
+
+/** Yazarkasadan geçmeyen kart satışlarının bahşişi (kuruş): `offDevice.card` gibi hiçbir cihaz fişinde olmayan ödemeler */
+function offDeviceCardTips(dayId: string): number {
+  const viaDevice = new Set(deviceReceipts(db, [dayId]).flatMap((r) => r.paymentIds));
+  return liveSales(dayId).reduce((a, p) => a + (p.zField === 'card' && !viaDevice.has(p.id) ? p.tip : 0), 0);
+}
+
+/** Föyde (gün sonu ya da sonradan) ödeme türü başına yazılan tutarlar (`m:<tür>`); yazılmadıysa alan yok */
+function methodCountsOf(counts: Record<string, number> | null, methods: Map<string, MethodRow>): { methodCounts?: { name: string; zField: string; channel: string | null; counted: number }[] } {
+  const rows = Object.entries(counts ?? {})
+    .filter(([k]) => k.startsWith('m:'))
+    .flatMap(([k, v]) => {
+      const m = methods.get(k.slice(2));
+      return m ? [{ m, v }] : [];
+    })
+    .sort((a, b) => a.m.sort - b.m.sort || a.m.name.localeCompare(b.m.name, 'tr'));
+  return rows.length ? { methodCounts: rows.map(({ m, v }) => ({ name: m.name, zField: m.zField, channel: m.channel ?? null, counted: toTL(v) })) } : {};
+}
+
+/** Siparişsiz ödemeler (açık hesap tahsilatı), ödeme türü ve Z alanı başına; müşteri gitmez */
+function collectionsOf(dayId: string, methods: Map<string, MethodRow>) {
+  const p = schema.payments;
+  const rows = db
+    .select({ methodId: p.methodId, methodName: p.methodName, zField: p.zField, amount: p.amount })
+    .from(p)
+    .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNull(p.orderId)))
+    .orderBy(asc(p.createdAt), asc(p.id))
+    .all();
+  const groups = new Map<string, { name: string; zField: string; channel: string | null; kind: MethodKind; count: number; amount: number }>();
+  for (const r of rows) {
+    const key = `${r.methodId}|${r.zField}`;
+    const g = groups.get(key) ?? { name: r.methodName, zField: r.zField, channel: methods.get(r.methodId)?.channel ?? null, kind: kindOf(methods, r.methodId, r.zField), count: 0, amount: 0 };
+    g.count += 1;
+    g.amount += r.amount;
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'tr'))
+    .slice(0, COLLECTIONS_MAX)
+    .map((g) => ({ ...g, amount: toTL(g.amount) }));
+}
+
+/**
+ * İndirimler satır satır (kapanmış kasa adisyonları; Z'nin `discounts`'uyla aynı kapsam, toplamı ona eşit): adisyon
+ * indirimi türüyle (yüzde ya da tutar) ve kalem indirimi (tutar olarak saklanır), nedeniyle. İndirimi yapan gitmez
+ */
+function discountLinesOf(dayId: string, names: Map<string, string>, addonIds: Record<AddonKey, string | null>) {
+  const orders = closedPosOrders([dayId]).sort((a, b) => a.no - b.no || a.id.localeCompare(b.id));
+  if (!orders.length) return [];
+  const saleIds = db.select({ id: schema.orders.id }).from(schema.orders).where(closedPosWhere([dayId]));
+  const discounted = db
+    .select()
+    .from(schema.orderItems)
+    .where(and(inArray(schema.orderItems.orderId, saleIds), gt(schema.orderItems.discount, 0), eq(schema.orderItems.voided, false), eq(schema.orderItems.complimentary, false)))
+    .orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id))
+    .all();
+  const out: { scope: 'order' | 'item'; posName: string | null; type: 'percent' | 'amount'; value: number; amount: number; reason: string | null }[] = [];
+  for (const o of orders) {
+    const totals = o.totals ?? calcOrder({ lines: [] });
+    if (totals.orderDiscount > 0) {
+      const percent = o.discountType === 'percent';
+      out.push({ scope: 'order', posName: null, type: percent ? 'percent' : 'amount', value: percent ? (o.discountValue ?? 0) : toTL(o.discountValue ?? totals.orderDiscount), amount: toTL(totals.orderDiscount), reason: cap(o.discountReason) });
+    }
+    for (const i of discounted) {
+      if (i.orderId !== o.id) continue;
+      const main = itemParts(i, 0, addonIds)[0]!;
+      out.push({ scope: 'item', posName: names.get(partKey(main)) ?? main.posName, type: 'amount', value: toTL(i.discount), amount: toTL(Math.min(i.discount, i.qty * i.unitPrice)), reason: cap(i.discountReason) });
+    }
+  }
+  return out.slice(0, LIST_MAX);
+}
+
+/**
+ * Yazarkasanın (ÖKC) belgeleri (§4.9): günün adisyonlarının cihaz fişleri. Gerçek cihazın (eğitim simülatörü değil)
+ * belgesi varsa ya da yazarkasa Pavo veya Token'sa gider; yoksa alan yok. Tutarlar cihazdan geçen iade edilmemiş
+ * ödemelerin Z alanına göre toplamı; gün kapandıktan sonra cihazda fişi iptal edilen (`fis_iptal`) ayrı. Böylece
+ * `cash = z.cash − offDevice.cash − voided.cash`, `card = z.card − offDevice.card − voided.card`. KDV tamamlanan
+ * belgelerin sepetlerinden, belge başına yuvarlanmış (cihaz gibi); sepet okunamazsa null
+ */
+function okcField(dayId: string) {
+  const r = schema.fiscalReceipts;
+  const dayOrders = db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, dayId));
+  const paidOrders = db.select({ id: schema.payments.orderId }).from(schema.payments).where(eq(schema.payments.dayId, dayId));
+  const receipts = db
+    .select({ provider: r.provider, status: r.status, basket: r.basket, paymentIds: r.paymentIds })
+    .from(r)
+    .where(or(inArray(r.orderId, dayOrders), inArray(r.orderId, paidOrders)))
+    .orderBy(asc(r.createdAt), asc(r.id))
+    .all();
+  const setting = getSettings().okcProvider;
+  const real = receipts.filter((x) => x.provider !== 'simulator');
+  const provider = (real.at(-1)?.provider as 'pavo' | 'tokenx' | undefined) ?? (setting === 'pavo' || setting === 'tokenx' ? setting : null);
+  if (!provider) return {};
+  const viaDevice = new Set(receipts.flatMap((x) => x.paymentIds));
+  const voidedIds = new Set(receipts.filter((x) => x.status === 'fis_iptal').flatMap((x) => x.paymentIds));
+  const sums = { cash: 0, card: 0, mealCard: 0, other: 0 };
+  const voided = { cash: 0, card: 0 };
+  for (const p of liveSales(dayId)) {
+    if (!viaDevice.has(p.id)) continue;
+    if (voidedIds.has(p.id)) {
+      if (p.zField === 'cash' || p.zField === 'card') voided[p.zField] += p.amount;
+      continue;
+    }
+    sums[p.zField === 'cash' ? 'cash' : p.zField === 'card' ? 'card' : p.zField === 'meal_card' ? 'mealCard' : 'other'] += p.amount;
+  }
+  const completed = receipts.filter((x) => x.status === 'tamamlandi');
+  return {
+    okc: {
+      provider,
+      // Token yazarkasası mali Z basar; Pavo (VUK 507, e-Arşiv) basmaz: personelin fotoğrafı yalnız gün sonu fişi
+      zReport: provider === 'tokenx',
+      docs: completed.length,
+      cash: toTL(sums.cash),
+      card: toTL(sums.card),
+      mealCard: toTL(sums.mealCard),
+      other: toTL(sums.other),
+      total: toTL(sums.cash + sums.card + sums.mealCard + sums.other),
+      voided: { count: receipts.filter((x) => x.status === 'fis_iptal').length, cash: toTL(voided.cash), card: toTL(voided.card) },
+      vat: receiptVat(completed.map((x) => x.basket)),
+    },
+  };
+}
+
+/** Belgelerin KDV dökümü: oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır); okunamayan sepette null */
+function receiptVat(baskets: unknown[]): { rate: number; total: number; vat: number }[] | null {
+  const rates = new Map<number, { gross: number; vat: number }>();
+  for (const b of baskets) {
+    if (!b || typeof b !== 'object' || !Array.isArray((b as { items?: unknown }).items)) return null;
+    for (const [key, gross] of Object.entries(basketByRate(b as TokenxBasket).byRate)) {
+      const rate = Number(key);
+      if (!Number.isFinite(rate) || rate < 0 || !Number.isFinite(gross)) return null;
+      if (gross === 0) continue;
+      const row = rates.get(rate) ?? { gross: 0, vat: 0 };
+      row.gross += gross;
+      row.vat += splitKdv(gross, rate).kdv;
+      rates.set(rate, row);
+    }
+  }
+  return [...rates.entries()].sort((a, b) => a[0] - b[0]).map(([rate, v]) => ({ rate, total: toTL(v.gross), vat: toTL(v.vat) }));
 }
 
 

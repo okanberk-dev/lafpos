@@ -17,7 +17,17 @@
       }
     ],
     "message": null,
-    "errorCode": null
+    "errorCode": null,
+    "batches": [
+      {
+        "batchNo": "0001",
+        "at": "2026-11-22T21:26:00.000Z",
+        "total": 4160,
+        "trigger": "otomatik",
+        "dayClosed": true
+      }
+    ],
+    "dayCard": 4160
   },
   "sube": "marina",
   "date": "2026-11-22",
@@ -57,7 +67,9 @@
     "okcZNo": "11",
     "expectedOpening": null,
     "openingDiff": null,
-    "openingReason": null
+    "openingReason": null,
+    "cashTips": 0,
+    "closeNote": null
   },
   "lines": [
     {
@@ -279,19 +291,22 @@
       "zField": "card",
       "channel": null,
       "count": 19,
-      "amount": 5030
+      "amount": 5030,
+      "kind": "kart"
     },
     {
       "name": "Nakit",
       "zField": "cash",
       "channel": null,
       "count": 7,
-      "amount": 1255
+      "amount": 1255,
+      "kind": "nakit"
     }
   ],
   "offDevice": {
     "card": 870,
-    "cash": 200
+    "cash": 200,
+    "cardTips": 0
   },
   "refunds": [
     {
@@ -439,6 +454,48 @@
       "description": "Fişsiz",
       "at": "2026-11-22T13:45:00.000Z",
       "categoryId": 3
+    }
+  ],
+  "okc": {
+    "provider": "pavo",
+    "zReport": false,
+    "docs": 22,
+    "cash": 1055,
+    "card": 4160,
+    "mealCard": 0,
+    "other": 0,
+    "total": 5215,
+    "voided": {
+      "count": 0,
+      "cash": 0,
+      "card": 0
+    },
+    "vat": [
+      {
+        "rate": 10,
+        "total": 5215,
+        "vat": 474.09
+      }
+    ]
+  },
+  "collections": [],
+  "shiftCounts": [],
+  "discountLines": [
+    {
+      "scope": "order",
+      "posName": null,
+      "type": "amount",
+      "value": 52.5,
+      "amount": 52.5,
+      "reason": "Müdavim masası"
+    },
+    {
+      "scope": "order",
+      "posName": null,
+      "type": "amount",
+      "value": 37.5,
+      "amount": 37.5,
+      "reason": "Doğum günü"
     }
   ]
 }

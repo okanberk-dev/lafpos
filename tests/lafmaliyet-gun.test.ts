@@ -45,11 +45,16 @@ type Payload = {
   z: Record<string, number | null> & { vat?: { rate: number; base: number; vat: number }[]; okcZNo?: string | null; openedAt?: string; closedAt?: string | null };
   lines: Line[];
   ikram: Ikram[];
-  payments: { name: string; zField: string; channel: string | null; count: number; amount: number }[];
-  offDevice: { card: number; cash: number };
+  payments: { name: string; zField: string; channel: string | null; count: number; amount: number; kind: string }[];
+  offDevice: { card: number; cash: number; cardTips: number };
   refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
   iptal: { posName: string; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
   cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[];
+  /** Gün sonu tamlığı (docs/03-ENTEGRASYON.md §4.9) */
+  okc?: { provider: string; zReport: boolean; docs: number; cash: number; card: number; mealCard: number; other: number; total: number; voided: { count: number; cash: number; card: number }; vat: unknown[] | null };
+  collections: { name: string; zField: string; channel: string | null; kind: string; count: number; amount: number }[];
+  shiftCounts: { at: string; counted: number; expected: number; diff: number; confirmed: boolean }[];
+  discountLines: { scope: string; posName: string | null; type: string; value: number; amount: number; reason: string | null }[];
 };
 
 const product = (name: string) => {
@@ -172,7 +177,7 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     // Gün kapandı, geç gelen müşteri için yeniden açıldı (neden gövdenin düzeltmesi), bir satış daha
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
     await h.ok('mudur', 'POST', `/cash/days/${day.id}/reopen`, { reason: 'Geç gelen masa' });
-    expect((await pay(await sell([{ name: 'Espresso', size: 'L' }]), 'Nakit')).closed).toBe(true);
+    expect((await pay(await sell([{ name: 'Espresso', size: 'L' }]), 'Nakit', { tip: 500 })).closed).toBe(true);
 
     // Kasa hareketleri satır satır (cashMoves): lafmaliyet'in personel kategorisiyle harcama (son çekilen liste), teslim,
     // giriş. Kimlik ve an saatten bağımsız olsun diye sabitlenir
@@ -197,10 +202,16 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     ] as const;
     moves.forEach((m, i) => db.update(schema.cashMovements).set({ id: fixed[i]![0], createdAt: Date.parse(fixed[i]![1]) }).where(eq(schema.cashMovements.id, m.id)).run());
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
+    // Vardiya sayımı (₺5,00 eksik); anı saatten bağımsız
+    await h.ok('mudur', 'POST', '/cash/shift-counts', { countedCash: x.summary.expectedCash - 500 });
+    db.update(schema.shiftCounts).set({ createdAt: Date.parse('2026-10-26T19:30:00+03:00') }).where(eq(schema.shiftCounts.dayId, day.id)).run();
     // Paket tarihi saatten bağımsız olsun: satışlar bugünün gününe yazılır (eski güne satış engeli), gün kapanmadan
     // hemen önce sabit bir iş gününe alınır. Gün sonu eski günde de alınır; kapanış ve paket bu tarihi görür.
     db.update(schema.businessDays).set({ date: GOLDEN_DATE }).where(eq(schema.businessDays.id, day.id)).run();
-    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash - 1000 });
+    // Gün sonu: föyde kredi kartı slipi yazıldı, gün sonu notu
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash - 1000, cashCounts: { [`m:${method('Kredi kartı').id}`]: 128500 }, note: 'Geç kapanış' });
+    // Yazarkasadan geçen satış Pavo'nun belgesi (gerçek cihaz; eğitim cihazı Pavo gibi fiş kesti): gövdede `okc`
+    db.update(schema.fiscalReceipts).set({ provider: 'pavo' }).where(eq(schema.fiscalReceipts.orderId, cihaz.id)).run();
     // Açılış ve kapanış anı ile banka gün sonu saatten bağımsız: sabit anlar (gövde bayt bayt aynı kalsın). Kasa zinciri:
     // gün kurulum modunda açıldı (önceki gerçek gün yok, beklenen boş); örnek gövde beklenenli bir açılışı gösterir
     // (önceki günün devri ₺1.400,00, açılış ₺1.500,00, fark +₺100,00 ve nedeni; services/devir.ts)
@@ -223,6 +234,10 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
       message: 'Gün sonu alınamadı',
       errorCode: '5085',
       acquirers: [],
+      trigger: 'otomatik',
+      dayClosed: true,
+      // Gün içinde elle alınmış banka gün sonu (gövdede `bankPos.batches`)
+      earlier: [{ batchNo: '000278', deviceDateTime: null, grandTotalKurus: 24000, at: Date.parse('2026-10-26T15:10:00+03:00'), trigger: 'elle', dayClosed: false }],
     });
 
     goldenDayId = day.id;
@@ -284,6 +299,21 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     expect(moved('harcama')).toBeCloseTo(z.cashOut!, 2);
     expect(moved('teslim')).toBeCloseTo(z.handedOver!, 2);
     expect(moved('giris')).toBeLessThanOrEqual(z.cashIn! + 0.001);
+    // Gün sonu tamlığı (§4.9): günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri, yazarkasadan
+    // geçmeyen kartın bahşişi, nakit bahşiş, not, föyde yazılan slip, tahsilatlar, vardiya sayımı, indirim satırları
+    expect(payload.bankPos).toMatchObject({ batches: [{ batchNo: '000278', at: '2026-10-26T12:10:00.000Z', total: 240, trigger: 'elle', dayClosed: false }] });
+    expect(typeof payload.bankPos!.dayCard).toBe('number');
+    const okc = payload.okc!;
+    expect(okc).toMatchObject({ provider: 'pavo', zReport: false, docs: 1, voided: { count: 0, cash: 0, card: 0 } });
+    expect(okc.card).toBeCloseTo(z.card! - payload.offDevice.card - okc.voided.card, 2);
+    expect(okc.cash).toBeCloseTo(z.cash! - payload.offDevice.cash - okc.voided.cash, 2);
+    expect(payload.offDevice.cardTips).toBe(25);
+    expect(z.cashTips).toBe(5);
+    expect(payload.z).toMatchObject({ closeNote: 'Geç kapanış', methodCounts: [{ name: 'Kredi kartı', zField: 'card', channel: null, counted: 1285 }] });
+    expect(payload.collections).toEqual([{ name: 'Kredi kartı', zField: 'card', channel: null, kind: 'kart', count: 1, amount: 400 }]);
+    expect(payload.shiftCounts).toMatchObject([{ at: '2026-10-26T16:30:00.000Z', diff: -5, confirmed: false }]);
+    expect(payload.discountLines).toEqual([{ scope: 'order', posName: null, type: 'amount', value: 36, amount: 36, reason: 'Müdavim' }]);
+    expect(payload.payments.map((p) => p.kind)).not.toContain(undefined);
   });
 
   it('personel bağlantısıyla (ikinci örnek): yalnız workedStaffRefs eklenir, sonda; o gün iş yapan bağlı kişiler, sayı sırasıyla, ad yok', async () => {

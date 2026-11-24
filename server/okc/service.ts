@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { allocate, tl } from '@shared/money';
 import type { OrderTotals } from '@shared/order-calc';
 import type { ZSummary } from '@shared/types';
@@ -10,11 +10,11 @@ import { Effects } from '../lib/effects';
 import { zSummaryFor } from '../lib/kor-kasa';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
-import { deviceReceipts } from '../services/days';
 import { orderItems, orderPayments } from '../services/dto';
 import { enqueueDay } from '../sync/lafmaliyet';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
+import { batchesOf, cardBasis } from './card-basis';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
 import type { PendingReceipt } from './providers/types';
 import {
@@ -50,6 +50,8 @@ type ReceiptRow = typeof schema.fiscalReceipts.$inferSelect;
 const PENDING = ['gonderildi', 'kilitli'] as const;
 
 export { tokenx, webhookUrl };
+/** LafPOS'un banka gün sonu kıyas tutarı (okc/card-basis.ts; testler ve çağıranlar buradan da alır) */
+export { cardBasis };
 
 usePavoStore({
   getSequence: () => getSyncState<number>('pavo.sequence') ?? 0,
@@ -556,6 +558,13 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme LafPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
         });
       });
+      // Gövdedeki yazarkasa belgeleri (okc.voided, okc.card) ve kart kıyası (bankPos.dayCard) değişti: gün paketi
+      // lafmaliyet'e yeniden gider, saveEod gibi (inceleme, 24 Kas 2026)
+      try {
+        enqueueDay(closedDay.dayId);
+      } catch (e) {
+        console.warn('[okc] kapanmış gün fiş iptali lafmaliyet', e instanceof Error ? e.message : e);
+      }
     } else if (documented) {
       tx((t) => {
         const out = refundExternalPayments(t, by?.userId ?? null, fx, r.paymentIds, 'Yazarkasada fiş iptal edildi');
@@ -701,7 +710,7 @@ function applyUnderpaid(
 }
 
 /** Fişin (iade edilmemiş) ödemelerinden biri açık gün dışındaysa o günün tarihi ve ödemenin adisyonu */
-function closedDayOf(r: ReceiptRow): { date: string; orderId: string } | null {
+function closedDayOf(r: ReceiptRow): { dayId: string; date: string; orderId: string } | null {
   if (!r.paymentIds.length) return null;
   const day = getOpenDay(db);
   const live = db
@@ -713,7 +722,7 @@ function closedDayOf(r: ReceiptRow): { date: string; orderId: string } | null {
   const old = live.find((p) => p.dayId !== day?.id);
   if (!old) return null;
   const date = db.select({ date: schema.businessDays.date }).from(schema.businessDays).where(eq(schema.businessDays.id, old.dayId)).get()?.date ?? '?';
-  return { date, orderId: old.orderId ?? r.orderId };
+  return { dayId: old.dayId, date, orderId: old.orderId ?? r.orderId };
 }
 
 export function setLock(receiptId: string, locked: boolean, by?: string | null) {
@@ -1018,17 +1027,6 @@ const eodDayKey = (dayId: string) => `pavo.eod.${dayId}`;
 /** Sonucu bilinmeyen deneme: yanıtı alınamadı ya da süreç gün sonu sürerken kapandı (doğrulanmadan yenisi alınmaz) */
 const unresolved = (rec: PavoEodRecord | null | undefined) => rec?.status === 'unknown' || rec?.status === 'running';
 
-/** Kaydın gününde alınmış başarılı gün sonları: öncekiler ve kaydın kendisi (alındıysa) */
-function batchesOf(rec: PavoEodRecord | null | undefined): PavoEodBatch[] {
-  if (!rec) return [];
-  const list = [...(rec.earlier ?? [])];
-  if (rec.status === 'ok' && !list.some((b) => b.batchNo && b.batchNo === rec.batchNo)) {
-    // Eski kayıtta `dayClosed` yok: kapalı sayılır (otomatik deneme ikinci kez gönderilmez)
-    list.push({ batchNo: rec.batchNo, deviceDateTime: rec.deviceDateTime, grandTotalKurus: rec.grandTotalKurus, at: rec.at, trigger: rec.trigger, dayClosed: rec.dayClosed ?? true });
-  }
-  return list;
-}
-
 /** Blind kasa: kasa rakamlarını görmeyene tutarlar gitmez (sayılar ve durum gider) */
 function eodFor(user: AuthUser | null, rec: PavoEodRecord) {
   const earlier = rec.earlier ?? [];
@@ -1045,54 +1043,6 @@ function eodFor(user: AuthUser | null, rec: PavoEodRecord) {
 function eodSummaryFor(user: AuthUser | null, s: PavoEodSummary | null) {
   if (!s || (user && seesCashNumbers(user))) return s;
   return { ...s, grandTotalKurus: null, acquirers: s.acquirers.map((a) => ({ ...a, totalKurus: null })) };
-}
-
-/**
- * LafPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
- * alanı ve kartla alınan bahşiş: bankaya giden tutar). Aynı günün sonraki gün sonu (gün yeniden açılıp kapandı ya da
- * gün içinde elle alındı): önceki gün sonundan sonra alınan, iade edilmemiş kart ödemeleri; günün bütün kartıyla
- * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. İkisine de kartla açık hesap tahsilatı eklenir. Gün açıksa null.
- * Bankanın batch'inde olmayan kart satışı ikisinden de düşer (bahşişiyle, aynı çekimdir): mali fişi yazarkasada
- * kesilmeyen ödeme (yazarkasadan geçmeyen: başka POS'tan ya da "Başka yoldan aldım"; 22.11'de ₺870 "eksik" görünüyordu)
- * ve gün kapandıktan sonra cihazda fişi iptal edilen ödeme (`fis_iptal`: LafPOS'ta ödeme canlı kalır, Z'nin kartında durur)
- */
-export function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
-  const none = { dayCardKurus: null, dayCardSinceBatch: null };
-  if (!dayId) return none;
-  const day = db.select({ closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
-  if (!day?.closedAt || !day.summary) return none;
-  const prev = earlier.at(-1);
-  const p = schema.payments;
-  // Kartla açık hesap tahsilatı (siparişsiz ödeme) Z'nin kart alanında yok ama bankaya gider: kıyasa girer
-  const collections = (since: number | null) =>
-    db
-      .select({ amount: p.amount })
-      .from(p)
-      .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNull(p.orderId), eq(p.zField, 'card'), since == null ? undefined : gt(p.createdAt, since)))
-      .all()
-      .reduce((a, r) => a + r.amount, 0);
-  const receipts = deviceReceipts(db, [dayId]);
-  const viaDevice = new Set(receipts.flatMap((r) => r.paymentIds));
-  const voidedOnDevice = new Set(receipts.filter((r) => r.status === 'fis_iptal').flatMap((r) => r.paymentIds));
-  const inBatch = (id: string) => viaDevice.has(id) && !voidedOnDevice.has(id);
-  const sales = (since: number | null) =>
-    db
-      .select({ id: p.id, amount: p.amount, tip: p.tip })
-      .from(p)
-      .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNotNull(p.orderId), eq(p.zField, 'card'), since == null ? undefined : gt(p.createdAt, since)))
-      .all();
-  if (!prev) {
-    const s = day.summary;
-    const offBatch = sales(null)
-      .filter((r) => !inBatch(r.id))
-      .reduce((a, r) => a + r.amount + r.tip, 0);
-    return {
-      dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((x) => x.zField === 'card').reduce((a, x) => a + (x.tips ?? 0), 0) + collections(null) - offBatch,
-      dayCardSinceBatch: null,
-    };
-  }
-  const rows = sales(prev.at).filter((r) => inBatch(r.id));
-  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0) + collections(prev.at), dayCardSinceBatch: prev.batchNo };
 }
 
 /** Cihaz gün sonu neden denenmez; null: denenebilir. `auto`: gün kapanınca (ayara bağlı) */
