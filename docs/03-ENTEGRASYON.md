@@ -1068,7 +1068,10 @@ ipucudur.
   Personel › kişi › "lafmaliyet personeli": aday listesi ad benzerliğine göre sıralı (Türkçe katlanmış: büyük-küçük
   harf, ı/i, ş/s, ç/c, ğ/g, ö/o, ü/u farkı sayılmaz; `shared/name-match.ts`), hiçbiri işaretli gelmez. Seçince onay
   penceresi iki tarafı yan yana gösterir ("LafPOS: Ayşe · Kasiyer / Barista" ↔ "ladmin (s:12): Ayşe Yılmaz · hesap:
-  ayse@… · Marina"); ad benzemiyorsa ya da aynı ada uyan birden çok etkin kayıt varsa ayrıca "Eminim" işaretlenir.
+  ayse@… · Marina"); ad tam uymuyorsa ya da aynı ada uyan birden çok etkin kayıt varsa ayrıca "Eminim" işaretlenir.
+  "Ad uyuyor" yalnız ilk ad uyup öteki sözcükler (ya da baş harfleri) ladmin adıyla çelişmediğinde çıkar ("Ayşe" ↔
+  "Ayşe Yılmaz", "Ayşe Y." ↔ "Ayşe Yılmaz"); ilk ad uyup soyad ya da baş harf çelişirse ("Ayşe Kara", "Ayşe K." ↔ "Ayşe
+  Yılmaz") "Ad kısmen uyuyor" çıkar ve "Eminim" istenir.
   Bağlı kişinin kimliği listede yoksa "ladmin'de bulunamadı" rozeti çıkar (kayıt silinmiş ya da başka şubeye
   taşınmış: lafmaliyet o kişinin günlerini saymaz; kaldırılıp yeniden bağlanır).
 - **Liste:**

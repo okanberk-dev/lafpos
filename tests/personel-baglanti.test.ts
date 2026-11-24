@@ -118,6 +118,19 @@ describe('ad benzerliği (Türkçe katlanmış; yalnız ipucu, seçim yapmaz)', 
     expect(nameMatch('Ali', 'Alican Ak')).toBe('dusuk');
     expect(nameMatch('', 'Ayşe')).toBe('dusuk');
   });
+
+  it('ilk ad uyup öteki sözcük (ad ya da baş harf) ladmin adıyla çelişirse en çok orta: "Ad uyuyor" demez, "Eminim" istenir', () => {
+    expect(nameMatch('Ayşe Kara', 'Ayşe Yılmaz')).toBe('orta');
+    expect(nameMatch('Ayşe K.', 'Ayşe Yılmaz')).toBe('orta');
+    expect(nameMatch('Mehmet Ali', 'Mehmet Demir')).toBe('orta');
+    expect(nameMatch('Ali Can', 'Ali Veli')).toBe('orta');
+    // Çelişen aday ilk adı tutan ama çelişmeyenden geride sıralanır
+    expect(nameSimilarity('Ayşe Kara', 'Ayşe Yılmaz')).toBeLessThan(nameSimilarity('Ayşe Kara', 'Ayşe'));
+    // Çelişmeyen sözcük ya da baş harf yüksek kalır; ladmin'de karşılığı olmayan (yalnız ilk ad) çelişki değildir
+    expect(nameMatch('Ayşe Y.', 'Ayşe Yılmaz')).toBe('yuksek');
+    expect(nameMatch('Mehmet Ali', 'Mehmet Ali Demir')).toBe('yuksek');
+    expect(nameMatch('Ayşe Kara', 'Ayşe')).toBe('yuksek');
+  });
 });
 
 describe('ladmin personel listesi (GET /admin/ladmin-personel)', () => {
