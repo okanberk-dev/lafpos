@@ -100,6 +100,8 @@ export async function startServer({ jobs = false, env: extra = {} } = {}) {
   }
   return {
     base,
+    /** Veri klasörü (veritabanı `lafpos.db`): akışın saatten bağımsız kurulumu için (ör. kapanan günü düne almak) */
+    dataDir,
     log: () => log,
     stop: async () => {
       child.kill('SIGTERM');

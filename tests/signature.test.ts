@@ -27,6 +27,12 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/modpos-gunler?sube=marina'), body: '' })).toBe('e653d2f73b92e4fa1f6acc750f6702872e7e3a68204f9adad8f17e5bf6dd9023');
   });
 
+  it('kasa zinciri uçları (docs/03-ENTEGRASYON.md §4.6, §4.7; lafmaliyet tests/lafpos.test.ts aynı vektörler)', () => {
+    // Devir okuması (sorgu imzaya girer) ve gider kategorileri: ikisi de gövdesiz imzalı GET
+    expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/devir?date=2026-11-22'), body: '' })).toBe('d0d42a100852f660d76a81e1f1631684faef9838a67f1788ded57de92640205b');
+    expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/gider-kategorileri'), body: '' })).toBe('7309e560164d15d4ccb5c17ecaa6355bde88073a238c1cc5976f1858431c10b1');
+  });
+
   it('sitenin çağrı yanıtı vektörü (laffogato docs/PANEL-ORDERS.md "İmza vektörü")', () => {
     // Masa çağrısına "Gördüm": sitenin belgesindeki gövde ve sonuç; kanonik metin yalnız yolu okur, alan adı imzaya girmez
     const body = JSON.stringify({ id: 'tcl-3f9a0c4b7d2e1a68', actor: 'Selin' });

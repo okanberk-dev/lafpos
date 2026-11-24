@@ -419,6 +419,23 @@ describe('ayarlar taslağı', () => {
     // Satır alanı odaktayken de dışarıdan gelen listeyi alır, kullanıcı yazmadıysa
     expect(src).toMatch(/if \(!focused\.current \|\| JSON\.stringify\(parse\(draft\)\) === prevKey\.current\) setDraft\(format\(value\)\);/);
   });
+  it('kilitli şube kimliği: alanın altında not, patron kaydederken onay; onay yalnız bu kayıtla gider (kaynak)', () => {
+    const src = readFileSync(join(__dirname, '../src/pages/admin/SettingsAdmin.tsx'), 'utf8');
+    const save = src.slice(src.indexOf('const save = async'), src.indexOf('const backupNow'));
+    expect(src).toMatch(/get<\{ locked: boolean; branchId: string; acceptedBranch: string \| null \}>\('\/admin\/settings\/branch-lock'\)/);
+    // Onay penceresi istekten önce, yalnız şube lafmaliyet'in kabul ettiğinden başkasına değişirken ve kilit varken;
+    // onaylanmazsa istek gitmez. Metin kabul edilen şubeyi söyler, şu anki kimliği değil
+    expect(save).toMatch(
+      /if \(branchChange && patron && branchLock\.data\?\.locked && branchChange\.to !== accepted\) \{[\s\S]*?await confirmDialog\([\s\S]*?if \(!ok\) return;\s*rest\.confirmBranchChange = true;/,
+    );
+    expect(save).toMatch(/“\$\{accepted\}” şubesine kaydetti/);
+    expect(src).toMatch(/lafmaliyet bu kasanın günlerini “\$\{branchLock\.data\.acceptedBranch\}” şubesine kaydetti/);
+    expect(save.indexOf('confirmDialog')).toBeLessThan(save.indexOf("put<Settings>('/admin/settings'"));
+    // Kilit sayfa açıkken konduysa sunucunun 409'u notu getirir (sonraki Kaydet onay sorar)
+    expect(save).toMatch(/e\.code === 'branch_locked'\) void branchLock\.refetch\(\)/);
+    expect(src).toMatch(/aria-describedby=\{branchLock\.data\?\.locked \? 'branch-lock-info' : undefined\}/);
+    expect(src).toMatch(/id="branch-lock-info"/);
+  });
 });
 
 describe('masa planı taslağı', () => {

@@ -70,6 +70,7 @@ const ACTION_LABEL: Record<string, string> = {
   'day.close': 'Gün sonu',
   'day.count': 'Kasa sayımı',
   'day.open': 'Gün açılışı',
+  'day.open_attempt': 'Gün açma denemesi',
   'day.recount': 'Yeniden sayım',
   'day.reopen': 'Günü yeniden açma',
   'delivery.done': 'Teslim',

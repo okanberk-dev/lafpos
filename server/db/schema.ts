@@ -330,6 +330,31 @@ export const businessDays = sqliteTable(
     /** Gün sonundan sonra "Günü yeniden aç" ile açıldığı son an (otomatik gün sonu buna da bakar) */
     reopenedAt: integer('reopened_at'),
     /**
+     * Son yeniden açılışın nedeni (en çok 200 karakter): lafmaliyet'e giden gövdenin `correction`'ı (docs/03 §4). Bu
+     * alandan önce yeniden açılan günde boş
+     */
+    reopenReason: text('reopen_reason'),
+    /**
+     * Kaydedilmiş kasa sayımı gün kapandıktan sonra değiştirildiyse (yetkili onayıyla) düzeltmenin metni: "Kasa sayımı
+     * değiştirildi: ₺600,00 → ₺610,00". Günün son düzeltmesi buysa gövdenin `correction`'ı `recount`; yeniden açılış
+     * siler (yeni kapanışın sayımı öncekinin yerine geçer)
+     */
+    recountReason: text('recount_reason'),
+    /**
+     * `recountReason`'ın yazıldığı an. Düzeltme yalnız ondan (ya da yeniden açılıştan, `reopenedAt`) sonra kurulan ilk
+     * kabul edilen gövdeyle gider; sonraki gönderim (Pavo'nun gün sonu, elle "Gönder") düzeltme taşımaz
+     */
+    recountedAt: integer('recounted_at'),
+    /**
+     * Açılışta beklenen nakit (kuruş): önceki gerçek günün devri, lafmaliyet'in `nextOpening`'i ya da LafPOS'un sayımı
+     * (services/devir.ts). Önceki gerçek gün yoksa ya da sayılmadıysa boş. docs/03-ENTEGRASYON.md §4.6
+     */
+    expectedOpening: integer('expected_opening'),
+    /** Açılış − beklenen (kuruş, işaretli); beklenen yoksa boş */
+    openingDiff: integer('opening_diff'),
+    /** Farkın nedeni (en çok 200 karakter): en az ₺1,00 farkta zorunlu, altında isteğe bağlı */
+    openingReason: text('opening_reason'),
+    /**
      * Gün sonu kurulum (eğitim) modunda mı alındı: true eğitim günü, false gerçek gün. null: gün açık ya da bu işaret
      * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
      */
@@ -351,6 +376,12 @@ export const cashMovements = sqliteTable(
     description: text('description').notNull().default(''),
     userId: text('user_id').references(() => users.id),
     createdAt: integer('created_at').notNull(),
+    /**
+     * Harcamanın lafmaliyet gider kategorisi (`expense_categories.id`; yalnız harcamada, isteğe bağlı) ve yazıldığı
+     * andaki adı: kategori lafmaliyet'te sonra değişse ya da liste çekilemese de hareket adını korur. docs/03 §4.7
+     */
+    categoryId: integer('category_id'),
+    categoryName: text('category_name'),
   },
   (t) => [index('cash_movements_day_idx').on(t.dayId)],
 );

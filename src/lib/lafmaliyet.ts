@@ -3,6 +3,8 @@
  * `lafmaliyetStatus` ve rapor yanıtlarını okur (server/sync/lafmaliyet.ts), docs/03-ENTEGRASYON.md §4.
  */
 
+import { fmtDateLong } from '@shared/time';
+
 /** lafmaliyet'in gün sonu yanıtından saklananlar (sunucudaki `DayAnswer`); eski lafmaliyet alanları göndermez */
 export interface DayAnswer {
   date: string;
@@ -12,6 +14,32 @@ export interface DayAnswer {
   unmatched?: string[];
   counted?: boolean;
   switchDay?: string | null;
+  /** Ertesi günün beklenen açılışı (TL; kasa zinciri); kasa rakamlarını görmeyene gitmez */
+  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+}
+
+/**
+ * Açılış önerisi (`GET /api/cash/day` `opening`; kasa zinciri, docs/03-ENTEGRASYON.md §4.6): `source` beklenenin
+ * kaynağı (lafmaliyet'in devri ya da kasanın sayımı); lafmaliyet'inse `ladminSource` onun kaynağı (`kasa_raporu`:
+ * panelin Kasa raporu; `lafpos`: rapor yokken geri söylenen sayım)
+ */
+export interface OpeningSuggestion {
+  suggested: number;
+  source: 'lafmaliyet' | 'lafpos';
+  ladminSource?: 'kasa_raporu' | 'lafpos';
+  fromDate: string;
+}
+
+/**
+ * "Günü aç" kartında beklenen açılışın kaynağı. Kasa raporu yalnız lafmaliyet devri gerçekten Kasa raporundan
+ * hesapladıysa anılır; rapor yokken lafmaliyet kasanın sayımını geri söyler (gün sonu sayımı)
+ */
+export function openingSourceText(o: Pick<OpeningSuggestion, 'source' | 'ladminSource' | 'fromDate'>): string {
+  const day = fmtDateLong(o.fromDate);
+  if (o.source === 'lafpos') return `${day} gün sonu sayımı`;
+  if (o.ladminSource === 'kasa_raporu') return `${day} devri, lafmaliyet kasa raporundan`;
+  if (o.ladminSource === 'lafpos') return `${day} gün sonu sayımı, lafmaliyet'ten`;
+  return `${day} devri, lafmaliyet'ten`;
 }
 
 const dayFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long' });

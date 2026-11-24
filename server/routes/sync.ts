@@ -7,11 +7,11 @@ import { Effects } from '../lib/effects';
 import { licenseNow, merkezLast, merkezSyncState } from '../sync/merkez';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
-import { type AppEnv, can, requirePermission } from '../lib/auth';
+import { type AppEnv, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, HttpError, isoDate, patchOf } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
-import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
+import { answerFor, backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
 import { modposStatus, pullModposNow } from '../sync/modpos';
 import type { SiteAlertsDTO } from '@shared/site-alerts';
 import { requireSiteLinked, siteLinked, siteSigned } from '../sync/laffogato-link';
@@ -44,7 +44,7 @@ syncRoutes.get('/status', (c) => {
     menu: { linked: siteLinked(), auto: s.menuAutoSync, state: stale ? { ...state, lastError: stale } : state },
     online: onlineStatus(),
     karaoke: siteKaraokeStatus(),
-    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),
+    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user'))),
     // ModPOS dönemi (lafmaliyet'ten): kaç gün, hangi aralık, son çekim; tutar yok
     modpos: modposStatus(),
     okc: okcStatus(),
@@ -255,7 +255,9 @@ syncRoutes.post('/lafmaliyet/gun/:dayId/push', async (c) => {
   if (!can(user, 'kasa.gun')) requirePermission(user, 'senkron.yonet');
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, c.req.param('dayId'))).get();
   if (!day?.closedAt) throw new HttpError(409, 'Yalnız gün sonu alınmış gün gönderilir', 'day_open');
-  return c.json(await pushDayNow(day.id));
+  const r = await pushDayNow(day.id);
+  // Yanıttaki devir (ertesi günün beklenen açılışı) kör kasiyere gitmez
+  return c.json({ ...r, answer: answerFor(r.answer, seesCashNumbers(user)) });
 });
 
 /**

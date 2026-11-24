@@ -1,0 +1,1 @@
+ALTER TABLE `business_days` ADD `recounted_at` integer;
