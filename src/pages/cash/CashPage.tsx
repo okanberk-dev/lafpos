@@ -104,9 +104,10 @@ export default function CashPage() {
   const detail = useQuery({ queryKey: ['cash', 'detail', selected], queryFn: () => get<DayDetail>(`/cash/days/${selected}`), enabled: !!selected });
 
   const [opening, setOpening] = useState('');
-  // Açılışın nedeni: rakam gören kullanıcıda fark ₺1,00 ve üstündeyse, kör kasiyerde sunucu farkı söyleyince istenir
+  // Açılışın nedeni: rakam gören kullanıcıda fark ₺1,00 ve üstündeyse, kör kasiyerde sunucu farkı söyleyince istenir.
+  // `openingAsked`: sunucunun reddettiği tutar ve iletisi; tutar değişince ekran yeniden sormadan sunucuya bırakır
   const [openingReason, setOpeningReason] = useState('');
-  const [openingAsked, setOpeningAsked] = useState<string | null>(null);
+  const [openingAsked, setOpeningAsked] = useState<{ message: string; amount: number } | null>(null);
   const [openingReasonError, setOpeningReasonError] = useState<string | null>(null);
   const openingReasonRef = useRef<HTMLInputElement>(null);
   const [moveKind, setMoveKind] = useState<null | MoveKind>(null);
@@ -148,19 +149,28 @@ export default function CashPage() {
   const openingHint = current.data?.opening ?? null;
   const openingCash = parseTL(opening || '0') ?? 0;
   const openingDiff = openingHint && 'suggested' in openingHint ? openingCash - openingHint.suggested : null;
+  const openingOverLimit = openingDiff != null && Math.abs(openingDiff) >= OPENING_REASON_MIN;
+  // Sunucu bu tutarı reddetti (kör kasiyer farkı yalnız böyle öğrenir): aynı tutarla neden zorunlu. Kasiyer yeniden sayıp
+  // başka tutar yazarsa alan açık kalır ama zorunlu değildir: farkı yine sunucu söyler (ekran tahmin etmez)
+  const openingAskedNow = openingAsked != null && openingAsked.amount === openingCash;
   // Neden alanı: rakam gören kullanıcıda fark eşiği geçince, kör kasiyerde sunucu sorunca (tutar ve yön söylenmez)
-  const openingNeedsReason = (openingDiff != null && Math.abs(openingDiff) >= OPENING_REASON_MIN) || openingAsked != null;
+  const openingNeedsReason = openingOverLimit || openingAsked != null;
+  const typeOpening = (text: string) => {
+    setOpening(text);
+    setOpeningReasonError(null);
+  };
 
   const openDay = async () => {
     if (busy) return;
-    if (openingNeedsReason && !openingReason.trim()) {
-      setOpeningReasonError(openingAsked ?? 'Farkın nedeni gerekli');
+    if ((openingOverLimit || openingAskedNow) && !openingReason.trim()) {
+      setOpeningReasonError(openingAskedNow ? openingAsked.message : 'Farkın nedeni gerekli');
       openingReasonRef.current?.focus();
       return;
     }
     setBusy(true);
     try {
-      await post('/cash/day/open', { openingCash, reason: openingReason.trim() || null });
+      // Görünmeyen alanın eski yazısı gitmez
+      await post('/cash/day/open', { openingCash, reason: (openingNeedsReason && openingReason.trim()) || null });
       toast.ok('Gün açıldı, satışa hazır');
       setOpening('');
       setOpeningReason('');
@@ -170,7 +180,7 @@ export default function CashPage() {
     } catch (e) {
       // Sayım beklenenden farklı: neden alanı açılır, ileti altında (kör kasiyerde tutarsız)
       if (e instanceof ApiError && e.code === 'opening_reason_required') {
-        setOpeningAsked(e.message);
+        setOpeningAsked({ message: e.message, amount: openingCash });
         setOpeningReasonError(e.message);
         requestAnimationFrame(() => openingReasonRef.current?.focus());
       } else toast.err(errorMessage(e));
@@ -429,7 +439,7 @@ export default function CashPage() {
                         <p className="tabular text-lg font-semibold">{tl(openingHint.suggested)}</p>
                         <p className="text-pretty text-xs text-muted">{openingSourceText(openingHint)}</p>
                       </div>
-                      <Button variant="soft" onClick={() => setOpening(tlPlain(openingHint.suggested).replace(/\./g, ''))}>
+                      <Button variant="soft" onClick={() => typeOpening(tlPlain(openingHint.suggested).replace(/\./g, ''))}>
                         Bu tutarı yaz
                       </Button>
                     </div>
@@ -441,14 +451,16 @@ export default function CashPage() {
                   <output aria-label="Açılış nakdi" aria-live="polite" className="tabular font-headline block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">
                     <TypedAmount text={opening} />
                   </output>
-                  <Numpad decimal keyboard onEnter={() => void openDay()} onKey={(k) => setOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
+                  <Numpad decimal keyboard onEnter={() => void openDay()} onKey={(k) => typeOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
                   {openingNeedsReason && (
                     <Field
                       label="Farkın nedeni"
                       hint={
-                        openingDiff != null && Math.abs(openingDiff) >= OPENING_REASON_MIN
+                        openingOverLimit
                           ? `Açılış beklenenden ${tl(Math.abs(openingDiff))} ${openingDiff > 0 ? 'fazla' : 'eksik'}; neden zorunlu`
-                          : 'zorunlu'
+                          : openingAskedNow
+                            ? 'zorunlu'
+                            : 'farkta zorunlu'
                       }
                       className="text-left"
                       error={openingReasonError}

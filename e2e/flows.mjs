@@ -1344,7 +1344,13 @@ export async function runFlows(ctx) {
               assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
               const small = await smallTargets(page);
               assert(!small.length, `44 px altı: ${small.join(', ')}`);
-              await page.getByRole('textbox', { name: /^Farkın nedeni/ }).fill('Bozuk para için 79,50 alındı');
+              // Yeniden sayıp başka tutar yazdı: ekran farkı tahmin etmez, sunucuya sorar (ikinci deneme de denetimde)
+              for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Geri sil', exact: true }).click();
+              for (const d of '1300') await page.getByRole('button', { name: d, exact: true }).click();
+              const asked = page.waitForResponse((r) => r.url().endsWith('/api/cash/day/open') && r.status() === 422, { timeout: 8000 });
+              await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
+              await asked;
+              await page.getByRole('textbox', { name: /^Farkın nedeni/ }).fill('Bozuk para için 20,50 eklendi');
               await page.getByRole('button', { name: 'Günü aç', exact: true }).click();
               await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).first().waitFor({ timeout: 8000 });
             },
@@ -1352,8 +1358,9 @@ export async function runFlows(ctx) {
           );
           const audit = await api.call('patron', 'GET', '/admin/audit?limit=50');
           const opened = audit.find((a) => a.action === 'day.open');
-          assert(audit.some((a) => a.action === 'day.open_attempt' && a.severity === 'uyari'), 'nedensiz deneme denetime yazılmadı');
-          assert(opened?.data?.expected === 127950 && opened.data.diff === -7950 && opened.data.reason === 'Bozuk para için 79,50 alındı', `açılış denetimi: ${JSON.stringify(opened?.data)}`);
+          const attempts = audit.filter((a) => a.action === 'day.open_attempt');
+          assert(attempts.length === 2 && attempts.every((a) => a.severity === 'uyari'), `nedensiz denemeler denetimde: ${attempts.length}`);
+          assert(opened?.data?.expected === 127950 && opened.data.diff === 2050 && opened.data.reason === 'Bozuk para için 20,50 eklendi', `açılış denetimi: ${JSON.stringify(opened?.data)}`);
           assert(first.zNo > 0, 'ilk gün kapanmadı');
 
           // Harcama penceresi: lafmaliyet'in son çekilen kategorileri (bağlantısız kasada önbellek elle yazılır) çip olarak
