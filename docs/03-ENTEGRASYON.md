@@ -1318,7 +1318,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | Birleşti | lafpos#171 + lafmaliyet#132, #135 (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te LafPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
 | Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
-| Açık | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); birleşene kadar lafmaliyet alanı okumaz (§4); ladmin bu sürümle yayına LafPOS'un `listPrices`'lı sürümünden önce ya da onunla birlikte çıkmalı, önce gelen günlerde "Eski fiyattan satılanlar" "Bilinmiyor" der |
+| Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
