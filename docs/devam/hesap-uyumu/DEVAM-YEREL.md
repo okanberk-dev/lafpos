@@ -20,35 +20,29 @@ oturumun durumunu ve yeni oturumun nereden başlayacağını yazar. Ayrıntılı
 - Temel kontrol (24.11 sabah, main): lafpos typecheck ✓, test 3461 ✓ (audit-raporlar ve lafmaliyet-gecis yalnız yük
   altında süre aşımı; tek başına geçer); lafmaliyet tsc/lint ✓, test 2906 ✓, test:db 67/67 ✓.
 
-## 2. Durum (12:15 TR)
+## 2. Durum (25.11.2026 ~02:00 TR): İŞ TAMAM
 
-**main'e birleşen (bu oturum):** lafpos#170 (LP-C personel bağlantısı, merge commit, 70562a4).
+**main'e birleşenler (bu yerel oturum, 24–25.11):**
+- LafPOS: #170 personel bağlantısı (LP-C), #171 gün sonu eksiksiz (LP-F), #172 arayüz (sayaç, Sık sorulan sorular, zil,
+  bildirim kartı, şifre kutusu), #173 şube fiyatı kasada (LP-E), #174 Pavo ayrıntılı Z belgesi, #175 son denetim belgeleri.
+- lafmaliyet: #127 Faz 5 (LM-4), #131 arayüz, #132 gün sonu tam (LM-6), #134 personel bağlantısı okuyucu (LM-4b),
+  #135 gün sonu fotoğraf okuma (LM-6b: ucuz model → güçlü model, OCR yedeği, yönetici e-postası), #137 şube fiyatı (LM-5),
+  #140 LafPOS günü personel yalnız fotoğraf + son denetim düzeltmeleri, #138 metin temizliği.
+- Son denetim (wf_eccd3678-c8f): sözleşme §1–§9 ve kabul rakamları iki depoda tamam; uçtan uca veri yolu eksiksiz.
+- Öbür oturum lafmaliyet'te ai/* işleri yapıyor (#128–#130, #133, #136, #139): migration çakışması (0076) LM-5'te 0077
+  olarak çözüldü; asistan bilgi bankası (`npm run asistan:bilgi`) belge değişince yeniden üretilmeli.
 
-**GitHub'a push'lu, PR'sız dallar:**
-- lafpos `claude/gun-sonu-tam` @ ed47223 — LP-F uygulaması (gün sonu eksiksiz: bütün banka gün sonları, yazarkasa
-  belgeleri, kasa kayıtları gövdede). İş akışında bağımsız inceleme sürüyordu, sonra düzeltme + doğrulama.
-- lafmaliyet `claude/personel-sube-kira` @ 1c0f5e9e — LM-4: 8 bulgunun hepsi düzeltildi (ed408a30 büyük 3 başabaş/Excel
-  temeli; 56023d57, 04b38450, e6e745c2, c50c1d1a, 1c0f5e9e küçükler). İkinci inceleme bulguları düzeltiliyordu (fix2).
-- lafmaliyet `claude/animasyonlu-sayac` @ d803447c — arayüz (ladmin): kayan sayaç (3e2b1ca2), Yardım sohbet SSS
-  (1be450d8), zil + bildirim kartı + parola kutusu (d803447c). Sırada bağımsız inceleme + düzeltme.
+**Açık kod işi yok.** Sahibin kod dışı işleri §3'te.
 
-**Yerelde yarım (push'lanmamış, ajan çalışıyordu):**
-- lafmaliyet worktree `wt/lafmaliyet-gunsonu` (dal `claude/gun-sonu-tam`): LM-6 uygulaması commit'lenmemiş değişikliklerle.
-- lafpos worktree `wt/lafpos-arayuz` (dal `claude/arayuz-hareket`, origin/main'den): arayüz Bölüm 1 (motion bağımlılığı,
-  sayaç, YENİ "Sık sorulan sorular") commit'lenmemiş değişikliklerle.
-  Limit gelirse yarım iş WIP commit'i olarak push'lanır (bkz. §4).
+## 3. Sahibin işleri (kod dışı) ve bu oturumdaki kararlar
 
-**İş akışları (bu oturumda resume edilebilir; yeni oturumda yeniden başlatılır):**
-- gün sonu `wf_fd5d6657-67d` (`~/laf/scripts/gunsonu.js`): Audit ✓ → LP-F impl ✓, LM-6 impl … → Review → Fix → Verify
-  (Verify: altın/kabul gövdeleri `cmp`, alan adları, uçtan uca yeniden koşu, personel sayfası yalnız foto ekran görüntüleri
-  `~/laf/scripts/e2e-gunsonu/shots/`).
-- LM-4 `wf_e0e767d0-2be` (`~/laf/scripts/lm4-fix.js`): Fix ✓ → Review ✓ → Fix2 …
-- arayüz `wf_f136bd88-172` (`yerel/scripts/ui-hareket.js`): ladmin Part1 ✓ Part2 ✓(commit) → Review → Fix; LafPOS Part1 … →
-  Part2 → Review → Fix. Ekran görüntüleri `~/laf/scripts/ui-shots/{panel,lafpos}/`.
+Bekleyen sahip işleri: Maaşlar'da Alper ve Cem'e yemek kartı; haftalık "Part-time çalışan" kalemine bitiş 2026-11; kira
+ev sahibi türü (Tuzla şahıs, resmi 100.000 brüt, şube Tuzla; Marina şirket, Aralık'tan); LafPOS'ta her çalışanı Yönetim ›
+Personel'den ladmin kaydına bağlama; part-time günlük ücretin SGK'sız tam maliyet olduğunu onaylama; kasada
+LAFFOGATO_SYNC_SECRET; canlıda bir kez yapay zekâsız fotoğraf okumasını (OCR) deneme; lafmobil API-MOBILE kopyası;
+lafmaliyet Actions'taki "inceleme" anahtarı; Marina'nın Kasım ModPOS listesi.
 
-**Otomatik devam:** sahip "otomatik devam et" dedi; oturum içi tek seferlik tetik 24.11 15:24 (limit 15:20'de yenilenir).
-
-## 3. Sahibin bu oturumdaki kararları ve istekleri
+Kararlar:
 
 - "Ne gerekiyorsa kur, yazılım bilgim yok, önerdiğin en iyi şekilde ilerle."
 - Arayüz parçaları (rare-ui: kayan sayaç, sohbet SSS, zil, bildirim kartı, parola kutusu; kaynaklar `yerel/ui-src/`)

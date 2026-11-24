@@ -94,3 +94,8 @@ verecek şekilde; AI token biterse/yoksa kod ile okusun, en doğru sonucu alacak
   Sıra: #137 (checks bq9q91s63) → lafmaliyet son-kontrol + LafPOS sozlesme-pencere birlikte → LafPOS son-kontrol → #138. tsc artık NODE_OPTIONS=--max-old-space-size=6144 ister.
   Sahibe sorulacak: LafPOS günlerinde personel ladmin'de "Kasadan çıkanlar" ve zayi/ikram ekleyebilsin mi?
 - 22:13 #137: main(+#136) birleşik a21602c0, tsc/lint ✓, test 3142 ✓, test:db 77/77 ✓; push. Personel LafPOS günü kısıtı iş akışı wf_d0517a94-5c4 (son-kontrol dalında).
+- 22:23 #137: 
+- 22:28 LIMİT DOLDU. #137 birleşti. lafmaliyet claude/son-kontrol push'landı (ee19db0b: personel LafPOS gününde Kasa'dan çıkan/ikram-zayi eklemez; inceleme bulgusuz; test 3158 ✓, test:db 77/77). YAPILACAK (01:24 sonrası): son-kontrol'e origin/main birleştir (#137 artık main'de), test, PR (Türkçe), CI, merge; LafPOS claude/hesap-sozlesmesi-pencere (wt/lafpos-sozlesme, §10 SHA) aynı anda PR+merge; LafPOS claude/son-kontrol (wt/lafpos-sonkontrol) PR+merge; #138'e main birleştir, test, merge. Personel Yardım'ında "form ondan dolar" diyen 2 eski cümle (Akşam kasa raporu rutini, kasa-aksam) düzeltilecek. Sonra notlar + sahibe son 1 gün özeti + saatlik cron sil.
+- 01:26 lafmaliyet son-kontrol → PR #140 (main+#139 birleşik, test 3183 ✓, test:db 77/77); LafPOS son-kontrol+sözleşme → PR lafpos#175. İkisi birlikte merge; sonra #138'e main birleştir (personel/content.tsx çakışabilir), test, merge.
+- 01:42 lafmaliyet#140 ve lafpos#175 birleşti.
+- 01:43 #138: main (+#140) birleştirildi; personel/content.tsx çakışması sade sürümle çözüldü, son-kontrol'ün LafPOS cümleleri geri eklendi (Yardım testleri 44/44). Tam kontrol koşuyor (bhbgi44as).
