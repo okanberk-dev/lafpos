@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Bike, PackageCheck, Timer } from 'lucide-react';
+import { Bike, PackageCheck, Timer } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
 import { AUTO_SKIP_PREFIX, COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
+import { InboxBell } from '@/components/ui/InboxBell';
 import { Chip } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, Notice } from '@/components/ui/misc';
@@ -109,7 +110,7 @@ function PendingStrip({ waitingOrders, cancelOrders, settings }: { waitingOrders
   const waiting = waitingOrders.length;
   return (
     <>
-      {/* Şerit (kitin "N waiting in Review" hapı): zamanı daralan iş magenta yıkamada, başında dolu magenta daire;
+      {/* Şerit (kitin "N waiting in Review" hapı): zamanı daralan iş magenta yıkamada, başında dolu magenta dairede zil;
           telefonda üst şeridin altında tam genişlik, tablet ve bilgisayarda sahnenin üstünde hap. Yazı mürekkepte, geri
           sayım sağda */}
       <button
@@ -117,9 +118,8 @@ function PendingStrip({ waitingOrders, cancelOrders, settings }: { waitingOrders
         onClick={() => setOpen(true)}
         className="flex min-h-11 w-full shrink-0 items-center gap-2.5 border-b border-signal-line bg-signal-soft py-1.5 pl-3 pr-4 text-left text-sm text-ink transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95 md:w-auto md:rounded-[1.25rem] md:border md:pl-2"
       >
-        <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-signal)] text-[var(--admin-surface)]">
-          <Bell className="size-3.5 stroke-[2.25]" />
-        </span>
+        {/* Zil: yeni sipariş gelince sallanır, rozetin rakamı döner (bekleyen ve iptal edilen) */}
+        <InboxBell count={pending.length} tone="signal" />
         {/* Telefonda ileti kısalmaz, alt satıra iner (şerit uzar); geniş ekranda tek satır, sığmayan ek bilgi kısalır */}
         <span className="min-w-0 flex-1 font-semibold leading-tight text-signal-ink sm:truncate">
           {waiting === 0 ? 'Platform iptal etti: kasadaki ödemeyi geri alın' : waiting === 1 ? 'Platform siparişi onay bekliyor' : `${waiting} platform siparişi onay bekliyor`}

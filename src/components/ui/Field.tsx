@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
+import { PasswordInput } from './PasswordInput';
 
 /**
  * Alanın dört durumu (pano): dinlenme (alan kenarı 3:1, çok hafif gölge), odak (ev yeşili kenar ve 3 px açık nane
@@ -73,7 +74,7 @@ export function Field({
   const own = !!el && (typeof el.type !== 'string' || ['input', 'select', 'textarea'].includes(el.type));
   // Yardım metni yalnız özniteliği alana kesin ulaştıran denetime bağlanır (yerli alan ya da kitin alanı); sayfanın
   // kendi sarmalayıcısında (ör. satır listesi) etiketin metni olarak kalır, kaybolmaz
-  const describes = !!help && !!el && (typeof el.type === 'string' ? own : el.type === Input || el.type === Textarea || el.type === Select || el.type === NumberInput);
+  const describes = !!help && !!el && (typeof el.type === 'string' ? own : el.type === Input || el.type === PasswordInput || el.type === Textarea || el.type === Select || el.type === NumberInput);
   if (el && own && (error || describes)) {
     control = cloneElement(el, {
       ...(error ? { 'aria-invalid': true } : {}),

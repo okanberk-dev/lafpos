@@ -490,9 +490,17 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   hizalı. Köşe 12 (arama alanı da), çok hafif gölge. Odakta ev yeşili kenar ve 3 px açık nane hâle, hatada kırmızı kenar,
   açık kırmızı hâle ve ileti alanın altında (`Field`, `src/components/ui/Field.tsx`). Aramanın temizle düğmesi küçük gri
   dairede çarpı. **Anahtar** (`Toggle`): açıkken ev yeşili ve beyaz topta küçük tik, kapalıyken gri (3:1).
-  **Adet seçici** (`Stepper`): açık gri hap ray, içinde beyaz yuvarlak eksi ve artı.
-- **Bildirim:** mürekkep zeminli kart (köşe 16); dört tonda da (başarı, bilgi, uyarı, hata) durum rengi yalnız ikonda,
-  ikon yarı saydam dairede, bilgi renksiz; eylem ("Geri al") küçük yumuşak düğme; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
+  **Adet seçici** (`Stepper`): açık gri hap ray, içinde beyaz yuvarlak eksi ve artı. **Şifre kutusu** (`PasswordInput`;
+  yerli `type="password"` yok): alanın görünümünde, gizliyken yalnız noktalar (gerçek karakter sayfaya yazılmaz), göz
+  düğmesiyle karakterler noktaların yerinde belirir ("Şifreyi göster" / "Şifreyi gizle"; PIN'de "PIN'i", Uzaktan'da
+  "Parolayı"); güç çubuğu (Zayıf, Orta, İyi, Güçlü) yalnız yeni şifre alanında.
+- **Gelen işin zili:** platform siparişi ve sitenin uyarıları şeridinin başındaki dolu dairede zil (`InboxBell`): yeni
+  sipariş ya da çağrı gelince bir kez sallanır, sağ üstteki mürekkep rozetin rakamı kayan sayaçla döner (99'dan çoğu
+  "99+"). Hareket kütüphanesi tembel parçada; hareket azaltmada sallanmaz.
+- **Bildirim:** mürekkep zeminli kart (köşe 18 = ikon karosunun 10'u + 8 iç pay, eş merkezli; rare-ui toast'tan); dört
+  tonda da (başarı, bilgi, uyarı, hata) durum rengi yalnız ikon karosunda: açık karo (nane, gül, kehribar), üstünde mürekkep
+  işaret (tik, çarpı, ünlem, i); bilgi renksiz. Kart yerine oturunca karo belirir, işaret çizilerek gelir (yalnız CSS,
+  `.toast-tile`; hareket azaltmada hemen yerinde). Eylem ("Geri al") küçük yumuşak düğme; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
   ekranda (`data-action-bar`: adisyonun Gönder / Ödeme şeridi) şeridin de üstünde. Tablet ve bilgisayarda üst ortada.
   "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır; hata ve uyarı hemen okunur ve daha uzun kalır.
 - **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`

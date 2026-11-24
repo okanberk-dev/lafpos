@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { cn } from './cn';
 import { type Toast, type ToastOptions, type Tone, useToasts } from './toastStore';
@@ -18,22 +18,54 @@ export const toast = {
   dismiss: (id: number) => useToasts.getState().leave(id),
 };
 
-const icons = { ok: CheckCircle2, err: AlertTriangle, info: Info, warn: AlertTriangle };
 // Mürekkep zeminde yeşil odak halkası 3:1'in altında kalır: halka krem (koyu temada yüzen yüzeyde yine yeşil)
 const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]';
 const tones: Record<Tone, string> = {
-  // Dört ton da aynı mürekkep zeminli hap; durum rengi (yeşil, kırmızı, amber) yalnız ikonda, bilgi renksiz. Koyu
+  // Dört ton da aynı mürekkep zeminli kart; durum rengi (yeşil, kırmızı, amber) yalnız ikon karosunda: açık karo, koyu
+  // işaret (mürekkepte de gecede de karo kartın zemininden belirgin, işaret karoda 4.5:1 üstü). Bilgi renksiz. Koyu
   // temada mürekkep zeminde kaybolur: yüzen yüzey
-  ok: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-success)]`,
-  err: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-danger)]`,
-  info: `${NIGHT_FOCUS} bg-night text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink`,
-  warn: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-warn-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-warning)]`,
+  ok: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:bg-success-300 [&_.toast-ic]:text-night dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:bg-[var(--admin-success)] dark:[&_.toast-ic]:text-[var(--admin-on-ink)]`,
+  err: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:bg-danger-300 [&_.toast-ic]:text-night dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:bg-[var(--admin-danger-ink)] dark:[&_.toast-ic]:text-[var(--admin-on-ink)]`,
+  info: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:bg-white/14 [&_.toast-ic]:text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:bg-[var(--admin-panel)] dark:[&_.toast-ic]:text-ink`,
+  warn: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:bg-warn-300 [&_.toast-ic]:text-night dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:bg-[var(--admin-warning)] dark:[&_.toast-ic]:text-[var(--admin-on-ink)]`,
 };
 
-function ToastItem({ t }: { t: Toast }) {
+/**
+ * İkon karosunun işareti (rare-ui toast'tan): tik (oldu), çarpı (hata), ünlem (uyarı), i (bilgi). Çizgiler `pathLength`
+ * 1 ile çizilerek gelir, noktalar büyüyerek (index.css `.toast-tile`); hareket azaltmada hemen yerinde
+ */
+function Glyph({ tone }: { tone: Tone }) {
+  const draw = { className: 'draw', pathLength: 1 } as const;
+  const dot = { className: 'dot', r: 1.6, fill: 'currentColor', stroke: 'none' } as const;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="size-4">
+      {tone === 'ok' && <path {...draw} d="M6 12.5l4 4 8-9" />}
+      {tone === 'err' && (
+        <>
+          <path {...draw} d="M7.5 7.5l9 9" />
+          <path {...draw} d="M16.5 7.5l-9 9" />
+        </>
+      )}
+      {tone === 'warn' && (
+        <>
+          <path {...draw} d="M12 6v7" />
+          <circle {...dot} cx="12" cy="18" />
+        </>
+      )}
+      {tone === 'info' && (
+        <>
+          <circle {...dot} cx="12" cy="6.25" />
+          <path {...draw} d="M12 11v7" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** Bildirim kartı (dışa açık: testler sunucuda çizer) */
+export function ToastItem({ t }: { t: Toast }) {
   const leave = useToasts((s) => s.leave);
   const act = useToasts((s) => s.act);
-  const Icon = icons[t.tone];
   // Sayaç üzerine gelince ve odaktayken durur, ayrılınca kalan süreyle sürer
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remaining = useRef(t.duration);
@@ -76,20 +108,22 @@ function ToastItem({ t }: { t: Toast }) {
       // Kapanırken (150 ms) dokunuşu yine bildirim alır, hiçbir şey olmaz: act() ve leave() kapanmakta olanı yok sayar
       // ("Geri al"a çift dokunuş eylemi iki kez çalıştırmaz). inert ya da pointer-events-none dokunuşu alttaki ürüne,
       // pencerenin arka planına geçirirdi
-      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl py-2.5 pl-2.5 pr-4 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
+      // Kart köşesi = karonun köşesi (10) + iç pay (8): köşeler eş merkezli (rare-ui kartının oranı, Keel'in 18'i)
+      data-tone={t.tone}
+      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-[var(--r-card)] p-2 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
     >
-      {/* İkon yarı saydam dairede (panonun ikon dairesi); durum rengi yalnız ikonda */}
-      <span aria-hidden="true" className="toast-ic grid size-7 shrink-0 place-items-center rounded-full bg-white/10 dark:bg-[var(--admin-panel)]">
-        <Icon className="size-4" />
+      {/* İkon karosu: durum rengi yalnız burada; işaret çizilerek gelir */}
+      <span aria-hidden="true" className="toast-ic toast-tile grid size-8 shrink-0 place-items-center rounded-[10px]">
+        <Glyph tone={t.tone} />
       </span>
-      <span className="flex-1 pt-[5px] leading-snug">{t.text}</span>
+      <span className="flex min-h-8 flex-1 items-center py-1 leading-snug">{t.text}</span>
       {t.action && (
         <button
           type="button"
           tabIndex={t.leaving ? -1 : undefined}
           aria-disabled={t.leaving || undefined}
           onClick={() => act(t.id)}
-          className="-my-0.5 min-h-8 shrink-0 rounded-lg bg-white/12 px-2.5 text-[13px] font-semibold transition-colors hover:bg-white/20 focus-visible:-outline-offset-2 pointer-coarse:-my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 dark:bg-[var(--admin-panel)] dark:hover:bg-[var(--admin-border)]"
+          className="-my-0.5 min-h-9 shrink-0 rounded-[10px] bg-white/12 px-3 text-[13px] font-semibold transition-colors hover:bg-white/20 focus-visible:-outline-offset-2 pointer-coarse:-my-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11 dark:bg-[var(--admin-panel)] dark:hover:bg-[var(--admin-border)]"
         >
           {t.action.label}
         </button>
@@ -99,7 +133,7 @@ function ToastItem({ t }: { t: Toast }) {
         tabIndex={t.leaving ? -1 : undefined}
         onClick={() => leave(t.id)}
         aria-label="Kapat"
-        className="-my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:-outline-offset-2 pointer-coarse:-my-2.5 pointer-coarse:size-11"
+        className="-my-0.5 -mr-0.5 grid size-9 shrink-0 place-items-center rounded-[10px] opacity-70 transition-opacity hover:opacity-100 focus-visible:-outline-offset-2 pointer-coarse:-my-1.5 pointer-coarse:-mr-1.5 pointer-coarse:size-11"
       >
         <X aria-hidden="true" className="size-4" />
       </button>

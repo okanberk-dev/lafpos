@@ -5,6 +5,7 @@ import { fmtDateTime } from '@shared/time';
 import { LafTile } from '@/components/LafMark';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Notice, PageLoading } from '@/components/ui/misc';
 import { errorMessage, post, setToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -191,10 +192,15 @@ export function RemoteLoginPage() {
               </Field>
             )}
             <Field label="Parola" hint={creating ? 'En az 10 karakter' : undefined} error={creating ? null : error} className={member ? 'mt-3' : 'mt-5'}>
-              <Input
+              <PasswordInput
                 id="parola"
-                type="password"
                 autoComplete={creating ? 'new-password' : 'current-password'}
+                // Güç çubuğu yalnız üyelik oluştururken (yeni parola); girişte değil
+                strength={creating}
+                strengthMin={10}
+                strengthLabel="Parola gücü"
+                showLabel="Parolayı göster"
+                hideLabel="Parolayı gizle"
                 autoFocus={ready && !member}
                 value={password}
                 onChange={(e) => {
@@ -205,10 +211,11 @@ export function RemoteLoginPage() {
             </Field>
             {creating && (
               <Field label="Parola (yeniden)" error={error} className="mt-3">
-                <Input
+                <PasswordInput
                   id="parola2"
-                  type="password"
                   autoComplete="new-password"
+                  showLabel="Parolayı göster"
+                  hideLabel="Parolayı gizle"
                   value={password2}
                   onChange={(e) => {
                     setPassword2(e.target.value);

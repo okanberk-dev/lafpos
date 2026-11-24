@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { Badge, Card, DefRow } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
-import { Field, Input } from '@/components/ui/Field';
+import { Field } from '@/components/ui/Field';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
@@ -103,7 +104,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
             Şu anki veritabanının kopyası yedek klasörüne alınır, sonra seçtiğiniz yedek yerine konur ve LafPOS yeniden açılır (yaklaşık yarım dakika)
           </Notice>
           <Field label="Kendi PIN’iniz">
-            <Input type="password" inputMode="numeric" autoComplete="off" maxLength={12} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
+            <PasswordInput inputMode="numeric" autoComplete="off" wide showLabel="PIN’i göster" hideLabel="PIN’i gizle" maxLength={12} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
           </Field>
           {restore.isError && <Notice tone="danger">{errorMessage(restore.error)}</Notice>}
         </div>

@@ -3,7 +3,8 @@ import { FlaskConical, KeyRound, Rocket } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { DayRangeDTO, DenemeStatusDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Toggle } from '@/components/ui/Field';
+import { Field, Toggle } from '@/components/ui/Field';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Modal } from '@/components/ui/Modal';
 import { Notice } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
@@ -273,15 +274,15 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
           {needNew && (
             <>
               <Field label="Yeni PIN’iniz" hint="4–6 hane" error={(tried || newPin.length >= 4) && newError ? newError : null}>
-                <Input value={newPin} onChange={(e) => setNewPin(digits(e.target.value))} inputMode="numeric" type="password" autoComplete="new-password" className="tracking-[0.3em]" />
+                <PasswordInput value={newPin} onChange={(e) => setNewPin(digits(e.target.value))} inputMode="numeric" autoComplete="new-password" wide showLabel="PIN’i göster" hideLabel="PIN’i gizle" />
               </Field>
               <Field label="Yeni PIN (tekrar)" error={tried && repeatError ? (newPin2 ? repeatError : 'Yeni PIN’i tekrar yazın') : null}>
-                <Input value={newPin2} onChange={(e) => setNewPin2(digits(e.target.value))} inputMode="numeric" type="password" autoComplete="new-password" className="tracking-[0.3em]" />
+                <PasswordInput value={newPin2} onChange={(e) => setNewPin2(digits(e.target.value))} inputMode="numeric" autoComplete="new-password" wide showLabel="PIN’i göster" hideLabel="PIN’i gizle" />
               </Field>
             </>
           )}
           <Field label="Onay için şu anki PIN’iniz" error={tried && pinError ? pinError : null}>
-            <Input value={pin} onChange={(e) => setPin(digits(e.target.value))} inputMode="numeric" type="password" autoComplete="off" className="tracking-[0.3em]" />
+            <PasswordInput value={pin} onChange={(e) => setPin(digits(e.target.value))} inputMode="numeric" autoComplete="off" wide showLabel="PIN’i göster" hideLabel="PIN’i gizle" />
           </Field>
         </div>
         <p className="flex items-start gap-2 text-[13px] text-muted">

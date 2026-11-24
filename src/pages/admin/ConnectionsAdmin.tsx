@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardPaste, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { checkConnValue, CLOUD_KEY_GROUPS, CONN_GROUPS, type ConnGroup, connField, parseEnvLines } from '@shared/baglanti';
 import { fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Textarea } from '@/components/ui/Field';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, put } from '@/lib/api';
@@ -146,21 +147,28 @@ function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGrou
           const cloud = st?.source === 'bulut';
           return (
             <Field key={f.key} label={f.label} hint={f.hint} error={errors[f.key] ?? null}>
-              <Input
-                name={f.key}
-                type={secret ? 'password' : f.kind === 'url' ? 'url' : 'text'}
-                value={draft[f.key] ?? ''}
-                onChange={(e) => {
-                  setDraft({ ...draft, [f.key]: e.target.value });
-                  if (errors[f.key]) setErrors({ ...errors, [f.key]: '' });
-                }}
-                disabled={!editable || !!busy}
-                placeholder={cloud ? 'Buluttan · tanımlı' : secret ? (st?.set ? 'Tanımlı · değiştirmek için yazın' : 'Tanımlı değil') : (f.placeholder ?? '')}
-                autoComplete={secret ? 'new-password' : 'off'}
-                autoCapitalize="none"
-                spellCheck={false}
-                className="font-mono text-[13px]"
-              />
+              {(() => {
+                const common = {
+                  name: f.key,
+                  value: draft[f.key] ?? '',
+                  onChange: (e: ChangeEvent<HTMLInputElement>) => {
+                    setDraft({ ...draft, [f.key]: e.target.value });
+                    if (errors[f.key]) setErrors({ ...errors, [f.key]: '' });
+                  },
+                  disabled: !editable || !!busy,
+                  placeholder: cloud ? 'Buluttan · tanımlı' : secret ? (st?.set ? 'Tanımlı · değiştirmek için yazın' : 'Tanımlı değil') : (f.placeholder ?? ''),
+                  autoCapitalize: 'none',
+                  spellCheck: false,
+                  className: 'font-mono text-[13px]',
+                };
+                // Gizli alan (anahtar, parola): şifre kutusu; gizliyken değerin karakterleri sayfaya yazılmaz
+                const noun = /parola/i.test(f.label) ? 'Parolayı' : 'Anahtarı';
+                return secret ? (
+                  <PasswordInput {...common} autoComplete="new-password" showLabel={`${noun} göster`} hideLabel={`${noun} gizle`} />
+                ) : (
+                  <Input {...common} type={f.kind === 'url' ? 'url' : 'text'} autoComplete="off" />
+                );
+              })()}
             </Field>
           );
         })}
