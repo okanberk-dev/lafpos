@@ -494,7 +494,62 @@ export function buildDayPayload(dayId: string) {
     // LafPOS'tan ayrılsın). Kişi gitmez; harcamanın kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut,
     // Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit tahsilatı ve bahşişi de sayar)
     cashMoves: cashMovesOf(day.id),
+    // O gün çalışanların lafmaliyet personel kimlikleri (§4.8): yalnız en az bir kullanıcı bağlıyken; ad gitmez.
+    // Gönderirken güncel bağlantıdan yeniden çözülür (finalBody)
+    ...workedStaffField(day),
   };
+}
+
+type DayRow = typeof schema.businessDays.$inferSelect;
+
+/**
+ * Günün kayıtlarından o gün iş yapan LafPOS kullanıcıları (kimlik, sıralı): günü açan ve kapatan, adisyonu açan, kapatan
+ * ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan ve devralan. Mesai kaydı yok (4
+ * Kas 2026'da kaldırıldı): ortak girişle çalışan ya da hiç giriş yapmayan (bar) görünmez, yalnız günü kapatan yönetici
+ * görünür; düzeltmesi "Bugün çalışanlar" (`business_days.workedUserIds`)
+ */
+export function derivedWorkedUserIds(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy'>): string[] {
+  const ids = new Set<string>();
+  const add = (...vs: (string | null | undefined)[]) => vs.forEach((v) => v && ids.add(v));
+  add(day.openedBy, day.closedBy);
+  for (const o of db.select({ w: schema.orders.waiterId, o: schema.orders.openedBy, c: schema.orders.closedBy }).from(schema.orders).where(eq(schema.orders.dayId, day.id)).all()) add(o.w, o.o, o.c);
+  const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, day.id));
+  for (const i of db.selectDistinct({ u: schema.orderItems.createdBy }).from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all()) add(i.u);
+  for (const p of db.selectDistinct({ u: schema.payments.userId }).from(schema.payments).where(eq(schema.payments.dayId, day.id)).all()) add(p.u);
+  for (const m of db.selectDistinct({ u: schema.cashMovements.userId }).from(schema.cashMovements).where(eq(schema.cashMovements.dayId, day.id)).all()) add(m.u);
+  for (const sc of db.select({ u: schema.shiftCounts.userId, to: schema.shiftCounts.toUserId }).from(schema.shiftCounts).where(eq(schema.shiftCounts.dayId, day.id)).all()) add(sc.u, sc.to);
+  // Yalnız gerçek personel (sistem yazanları: site, platform, uzaktan kimlikleri düşer)
+  const known = new Set(db.select({ id: schema.users.id }).from(schema.users).all().map((u) => u.id));
+  return [...ids].filter((id) => known.has(id)).sort();
+}
+
+/** Günün çalışanları: "Bugün çalışanlar" düzeltmesi varsa o (kayıtlardan çıkanın yerine geçer), yoksa kayıtlardan */
+export function workedUserIdsOf(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedUserIds'>) {
+  const derived = derivedWorkedUserIds(day);
+  return { ids: day.workedUserIds ?? derived, derived, corrected: day.workedUserIds != null };
+}
+
+/** En az bir LafPOS kullanıcısı lafmaliyet personeline bağlı mı (yoksa gövde `workedStaffRefs` taşımaz) */
+export function anyStaffLinked(): boolean {
+  return !!db.select({ id: schema.users.id }).from(schema.users).where(isNotNull(schema.users.staffRef)).get();
+}
+
+/**
+ * Gövdenin `workedStaffRefs`'i: çalışanların lafmaliyet personel kimlikleri (`s:<id>`), tekil, sayı sırasıyla. Hiçbir
+ * kullanıcı bağlı değilse alan yok (bilinmiyor; eski gövde bayt bayt aynı); bağlı var ama o gün çalışan yoksa boş dizi
+ */
+function workedStaffField(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'workedUserIds'>): { workedStaffRefs?: string[] } {
+  const refs = new Map(
+    db
+      .select({ id: schema.users.id, staffRef: schema.users.staffRef })
+      .from(schema.users)
+      .where(isNotNull(schema.users.staffRef))
+      .all()
+      .map((u) => [u.id, u.staffRef!]),
+  );
+  if (!refs.size) return {};
+  const worked = new Set(workedUserIdsOf(day).ids.flatMap((id) => refs.get(id) ?? []));
+  return { workedStaffRefs: [...worked].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })) };
 }
 
 /** Günün kasa hareketleri, yazıldığı sırayla (TL; açıklama en çok 200 karakter) */
@@ -593,12 +648,19 @@ export interface DayAnswer {
    * (`kasa_raporu`), yoksa gövdenin sayımı (`lafpos`); null: gün sayılmadı
    */
   nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  /**
+   * Gövdedeki `workedStaffRefs`'in lafmaliyet'teki karşılığı (§4.8): sayılan, lafmaliyet'te bulunmayan ve başka şubenin
+   * kaydı olan kimlikler. Yalnız alan gönderildiyse gelir
+   */
+  staff?: { counted: string[]; unknown: string[]; otherBranch: string[] };
 }
 
 /** lafmaliyet'in devir nesnesi (gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı) */
 const nextOpeningShape = z.object({ amount: z.number().finite().min(0).max(10_000_000), source: z.enum(['kasa_raporu', 'lafpos']) });
 
 const count = z.number().int().min(0).optional().catch(undefined);
+/** lafmaliyet personel kimlikleri (`s:<staff.id>`); bozuk liste yanıtın `staff`'ını düşürür, günü değil */
+const staffRefs = z.array(z.string().regex(/^s:[1-9]\d{0,8}$/)).max(500);
 const answerShape = z.object({
   lines: count,
   matched: count,
@@ -610,6 +672,10 @@ const answerShape = z.object({
   counted: z.boolean().optional().catch(undefined),
   switchDay: z.string().refine(isCalendarDate).nullable().optional().catch(undefined),
   nextOpening: nextOpeningShape.nullable().optional().catch(undefined),
+  staff: z
+    .object({ counted: staffRefs, unknown: staffRefs, otherBranch: staffRefs })
+    .optional()
+    .catch(undefined),
 });
 
 export function readDayAnswer(json: unknown, date: string, at = Date.now()): DayAnswer {
@@ -707,6 +773,12 @@ function finalBody(row: typeof schema.outbox.$inferSelect): Record<string, unkno
   const { revision: _revision, correction: _built, ...rest } = row.payload as Record<string, unknown>;
   const body: Record<string, unknown> = { version: rest.version, source: rest.source, revision: revisionOf(date), ...(correction ? { correction } : {}), ...rest };
   body.sube = getSettings().branchId;
+  // O gün çalışanlar da gönderim anının bağlantısından (gün kapandıktan sonra kurulan bağlantı ve "Bugün çalışanlar"
+  // düzeltmesi sonraki gönderimde gider); alan sonda kalır
+  if (day) {
+    delete body.workedStaffRefs;
+    Object.assign(body, workedStaffField(day));
+  }
   return body;
 }
 
@@ -891,10 +963,29 @@ export function acceptedBranch(): string | null {
  * Yanıtın kullanıcıya giden hâli: ertesi günün beklenen açılışı (`nextOpening`) yalnız kasa rakamlarını görene (kör
  * kasiyer devri bağlantı durumundan ya da "Gönder"in yanıtından öğrenmesin; docs/03-ENTEGRASYON.md §4.6)
  */
-export function answerFor(a: DayAnswer | null, seesCash: boolean): DayAnswer | null {
-  if (!a || seesCash || !('nextOpening' in a)) return a;
-  const { nextOpening: _hidden, ...rest } = a;
-  return rest;
+export function answerFor(a: DayAnswer | null, seesCash: boolean, seesStaff = false): DayAnswer | null {
+  if (!a) return a;
+  // Personel kimlikleri (`staff`) yalnız personel ya da bağlantı yöneticisine (Entegrasyon, Personel)
+  const { nextOpening, staff, ...rest } = a;
+  return { ...rest, ...(seesCash && 'nextOpening' in a ? { nextOpening } : {}), ...(seesStaff && staff ? { staff } : {}) };
+}
+
+/**
+ * lafmaliyet'in saymadığı personel kimlikleri, LafPOS'taki adıyla (Entegrasyon; ad yalnız bu kasada, lafmaliyet'e
+ * gitmez): bulunmayan (ladmin'de silinmiş kayıt) ve başka şubenin kaydı. Bu kasada bağlı kullanıcı yoksa ad null
+ */
+function staffIssuesOf(a: DayAnswer | null) {
+  if (!a?.staff) return null;
+  const names = new Map(
+    db
+      .select({ name: schema.users.name, staffRef: schema.users.staffRef })
+      .from(schema.users)
+      .where(isNotNull(schema.users.staffRef))
+      .all()
+      .map((u) => [u.staffRef!, u.name]),
+  );
+  const named = (refs: string[]) => refs.map((ref) => ({ ref, name: names.get(ref) ?? null }));
+  return { unknown: named(a.staff.unknown), otherBranch: named(a.staff.otherBranch) };
 }
 
 /** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */
@@ -1067,7 +1158,7 @@ export function costsAt(): number | null {
 export const LADMIN_LAZY_MIN_MS = 5 * 60_000;
 
 /** Eski lafmaliyet (uç yok) 404 döner: adres yanlış değildir, bu uç henüz yok */
-function lazyErrorText(status: number, json: unknown): string {
+export function lazyErrorText(status: number, json: unknown): string {
   return status === 404 ? "HTTP 404: lafmaliyet bu ucu henüz sunmuyor (eski sürüm)" : httpErrorText(status, json);
 }
 
@@ -1197,7 +1288,7 @@ async function pullExpenseCategories() {
  * maliyetin varlığını da görmez (Raporlar ve patron paneliyle aynı kapı). Yanıttaki devir yalnız kasa rakamlarını
  * görene (`withCash`)
  */
-export function lafmaliyetStatus(withCost = false, withCash = false) {
+export function lafmaliyetStatus(withCost = false, withCash = false, withStaff = false) {
   const pending = db
     .select({ id: schema.outbox.id, lastError: schema.outbox.lastError, attempts: schema.outbox.attempts, dedupeKey: schema.outbox.dedupeKey })
     .from(schema.outbox)
@@ -1216,7 +1307,8 @@ export function lafmaliyetStatus(withCost = false, withCash = false) {
     pendingDays: pending.map((p) => p.dedupeKey),
     lastError: pending.find((p) => p.lastError)?.lastError ?? null,
     push: push ? { lastRunAt: push.lastRunAt, lastSuccessAt: push.lastSuccessAt, sent: push.sent, failed: push.failed } : null,
-    answer: answerFor(push?.lastAnswer ?? null, withCash),
+    answer: answerFor(push?.lastAnswer ?? null, withCash, withStaff),
+    ...(withStaff ? { staffIssues: staffIssuesOf(push?.lastAnswer ?? null) } : {}),
     backfill: { ...range, unsent: range.from && range.from <= range.to ? unsentClosedDays(range.from, range.to).length : null },
     ...(withCost ? { costsAt: costs?.at || null, costsError: costs?.lastError ? { message: costs.lastError, at: costs.lastErrorAt ?? null } : null } : {}),
   };

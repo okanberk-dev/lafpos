@@ -31,6 +31,11 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/gider-kategorileri'), body: '' })).toBe('7309e560164d15d4ccb5c17ecaa6355bde88073a238c1cc5976f1858431c10b1');
   });
 
+  it('personel listesi ucu (docs/03-ENTEGRASYON.md §4.8; lafmaliyet tests/lafpos.test.ts aynı vektörü sabitler)', () => {
+    // Kasanın şubesi sorguda (imzaya girer): lafmaliyet başka şubeye 409 wrong_branch döner
+    expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/personel?sube=marina'), body: '' })).toBe('b6933a6b1b6469c8e430564d5f31c9002ca2ed6a2100fd3cc41df4ccc2d77f31');
+  });
+
   it('sitenin çağrı yanıtı vektörü (laffogato docs/PANEL-ORDERS.md "İmza vektörü")', () => {
     // Masa çağrısına "Gördüm": sitenin belgesindeki gövde ve sonuç; kanonik metin yalnız yolu okur, alan adı imzaya girmez
     const body = JSON.stringify({ id: 'tcl-3f9a0c4b7d2e1a68', actor: 'Selin' });

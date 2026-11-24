@@ -457,6 +457,35 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
   return getDay(t, dayId);
 }
 
+/**
+ * Kasa › Geçmiş günler › "Bugün çalışanlar" düzeltmesi (docs/03-ENTEGRASYON.md §4.8): kapanmış günde yönetimin seçtiği
+ * personel, kayıtlardan çıkan listenin yerine geçer (ortak girişle çalışan, hiç giriş yapmayan bar personeli; yalnız günü
+ * kapatan yönetici). null kayıtlara döndürür, boş liste "kimse" demektir. lafmaliyet'e giden gövdenin `workedStaffRefs`'i
+ * bundan çözülür (yemek kartı günleri): denetime uyarı önemiyle yazılır
+ */
+export function setWorkedUsers(t: Tx, actor: { id: string; name: string }, fx: Effects, dayId: string, userIds: string[] | null): DayRow {
+  const day = getDay(t, dayId);
+  if (!day.closedAt) throw conflict('Çalışanlar gün sonundan sonra düzeltilir (Kasa › Geçmiş günler)', 'day_open');
+  const names = new Map(t.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
+  const ids = userIds == null ? null : [...new Set(userIds)];
+  if (ids?.some((id) => !names.has(id))) throw new HttpError(422, 'Listede olmayan personel seçildi; sayfayı yenileyip yeniden seçin', 'validation');
+  t.update(schema.businessDays).set({ workedUserIds: ids }).where(eq(schema.businessDays.id, dayId)).run();
+  fx.audit(t, {
+    userId: actor.id,
+    action: 'day.worked_staff',
+    severity: 'uyari',
+    entity: 'day',
+    entityId: dayId,
+    message:
+      ids == null
+        ? `${actor.name} Z ${day.zNo} (${fmtDateShort(day.date)}) çalışan listesini kayıtlara döndürdü`
+        : `${actor.name} Z ${day.zNo} (${fmtDateShort(day.date)}) çalışan listesini düzeltti: ${ids.length ? ids.map((id) => names.get(id)).join(', ') : 'kimse'}`,
+    data: { userIds: ids, previous: day.workedUserIds ?? null },
+  });
+  fx.emit({ topic: 'cash', kind: 'day.worked', byUserId: actor.id });
+  return getDay(t, dayId);
+}
+
 /** Açık gün yokken bugünün kapanmış günü (kasa ekranındaki "Günü yeniden aç" için) */
 export function closedToday(t: Tx | DB): DayRow | null {
   return (

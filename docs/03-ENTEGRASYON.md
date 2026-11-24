@@ -749,8 +749,9 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 - Tutarlar TL (lafmaliyet'in para biçimi), iki ondalık. `lines` lafmaliyet'in planladığı
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
   eşlemesinden bulunur, bulunamazsa `posMatchKey(posName)` ile `pos_mappings`).
-- Kişisel veri yok: müşteri, personel adı, kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız kişinin
-  türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Serbest metin nedenler en çok 200
+- Kişisel veri: müşteri ve personel adı, LafPOS kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız
+  kişinin türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Çalışan personelden ad
+  gitmez; yalnız ladmin personel kimliği (`workedStaffRefs`, §4.8). Serbest metin nedenler en çok 200
   karakter, önekiyle birlikte (`ikram[].reason`'ın "Ödenmez: " ve "Zayi: " öneki dahil; `iptal[].reason`'ın "İade: "
   öneki dahil).
 - lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
@@ -767,8 +768,11 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim ve giriş). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
   aynı olduğunu sabitler; lafmaliyet aynı dosyayı kendi ayrıştırıcısıyla okur (B07). Gövde bilerek değişirse
   `LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
-  aynı PR serisinde güncellenir. İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`,
-  `/api/panel/pos/devir`, `/api/panel/pos/gider-kategorileri`) `tests/signature.test.ts`'te iki tarafta aynı.
+  aynı PR serisinde güncellenir. İkinci örnek `tests/fixtures/lafmaliyet-gun-personel.golden.json` aynı gündür, üç
+  kullanıcı lafmaliyet personeline bağlıyken: ilkinden tek farkı sondaki `workedStaffRefs` (§4.8); bağlantı yokken
+  gövde ilk dosyayla bayt bayt aynı kalır (aynı test denetler). İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`,
+  `/api/panel/pos/devir`, `/api/panel/pos/gider-kategorileri`, `/api/panel/pos/personel?sube=marina`)
+  `tests/signature.test.ts`'te iki tarafta aynı.
 - **Kabul günü:** `tests/fixtures/kabul-gunu-2026-11-22.json`, Marina 22.11.2026'nın LafPOS günü (hesap sözleşmesinin
   örnek rakamları: liste 7.440,00, indirim 90,00, ikram 130,00, ödenmez 935,00, ciro 6.285,00, kart 5.030,00, nakit
   1.255,00, 26 fiş, KDV %10 matrah 5.713,64; tek harcama ₺800,00 "Diğer fatura dışı", fişsiz; sayılan ₺1.279,50, 23.11
@@ -844,6 +848,15 @@ reddetmez.
   ekran kişi adı yazdırmaz). Tutarlılık: Σ harcama = `z.cashOut`, Σ teslim = `z.handedOver`, Σ giriş ≤ `z.cashIn`
   (`cashIn` nakit cari tahsilatını ve nakit bahşişi de sayar). Satır sınırı yoktur (bir günde birkaç hareket olur).
 
+**Personel alanı (24 Kasım 2026; §4.8).** İsteğe bağlı ve eklemeli; lafmaliyet bozuk geleni atar, günü reddetmez.
+
+- `workedStaffRefs`: `string[]`, o gün çalışanların lafmaliyet personel kimlikleri (`"s:<staff.id>"`, bordro satırı),
+  tekil, sayı sırasıyla (`s:7` `s:12`'den önce). **Yalnız en az bir LafPOS kullanıcısı lafmaliyet personeline bağlıyken
+  gider**; yoksa alan hiç yoktur ("bilinmiyor": eski gövde bayt bayt aynı). `[]`: bağlı kişi var ama o gün bağlı
+  kişilerden kimse çalışmadı. Gövdenin sonundadır. Ad, saat ya da LafPOS kullanıcı kimliği gitmez; yalnız o gün var
+  olup olmadığı. Liste gönderim anında çözülür (`sube` gibi): gün kapandıktan sonra kurulan bağlantı ve "Bugün
+  çalışanlar" düzeltmesi sonraki gönderimde gider.
+
 ### 4.1 Ürün maliyetleri (lafmaliyet → LafPOS)
 
 ```
@@ -886,7 +899,7 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
 
 | Yanıt | Gövde | LafPOS |
 | --- | --- | --- |
-| 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay, nextOpening }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines`, `nextOpening` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
+| 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay, nextOpening, staff }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines`, `nextOpening`, `staff` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
 | 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; LafPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
 | 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
 | 409 | `{ error: "wrong_branch", sube, expected }` | Kalıcı: kasanın şubesi (`sube`) lafmaliyet'in LafPOS şubesi (`expected`, marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği düzeltilip yeniden gönderilir. Şube gönderirken güncel ayardan yazılır |
@@ -902,6 +915,12 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
   §4.6). `source: "kasa_raporu"`: lafmaliyet'te bu günün (tarih, şube) Kasa raporu var, `amount` = sayılan − teslim;
   `source: "lafpos"`: rapor yok, gövdenin `z.countedCash`'i; `null`: gün sayılmadı. Eski lafmaliyet göndermez; bozuksa
   yazılmaz. Kasa rakamlarını görmeyen kullanıcıya (kör kasiyer) bağlantı durumunda ve "Gönder"in yanıtında gitmez.
+- `staff` (24 Kasım 2026): `{ counted: string[], unknown: string[], otherBranch: string[] }`, yalnız gövde
+  `workedStaffRefs` taşıdıysa: lafmaliyet'in o gün saydığı, bulamadığı (ladmin'de silinmiş ya da yeniden açılmış kayıt)
+  ve başka şubenin kaydı olan personel kimlikleri (§4.8). Eski lafmaliyet göndermez; bozuksa yazılmaz (gün yine
+  gönderilmiş sayılır). Yalnız personel ya da bağlantı yöneticisine (`personel.yonet`, `senkron.yonet`) gider: bağlantı
+  durumunda `staffIssues` bulunamayan ve başka şubenin kimliklerini bu kasadaki adıyla verir, Yönetim › Entegrasyon
+  "lafmaliyet N personelin gününü saydı; …" satırını yazar.
 - `counted`: gün geçiş gününden önce değilse `true`. `switchDay`: lafmaliyet'teki geçiş günü (`null`: seçilmedi, kasa
   ModPOS). Eski lafmaliyet bu alanları göndermez: yoksa ya da bozuksa yazılmaz, LafPOS "geçiş günü bilinmiyor" der.
 - Yönetim › Site ve lafmaliyet son gönderilen günü yazar: "lafmaliyet 3 Kasım gününü saymıyor (geçiş günü 10 Kasım): deneme
@@ -1038,6 +1057,58 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 - İmza vektörleri (`/api/panel/pos/devir?date=2026-11-22`, `/api/panel/pos/gider-kategorileri`) `tests/signature.test.ts`'te
   ve lafmaliyet `tests/lafpos.test.ts`'te aynı.
 
+### 4.8 Personel bağlantısı ve o gün çalışanlar (24 Kasım 2026)
+
+Sahibin kararı (23 Kasım 2026): personel kimliği bağlanır; "ladmin'de zaten hesapları var, doğru hesabı bağladığından
+emin ol". lafmaliyet yemek kartını ve çalışılan günleri bordro satırına (`staff`) yazar; LafPOS kullanıcısı o satıra
+**yalnız elle ve onayla** bağlanır. Hiçbir şey kendiliğinden bağlanmaz ya da önceden seçilmez; ad benzerliği yalnız
+ipucudur.
+
+- **Bağlantı:** `users.staffRef` (`"s:<staff.id>"`, boş olabilir, tekil; göç `0025_personel_baglanti`). Yönetim ›
+  Personel › kişi › "lafmaliyet personeli": aday listesi ad benzerliğine göre sıralı (Türkçe katlanmış: büyük-küçük
+  harf, ı/i, ş/s, ç/c, ğ/g, ö/o, ü/u farkı sayılmaz; `shared/name-match.ts`), hiçbiri işaretli gelmez. Seçince onay
+  penceresi iki tarafı yan yana gösterir ("LafPOS: Ayşe · Kasiyer / Barista" ↔ "ladmin (s:12): Ayşe Yılmaz · hesap:
+  ayse@… · Marina"); ad benzemiyorsa ya da aynı ada uyan birden çok etkin kayıt varsa ayrıca "Eminim" işaretlenir.
+  Bağlı kişinin kimliği listede yoksa "ladmin'de bulunamadı" rozeti çıkar (kayıt silinmiş ya da başka şubeye
+  taşınmış: lafmaliyet o kişinin günlerini saymaz; kaldırılıp yeniden bağlanır).
+- **Liste:**
+  ```
+  GET {LAFMALIYET_URL}/api/panel/pos/personel?sube=marina     (imzalı, aynı anahtar; sorgu imzaya girer)
+  { "version": 1, "now": "…", "sube": "marina",
+    "items": [{ "ref": "s:12", "name": "Ayşe Yılmaz", "active": true, "account": "ayse@laffogato.net" }] }
+  ```
+  Şubenin bu ay ya da geçen ay geçerli bordro satırları; `account` satıra bağlı ladmin giriş hesabının görünen adı ya
+  da `null`. Maaş, e-posta (hesap adı dışında) ve ay gitmez; `Cache-Control: no-store`. `sube` kasanın şubesi değilse
+  lafmaliyet 409 `wrong_branch` döner. LafPOS'ta `GET /api/admin/ladmin-personel` (`personel.yonet`) listeyi yalnız
+  istenince çeker ve **yalnız bellekte** en çok 5 dakika tutar (diske, yedeğe girmez): `{ at, sube, items[] (+
+  linkedUserId), missing[] }`; `?yenile=1` önbelleği atlar (en sık 30 saniyede bir). Bağlantı yoksa 503
+  `not_configured`, ladmin'e ulaşılamazsa, eski sürümse (404) ya da yanıt bozuksa (başka şubenin listesi dahil) 503
+  `ladmin_unavailable`; liste uydurulmaz. Adlar yalnız seçicide görünür.
+- **Doğrulama:** `PATCH /api/admin/users/:id { staffRef }` (`patchOf` ile): bağlamak taze liste ister (5 dakikadan
+  eski liste yeniden çekilir; çekilemezse 503, bağlantı kurulmaz), kayıt listede olmalı (değilse 422
+  `staff_ref_unknown`), ladmin'de etkin olmalı (422 `staff_ref_inactive`), başka LafPOS kullanıcısına bağlı olmamalı (409
+  `staff_ref_taken`; veritabanında da tekil dizin). `staffRef: null` bağlantıyı kaldırır, internetsiz de olur.
+  Denetimde `user.staff_link` (`entity: user`, `data: { staffRef, previous }`; yeni bağlantı bilgi, değiştirme ve
+  kaldırma uyarı önemiyle): LafPOS adı ve kimlik yazılır, ladmin'deki ad yazılmaz. `GET /api/admin/users` `staffRef`'i
+  verir.
+- **O gün çalışanlar:** mesai kaydı yok (4 Kasım 2026'da kaldırıldı). Liste günün kayıtlarından çıkar: günü açan ve
+  kapatan, adisyonu açan, kapatan ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan
+  ve devralan (`derivedWorkedUserIds`). Ortak girişle çalışan ya da hiç giriş yapmayan (bar) personel görünmez, yalnız
+  günü kapatan yönetici görünür: **Kasa › Geçmiş günler › "Bugün çalışanlar" › Düzelt** (`rapor.gor`, yalnız kapanmış
+  gün; `PUT /api/cash/days/:id/worked { userIds: string[] | null }`) seçilen kişileri `business_days.workedUserIds`'e
+  yazar, kayıtlardan çıkanın yerine geçer; `null` kayıtlara döndürür, `[]` "kimse". Denetimde `day.worked_staff` uyarı
+  önemiyle (`data: { userIds, previous }`). Bağlı kullanıcı varsa gün yeniden kuyruğa girer (yeni `revision`, düzeltme
+  değil). `GET /api/cash/days/:id` `worked: { ids, derivedIds, corrected, people[] }` verir (`people[].linked` bağlı mı;
+  kimlik vermez).
+- **Gövde:** `workedStaffRefs` (§4 "Personel alanı") bağlı kullanıcıların kimliklerinden gönderim anında çözülür;
+  lafmaliyet'in sayıp saymadığı 200 yanıtının `staff`'ında döner (§4.2).
+- **KVKK:** lafmaliyet'e ad gitmez; yalnız ladmin personel kimliği ve o gün var olup olmadığı (saat yok). Kimlik
+  takma addır (lafmaliyet kişiyi bulur): amaç bordro ve yemek kartı, lafmaliyet'te yalnız yöneticiye görünür. Adlar
+  lafmaliyet → LafPOS yönünde, yalnız seçicide ve bellekte.
+- İmza vektörü (`GET /api/panel/pos/personel?sube=marina`, zaman 1760000000, testlerin anahtarı)
+  `tests/signature.test.ts`'te; lafmaliyet `tests/lafpos.test.ts` aynısını sabitler. Testler `tests/personel-baglanti.test.ts`
+  (sahte lafmaliyet sunucusuyla).
+
 ## 5. Sıklık ve bütçe
 
 `.env`'de `LAFFOGATO_URL` yoksa aşağıdaki site işlerinin hiçbiri çalışmaz (§2).
@@ -1056,6 +1127,7 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 | lafmaliyet devir okuma (§4.6) | yalnız Kasa ekranı gün kapalıyken sorunca (tembel), en sık 5 dakikada bir; gün açıkken, bugünün günü kapandıktan sonra (gece), devrin günü yokken ya da günün gönderilmemiş kaydı varken hiç; bağlantı yoksa hiç | yok |
 | lafmaliyet gider kategorileri (§4.7) | yalnız harcama penceresi açılınca (tembel), gün açıkken, en sık 5 dakikada bir; bağlantı yoksa hiç | yok |
+| lafmaliyet personel listesi (§4.8) | yalnız Yönetim › Personel'de kişinin "lafmaliyet personeli" bölümü açılınca ve bağlarken (tembel), bellekte 5 dakika; "Listeyi yenile" en sık 30 saniyede bir; kendiliğinden hiç; bağlantı yoksa hiç | yok |
 
 ## 6. Durum (23 Kasım 2026)
 
@@ -1076,6 +1148,7 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 | Birleşti | laffogato#298, #299 + lafpos#160, #163 | Panel siparişinde `paidAtTill`, `lines[].index` ve yanıtta `closed` (§2.3 "Sözleşme eklemeleri"); şubenin sürüm sinyali ve menü işareti, `?branch=`; şubede kapalı ürünün Tükendi kilidi (`onMenu`, 409 `site_closed`) |
 | Açık | lafpos + lafmaliyet (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
 | Açık | lafpos + lafmaliyet (kasa zinciri, Faz 3) | Açılışta devir ve fark nedeni (§4.6), 200 yanıtında ve `GET /api/panel/pos/devir`'de `nextOpening`, kasa hareketleri satır satır ve gider kategorileri (§4.7) |
+| Açık | lafpos + lafmaliyet (personel bağlantısı) | Kullanıcının lafmaliyet personeline elle, onaylı bağlanması, `GET /api/panel/pos/personel`, gövdede `workedStaffRefs`, 200 yanıtında `staff`, "Bugün çalışanlar" düzeltmesi (§4.8) |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

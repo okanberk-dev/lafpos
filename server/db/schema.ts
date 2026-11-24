@@ -25,21 +25,31 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at').notNull().default(nowMs),
 });
 
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  role: text('role').$type<Role>().notNull(),
-  /** HMAC(secret, pin): tekil, böylece yalnız PIN'le giriş yapılabilir */
-  pinHash: text('pin_hash').notNull().unique(),
-  color: text('color').notNull().default('#245c43'),
-  active: bool('active').notNull().default(true),
-  permGrant: text('perm_grant', { mode: 'json' }).$type<Permission[]>().notNull().default(sql`'[]'`),
-  permRevoke: text('perm_revoke', { mode: 'json' }).$type<Permission[]>().notNull().default(sql`'[]'`),
-  /** İndirim üst sınırı (yüzde); yetkili onayı olmadan bundan fazlası yapılamaz */
-  maxDiscountPct: integer('max_discount_pct').notNull().default(100),
-  createdAt: integer('created_at').notNull().default(nowMs),
-  lastLoginAt: integer('last_login_at'),
-});
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    role: text('role').$type<Role>().notNull(),
+    /** HMAC(secret, pin): tekil, böylece yalnız PIN'le giriş yapılabilir */
+    pinHash: text('pin_hash').notNull().unique(),
+    color: text('color').notNull().default('#245c43'),
+    active: bool('active').notNull().default(true),
+    permGrant: text('perm_grant', { mode: 'json' }).$type<Permission[]>().notNull().default(sql`'[]'`),
+    permRevoke: text('perm_revoke', { mode: 'json' }).$type<Permission[]>().notNull().default(sql`'[]'`),
+    /** İndirim üst sınırı (yüzde); yetkili onayı olmadan bundan fazlası yapılamaz */
+    maxDiscountPct: integer('max_discount_pct').notNull().default(100),
+    createdAt: integer('created_at').notNull().default(nowMs),
+    lastLoginAt: integer('last_login_at'),
+    /**
+     * lafmaliyet (ladmin) personel kaydına bağlantı: `s:<staff.id>` (bordro satırı). Yalnız yönetimde, iki tarafı gösteren
+     * onayla elle bağlanır (kendiliğinden eşleşme yok); tekil. Gün sonu gövdesinin `workedStaffRefs`'i bundan, ad gitmez.
+     * docs/03-ENTEGRASYON.md §4.8
+     */
+    staffRef: text('staff_ref'),
+  },
+  (t) => [uniqueIndex('users_staff_ref_idx').on(t.staffRef).where(sql`staff_ref IS NOT NULL`)],
+);
 
 export const sessions = sqliteTable(
   'sessions',
@@ -359,6 +369,12 @@ export const businessDays = sqliteTable(
      * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
      */
     trainingDay: integer('training_day', { mode: 'boolean' }),
+    /**
+     * "Bugün çalışanlar" düzeltmesi (Kasa › Geçmiş günler): yönetimin seçtiği personel kimlikleri. Doluysa günün
+     * kayıtlarından çıkarılan listenin yerine geçer (ortak girişle çalışan, hiç giriş yapmayan bar personeli); boşsa
+     * (null) liste kayıtlardan. Gövdenin `workedStaffRefs`'i gönderirken bundan çözülür (docs/03-ENTEGRASYON.md §4.8)
+     */
+    workedUserIds: text('worked_user_ids', { mode: 'json' }).$type<string[] | null>(),
   },
   (t) => [index('business_days_date_idx').on(t.date)],
 );

@@ -1,0 +1,401 @@
+{
+  "version": 1,
+  "source": "lafpos",
+  "revision": 1,
+  "correction": {
+    "kind": "reopen",
+    "reason": "Geç gelen masa"
+  },
+  "bankPos": {
+    "status": "failed",
+    "batchNo": null,
+    "at": "2026-10-26T21:14:00.000Z",
+    "pavoCard": null,
+    "lafposCard": null,
+    "diff": null,
+    "acquirers": [],
+    "message": "Gün sonu alınamadı",
+    "errorCode": "5085"
+  },
+  "sube": "marina",
+  "date": "2026-10-26",
+  "z": {
+    "zNo": 1,
+    "receipts": 10,
+    "zTotal": 3544,
+    "cash": 465,
+    "card": 1789,
+    "mealCard": 290,
+    "online": 0,
+    "other": 1000,
+    "offRevenue": 630,
+    "discounts": 36,
+    "openingCash": 1500,
+    "cashOut": 120,
+    "countedCash": 1685,
+    "handedOver": 200,
+    "cashDiff": -10,
+    "cashIn": 50,
+    "expectedCash": 1695,
+    "cardTips": 25,
+    "cardCollections": 400,
+    "listValue": 4150,
+    "ikramTotal": 160,
+    "odenmezTotal": 410,
+    "zayiTotal": 60,
+    "vat": [
+      {
+        "rate": 10,
+        "base": 2312.74,
+        "vat": 231.26
+      },
+      {
+        "rate": 20,
+        "base": 833.33,
+        "vat": 166.67
+      }
+    ],
+    "openedAt": "2026-10-26T04:58:00.000Z",
+    "closedAt": "2026-10-26T21:12:00.000Z",
+    "okcZNo": "1",
+    "expectedOpening": 1400,
+    "openingDiff": 100,
+    "openingReason": "Sabah bozuk para eklendi"
+  },
+  "lines": [
+    {
+      "posName": "KARAOKE ODASI",
+      "siteMenuId": null,
+      "slot": null,
+      "qty": 1,
+      "revenue": 1000,
+      "gross": 1000,
+      "isService": true,
+      "isAddon": false
+    },
+    {
+      "posName": "LATTE MEDIUM",
+      "siteMenuId": "mnu-0007",
+      "slot": "M",
+      "qty": 3,
+      "revenue": 585,
+      "gross": 585,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SAN SEBASTİAN",
+      "siteMenuId": "mnu-0058",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 290,
+      "gross": 290,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "TİRAMİSU",
+      "siteMenuId": "mnu-0072",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 280,
+      "gross": 280,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "LATTE LARGE",
+      "siteMenuId": "mnu-0007",
+      "slot": "L",
+      "qty": 1,
+      "revenue": 210,
+      "gross": 210,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "AMERİCANO LARGE",
+      "siteMenuId": "mnu-0006",
+      "slot": "L",
+      "qty": 1,
+      "revenue": 185,
+      "gross": 185,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "CAPPUCCİNO MEDIUM",
+      "siteMenuId": "mnu-0010",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 175.5,
+      "gross": 195,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "FİLTRE KAHVE MEDIUM",
+      "siteMenuId": "mnu-0020",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 148.5,
+      "gross": 165,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "ESPRESSO LARGE",
+      "siteMenuId": "mnu-0005",
+      "slot": "L",
+      "qty": 1,
+      "revenue": 140,
+      "gross": 140,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "TÜRK KAHVESİ MEDIUM",
+      "siteMenuId": "mnu-0019",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 130,
+      "gross": 130,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SYRUP",
+      "siteMenuId": "mnu-0080",
+      "slot": "M",
+      "qty": 2,
+      "revenue": 100,
+      "gross": 100,
+      "isService": false,
+      "isAddon": true
+    },
+    {
+      "posName": "YENİLEBİLİR BARDAK",
+      "siteMenuId": null,
+      "slot": null,
+      "qty": 1,
+      "revenue": 80,
+      "gross": 80,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "ÇAY MEDIUM",
+      "siteMenuId": "mnu-0042",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 60,
+      "gross": 60,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "SU",
+      "siteMenuId": "mnu-0036",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 60,
+      "gross": 60,
+      "isService": false,
+      "isAddon": false
+    },
+    {
+      "posName": "ALTERNATIF SÜT",
+      "siteMenuId": "mnu-0082",
+      "slot": "M",
+      "qty": 3,
+      "revenue": 50,
+      "gross": 50,
+      "isService": false,
+      "isAddon": true
+    },
+    {
+      "posName": "EXTRA SHOT",
+      "siteMenuId": "mnu-0081",
+      "slot": "M",
+      "qty": 1,
+      "revenue": 50,
+      "gross": 50,
+      "isService": false,
+      "isAddon": true
+    }
+  ],
+  "ikram": [
+    {
+      "posName": "ESPRESSO MEDIUM",
+      "siteMenuId": "mnu-0005",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 110,
+      "reason": "Müdavim",
+      "kind": "ikram",
+      "personKind": null
+    },
+    {
+      "posName": "EXTRA SHOT",
+      "siteMenuId": "mnu-0081",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 50,
+      "reason": "Müdavim",
+      "kind": "ikram",
+      "personKind": null
+    },
+    {
+      "posName": "TÜRK KAHVESİ MEDIUM",
+      "siteMenuId": "mnu-0019",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 130,
+      "reason": "Ödenmez: Personel yemeği",
+      "kind": "odenmez",
+      "personKind": "personel"
+    },
+    {
+      "posName": "BROWNİE",
+      "siteMenuId": "mnu-0070",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 280,
+      "reason": "Ödenmez: Deneme",
+      "kind": "odenmez",
+      "personKind": "patron"
+    },
+    {
+      "posName": "SU",
+      "siteMenuId": "mnu-0036",
+      "slot": "M",
+      "qty": 1,
+      "menuValue": 60,
+      "reason": "Zayi: Döküldü",
+      "kind": "zayi",
+      "personKind": null
+    }
+  ],
+  "payments": [
+    {
+      "name": "Kredi kartı",
+      "zField": "card",
+      "channel": null,
+      "count": 5,
+      "amount": 1789
+    },
+    {
+      "name": "Açık hesap",
+      "zField": "other",
+      "channel": null,
+      "count": 1,
+      "amount": 1000
+    },
+    {
+      "name": "Nakit",
+      "zField": "cash",
+      "channel": null,
+      "count": 3,
+      "amount": 465
+    },
+    {
+      "name": "Pluxee",
+      "zField": "meal_card",
+      "channel": "pluxee",
+      "count": 1,
+      "amount": 290
+    }
+  ],
+  "offDevice": {
+    "card": 1509,
+    "cash": 465
+  },
+  "refunds": [
+    {
+      "amount": 195,
+      "zField": "card",
+      "name": "Kredi kartı",
+      "channel": null,
+      "reason": "İade: Soğuk geldi"
+    },
+    {
+      "amount": 60,
+      "zField": "cash",
+      "name": "Nakit",
+      "channel": null,
+      "reason": "Kartla ödeyecek"
+    }
+  ],
+  "iptal": [
+    {
+      "posName": "MOCHA MEDIUM",
+      "siteMenuId": "mnu-0009",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 245,
+      "prepared": false,
+      "reason": "Vazgeçti",
+      "refund": false
+    },
+    {
+      "posName": "COOL LİME MEDIUM",
+      "siteMenuId": "mnu-0033",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 200,
+      "prepared": true,
+      "reason": "Yanlış ürün",
+      "refund": false
+    },
+    {
+      "posName": "SODA",
+      "siteMenuId": "mnu-0035",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 80,
+      "prepared": false,
+      "reason": "Fazla yazıldı",
+      "refund": false
+    },
+    {
+      "posName": "LATTE MEDIUM",
+      "siteMenuId": "mnu-0007",
+      "slot": "M",
+      "qty": 1,
+      "listValue": 195,
+      "prepared": false,
+      "reason": "İade: Soğuk geldi",
+      "refund": true
+    }
+  ],
+  "cashMoves": [
+    {
+      "id": "01M5WDWP40S3V9J8M2N4P6Q8T0",
+      "kind": "harcama",
+      "amount": 120,
+      "description": "Buz",
+      "at": "2026-10-26T15:40:00.000Z",
+      "categoryId": 1
+    },
+    {
+      "id": "01M5WFAEZ0X2Y4Z6A8B0C2D4E6",
+      "kind": "teslim",
+      "amount": 200,
+      "description": "Patrona teslim",
+      "at": "2026-10-26T16:05:00.000Z",
+      "categoryId": null
+    },
+    {
+      "id": "01M5WG5XW0F0G2H4J6K8M0N2P4",
+      "kind": "giris",
+      "amount": 50,
+      "description": "Bozuk para",
+      "at": "2026-10-26T16:20:00.000Z",
+      "categoryId": null
+    }
+  ],
+  "workedStaffRefs": [
+    "s:7",
+    "s:12"
+  ]
+}

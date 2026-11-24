@@ -7,7 +7,7 @@ import { Effects } from '../lib/effects';
 import { licenseNow, merkezLast, merkezSyncState } from '../sync/merkez';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
-import { type AppEnv, can, requirePermission, seesCashNumbers } from '../lib/auth';
+import { type AppEnv, type AuthUser, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, HttpError, isoDate, patchOf } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
@@ -28,6 +28,9 @@ import { eq } from 'drizzle-orm';
 
 export const syncRoutes = new Hono<AppEnv>();
 
+/** lafmaliyet'in personel yanıtını (kimlikler, adlar) görür mü: bağlantı ya da personel yöneticisi (§4.8) */
+const seesStaffRefs = (user: AuthUser) => can(user, 'senkron.yonet') || can(user, 'personel.yonet');
+
 /**
  * Bağlantı durumu: Entegrasyon, Genel bakış ve menü sayacı okur (giriş yapan herkes). Maliyetin tarihi ve hatası yalnız
  * `rapor.maliyet`'e: personel maliyetin varlığını da görmez
@@ -43,7 +46,7 @@ syncRoutes.get('/status', (c) => {
     menu: { linked: siteLinked(), auto: s.menuAutoSync, state: stale ? { ...state, lastError: stale } : state },
     online: onlineStatus(),
     karaoke: siteKaraokeStatus(),
-    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user'))),
+    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user')), seesStaffRefs(c.get('user'))),
     okc: okcStatus(),
     internet: internetStatus(),
     cloud: (({ lastSize: _size, ...cloud }) => cloud)(cloudState()),
@@ -254,7 +257,7 @@ syncRoutes.post('/lafmaliyet/gun/:dayId/push', async (c) => {
   if (!day?.closedAt) throw new HttpError(409, 'Yalnız gün sonu alınmış gün gönderilir', 'day_open');
   const r = await pushDayNow(day.id);
   // Yanıttaki devir (ertesi günün beklenen açılışı) kör kasiyere gitmez
-  return c.json({ ...r, answer: answerFor(r.answer, seesCashNumbers(user)) });
+  return c.json({ ...r, answer: answerFor(r.answer, seesCashNumbers(user), seesStaffRefs(user)) });
 });
 
 /**
