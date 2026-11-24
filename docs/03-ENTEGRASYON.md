@@ -1203,7 +1203,9 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   o belgelerden geçen, iade edilmemiş ödemeler, ödemenin Z alanına göre (online ve diğer `other`'da); `total` dördünün
   toplamı. `voided`: gün kapandıktan sonra cihazda iptal edilen (`fis_iptal`) belgeler, yukarıdakilere girmez (aynı
   gün iptal edilen belgenin ödemesi zaten iadedir, sayıya girer, tutara girmez). Böylece `okc.cash = z.cash −
-  offDevice.cash − voided.cash`, `okc.card = z.card − offDevice.card − voided.card`. `vat` tamamlanan belgelerin
+  offDevice.cash − voided.cash`, `okc.card = z.card − offDevice.card − voided.card`. Kapanmış günün fişi cihazda
+  iptal edilince (`okc.void_closed_day`) gün yeniden kuyruğa girer (yeni `revision`, düzeltme değil): `okc.voided`,
+  `okc.card` ve `bankPos.dayCard` lafmaliyet'e elle "Gönder" beklemeden ulaşır. `vat` tamamlanan belgelerin
   sepetlerinden, oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır, cihaz gibi); sepet okunamazsa `null`.
   lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ LafPOS kıyası böylece kendiliğinden tutar;
   gerçek denetim personelin fotoğrafıdır).

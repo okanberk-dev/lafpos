@@ -558,6 +558,13 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme LafPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
         });
       });
+      // Gövdedeki yazarkasa belgeleri (okc.voided, okc.card) ve kart kıyası (bankPos.dayCard) değişti: gün paketi
+      // lafmaliyet'e yeniden gider, saveEod gibi (inceleme, 24 Kas 2026)
+      try {
+        enqueueDay(closedDay.dayId);
+      } catch (e) {
+        console.warn('[okc] kapanmış gün fiş iptali lafmaliyet', e instanceof Error ? e.message : e);
+      }
     } else if (documented) {
       tx((t) => {
         const out = refundExternalPayments(t, by?.userId ?? null, fx, r.paymentIds, 'Yazarkasada fiş iptal edildi');
@@ -703,7 +710,7 @@ function applyUnderpaid(
 }
 
 /** Fişin (iade edilmemiş) ödemelerinden biri açık gün dışındaysa o günün tarihi ve ödemenin adisyonu */
-function closedDayOf(r: ReceiptRow): { date: string; orderId: string } | null {
+function closedDayOf(r: ReceiptRow): { dayId: string; date: string; orderId: string } | null {
   if (!r.paymentIds.length) return null;
   const day = getOpenDay(db);
   const live = db
@@ -715,7 +722,7 @@ function closedDayOf(r: ReceiptRow): { date: string; orderId: string } | null {
   const old = live.find((p) => p.dayId !== day?.id);
   if (!old) return null;
   const date = db.select({ date: schema.businessDays.date }).from(schema.businessDays).where(eq(schema.businessDays.id, old.dayId)).get()?.date ?? '?';
-  return { date, orderId: old.orderId ?? r.orderId };
+  return { dayId: old.dayId, date, orderId: old.orderId ?? r.orderId };
 }
 
 export function setLock(receiptId: string, locked: boolean, by?: string | null) {

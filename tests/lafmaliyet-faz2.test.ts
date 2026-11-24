@@ -300,6 +300,31 @@ describe('gönderim sırası ve düzeltme', () => {
     await retire(dayId);
   });
 
+  it('kapanmış günün fişi cihazda iptal edilince gün yeniden gider: okc.voided ve kart kıyası ladmin\'e ulaşır', async () => {
+    const m = await mods();
+    const dayId = await openDay();
+    const o = await sell([{ name: 'Latte', size: 'M' }]);
+    const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null });
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
+    // Belge gerçek cihazın (Pavo): okc gövdede
+    m.db.update(m.schema.fiscalReceipts).set({ provider: 'pavo' }).where(m.eq(m.schema.fiscalReceipts.id, sent.receipt.id)).run();
+    await close(50000);
+    await m.lm.flushOutbox();
+    const date = businessDate(Date.now());
+    const before = posts.filter((x) => x.date === date).at(-1) as Payload & { okc?: { card: number; voided: { count: number; card: number } } };
+    expect(before.okc).toMatchObject({ card: sent.receipt.amount / 100, voided: { count: 0, card: 0 } });
+    // Ertesi sabah fiş cihazda iptal edildi (okc.void_closed_day): LafPOS'ta ödeme kalır, gün yeniden kuyruğa girer
+    const { applyResult } = await import('../server/okc/service');
+    applyResult(sent.receipt.id, { status: 'voided', docKind: null, zNo: null, receiptNo: null, docId: null, payments: [] }, 'cihaz');
+    expect(m.db.select().from(m.schema.fiscalReceipts).where(m.eq(m.schema.fiscalReceipts.id, sent.receipt.id)).get()!.status).toBe('fis_iptal');
+    await m.lm.flushOutbox();
+    const after = posts.filter((x) => x.date === date).at(-1) as typeof before;
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after).not.toHaveProperty('correction');
+    expect(after.okc).toMatchObject({ card: 0, voided: { count: 1, card: sent.receipt.amount / 100 } });
+    await retire(dayId);
+  });
+
   it('yanıtı beklenen gönderim sırasında gün yeniden kuyruğa girerse: yoldaki kayıt silinmez, sıra tekrar etmez, düzeltme bir kez gider', async () => {
     const m = await mods();
     const start = posts.length;
