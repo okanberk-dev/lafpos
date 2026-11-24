@@ -1238,17 +1238,19 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   other, total, voided: { count, cash, card }, vat: [{ rate, total, vat }] | null }`. Gerçek cihazın (eğitim simülatörü
   değil) belgesi varsa ya da yazarkasa Pavo veya Token'sa gider; cihaz yoksa alan yoktur (hiç `null` değil).
   `provider` günün son gerçek belgesinin cihazı, yoksa ayardaki. `zReport` cihaz mali Z basar mı: Token `true`, Pavo
-  `false` (Marina'nın Pavo'su VUK 507, e-Arşiv; Z kâğıdı yok, `z.okcZNo` hep `null`: personelin fotoğrafı yalnız Pavo gün
-  sonu fişi). `docs` günün adisyonlarının tamamlanan (`tamamlandi`) cihaz belgeleri. `cash`, `card`, `mealCard`, `other`:
-  o belgelerden geçen, iade edilmemiş ödemeler, ödemenin Z alanına göre (online ve diğer `other`'da); `total` dördünün
-  toplamı. `voided`: gün kapandıktan sonra cihazda iptal edilen (`fis_iptal`) belgeler, yukarıdakilere girmez (aynı
-  gün iptal edilen belgenin ödemesi zaten iadedir, sayıya girer, tutara girmez). Böylece `okc.cash = z.cash −
-  offDevice.cash − voided.cash`, `okc.card = z.card − offDevice.card − voided.card`. Kapanmış günün fişi cihazda
-  iptal edilince (`okc.void_closed_day`) gün yeniden kuyruğa girer (yeni `revision`, düzeltme değil): `okc.voided`,
-  `okc.card` ve `bankPos.dayCard` lafmaliyet'e elle "Gönder" beklemeden ulaşır. `vat` tamamlanan belgelerin
-  sepetlerinden, oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır, cihaz gibi); sepet okunamazsa `null`.
-  lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ LafPOS kıyası böylece kendiliğinden tutar;
-  gerçek denetim personelin fotoğrafıdır).
+  `false` (Marina'nın Pavo'su VUK 507, e-Arşiv; satış belgelerinde Z no yok, `z.okcZNo` hep `null`). Pavo istenince
+  gün sonunda ayrıntılı bir Z fişi (batch'ler ve Z rakamları) basar (sahip, 24.11.2026; docs/04-YAZARKASA.md §8):
+  personel o fişin fotoğrafını lafmaliyet'e ekler, lafmaliyet onu gövdeyle karşılaştırır (lafmaliyet `docs/LAFPOS.md`
+  "Gün sonu otomasyonu"). `docs` günün adisyonlarının tamamlanan (`tamamlandi`) cihaz belgeleri. `cash`, `card`,
+  `mealCard`, `other`: o belgelerden geçen, iade edilmemiş ödemeler, ödemenin Z alanına göre (online ve diğer
+  `other`'da); `total` dördünün toplamı. `voided`: gün kapandıktan sonra cihazda iptal edilen (`fis_iptal`) belgeler,
+  yukarıdakilere girmez (aynı gün iptal edilen belgenin ödemesi zaten iadedir, sayıya girer, tutara girmez). Böylece
+  `okc.cash = z.cash − offDevice.cash − voided.cash`, `okc.card = z.card − offDevice.card − voided.card`. Kapanmış
+  günün fişi cihazda iptal edilince (`okc.void_closed_day`) gün yeniden kuyruğa girer (yeni `revision`, düzeltme
+  değil): `okc.voided`, `okc.card` ve `bankPos.dayCard` lafmaliyet'e elle "Gönder" beklemeden ulaşır. `vat` tamamlanan
+  belgelerin sepetlerinden, oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır, cihaz gibi); sepet
+  okunamazsa `null`. lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ LafPOS kıyası böylece
+  kendiliğinden tutar; gerçek denetim personelin fotoğrafıdır).
 - `offDevice.cardTips`: yazarkasadan geçmeyen (hiçbir cihaz fişinde olmayan) iade edilmemiş kart satışlarının bahşişi
   (`cardBasis`'in batch dışı kısmının bahşişi). `offDevice` ile hep gider. lafmaliyet bankaya beklenen kartı
   (`card − offDevice.card + cardTips + cardCollections`) bununla düzeltir: yoksa yazarkasadan geçmeyen kartın bahşişi
@@ -1293,7 +1295,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | lafmaliyet gider kategorileri (§4.7) | yalnız harcama penceresi açılınca (tembel), gün açıkken, en sık 5 dakikada bir; bağlantı yoksa hiç | yok |
 | lafmaliyet personel listesi (§4.8) | yalnız Yönetim › Personel'de kişinin "lafmaliyet personeli" bölümü açılınca ve bağlarken (tembel), bellekte 5 dakika; "Listeyi yenile" en sık 30 saniyede bir; kendiliğinden hiç; bağlantı yoksa hiç | yok |
 
-## 6. Durum (23 Kasım 2026)
+## 6. Durum (24 Kasım 2026)
 
 | Durum | Repo | İş |
 | --- | --- | --- |
@@ -1307,13 +1309,16 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | Birleşti | lafpos#26 | Masa QR'ı LafPOS üretir; siparişte `tableCode` ile eşleme, kodlar giden kutusundan `PUT /api/panel/tables`'a (§2.3) |
 | Birleşti | lafpos#25 (L4) | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
 | Birleşti | laffogato#268 | Panel siparişinde `tableCode`; imzalı `PUT /api/panel/tables` (LafPOS anahtarı; §2.3) |
-| Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
+| Birleşti | lafmaliyet#49 (B09), #51 (B10), #54 (B11) | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
 | Birleşti | laffogato#279 + lafpos | Site şubeli; LafPOS her imzalı istekte şubesini söyler, başka şubenin listesini ve kaydını yazmaz (§2 "Şube") |
 | Birleşti | laffogato#298, #299 + lafpos#160, #163 | Panel siparişinde `paidAtTill`, `lines[].index` ve yanıtta `closed` (§2.3 "Sözleşme eklemeleri"); şubenin sürüm sinyali ve menü işareti, `?branch=`; şubede kapalı ürünün Tükendi kilidi (`onMenu`, 409 `site_closed`) |
-| Açık | lafpos + lafmaliyet (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
-| Açık | lafpos + lafmaliyet (kasa zinciri, Faz 3) | Açılışta devir ve fark nedeni (§4.6), 200 yanıtında ve `GET /api/panel/pos/devir`'de `nextOpening`, kasa hareketleri satır satır ve gider kategorileri (§4.7) |
-| Açık | lafpos + lafmaliyet (personel bağlantısı) | Kullanıcının lafmaliyet personeline elle, onaylı bağlanması, `GET /api/panel/pos/personel`, gövdede `workedStaffRefs`, 200 yanıtında `staff`, "Bugün çalışanlar" düzeltmesi (§4.8) |
-| Açık | lafpos + lafmaliyet (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te LafPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
+| Birleşti | lafpos#167 + lafmaliyet#124, #125 (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
+| Birleşti | lafpos#169 + lafmaliyet#126 (kasa zinciri, Faz 3) | Açılışta devir ve fark nedeni (§4.6), 200 yanıtında ve `GET /api/panel/pos/devir`'de `nextOpening`, kasa hareketleri satır satır ve gider kategorileri (§4.7) |
+| Birleşti | lafpos#170 + lafmaliyet#134 (personel bağlantısı) | Kullanıcının lafmaliyet personeline elle, onaylı bağlanması, `GET /api/panel/pos/personel`, gövdede `workedStaffRefs`, 200 yanıtında `staff`, "Bugün çalışanlar" düzeltmesi (§4.8) |
+| Birleşti | lafpos#171 + lafmaliyet#132, #135 (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te LafPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
+| Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
+| Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
+| Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
