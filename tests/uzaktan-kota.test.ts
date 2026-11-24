@@ -351,3 +351,19 @@ describe('uzaktan istemci', () => {
     }
   });
 });
+
+describe('geçmiş ciro ve patron panelinin etiketi', () => {
+  it('sahip geçmiş ciroyu yükleyince patron paneli 304 almaz: etiket geçmişin yükleme anını taşır', async () => {
+    expect(await push(snap(BASE.at))).toEqual({ ok: true });
+    const token = await login();
+    const first = await view(token, 'reports/patron');
+    expect(first.status).toBe(200);
+    expect((await view(token, 'reports/patron', first.tag)).status).toBe(304);
+    // Merkez'e geçmiş yüklendi (api/_merkez.ts): sürüm karmasında dükkânın işareti
+    upstashCommand(store, ['HSET', 'lafpos:surum', 'gecmis:default', '42']);
+    const after = await view(token, 'reports/patron', first.tag);
+    expect(after.status).toBe(200);
+    expect(after.tag).not.toBe(first.tag);
+    expect((await view(token, 'reports/patron', after.tag)).status).toBe(304);
+  });
+});

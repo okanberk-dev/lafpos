@@ -771,7 +771,7 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   aynı PR serisinde güncellenir. İkinci örnek `tests/fixtures/lafmaliyet-gun-personel.golden.json` aynı gündür, üç
   kullanıcı lafmaliyet personeline bağlıyken: ilkinden tek farkı sondaki `workedStaffRefs` (§4.8); bağlantı yokken
   gövde ilk dosyayla bayt bayt aynı kalır (aynı test denetler). İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`,
-  `/api/panel/pos/devir`, `/api/panel/pos/gider-kategorileri`, `/api/panel/pos/personel?sube=marina`)
+  `/api/panel/pos/modpos-gunler?sube=marina`, `/api/panel/pos/devir`, `/api/panel/pos/gider-kategorileri`, `/api/panel/pos/personel?sube=marina`)
   `tests/signature.test.ts`'te iki tarafta aynı.
 - **Kabul günü:** `tests/fixtures/kabul-gunu-2026-11-22.json`, Marina 22.11.2026'nın LafPOS günü (hesap sözleşmesinin
   örnek rakamları: liste 7.440,00, indirim 90,00, ikram 130,00, ödenmez 935,00, ciro 6.285,00, kart 5.030,00, nakit
@@ -984,6 +984,46 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
   `training_mode`.
 - `exportedAt` yalnız `reopenDay` ile sıfırlanır (gün yeniden açılınca yeniden kapanışta tekrar gider).
 
+### 4.5 ModPOS dönemi (lafmaliyet → LafPOS)
+
+LafPOS'tan önceki kasa programının (ModPOS) günleri lafmaliyet'ten gelir; sahibin Merkez'e elle yüklediği geçmiş ciro
+(docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro") aynı tarihte bunun yerine geçmez, bu onun yerine geçer.
+
+```
+GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imzalı, aynı anahtar; başka şube 409)
+{ "version": 1, "now": "…", "sube": "marina", "switchDay": "2026-11-22" | null,
+  "days": [{ "date": "2026-11-13", "ciro": 390.00, "kart": 195.00, "nakit": 195.00, "yemek": 0, "online": 0,
+             "diger": 0, "indirim": 0 | null, "odenmez": 0, "ikram": 0, "fis": 2, "zNo": "Z-2026-002",
+             "kaynak": "kasa_raporu" | "foy", "kdv": [{ "rate": 10, "base": 354.55, "vat": 35.45 }] }],
+  "urunler": { "from": "2026-11-13", "to": "2026-11-21",
+               "rows": [{ "ad": "LATTE", "boy": "M" | "L" | null, "adet": 31, "tutar": 4650.00 }] } | null }
+```
+
+- **Gün:** şubenin geçiş gününden önceki günleri (en çok 400), kasa raporundan ya da yalnız ModPOS föyünden (`kaynak`;
+  eski lafmaliyet göndermez). `ciro` = ödemelerin toplamı (indirim sonrası, ödenmez ve ikram hariç). Tutarlar TL, LafPOS
+  kuruşa çevirir (`server/sync/modpos.ts` `modposDays`): ciro dışı = ödenmez + ikram (lafmaliyet ikisini `odenmez`'de
+  tek tutar gönderir, `ikram` 0); `indirim: null` (föy günü) "indirim bilinmiyor"dur: brüt = ciro, raporlar indirimi ₺0
+  gibi göstermez, "N ModPOS gününde bilinmiyor" der. KDV satırları geldiği gibi kullanılır (Marina'da %20 yalnız
+  karaoke); ciroyu kuruşu kuruşuna tutmuyorsa ya da yoksa rapor %10 sayar, %20 hiç varsayılmaz. Ödeme türünün adedi
+  bilinmez (0). Geçiş günü ve LafPOS'un bugünü ile sonrası alınmaz.
+- **Ürün listesi:** dönem için tek blok, indirim öncesi; ad, boy (tek boyluda null), adet (ondalıklı olabilir) ve tutar.
+  Toplamı günlerin cirosuyla denetlenmez (lafmaliyet'in listesi kuruşu kuruşuna tutmayabilir); bozuk satır (eksi ya da
+  sayı olmayan tutar) tek başına düşer, 120 karakterden uzun ad kısaltılır; zarfı bozuksa ya da satır kalmazsa alınmaz.
+- **Hoşgörülü okuma:** bilinmeyen alan yok sayılır, isteğe bağlı alan bozuksa yok sayılır, bozuk gün tek başına düşer;
+  yalnız zarf bozuksa ya da gün geldiği hâlde hiçbiri okunamıyorsa çekim hata sayılır (önceki günler kalır).
+- **Saklama:** kasada `sync_state` `lafmaliyet.modpos` (shared/gecmis.ts `HistoryStore` biçimi, kaynak "ModPOS").
+  Bozuk gövdede, HTTP hatasında ya da başka şubenin yanıtında önceki günler kalır; hata Yönetim › Site ve lafmaliyet ›
+  "ModPOS dönemi"nde görünür. Yalnız gün sayısı ve aralık görünür, tutar değil.
+- **Kullanım:** patron panelinin kıyası, kasadaki Raporlar (Ciro, Ürünler, Saatlik; "ModPOS" etiketli; Ürünler'de dönem
+  bloğu yalnız dönemin hepsi seçiliyse) ve LafPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
+  iter (server/sync/cloud-reports.ts), yalnız LafPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi
+  o günlerle gider (satırları yalnız son günde), lafmaliyet'te silinen gün Uzaktan'da boşaltılır (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro"). İş günü,
+  Z zinciri ve lafmaliyet'e giden gün paketi (§4) bu günleri hiç görmez.
+- **Sıklık:** kendiliğinden iş günü başına bir kez (05:00'ten ya da kasa açıldıktan sonraki ilk tur), elle Yönetim ›
+  Site ve lafmaliyet › "ModPOS dönemini çek" (`senkron.yonet`, denetim kaydı `sync.lafmaliyet_modpos`); ikisi de 5
+  dakikadan sık değil (elle 429 `too_soon`). Bağlantı tanımlı değilse hiç istek yok. İmza vektörü (`?sube=marina`)
+  `tests/signature.test.ts`'te iki tarafta aynı.
+
 ### 4.6 Kasa zinciri: açılış ve devir (23 Kasım 2026)
 
 Sahibin kararı (Faz 3): gün açılırken çekmecedeki nakit önceki günün devriyle karşılaştırılır; fark varsa nedeni yazılır.
@@ -1132,6 +1172,7 @@ ipucudur.
 | Sesli uyarılar (§2.5) | yeni istek yok: sipariş (masa çağrıları dahil) ve karaoke çekimlerinin listesinden | yok |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
+| lafmaliyet ModPOS dönemi okuma (§4.5) | iş günü başına bir kez (05:00'ten ya da açılıştan sonraki ilk tur); + elle; ikisi de en sık 5 dk; bağlantı yoksa hiç | yok |
 | lafmaliyet devir okuma (§4.6) | yalnız Kasa ekranı gün kapalıyken sorunca (tembel), en sık 5 dakikada bir; gün açıkken, bugünün günü kapandıktan sonra (gece), devrin günü yokken ya da günün gönderilmemiş kaydı varken hiç; bağlantı yoksa hiç | yok |
 | lafmaliyet gider kategorileri (§4.7) | yalnız harcama penceresi açılınca (tembel), gün açıkken, en sık 5 dakikada bir; bağlantı yoksa hiç | yok |
 | lafmaliyet personel listesi (§4.8) | yalnız Yönetim › Personel'de kişinin "lafmaliyet personeli" bölümü açılınca ve bağlarken (tembel), bellekte 5 dakika; "Listeyi yenile" en sık 30 saniyede bir; kendiliğinden hiç; bağlantı yoksa hiç | yok |

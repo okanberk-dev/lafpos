@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { and, gte, isNull, lt, lte } from 'drizzle-orm';
+import { type HistoryDay, type HistoryProducts, historyReport, type PushedHistoryProducts } from '@shared/gecmis';
 import type { ItemListRow } from '@shared/remote-calc';
 import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
@@ -11,6 +12,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
+import { historyFor, type HistoryIn } from '../services/gecmis';
 import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListReport, platformReport, prepRaw, productReport, refundReport, reportToday, staffReport, summaryReport } from '../services/reports';
 import { cloudEnabled, patronSeesCash } from './cloud';
 
@@ -26,6 +28,12 @@ import { cloudEnabled, patronSeesCash } from './cloud';
  * - İnternet yokken gidemeyen günler kuyrukta (`queue`) bekler; internet dönünce catch-up (server/sync/catch-up.ts)
  *   onları bir kez gönderir. Gönderilen günün içerik özeti saklanır: aynı gün iki kez gitmez.
  * Gitmeyen: maliyet ve kâr (ürün raporu maliyetsiz kurulur), PIN, müşteri adı ve telefonu (raporlarda yok).
+ *
+ * Geçmiş ciro (LafPOS öncesi, ModPOS; server/services/gecmis.ts `historyFor`): LafPOS'ta gerçek iş günü olmayan
+ * tarihlerin geçmiş günü de gün raporu olarak gider (`historyReport`: kaynak adı, ModPOS Z'si, indirim, ciro dışı, KDV).
+ * Böylece Uzaktan, geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da o günleri bu
+ * kasanın dükkânında gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an). Kayıt
+ * değişince (`historyAt`) bütün geçmiş günlerine bir kez bakılır, yalnız içeriği değişen gün gider.
  */
 export const LIVE_MIN_MS = 5 * 60_000;
 export const BACKFILL_MS = 60_000;
@@ -47,6 +55,10 @@ interface State {
   sweptAt: number;
   /** Gönderimin dükkân kimliği; değişince (kasa Merkez'e bağlandı) geçmiş yeni kimlikle baştan gider */
   shop: string;
+  /** Uzaktan'a son bakılan geçmiş ciro kaydının anı (server/services/gecmis.ts); değişince geçmiş günlerine yeniden bakılır */
+  historyAt?: number;
+  /** O bakışta geçmiş günü olarak giden tarihler: kayıttan çıkan tarih (lafmaliyet'te silindi) Uzaktan'da boşaltılır */
+  historyDates?: string[];
 }
 
 const emptyState = (): State => ({ sent: {}, queue: [], cursor: null, sweptAt: 0, shop: remoteShop() });
@@ -123,6 +135,15 @@ export function buildDayReport(date: string, now = Date.now()): RemoteDayReport 
 }
 
 /**
+ * Satışsız gün (`n: 0`): Uzaktan gün listesine ve toplamlara katmaz. Kayıttan çıkan geçmiş ciro gününün (lafmaliyet'te
+ * silindi ya da başka güne taşındı) yerine gider: bulutta o tarihin eski raporu ve ek verisi kalmaz
+ */
+function emptyDayReport(date: string, now: number): RemoteDayReport {
+  const s = { list: 0, gross: 0, comp: 0, disc: 0, svc: 0, rev: 0, odenmez: 0, zayi: 0, voided: 0, receipts: 0, items: 0, tips: 0, guests: 0, tableSales: 0, paidClosed: 0, paidOpen: 0, onlineOrders: 0, onlineAmount: 0 };
+  return { v: 1, date, at: now, n: 0, closed: true, z: [], s, pay: [], types: [], kdv: [], closes: [], prod: [], hours: [], clock: [], staff: [] };
+}
+
+/**
  * İş günü açılmamış tarihte gelen ve kabul edilmeden kapanan platform siparişleri (ret, süresi dolan, bekleyen):
  * kasadaki Paket platformları raporu onları geldiği ana göre sayar, uzakta da görünsün. Satışı olmayan boş gün
  * (`n: 0`), yalnız platform verisiyle; yoksa null
@@ -135,23 +156,8 @@ function platformOnlyDay(date: string, now: number): RemoteDayReport | null {
     .all();
   if (!loose.some((r) => !r.payload.test)) return null;
   const plat = platformReport({ from: date, to: date }, false, now);
-  const zero = { list: 0, gross: 0, comp: 0, disc: 0, svc: 0, rev: 0, odenmez: 0, zayi: 0, voided: 0, receipts: 0, items: 0, tips: 0, guests: 0, tableSales: 0, paidClosed: 0, paidOpen: 0, onlineOrders: 0, onlineAmount: 0 };
   return {
-    v: 1,
-    date,
-    at: now,
-    n: 0,
-    closed: true,
-    z: [],
-    s: zero,
-    pay: [],
-    types: [],
-    kdv: [],
-    closes: [],
-    prod: [],
-    hours: [],
-    clock: [],
-    staff: [],
+    ...emptyDayReport(date, now),
     xpay: [],
     x: {
       prep: { done: [], hand: [] },
@@ -274,6 +280,37 @@ export function resetReportSync() {
   setSyncState(STATE_KEY, emptyState());
 }
 
+/**
+ * Geçmiş cironun dönem ürün listesi Uzaktan'a nasıl gider: blok, dönemindeki geçmiş günü sayısı (`n`; kasanın
+ * Raporlar'ındaki `historyProductsShown` gibi, biri LafPOS günüyle değiştiyse bulut bloğu tam göstermez) ve satırları
+ * taşıyacak gün (`carrier`: bloğun dönemindeki son giden geçmiş günü). Blok yoksa ya da döneminde giden gün yoksa null
+ */
+export interface PushedBlock {
+  block: HistoryProducts;
+  n: number;
+  carrier: string;
+}
+export function historyBlockOf(hist: HistoryIn | null): PushedBlock | null {
+  const u = hist?.urunler;
+  if (!u) return null;
+  const inBlock = (d: HistoryDay) => d.date >= u.from && d.date <= u.to;
+  const n = hist.inRange.filter(inBlock).length;
+  const carrier = hist.days.filter(inBlock).at(-1)?.date;
+  return n && carrier ? { block: u, n, carrier } : null;
+}
+
+/**
+ * Geçmiş gününün Uzaktan'a giden raporu (`historyReport`). Bloğun dönemindeki gün dönemi ve gün sayısını taşır
+ * (`PushedHistoryProducts`); satırlar yalnız `carrier` gününde (liste her gün anahtarında kopyalanmaz)
+ */
+export function historyDayReport(h: HistoryDay, kaynak: string, pushed: PushedBlock | null, now: number): RemoteDayReport {
+  const report = { ...historyReport(h, kaynak), at: now };
+  if (!pushed || h.date < pushed.block.from || h.date > pushed.block.to) return report;
+  const { from, to, rows } = pushed.block;
+  const urunler: PushedHistoryProducts = h.date === pushed.carrier ? { from, to, n: pushed.n, rows } : { from, to, n: pushed.n };
+  return { ...report, urunler };
+}
+
 /** Gönderim; bulutun saklamadığı günler (sınırı aştı) döner */
 async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<{ date: string; why: string }[]> {
   const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days, cat: categoryMap() };
@@ -320,12 +357,24 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     }
     const liveDates = live ? [today, addDays(today, -1), ...st.queue] : [];
     if (live) lastLiveAt = now;
-    const dates = [...new Set([...liveDates, ...batch])].filter((d) => d >= oldest && d <= today);
+    // Geçmiş ciro günleri (ModPOS): LafPOS'ta gerçek iş günü olmayan tarihte gün raporu onlardan kurulur
+    const hist = historyFor({ from: oldest, to: addDays(today, -1) }, today);
+    const histByDate = new Map((hist?.days ?? []).map((d) => [d.date, d]));
+    // Kayıt değişti (yeni çekim, elle yükleme ya da silinme) ya da geçmişin geçtiği tarihler değişti (kurulum modundan
+    // çıkış: deneme gününün yerine geçmiş; tarihte gerçek LafPOS günü açıldı): geçmiş günlerine bir kez bakılır, yalnız
+    // içeriği değişen gün gider
+    const histDirty = (st.historyAt ?? 0) !== (hist?.at ?? 0) || (st.historyDates ?? []).join() !== [...histByDate.keys()].join();
+    const histDue = histDirty ? [...histByDate.keys()] : [];
+    // Önceki bakışta geçmiş günü olarak gidip artık kayıtta olmayan tarih: o tarihin LafPOS raporu, yoksa boş gün gider
+    const histGone = new Set(histDirty ? (st.historyDates ?? []).filter((d) => !histByDate.has(d) && d >= oldest && d < today) : []);
+    const block = historyBlockOf(hist);
+    const dates = [...new Set([...liveDates, ...batch, ...histDue, ...histGone])].filter((d) => d >= oldest && d <= today);
     // Boş tur (canlı bakışın sırası gelmedi, tarama bitti): veritabanına yazılmaz
-    if (!dates.length && st.sweptAt === sweptBefore) return { sent: 0, queued: st.queue.length };
+    if (!dates.length && st.sweptAt === sweptBefore && !histDirty) return { sent: 0, queued: st.queue.length };
     const changed: { date: string; hash: string; report: RemoteDayReport }[] = [];
     for (const date of dates) {
-      const report = buildDayReport(date, now);
+      const h = histByDate.get(date);
+      const report = h ? historyDayReport(h, hist!.kaynak, block, now) : (buildDayReport(date, now) ?? (histGone.has(date) ? emptyDayReport(date, now) : null));
       if (!report) continue;
       const hash = dayHash(report);
       if (st.sent[date] !== hash) changed.push({ date, hash, report });
@@ -353,6 +402,11 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     if (batch.some((d) => failed.has(d))) {
       st.cursor = batch[0]!;
       st.sweptAt = sweptBefore;
+    }
+    // Geçmiş günlerinden biri gidemediyse kayıt yeniden bakılmak üzere bekler (gitmiş olanın özeti aynı, yeniden gitmez)
+    if (histDirty && ![...histDue, ...histGone].some((d) => failed.has(d))) {
+      st.historyAt = hist?.at ?? 0;
+      st.historyDates = [...histByDate.keys()];
     }
     if (live) st.queue = liveDates.filter((d, i) => failed.has(d) && liveDates.indexOf(d) === i);
     else st.queue = [...new Set([...st.queue, ...[...failed].filter((d) => !batch.includes(d))])];

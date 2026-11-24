@@ -12,6 +12,7 @@ import { body, HttpError, isoDate, patchOf } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
 import { answerFor, backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
+import { modposStatus, pullModposNow } from '../sync/modpos';
 import type { SiteAlertsDTO } from '@shared/site-alerts';
 import { requireSiteLinked, siteLinked, siteSigned } from '../sync/laffogato-link';
 import { reportRange } from './reports';
@@ -47,6 +48,8 @@ syncRoutes.get('/status', (c) => {
     online: onlineStatus(),
     karaoke: siteKaraokeStatus(),
     lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user')), seesStaffRefs(c.get('user'))),
+    // ModPOS dönemi (lafmaliyet'ten): kaç gün, hangi aralık, son çekim; tutar yok
+    modpos: modposStatus(),
     okc: okcStatus(),
     internet: internetStatus(),
     cloud: (({ lastSize: _size, ...cloud }) => cloud)(cloudState()),
@@ -269,6 +272,16 @@ syncRoutes.post('/lafmaliyet/backfill', async (c) => {
   requirePermission(user, 'senkron.yonet');
   const input = await body(c, z.object({ from: isoDate, to: isoDate }));
   return c.json(backfillDays(input, { id: user.id, name: user.name }));
+});
+
+/**
+ * Yönetim › Entegrasyon › "ModPOS dönemini çek" (server/sync/modpos.ts): LafPOS öncesi günler lafmaliyet'ten; kendiliğinden
+ * iş günü başına bir kez de çekilir. Son denemeden 5 dakika geçmediyse 429
+ */
+syncRoutes.post('/lafmaliyet/modpos/pull', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'senkron.yonet');
+  return c.json(await pullModposNow({ id: user.id }));
 });
 
 /** "Maliyetleri çek": bağlantı yönetimi ve maliyet yetkisi (yanıt kaç ürünün maliyeti geldiğini söyler) */

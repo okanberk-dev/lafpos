@@ -48,6 +48,19 @@ interface SyncStatus {
     costsAt?: number | null;
     costsError?: { message: string; at: number | null } | null;
   };
+  /** ModPOS dönemi lafmaliyet'ten (server/sync/modpos.ts); eski sunucu göndermez */
+  modpos?: ModposStatus;
+}
+
+interface ModposStatus {
+  configured: boolean;
+  pulledAt: number | null;
+  checkedAt: number | null;
+  days: number;
+  from: string | null;
+  to: string | null;
+  products: number;
+  error: { message: string; at: number | null } | null;
 }
 
 /**
@@ -294,7 +307,7 @@ export default function IntegrationAdmin() {
           )}
         </div>
       </Card>
-      <LafmaliyetCard s={s.lafmaliyet} badge={<StateBadge h={state.lafmaliyet} />} canSync={canSync} canCost={can('rapor.maliyet')} run={run} busy={busy} />
+      <LafmaliyetCard s={s.lafmaliyet} modpos={s.modpos} badge={<StateBadge h={state.lafmaliyet} />} canSync={canSync} canCost={can('rapor.maliyet')} run={run} busy={busy} />
       <SetupNotes>
         <p>
           Kasa bilgisayarının ayarları: site için <code className={CODE}>LAFFOGATO_URL</code> ve <code className={CODE}>LAFFOGATO_SYNC_SECRET</code>, lafmaliyet için <code className={CODE}>LAFMALIYET_URL</code> ve <code className={CODE}>LAFMALIYET_SYNC_SECRET</code> (en az 32 karakter). Adres yoksa o sisteme hiç istek gitmez.
@@ -339,10 +352,53 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
 }
 
 /**
+ * ModPOS dönemi (LafPOS'tan önceki günler) lafmaliyet'ten: kaç gün, hangi aralık, son çekim ve hata; elle çekim. Günler
+ * Raporlar'da ve Uzaktan'da "ModPOS" etiketiyle görünür, iş gününe ve Z'ye girmez. Tutar yazılmaz (yalnız gün sayısı)
+ */
+function ModposSection({ m, canSync, run, busy }: { m: ModposStatus; canSync: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
+  // Son başarılı çekimden sonraki hata (kendiliğinden çekim de yazar)
+  const error = m.error && (!m.pulledAt || (m.error.at ?? 0) > m.pulledAt) ? m.error.message : null;
+  const range = m.from && m.to ? (m.from === m.to ? dayLabel(m.from) : `${dayLabel(m.from)} – ${dayLabel(m.to)}`) : null;
+  return (
+    <div className={SECTION}>
+      <h3 className={SECTION_TITLE}>ModPOS dönemi</h3>
+      <Status ok={!!m.pulledAt && !error} idle={!m.pulledAt && !error} error={!!error}>
+        {!m.pulledAt
+          ? 'ModPOS dönemi henüz çekilmedi; günde bir kez kendiliğinden çekilir'
+          : m.days
+            ? `${m.days} ModPOS günü (${range})${m.products ? `, dönemin ${m.products} satırlık ürün listesi` : ''}; son çekim ${fmtDateTime(m.pulledAt)}`
+            : `lafmaliyet’te bu şubenin ModPOS günü yok; son çekim ${fmtDateTime(m.pulledAt)}`}
+        {error && <span className={ERR}>Son deneme: {error}</span>}
+      </Status>
+      <p className="text-xs text-muted">LafPOS’tan önceki günler indirim, ödenmez, KDV ve Z numarasıyla Raporlar’da ve Uzaktan’da “ModPOS” etiketiyle görünür; iş gününe ve Z’ye girmez</p>
+      <Button size="sm" icon={<CloudDownload className="size-4" />} loading={busy === '/sync/lafmaliyet/modpos/pull'} disabled={!canSync} onClick={() => void run('/sync/lafmaliyet/modpos/pull', 'ModPOS dönemi çekildi')}>
+        ModPOS dönemini çek
+      </Button>
+    </div>
+  );
+}
+
+/**
  * lafmaliyet kartı: bağlantı, kurulum modu kapısı, giden kutusu, son günün lafmaliyet'teki durumu (geçiş günü,
  * eşleşmeyen ürünler), geçmiş günler ve maliyet. Bağlantı yokken sakin dil (sahibin kararı: varsayılan kapalı)
  */
-function LafmaliyetCard({ s, badge, canSync, canCost, run, busy }: { s: SyncStatus['lafmaliyet']; badge: React.ReactNode; canSync: boolean; canCost: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
+function LafmaliyetCard({
+  s,
+  modpos,
+  badge,
+  canSync,
+  canCost,
+  run,
+  busy,
+}: {
+  s: SyncStatus['lafmaliyet'];
+  modpos?: ModposStatus;
+  badge: React.ReactNode;
+  canSync: boolean;
+  canCost: boolean;
+  run: (path: string, ok: string) => Promise<void>;
+  busy: string | null;
+}) {
   const qc = useQueryClient();
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [sending, setSending] = useState(false);
@@ -440,6 +496,8 @@ function LafmaliyetCard({ s, badge, canSync, canCost, run, busy }: { s: SyncStat
                 </Button>
               </div>
             </div>
+
+            {modpos && <ModposSection m={modpos} canSync={canSync} run={run} busy={busy} />}
 
             {/* Maliyet yalnız maliyet yetkisine: personel maliyetin varlığını da görmez (sunucu tarihi de göndermez) */}
             {canCost && (
