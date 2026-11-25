@@ -1435,7 +1435,7 @@ export async function runFlows(ctx) {
           // Garson gün sonu almaz: kart yok
           await withPage(ctx, 'telefon', 'garson', async (page) => {
             await go(ctx, page, '/masalar');
-            await page.locator('[data-table-id]').first().waitFor({ timeout: 8000 });
+            await page.getByRole('tab', { name: /^Salon/ }).waitFor({ timeout: 8000 });
             assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), 'garsonda kapanış kartı çıktı');
           });
           await api.call('patron', 'PUT', '/admin/settings', { closingTime: null });

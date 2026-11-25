@@ -372,6 +372,8 @@ export default function CashPage() {
   const closedDay = day ? null : (current.data?.closedToday ?? null);
   const views = can('rapor.gor');
   const simulator = boot.integrations.okc.provider === 'simulator';
+  // Gün sonu ladmin'e (lafmaliyet) gider mi: bağlantı kurulu ve deneme (kurulum) modu kapalı (eğitim günü gitmez)
+  const ladminPush = boot.integrations.lafmaliyetPush && !boot.integrations.deneme;
 
   // Görünüm (Bugün, Geçmiş günler) ve eğitim cihazı sahnenin numaralı menüsünde: geniş ekranda solda, darda hap şeridi.
   // Eylemler Bugün'ün kendi şeridinde
@@ -805,7 +807,7 @@ export default function CashPage() {
             {moveKind ? MOVE_SAVE[moveKind] : 'Kaydet'}
           </Button>
           {/* Harcama ve teslim lafmaliyet'in "Kasadan çıkanlar"ına satır satır gider (gün sonu paketiyle) */}
-          {boot.integrations.lafmaliyetPush && moveKind !== 'giris' && <p className="text-center text-xs text-muted">Gün sonunda ladmin’e (lafmaliyet) satır satır gider</p>}
+          {ladminPush && moveKind !== 'giris' && <p className="text-center text-xs text-muted">Gün sonunda ladmin’e (lafmaliyet) satır satır gider</p>}
         </div>
       </Modal>
 
@@ -837,7 +839,7 @@ export default function CashPage() {
       >
         <div className="space-y-4 p-5">
           {/* Kayda geçecekler: ayrıntılı gün sonunun neyi kaydettiği bir bakışta (kör kasada ciro ve beklenen nakit yok) */}
-          <DayCloseSummary summary={summary} movements={movements} shiftCounts={shiftCounts} lafmaliyet={boot.integrations.lafmaliyetPush} />
+          <DayCloseSummary summary={summary} movements={movements} shiftCounts={shiftCounts} lafmaliyet={ladminPush} />
           {/* Ekibin her akşam aynı sırayla yaptığı adımlar (sahibin istediği gün sonu rehberi) */}
           <DayCloseGuide />
           {counted && <CashCount summary={summary} value={count} onChange={setCount} />}

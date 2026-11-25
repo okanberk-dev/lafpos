@@ -501,7 +501,7 @@ export default function SettingsAdmin() {
                   checked={s.closingTime != null}
                   onChange={(v) => set({ closingTime: v ? closingDraft.current : null })}
                   label="Kapanış saati hatırlatması"
-                  hint="kapanışa 30 dakika kala kasada sağ altta “Gün sonu al” bildirimi çıkar"
+                  hint="kapanışa 30 dakika kala kasada sağ altta “Gün sonu al” bildirimi çıkar; gün 05:00’te döner, gece yarısından sonraki saat (01:00 gibi) o gecenin kapanışıdır"
                 />
                 <label className="mt-2 flex items-center gap-2 text-sm text-muted">
                   Kapanış

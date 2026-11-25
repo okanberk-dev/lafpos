@@ -46,8 +46,8 @@ export function ClosingReminder() {
         'fixed z-40 rounded-[var(--r-card)] border border-[var(--admin-border-strong)] bg-surface p-3.5 text-ink shadow-[var(--shadow-pop)]',
         // Telefon: alt sekme çubuğunun (ve adisyonun alt eylem şeridinin) üstünde, kenarlardan dok kadar içeride
         'inset-x-2.5 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:[html:has([data-action-bar])_&]:bottom-[calc(4.5rem+var(--action-bar-h,6rem)+env(safe-area-inset-bottom))]',
-        // Tablet ve bilgisayar: sağ alt köşe; adisyonun Gönder / Öde şeridi açıkken onun üstünde
-        'md:inset-x-auto md:right-[var(--shell-gap)] md:bottom-[max(var(--shell-gap),env(safe-area-inset-bottom))] md:w-[min(24rem,calc(100vw-2*var(--shell-gap)))] md:[html:has([data-action-bar])_&]:bottom-[calc(var(--action-bar-h,6rem)+var(--shell-gap))]',
+        // Tablet ve bilgisayar: sağ alt köşe; adisyonda hesap sütununun (Toplam, Gönder / Öde) solunda, ürünlerin köşesinde
+        'md:inset-x-auto md:right-[var(--shell-gap)] md:bottom-[max(var(--shell-gap),env(safe-area-inset-bottom))] md:w-[min(24rem,calc(100vw-2*var(--shell-gap)))] md:[html:has([data-action-bar])_&]:right-[calc(var(--cart-w)+2*var(--shell-gap))]',
       ].join(' ')}
     >
       <div className="flex items-start gap-3">

@@ -685,8 +685,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "zNo": 128, "receipts": 214, "zTotal": 45210.5,
     "cash": 12000, "card": 29110.5, "mealCard": 3100, "online": 0, "other": 1000,
     "offRevenue": 640, "discounts": 380,
-    "openingCash": 1500, "cashOut": 450, "countedCash": 12980, "handedOver": 0, "cashDiff": -70,
-    "cashIn": 0, "expectedCash": 13050, "cardTips": 120, "cardCollections": 400,
+    "openingCash": 1500, "cashOut": 450, "countedCash": 10980, "handedOver": 2000, "cashDiff": -70,
+    "cashIn": 0, "expectedCash": 11050, "cardTips": 120, "cardCollections": 400,
     "listValue": 46170.5, "ikramTotal": 260, "odenmezTotal": 320, "zayiTotal": 60,
     "vat": [{ "rate": 10, "base": 41100.45, "vat": 4110.05 }],
     "openedAt": "2026-10-26T04:58:00.000Z", "closedAt": "2026-10-26T21:12:00.000Z", "okcZNo": "1203",
@@ -900,7 +900,7 @@ reddetmez.
   beklenen (TL, **işaretli**: eksik açılış eksi), beklenen yoksa `null`. `z.openingReason`: farkın nedeni (en çok 200
   karakter); fark en az ₺1,00 ise zorunludur, altında isteğe bağlı, yoksa `null`. lafmaliyet bunları Kasa raporunun
   açılış notuna yazabilir ("Açılış önceki raporun devrinden X az/fazla").
-- `cashMoves[]`: `{ id, kind, amount, description, at, categoryId }`, günün kasa hareketleri yazıldığı sırayla (§4.7).
+- `cashMoves[]`: `{ id, kind, amount, description, at, categoryId, recipient? }`, günün kasa hareketleri yazıldığı sırayla (§4.7).
   **Hep gider**, hareketsiz günde `[]`: lafmaliyet "hareket yok"u "eski LafPOS"tan ayırır. `id` hareketin ULID'i (26
   karakter Crockford base32, değişmez; aynı gün yeniden gönderilince aynı satırdır), `kind` `harcama` | `teslim` |
   `giris`, `amount` TL (0'dan büyük), `description` personelin yazdığı açıklama (en çok 200 karakter, boş olabilir;

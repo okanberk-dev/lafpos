@@ -55,11 +55,14 @@ describe('Kapanış saati: ayar', () => {
     expect((await h.call('kasa', 'PUT', '/admin/settings', { closingTime: '22:00' })).status).toBe(403);
   });
 
-  it('closingAtMs: kapanış iş gününe yerleşir; 05:00 öncesi ertesi güne düşer', () => {
+  it('closingAtMs: kapanış iş gününe yerleşir; 05:00\'e kadarki saat ertesi güne düşer, 05:00 günün sonu', () => {
     expect(new Date(closingAtMs('2026-11-25', '23:30')).toISOString()).toBe('2026-11-25T20:30:00.000Z');
     expect(new Date(closingAtMs('2026-11-25', '01:00')).toISOString()).toBe('2026-11-25T22:00:00.000Z');
-    expect(new Date(closingAtMs('2026-11-25', '05:00')).toISOString()).toBe('2026-11-25T02:00:00.000Z');
     expect(new Date(closingAtMs('2026-11-25', '04:59')).toISOString()).toBe('2026-11-26T01:59:00.000Z');
+    // 05:00'te kapanan dükkân: günün sonu (gün 05:00'te döner), sabahı değil; bütün gün "geçti" demez
+    expect(new Date(closingAtMs('2026-11-25', '05:00')).toISOString()).toBe('2026-11-26T02:00:00.000Z');
+    expect(new Date(closingAtMs('2026-11-25', '05:01')).toISOString()).toBe('2026-11-25T02:01:00.000Z');
+    expect(new Date(closingAtMs('2026-11-25', '00:00')).toISOString()).toBe('2026-11-25T21:00:00.000Z');
   });
 });
 
@@ -84,8 +87,13 @@ describe('Kapanış saati: hatırlatma kuralları', () => {
     expect(closingPhase(day, '9:00', closeAt)).toBeNull();
   });
 
-  it('kapanıştan sonra yeniden açılan gün hemen hatırlatılmaz; öncesinde açılan hatırlatılır', () => {
-    expect(closingPhase({ ...day, reopenedAt: closeAt + 60_000 }, '23:00', closeAt + 120_000)).toBeNull();
+  it('kapanıştan sonra yeniden açılan gün 30 dakika hatırlatılmaz, sonra yine açıksa döner; öncesinde açılan hatırlatılır', () => {
+    const reopenedAt = closeAt + 60_000;
+    expect(closingPhase({ ...day, reopenedAt }, '23:00', closeAt + 120_000)).toBeNull();
+    expect(closingPhase({ ...day, reopenedAt }, '23:00', reopenedAt + CLOSING_REMINDER_MS - 1)).toBeNull();
+    expect(closingPhase({ ...day, reopenedAt }, '23:00', reopenedAt + CLOSING_REMINDER_MS)).toEqual({ kind: 'gecti', closeAt });
+    // Ertesi sabah hâlâ açık (dünden kalan gün): kart görünür
+    expect(closingPhase({ ...day, reopenedAt }, '23:00', closeAt + 8 * 3600_000)).toEqual({ kind: 'gecti', closeAt });
     expect(closingPhase({ ...day, reopenedAt: closeAt - 3 * 3600_000 }, '23:00', closeAt)).toEqual({ kind: 'gecti', closeAt });
   });
 

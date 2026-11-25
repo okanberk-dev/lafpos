@@ -219,7 +219,7 @@ function recipientOf(t: Tx, input: { kind: string; recipientUserId?: string | nu
   if (input.recipientUserId) {
     const u = t.select({ id: schema.users.id, name: schema.users.name, active: schema.users.active }).from(schema.users).where(eq(schema.users.id, input.recipientUserId)).get();
     if (!u?.active) throw new HttpError(422, 'Teslim alan kişi bulunamadı ya da hesabı kapalı', 'invalid_reference');
-    return { userId: u.id, name: cleanRecipientName(u.name) || u.id };
+    return { userId: u.id, name: cleanRecipientName(u.name) || 'Personel' };
   }
   if (!typed) throw bad('Paranın kime teslim edildiğini seçin ya da yazın', 'recipient_required');
   return { userId: null, name: typed };
