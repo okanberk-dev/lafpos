@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
+import { cleanRecipientName } from '@shared/teslim';
 import { compReasonText } from '@shared/comp';
 import { allocate, splitKdv } from '@shared/money';
 import { calcOrder, offDeviceTotals } from '@shared/order-calc';
@@ -600,7 +601,7 @@ function cashMovesOf(dayId: string) {
       description: cap(m.description) ?? '',
       at: new Date(m.createdAt).toISOString(),
       categoryId: m.kind === 'harcama' ? m.categoryId : null,
-      ...(m.kind === 'teslim' && m.recipientName ? { recipient: cap(m.recipientName) } : {}),
+      ...(m.kind === 'teslim' && cleanRecipientName(m.recipientName) ? { recipient: cleanRecipientName(m.recipientName) } : {}),
     }));
 }
 

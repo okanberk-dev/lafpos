@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dayText } from '@shared/gun-sonu-metni';
-import { handoverByRecipient, UNSPECIFIED_RECIPIENT } from '@shared/teslim';
+import { cleanRecipientName, handoverByRecipient, UNSPECIFIED_RECIPIENT } from '@shared/teslim';
 import { CLOSING_REMINDER_MS, closingAtMs } from '@shared/time';
 import type { ZSummary } from '@shared/types';
 import { CLOSING_SNOOZE_AFTER_MS, closingPhase, snoozeUntil } from '../src/lib/closingReminder';
@@ -37,6 +37,18 @@ describe('Kapanış saati: ayar', () => {
   it('varsayılan kapalı (null), herkese bootstrap ile gider', async () => {
     const b = await h.ok<{ settings: { closingTime: string | null } }>('kasa', 'GET', '/bootstrap');
     expect(b.settings.closingTime).toBeNull();
+  });
+
+  it('bootstrap: bugün kapanacak gün eğitim günü mü ("ladmin\'e gider" notu buna göre); canlıdan sonra eğitim cihazında da gider', async () => {
+    const { updateSettings } = await import('../server/lib/settings');
+    const flag = async () => (await h.ok<{ integrations: { trainingDay?: boolean; deneme?: boolean } }>('kasa', 'GET', '/bootstrap')).integrations;
+    expect(await flag()).toMatchObject({ trainingDay: false, deneme: false });
+    updateSettings({ demoMode: true });
+    expect(await flag()).toMatchObject({ trainingDay: true, deneme: true });
+    // Gerçek kullanım başladıktan sonra: deneme işareti açık olsa da gün lafmaliyet'e gider
+    updateSettings({ liveSince: Date.now() });
+    expect(await flag()).toMatchObject({ trainingDay: false, deneme: true });
+    updateSettings({ demoMode: false });
   });
 
   it('müdür SS:DD yazar ve kapatır (null kaydı siler); bozuk saat 422; denetimde "Kapanış saati"', async () => {
@@ -126,6 +138,12 @@ describe('Teslim: kime', () => {
     const unknown = await h.call<{ code: string }>('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 1000, recipientUserId: 'yok-boyle-biri' });
     expect(unknown.status).toBe(422);
     expect(unknown.json.code).toBe('invalid_reference');
+    // Kapatılmış hesap teslim alamaz
+    const gone = await h.ok<{ id: string }>('patron', 'POST', '/admin/users', { name: 'Eski müdür', role: 'mudur', pin: '7319' });
+    await h.ok('patron', 'PATCH', `/admin/users/${gone.id}`, { active: false });
+    const closed = await h.call<{ code: string }>('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 1000, recipientUserId: gone.id });
+    expect(closed.status).toBe(422);
+    expect(closed.json.code).toBe('invalid_reference');
   });
 
   it('hesaba teslimde ad o anki hâliyle saklanır; elle yazılan ad sadeleşir; denetimde "→ alıcı"', async () => {
@@ -162,6 +180,12 @@ describe('Teslim: kime', () => {
     ]);
     expect(x.summary.handedOverBy!.reduce((s, r) => s + r.amount, 0)).toBe(x.summary.handedOver);
     expect(x.movements.filter((m) => m.kind === 'teslim').map((m) => m.recipientName)).toEqual([patron.name, 'Banka şubesi', patron.name, null]);
+    // Ad yazıldığı anki hâliyle kalır: hesap sonra yeniden adlandırılsa da eski teslim eski adla görünür
+    await h.ok('patron', 'PATCH', `/admin/users/${patron.id}`, { name: 'Yeni ad' });
+    const renamed = await h.ok<{ summary: ZSummary; movements: { kind: string; recipientName: string | null }[] }>('mudur', 'GET', '/cash/day');
+    expect(renamed.movements.filter((m) => m.kind === 'teslim').map((m) => m.recipientName)).toEqual([patron.name, 'Banka şubesi', patron.name, null]);
+    expect(renamed.summary.handedOverBy?.[0]).toMatchObject({ userId: patron.id, name: patron.name, amount: 65000 });
+    await h.ok('patron', 'PATCH', `/admin/users/${patron.id}`, { name: patron.name });
 
     // lafmaliyet gövdesi: teslim satırının sonunda `recipient`, alıcısız eski teslimde ve öteki türlerde alan yok
     const p = await h.ok<{ cashMoves: Record<string, unknown>[] }>('patron', 'GET', `/sync/lafmaliyet/gun/${dayId}`);
@@ -172,7 +196,16 @@ describe('Teslim: kime', () => {
     expect(JSON.stringify(p.cashMoves)).not.toMatch(/userId|recipientUserId/);
   });
 
-  it('teslimsiz günün özetinde döküm alanı yok (eski Z ile aynı biçim)', () => {
+  it('alıcı adı en çok 60 karakter (lafmaliyet\'te teslimin "Kime"si, cash_outs.store, en çok 60)', async () => {
+    expect(cleanRecipientName(`  ${'Ç'.repeat(100)}  `)).toHaveLength(60);
+    const dayId = await openDayId();
+    await h.ok('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 1000, recipientName: 'x'.repeat(200) });
+    const { db, schema } = await import('../server/db/client');
+    const last = db.select().from(schema.cashMovements).all().filter((m) => m.dayId === dayId).sort((a, b) => b.createdAt - a.createdAt)[0]!;
+    expect(last.recipientName).toHaveLength(60);
+  });
+
+  it('teslim yoksa döküm boş (özet alanı eklenmez: eski Z ile aynı biçim)', () => {
     expect(handoverByRecipient([{ kind: 'harcama', amount: 100 }, { kind: 'giris', amount: 50 }])).toEqual([]);
   });
 

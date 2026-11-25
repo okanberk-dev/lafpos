@@ -567,13 +567,22 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           <LicenseStrip />
           {notice && <div className="shrink-0">{notice}</div>}
           {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
-          <main className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
+          <main
+            className={cn(
+              'min-h-0 min-w-0 flex-1 overflow-hidden',
+              // Ev çubuğu payını dok yoksa ana alan bırakır; kapanış kartı varken kartın kendisi bırakır (iki kez değil)
+              !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)] max-md:[html:has([data-closing-reminder])_&]:pb-0',
+            )}
+          >
             <TopTabsClaim.Provider value={claimTopTabs}>
               <TopTabsSlot.Provider value={tabsSlot}>
                 <div className="h-full">{children}</div>
               </TopTabsSlot.Provider>
             </TopTabsClaim.Provider>
           </main>
+          {/* Kapanış saatine 30 dk kala "Gün sonu al" (Ayarlar › Gün sonu ve Z; uzaktan görünümde yok): akışta, ana alanın
+              altında; ekranın üstüne binmez, telefonda dokun üstünde, geniş ekranda sağ alt köşede */}
+          {!REMOTE && <ClosingReminder dock={showTabs} />}
         </div>
       </div>
       {/*
@@ -616,8 +625,6 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
 
       {/* Kasada yeni sürüm teklifi: Şimdi güncelle / Gün sonunda güncelle (uzaktan görünümde ve demoda yok) */}
       {!REMOTE && !DEMO && <UpdateOffer />}
-      {/* Kapanış saatine 30 dk kala sağ altta "Gün sonu al" (Ayarlar › Gün sonu ve Z; uzaktan görünümde yok) */}
-      {!REMOTE && <ClosingReminder />}
       <ToolsDrawer
         open={toolsOpen}
         onClose={closeTools}

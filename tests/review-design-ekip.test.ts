@@ -58,7 +58,8 @@ describe('Roller ve yetkiler: telefondaki kaydetme şeridi', () => {
   it('yapışkan şerit eylem şeridi olarak işaretli: telefonda bildirim Vazgeç ve Kaydet’in üstünde durur', () => {
     expect(page).toMatch(/<div data-action-bar="" className="sticky bottom-0 /);
     // Şeridin boyunu yazmayan ekranda 4.5rem + 6rem (10.5rem); adisyon ekranı kendi bloğunu ölçüp --action-bar-h yazar
-    expect(src('lib/toast.tsx')).toMatch(/max-md:\[html:has\(\[data-action-bar\]\)_&\]:bottom-\[calc\(4\.5rem\+var\(--action-bar-h,6rem\)\+env\(safe-area-inset-bottom\)\)\]/);
+    // Kapanış hatırlatması varken onun boyu da eklenir (--closing-card-h; yoksa 0)
+    expect(src('lib/toast.tsx')).toMatch(/max-md:\[html:has\(\[data-action-bar\]\)_&\]:bottom-\[calc\(4\.5rem\+var\(--closing-card-h,0px\)\+var\(--action-bar-h,6rem\)\+env\(safe-area-inset-bottom\)\)\]/);
   });
 
   it('başarı bildirimi taslak düştükten sonra: şerit kalkınca bildirim aşağı zıplamaz; hata şerit dururken hemen', () => {

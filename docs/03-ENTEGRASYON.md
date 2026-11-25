@@ -685,8 +685,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "zNo": 128, "receipts": 214, "zTotal": 45210.5,
     "cash": 12000, "card": 29110.5, "mealCard": 3100, "online": 0, "other": 1000,
     "offRevenue": 640, "discounts": 380,
-    "openingCash": 1500, "cashOut": 450, "countedCash": 10980, "handedOver": 2000, "cashDiff": -70,
-    "cashIn": 0, "expectedCash": 11050, "cardTips": 120, "cardCollections": 400,
+    "openingCash": 1500, "cashOut": 450, "countedCash": 10990, "handedOver": 2000, "cashDiff": -70,
+    "cashIn": 10, "expectedCash": 11060, "cardTips": 120, "cardCollections": 400,
     "listValue": 46170.5, "ikramTotal": 260, "odenmezTotal": 320, "zayiTotal": 60,
     "vat": [{ "rate": 10, "base": 41100.45, "vat": 4110.05 }],
     "openedAt": "2026-10-26T04:58:00.000Z", "closedAt": "2026-10-26T21:12:00.000Z", "okcZNo": "1203",
@@ -909,11 +909,14 @@ reddetmez.
   metindir, ekran kişi adı yazdırmaz). Tutarlılık: Σ harcama = `z.cashOut`, Σ teslim = `z.handedOver`, Σ giriş ≤ `z.cashIn`
   (`cashIn` nakit cari tahsilatını ve nakit bahşişi de sayar). Satır sınırı yoktur (bir günde birkaç hareket olur).
 - `cashMoves[].recipient` (25 Kasım 2026, sahibin kararı: "teslim edilirken kime olduğu yazılsın, ladmin'e de
-  gönderilsin"): teslimde paranın verildiği kişi ya da yer, metin (en çok 80 karakter): kasadaki bir hesaba (patron,
+  gönderilsin"): teslimde paranın verildiği kişi ya da yer, metin (en çok 60 karakter: lafmaliyet'te satırın "Kime" alanı, `cash_outs.store`): kasadaki bir hesaba (patron,
   müdür) teslimde o hesabın teslim anındaki adı, "Banka" ya da personelin elle yazdığı ad. **Yalnız teslimde ve alıcı
   yazılmışsa** satırın sonunda gider; harcama ve girişte, alıcısız eski teslimde (bu sürümden önce yazılmış) alan hiç
   yoktur. LafPOS'ta yeni teslim alıcısız kaydedilmez (400 `recipient_required`). Kullanıcı kimliği gitmez, yalnız ad.
-  Okumayan lafmaliyet alanı atar (`z.object`); lafmaliyet "Kasadan çıkanlar"da teslim satırına "Kime" olarak yazabilir.
+  Okumayan lafmaliyet alanı atar (`z.object`), günü reddetmez. lafmaliyet#144'ten (25 Kasım 2026) alan okunur: LafPOS
+  teslim satırının "Kime"si (`cash_outs.store`, listede "Teslim · Patron") alıcı olur; Kime'si boş sahiplenilen ya da
+  önceden yazılmış satır yeniden gönderimde dolar, panelde yazılmış Kime'ye dokunulmaz; gün görünümünde teslim kişi
+  kişi.
 
 **Personel alanı (24 Kasım 2026; §4.8).** İsteğe bağlı ve eklemeli; lafmaliyet bozuk geleni atar, günü reddetmez.
 
@@ -1154,7 +1157,7 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 - **Teslimin alıcısı (25 Kasım 2026):** teslimde zorunlu (yoksa 400 `recipient_required`), harcama ve girişte verilirse
   400 `recipient_not_allowed`. Kasa › Teslim penceresinde "Kime": patron ve müdür hesapları, "Banka" ya da "Başka" (elle
   ad). Hesap seçilince `recipientUserId` (etkin hesap olmalı, değilse 422 `invalid_reference`) ve adı o anki hâliyle
-  `cash_movements.recipientName`'e yazılır; elle yazılan ad sadeleşir (boşluklar teke iner, en çok 80 karakter).
+  `cash_movements.recipientName`'e yazılır; elle yazılan ad sadeleşir (boşluklar teke iner, en çok 60 karakter).
   Beklenen nakit formülü değişmez (teslim kime olursa olsun çekmeceden çıkar); Z özeti teslimi alıcıya göre döker
   (`ZSummary.handedOverBy`, Σ = `handedOver`; alıcısız eski teslim "Belirtilmemiş"), ekran, Z fişi ve WhatsApp metni
   bunu yazar. Gövdeye yalnız ad gider (`cashMoves[].recipient`, §4 "Faz 3 alanları").
@@ -1336,7 +1339,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
 | Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
-| Bekliyor | lafpos (bu sürüm) + lafmaliyet | Teslimin alıcısı (`cashMoves[].recipient`, §4 "Faz 3 alanları", §4.7): LafPOS gönderiyor; lafmaliyet'in alanı okuyup "Kasadan çıkanlar"da "Kime" olarak göstermesi ve altın gövde kopyasını (`lafmaliyet-gun*.golden.json`, teslim satırında `"recipient": "Patron"`) güncellemesi bekliyor. Okumayan sürüm alanı atar, gün reddedilmez |
+| İncelemede | lafpos#176 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): LafPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, LafPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144). Okumayan sürüm alanı atar, gün reddedilmez |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

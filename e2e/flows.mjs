@@ -1417,6 +1417,9 @@ export async function runFlows(ctx) {
             await card.waitFor({ timeout: 8000 });
             await card.getByText(/^(Kapanışa \d+ dk kaldı|Kapanış saati geçti)$/).waitFor();
             await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-kapanis-hatirlatmasi.png` });
+            // Kart akışta: ana alanın altında, ekranın hiçbir yerine binmez (son masa satırı örtülmez)
+            const [cardBox, mainBox] = [await card.boundingBox(), await page.locator('main').boundingBox()];
+            assert(cardBox && mainBox && cardBox.y >= mainBox.y + mainBox.height - 1, `kart ekranın üstüne biniyor: kart ${JSON.stringify(cardBox)}, ana alan ${JSON.stringify(mainBox)}`);
             await card.getByRole('button', { name: 'Gün sonu al' }).click();
             const close = page.getByRole('dialog', { name: /^Ayrıntılı gün sonu · Z/ });
             await close.waitFor({ timeout: 8000 });
@@ -1431,6 +1434,34 @@ export async function runFlows(ctx) {
             await page.reload();
             await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).first().waitFor({ timeout: 8000 });
             assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), '"Sonra"dan sonra kart yenilemede geri geldi');
+          });
+          // Bilgisayarda adisyon: kart sağ altta, hesap sütununun Toplam'ı ve Gönder / Öde şeridi açık kalır
+          await withPage(ctx, 'bilgisayar', 'kasa', async (page) => {
+            await go(ctx, page, '/satis');
+            await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
+            const card = page.getByRole('status', { name: 'Kapanış hatırlatması' });
+            await card.waitFor({ timeout: 8000 });
+            const bar = page.locator('[data-action-bar]').first();
+            await bar.waitFor({ timeout: 8000 });
+            const [cardBox, barBox, mainBox] = [await card.boundingBox(), await bar.boundingBox(), await page.locator('main').boundingBox()];
+            const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+            assert(cardBox && barBox && !overlaps(cardBox, barBox), `kart adisyonun eylem şeridini örtüyor: ${JSON.stringify({ cardBox, barBox })}`);
+            assert(cardBox && mainBox && cardBox.y >= mainBox.y + mainBox.height - 1, `kart ekranın üstüne biniyor (bilgisayar): ${JSON.stringify({ cardBox, mainBox })}`);
+            assert(cardBox.x + cardBox.width >= (page.viewportSize()?.width ?? 0) - 40, `kart sağ altta değil: ${JSON.stringify(cardBox)}`);
+            await page.screenshot({ path: `${ROOT}/e2e/out/bilgisayar-kasa-kapanis-adisyon.png` });
+          });
+          // Yatay telefon (alçak ekran): kart tek satır; adisyonda hiç çıkmaz (sepet ve Gönder / Öde sığsın)
+          await withPage(ctx, 'yatay-telefon', 'kasa', async (page) => {
+            await go(ctx, page, '/masalar');
+            const card = page.getByRole('status', { name: 'Kapanış hatırlatması' });
+            await card.waitFor({ timeout: 8000 });
+            const box = await card.boundingBox();
+            assert(box && box.height <= 64, `yatay telefonda kart tek satır değil: ${JSON.stringify(box)}`);
+            await page.screenshot({ path: `${ROOT}/e2e/out/yatay-telefon-kasa-kapanis-hatirlatmasi.png` });
+            await go(ctx, page, '/satis');
+            await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
+            await page.locator('[data-action-bar]').first().waitFor({ timeout: 8000 });
+            assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), 'yatay telefonda adisyonda kapanış kartı çıktı');
           });
           // Garson gün sonu almaz: kart yok
           await withPage(ctx, 'telefon', 'garson', async (page) => {

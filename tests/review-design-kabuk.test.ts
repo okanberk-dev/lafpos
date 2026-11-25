@@ -144,7 +144,8 @@ describe('uygulama kabuğu', () => {
   it('alt sekme çubuğu çizilmeyen telefonda (tek ekranlı rol) ev çubuğu payını ana alan bırakır (kaynak)', () => {
     const shell = src('components/AppShell.tsx');
     expect(shell).toMatch(/const showTabs = tabs\.length > 1 \|\| meTab;/);
-    expect(shell).toMatch(/<main className=\{cn\('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-\[env\(safe-area-inset-bottom\)\]'\)\}>/);
+    // Kapanış hatırlatması varken payı kart bırakır (iki kez değil)
+    expect(shell).toMatch(/!showTabs && 'max-md:pb-\[env\(safe-area-inset-bottom\)\] max-md:\[html:has\(\[data-closing-reminder\]\)_&\]:pb-0'/);
     // Çubuk çizilince payı çubuğun kendisi alır (ikisi birden değil)
     // Alt menü yüzen dok (22 Kas 2026): ev çubuğu payı dokun alt boşluğunda
     expect(shell).toMatch(/\{showTabs && \(\s*<nav\s+aria-label="Ekranlar"\s+className="[^"]*mb-\[max\(0\.5rem,env\(safe-area-inset-bottom\)\)\]/);

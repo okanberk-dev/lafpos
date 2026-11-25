@@ -3,7 +3,7 @@ import type { BootstrapDTO, MeDTO, OptionGroupDTO, ProductDTO } from '@shared/ty
 import { type DB, schema, type Tx } from '../db/client';
 import { type AuthUser, can } from '../lib/auth';
 import { env } from '../env';
-import { getPublicSettings, getSettings, getSyncState, okcAutoOn, trainingMode } from '../lib/settings';
+import { getPublicSettings, getSettings, getSyncState, okcAutoOn, trainingDayNow, trainingMode } from '../lib/settings';
 import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici';
 import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
@@ -152,6 +152,8 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       localStamps: localStampsOn(),
       siteKaraoke: siteKaraokeOn(),
       deneme: trainingMode(),
+      // Şimdi kapanan gün eğitim günü mü (lafmaliyet'e gitmez): canlı kullanım başladıysa eğitim cihazında da gider
+      trainingDay: trainingDayNow(),
       goLivePending: !trainingMode() && getSettings().liveSince == null,
     },
     serverTime: Date.now(),

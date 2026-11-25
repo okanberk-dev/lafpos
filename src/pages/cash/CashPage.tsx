@@ -142,7 +142,8 @@ export default function CashPage() {
   });
   const [closing, setClosing] = useState(false);
   useEffect(() => {
-    if (!askClose || !current.data) return;
+    // Yalnız bu açılışta çekilmiş veriyle (önbellekteki eski gün kapanmış ya da başka kişinin olabilir)
+    if (!askClose || !current.data || !current.isFetchedAfterMount) return;
     const d = current.data;
     if (d.day && can('kasa.gun') && (d.summary || d.blind)) {
       setTab('bugun');
@@ -152,7 +153,7 @@ export default function CashPage() {
     const next = new URLSearchParams(params);
     next.delete('gunsonu');
     setParams(next, { replace: true });
-  }, [askClose, current.data, can, params, setParams]);
+  }, [askClose, current.data, current.isFetchedAfterMount, can, params, setParams]);
   const [handover, setHandover] = useState(false);
   const [count, setCount] = useState<CountResult>(emptyCount());
   const [counted, setCounted] = useState(true);
@@ -372,8 +373,9 @@ export default function CashPage() {
   const closedDay = day ? null : (current.data?.closedToday ?? null);
   const views = can('rapor.gor');
   const simulator = boot.integrations.okc.provider === 'simulator';
-  // Gün sonu ladmin'e (lafmaliyet) gider mi: bağlantı kurulu ve deneme (kurulum) modu kapalı (eğitim günü gitmez)
-  const ladminPush = boot.integrations.lafmaliyetPush && !boot.integrations.deneme;
+  // Gün sonu ladmin'e (lafmaliyet) gider mi: bağlantı kurulu ve bugün kapanacak gün eğitim günü değil (kurulum modunda
+  // gerçek kullanım başlamadan kapanan gün gitmez; başladıktan sonra eğitim cihazında da gider)
+  const ladminPush = boot.integrations.lafmaliyetPush && !(boot.integrations.trainingDay ?? boot.integrations.deneme);
 
   // Görünüm (Bugün, Geçmiş günler) ve eğitim cihazı sahnenin numaralı menüsünde: geniş ekranda solda, darda hap şeridi.
   // Eylemler Bugün'ün kendi şeridinde
