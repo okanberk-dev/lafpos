@@ -320,6 +320,11 @@ export interface BootstrapDTO {
      */
     deneme?: boolean;
     /**
+     * Şimdi kapanacak gün eğitim günü mü (`trainingDayNow`: deneme açık ve gerçek kullanım henüz başlamadı): öyleyse
+     * gün sonu lafmaliyet'e gitmez. Kasa ekranı "ladmin'e gider" notunu buna göre yazar (eski sunucu göndermez)
+     */
+    trainingDay?: boolean;
+    /**
      * Deneme kapanmış ama "gerçek kullanıma başla" hiç tamamlanmamış (`liveSince` yok): eski sürümde patron PIN'i
      * değişince deneme sessizce kapanıyordu. Patron "Geçişi tamamla" ile bitirir (kayıt silinmez)
      */

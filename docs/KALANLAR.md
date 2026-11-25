@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 22 Kasım 2026.
+Son güncelleme: 25 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -40,6 +40,10 @@ Son güncelleme: 22 Kasım 2026.
   güncellemesinde seçim** (Şimdi güncelle / Gün sonunda güncelle, kaldığı yerden devam; `docs/05-KASA-BILGISAYARI.md`
   §6); **tasarım sistemi LafPOS Keel** (`DESIGN.md` §0, `src/styles/keel.css`, `.claude/skills/lafpos-design`).
   Marina Merkez'de otomatik güncellemede.
+- **25 Kasım 2026 (#176 ve ardı; lafmaliyet#144):** kapanış saati hatırlatması (Ayarlar › Gün sonu ve Z; 30 dk kala
+  sağ altta "Gün sonu al", kabuğun akışında, hiçbir şeyi örtmez), teslimde zorunlu **Kime** (Z, fiş, WhatsApp, gün sonu
+  penceresi kişi kişi; lafmaliyet'e `cashMoves[].recipient`, orada satırın "Kime"si), **Ayrıntılı gün sonu** penceresi
+  ("Kayda geçecekler", sonuçta özet), oturum kapanınca önbellek boşalır (sonra giren öncekinin verisini görmez).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -88,6 +92,10 @@ PAVO_URL=https://<cihazın IP adresi>:4567
 PAVO_SERIAL=<cihazın seri numarası>
 ```
 
+- **Kapanış saati (25 Kasım 2026):** yeni sürüm Marina'ya kurulunca Yönetim › Ayarlar ve yedek › Gün sonu ve Z ›
+  "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Merkez'de Marina "Ben gönderince"yse yeni sürüm
+  için Merkez › Marina › "Güncellemeyi şimdi gönder".
+
 ## 2. Sahibin kararını bekleyenler (sormadan yapılmaz)
 
 - **Personel mesaisi:** 4 Kasım 2026'da sahibin kararıyla kaldırıldı (`docs/02-PLAN.md` "Mesai kaldırıldı"). Yeniden
@@ -103,6 +111,9 @@ PAVO_SERIAL=<cihazın seri numarası>
   uygulaması (TOTP) eklenebilir; sahip kullanmak isterse.
 - **Kod imzası:** sertifika alınırsa izlenecek yol `docs/05-KASA-BILGISAYARI.md` §2 "Kod imzası"; alınmazsa
   "Yine de çalıştır" anlatımı kalır.
+- **Kasa hareketi ladmin'e anında mı (25 Kasım 2026):** harcama ve teslim bugün gün sonu paketiyle (Z'den sonra)
+  ladmin'e gider. Sahip "girildiği an gitsin" derse sözleşme değişir: lafmaliyet'te açık günün hareketleri için ayrı
+  imzalı uç ve LafPOS'ta senkron bütçesine (AGENTS.md kural 6) uyan itme gerekir. Sorulmadan yapılmaz.
 - **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, LafPOS'un payı çok küçük). Kafe
   bağlanınca bir ay sonra Vercel › Usage ve Upstash › Usage bir kez bakılır.
 
@@ -130,6 +141,15 @@ PAVO_SERIAL=<cihazın seri numarası>
 4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
 5. **Geçişi tamamla ile silinen deneme günleri Uzaktan'da kalıyor:** kasa silinenleri bildirsin, bulut raporlarını
    kaldırsın (geriye uyumlu).
+6. **lafmaliyet#144'ün birleşmesi ve durum tablosu:** birleşince `docs/03-ENTEGRASYON.md` §6'daki "İncelemede" satırı
+   "Birleşti" olur. Birleşmeden önce gelen alıcılı günlerde ladmin "Kime"yi yeniden gönderimde doldurur
+   (`planLafposRecipientFill`); Kasa › Geçmiş günler › Z › "Gönder" ile elle de gider.
+7. **Adisyonun hesap sütunu çok alçak ekranda kaymalı (kapanış kartından bağımsız):** yaprak alçaldığında Toplam bloğu
+   eylem şeridinin üstüne binebiliyor (gözden geçirme, 25 Kasım 2026). Kapanış kartı bu yüzden telefonda ve alçak
+   ekranda adisyonda çıkmıyor; kalıcı çözüm `OrderPage` sepet yaprağının `overflow-y-auto` olması ve CartPanel'e en az
+   ~7,5 rem vermek, yatay telefonda e2e denetimiyle.
+8. **Kapanış hatırlatmasının sesi ve telefon bildirimi:** bugün yalnız ekranda kart. İstenirse kapanışa 30 dk kala
+   patrona Web Push (`server/sync/bildirim.ts`, yeni tür) ve kasada tek seferlik uyarı sesi eklenir.
 
 ## Çalışma kuralları (kısa)
 

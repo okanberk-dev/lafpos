@@ -10,6 +10,7 @@ import { ApprovalHost } from './lib/approval';
 import { DEMO, startDemo } from './lib/demo';
 import { PrintHost } from './lib/print';
 import { REMOTE } from './lib/remote';
+import { onSessionEnd } from './lib/sessionEnd';
 import { initTheme } from './lib/theme';
 import { Toaster } from './lib/toast';
 import './index.css';
@@ -40,6 +41,9 @@ const queryClient = new QueryClient({
     mutations: { retry: 0 },
   },
 });
+// Oturum kapanınca (Kilitle, otomatik kilit, çıkış, oturum düştü) önbellek boşalır: kasada sonra giren kişi öncekinin
+// verisini bir an bile görmez (kör kasiyer patronun ara raporunu, cirosunu ve beklenen nakdini; AGENTS.md kural 3)
+onSessionEnd(() => queryClient.clear());
 
 // Dokunmatik ekranlı bilgisayar (kasa): fare de bağlı olsa dokunmatik ölçüler açılır (index.css `pointer-coarse`)
 try {

@@ -8,8 +8,11 @@
 export const UNSPECIFIED_RECIPIENT = 'Belirtilmemiş';
 /** Bankaya yatırılan nakit için hazır alıcı adı */
 export const BANK_RECIPIENT = 'Banka';
-/** Elle yazılan alıcı adının en uzun hâli */
-export const RECIPIENT_MAX = 80;
+/**
+ * Alıcı adının en uzun hâli: lafmaliyet'te teslimin "Kime" alanı (`cash_outs.store`) en çok 60 karakter; daha uzun ad
+ * panelde satırı düzeltilemez yapardı
+ */
+export const RECIPIENT_MAX = 60;
 
 /** Alıcıya göre teslim toplamı (kuruş). `userId`: alıcı kullanıcıysa kimliği, değilse null */
 export interface HandoverRecipient {
@@ -19,7 +22,7 @@ export interface HandoverRecipient {
   amount: number;
 }
 
-/** Elle yazılan alıcı adı: baştaki ve sondaki boşluk atılır, aradaki boşluklar teke iner, en çok 80 karakter */
+/** Elle yazılan alıcı adı: baştaki ve sondaki boşluk atılır, aradaki boşluklar teke iner, en çok 60 karakter */
 export function cleanRecipientName(name: string | null | undefined): string {
   return String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, RECIPIENT_MAX);
 }
