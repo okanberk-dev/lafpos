@@ -1294,6 +1294,26 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   uygulanan tutar; `Σ amount = z.discounts`. Hep gider (`[]`). İndirimi yapan gitmez.
 - Gövdenin sırası: yeni üst alanlar `cashMoves`'tan sonra, `workedStaffRefs`'ten (sonda kalır) önce.
 
+### 4.10 Pavo'yu beklerken gün sonu e-postası (25 Kasım 2026)
+
+25 Kasım akşamı Marina'nın gün sonu e-postası gitmedi. lafmaliyet e-postayı Pavo'nun sonucunu (`bankPos`) taşıyan gövdeyle
+tek seferde gönderir ve ilk gövde sonucsuz gelince bekler. LafPOS sonucu taşıyan ikinci gövdeyi göndermediğinde gece
+beklemeyi bitiren bir tetik yoktu. İki tarafta düzeltildi; eski LafPOS ile yeni lafmaliyet ve tersi birlikte çalışır.
+
+- **`bankPosPending`** (isteğe bağlı, yalnız Pavo seçiliyken ve gövdede `bankPos` yokken gider): `true` Pavo'nun banka gün
+  sonu bu gün için sürüyor ya da kapanışta başlayacak; `false` başlamayacak, atlandı ya da bitti. lafmaliyet `false`'ta
+  beklemez, `true`'da en çok 2 dakika bekler; alan yoksa (eski LafPOS) önceki günün sonucuna bakar.
+- **İlk gövde tutulur:** gün kapanınca Pavo'nun otomatik gün sonu başlayacaksa (`autoEodExpected`: Pavo seçili, ayar açık,
+  cihaz eşleşmiş ve boş, önceki sonuç belirsiz değil) gövde giden kutusunda en çok `EOD_FIRST_PUSH_HOLD_MS` (150 sn)
+  tutulur. Gün sonu bitince (alındı, alınamadı, belirsiz) gün sonucuyla yeniden kuyruğa girer ve **hemen** gönderilir
+  (`saveEod`, dakikalık işi beklemez); tutulan gövdenin yerine geçer, lafmaliyet'e tek gövde gider. Gün sonu bitmezse tutulan
+  gövde sürenin sonunda `bankPosPending: true` ile gider.
+- **Atlanan deneme de gönderilir:** kapanıştaki otomatik deneme atlanırsa (cihaz meşgul, ayar kapalı, eşleşme yok, önceki
+  sonuç belirsiz) gün `bankPosPending: false` ile hemen gider; lafmaliyet boşuna beklemez.
+- **lafmaliyet tarafı** (lafmaliyet docs/LAFPOS.md "Pavo'yu bekler"): bekleme günün ilk gelişinden sayılır; beklemeye alan
+  gönderimin kendi işi süresi içinde sonucu yoklar, gelmezse e-postayı Pavo'suz gönderir (sonuç sonra gelirse kısa Pavo
+  e-postası). E-posta hiçbir gece sonraki bir tetiğe kalmaz.
+
 ## 5. Sıklık ve bütçe
 
 `.env`'de `LAFFOGATO_URL` yoksa aşağıdaki site işlerinin hiçbiri çalışmaz (§2).

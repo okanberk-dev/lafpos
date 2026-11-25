@@ -10,7 +10,7 @@ import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings, getSyncState } from './lib/settings';
-import { deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
+import { autoEodExpected, deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -264,7 +264,7 @@ export function autoDayEndTick(now = Date.now()) {
   }
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
-  afterDayClosed(closed.id);
+  afterDayClosed(closed.id, { eodExpected: autoEodExpected(closed.id) });
   // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5).
   // Alınamaz ya da belirsiz kalırsa kasadan alınan gün sonundaki gibi patronun telefonuna (routes/cash.ts); otomatik
   // gün sonunda bildirim hiç gitmiyordu (inceleme, 23 Kas 2026)

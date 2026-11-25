@@ -11,7 +11,7 @@ import { zSummaryFor } from '../lib/kor-kasa';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
-import { enqueueDay } from '../sync/lafmaliyet';
+import { enqueueDay, flushOutbox } from '../sync/lafmaliyet';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { batchesOf, cardBasis } from './card-basis';
@@ -1133,14 +1133,26 @@ function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, n
   });
   fx.emit({ topic: 'okc', kind: 'okc.eod', message: rec.status === 'ok' ? 'Cihazda gün sonu alındı' : (rec.message ?? undefined) });
   fx.flush();
-  // Kapanmış günün banka gün sonu sonucu lafmaliyet'e de gider (Pavo - LafPOS kıyası): gün paketi yeniden kuyruğa girer
-  if (rec.dayId && !skipped && rec.status !== 'running' && rec.dayClosed !== false) {
+  // Kapanmış günün banka gün sonu sonucu lafmaliyet'e de gider (Pavo - LafPOS kıyası): gün paketi yeniden kuyruğa girer ve
+  // hemen gönderilir (tutulan ilk gövdenin yerine; lafmaliyet gün sonu e-postasını bununla gönderir). Kapanıştaki otomatik
+  // deneme atlandıysa da gider (`bankPosPending: false`): lafmaliyet Pavo'yu boşuna beklemez (25 Kasım 2026: ikinci gövde
+  // gelmedi, e-posta gitmedi). Dakikalık işi beklemez: güncelleme gün sonundan hemen sonra kurulur
+  const autoSkipped = skipped && rec.trigger === 'otomatik';
+  if (rec.dayId && (!skipped || autoSkipped) && rec.status !== 'running' && rec.dayClosed !== false) {
     try {
-      enqueueDay(rec.dayId);
+      if (enqueueDay(rec.dayId)) void flushOutbox();
     } catch (e) {
       console.warn('[pavo] gün sonu lafmaliyet', e instanceof Error ? e.message : e);
     }
   }
+}
+
+/**
+ * Gün şimdi kapanırsa Pavo'nun otomatik banka gün sonu denenecek mi (deviceEndOfDay'in engelleri; lafmaliyet'e giden ilk
+ * gövde onu bekler, sync/lafmaliyet.ts afterDayClosed)
+ */
+export function autoEodExpected(dayId: string): boolean {
+  return getSettings().okcProvider === 'pavo' && !eodBlocker(true) && !autoEodHeld(dayId);
 }
 
 /**
