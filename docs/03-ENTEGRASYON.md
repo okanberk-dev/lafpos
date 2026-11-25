@@ -1339,7 +1339,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
 | Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
-| İncelemede | lafpos#176 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): LafPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, LafPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144). Okumayan sürüm alanı atar, gün reddedilmez |
+| Birleşti | lafpos#176, #177 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): LafPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, LafPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144, birleşti). Okumayan sürüm alanı atar, gün reddedilmez |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
