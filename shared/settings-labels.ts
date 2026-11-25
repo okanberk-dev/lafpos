@@ -27,6 +27,7 @@ export const SETTING_LABEL: Record<string, string> = {
   quickCash: 'Hızlı nakit',
   sizeLabels: 'Boy adları',
   requireDayOpen: 'Gün açık olmalı',
+  closingTime: 'Kapanış saati',
   kitchenWarnMinutes: 'Bar fişi uyarısı',
   kitchenAlarmMinutes: 'Bar fişi alarmı',
   roomBillingStepMinutes: 'Oda ücret adımı',

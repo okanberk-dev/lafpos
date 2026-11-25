@@ -20,6 +20,7 @@ import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
+import { ClosingReminder } from './ClosingReminder';
 import { CommandPalette } from './CommandPalette';
 import { InternetBadge } from './InternetBadge';
 import { LafTile } from './LafMark';
@@ -615,6 +616,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
 
       {/* Kasada yeni sürüm teklifi: Şimdi güncelle / Gün sonunda güncelle (uzaktan görünümde ve demoda yok) */}
       {!REMOTE && !DEMO && <UpdateOffer />}
+      {/* Kapanış saatine 30 dk kala sağ altta "Gün sonu al" (Ayarlar › Gün sonu ve Z; uzaktan görünümde yok) */}
+      {!REMOTE && <ClosingReminder />}
       <ToolsDrawer
         open={toolsOpen}
         onClose={closeTools}

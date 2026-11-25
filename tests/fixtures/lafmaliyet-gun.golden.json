@@ -502,7 +502,8 @@
       "amount": 200,
       "description": "Patrona teslim",
       "at": "2026-10-26T16:05:00.000Z",
-      "categoryId": null
+      "categoryId": null,
+      "recipient": "Patron"
     },
     {
       "id": "01M5WG5XW0F0G2H4J6K8M0N2P4",

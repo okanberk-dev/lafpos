@@ -1393,6 +1393,55 @@ export async function runFlows(ctx) {
           const move = day.movements.find((m) => m.kind === 'harcama');
           assert(move?.categoryId === 3 && move.categoryName === 'Diğer fatura dışı' && move.amount === 80000, `harcama kategorisi: ${JSON.stringify(move)}`);
 
+          // Teslim: "Kime" zorunlu (patron ve müdür hesapları, Banka, Başka); listede ve gün sonu penceresinde alıcıyla.
+          // Kapanış saati 10 dakika sonraya ayarlıyken sağ alttaki "Gün sonu al" Kasa'da ayrıntılı gün sonu penceresini açar
+          const closeHm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(Date.now() + 10 * 60_000);
+          await api.call('patron', 'PUT', '/admin/settings', { closingTime: closeHm });
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, '/kasa');
+            await page.getByRole('button', { name: 'Teslim', exact: true }).click();
+            const dialog = page.getByRole('dialog', { name: 'Teslim' });
+            for (const d of '500') await dialog.getByRole('button', { name: d, exact: true }).click();
+            await dialog.getByRole('button', { name: 'Teslimi kaydet', exact: true }).click();
+            await dialog.getByText('Kime teslim edildiğini seçin', { exact: true }).waitFor({ timeout: 5000 });
+            await dialog.getByRole('button', { name: 'Patron', exact: true }).click();
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-teslim-kime.png` });
+            const small = await smallTargets(page);
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            await dialog.getByRole('button', { name: 'Teslimi kaydet', exact: true }).click();
+            await dialog.waitFor({ state: 'detached', timeout: 8000 });
+            await page.getByText('Kime: Patron').first().waitFor({ timeout: 8000 });
+            // Kapanış hatırlatması: başka ekrandan "Gün sonu al" → Kasa, ayrıntılı gün sonu penceresi, alıcılı teslim
+            await go(ctx, page, '/masalar');
+            const card = page.getByRole('status', { name: 'Kapanış hatırlatması' });
+            await card.waitFor({ timeout: 8000 });
+            await card.getByText(/^(Kapanışa \d+ dk kaldı|Kapanış saati geçti)$/).waitFor();
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-kapanis-hatirlatmasi.png` });
+            await card.getByRole('button', { name: 'Gün sonu al' }).click();
+            const close = page.getByRole('dialog', { name: /^Ayrıntılı gün sonu · Z/ });
+            await close.waitFor({ timeout: 8000 });
+            await close.getByRole('heading', { name: 'Kayda geçecekler' }).waitFor();
+            await close.getByText('Patron', { exact: true }).first().waitFor();
+            assert(!new URL(page.url()).searchParams.has('gunsonu'), `parametre adreste kaldı: ${page.url()}`);
+            await close.getByRole('button', { name: 'Vazgeç', exact: true }).click();
+            await close.waitFor({ state: 'detached', timeout: 8000 });
+            // "Sonra": bu cihazda kapanışa dek gizler, yenilemede de
+            await page.getByRole('status', { name: 'Kapanış hatırlatması' }).getByRole('button', { name: 'Sonra', exact: true }).click();
+            await page.getByRole('status', { name: 'Kapanış hatırlatması' }).waitFor({ state: 'detached', timeout: 5000 });
+            await page.reload();
+            await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).first().waitFor({ timeout: 8000 });
+            assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), '"Sonra"dan sonra kart yenilemede geri geldi');
+          });
+          // Garson gün sonu almaz: kart yok
+          await withPage(ctx, 'telefon', 'garson', async (page) => {
+            await go(ctx, page, '/masalar');
+            await page.locator('[data-table-id]').first().waitFor({ timeout: 8000 });
+            assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), 'garsonda kapanış kartı çıktı');
+          });
+          await api.call('patron', 'PUT', '/admin/settings', { closingTime: null });
+          const teslim = (await api.call('mudur', 'GET', '/cash/day')).movements.find((m) => m.kind === 'teslim');
+          assert(teslim?.recipientName === 'Patron' && teslim.amount === 50000 && teslim.recipientUserId, `teslim alıcısı: ${JSON.stringify(teslim)}`);
+
           // Müdür (rakam görür): beklenen açılış ve kaynağı kartta; farkta neden alanı istekten önce açılır
           await closeBack(150000, 1);
           await withPage(ctx, 'tablet', 'mudur', async (page) => {

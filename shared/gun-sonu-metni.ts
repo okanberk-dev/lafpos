@@ -60,6 +60,12 @@ export function dayText(i: DayTextInput): string {
   lines.push(`• İptal: ${tl(s.voided)}`);
   lines.push('');
   lines.push('*Kasa*');
+  // Kasadan çıkan: harcama ve teslim (teslim kime gittiğiyle; alıcısız eski teslim "Belirtilmemiş")
+  if (s.cashOut) lines.push(`• Harcama: ${tl(s.cashOut)}`);
+  if (s.handedOver) {
+    const to = (s.handedOverBy ?? []).map((r) => `${r.name} ${tl(r.amount)}`).join(', ');
+    lines.push(`• Teslim: ${tl(s.handedOver)}${to ? ` (${to})` : ''}`);
+  }
   lines.push(`• Beklenen nakit: ${tl(s.expectedCash)}`);
   if (s.countedCash != null) lines.push(`• Sayılan: ${tl(s.countedCash)}`);
   if (s.cashDiff != null) lines.push(`• Fark: ${s.cashDiff === 0 ? 'yok ✅' : `${s.cashDiff > 0 ? '+' : '−'}${tl(Math.abs(s.cashDiff))} ⚠️`}`);

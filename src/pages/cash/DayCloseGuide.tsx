@@ -12,7 +12,7 @@ export const DAY_CLOSE_STEPS: { title: string; detail: string }[] = [
   { title: 'Banka POS’unun gün sonunu alın', detail: 'Kart cihazından gün sonu (Z) slibini alın; slipteki toplamı aşağıda “Kredi kartı” satırına girin.' },
   { title: 'Yemek kartı cihazlarının gün sonunu alın', detail: 'Multinet, Pluxee ve diğerlerinin slip toplamlarını kendi satırlarına girin (o gün yoksa boş bırakın).' },
   { title: 'Çekmecedeki nakdi sayın', detail: 'Banknot ve bozuk paraları sayıp girin. Fark çıkarsa nedenini “Not”a yazın (ör. bozuk para verildi).' },
-  { title: '“Günü kapat”a basın', detail: 'Z raporu ekranda açılır ve yazdırılır. Çıktıyı ve slipleri birlikte kasaya koyun.' },
+  { title: '“Günü kapat”a basın', detail: 'Ayrıntılı Z raporu ekranda açılır (özeti üstte); Yazdır’a basıp çıktıyı sliplerle birlikte kasaya koyun.' },
   { title: 'Bilgisayarı kapatmayın', detail: 'Kasa bilgisayarını en az 10 dakika açık ve internete bağlı bırakın: güncellemeler gün sonundan sonra kendiliğinden kurulur.' },
 ];
 

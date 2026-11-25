@@ -37,6 +37,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   quickCash: [10000, 20000, 50000, 100000, 200000],
   sizeLabels: { M: 'Orta', L: 'Büyük' },
   requireDayOpen: true,
+  // Kapanış saati hatırlatması varsayılan kapalı: patron ya da müdür Yönetim › Ayarlar › Gün sonu ve Z'den açar
+  closingTime: null,
   kitchenWarnMinutes: 7,
   kitchenAlarmMinutes: 12,
   roomBillingStepMinutes: 15,

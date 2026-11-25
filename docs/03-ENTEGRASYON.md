@@ -714,7 +714,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     { "posName": "MOCHA MEDIUM", "siteMenuId": "mnu-0009", "slot": "M", "qty": 1, "listValue": 245, "prepared": true, "reason": "Müşteri gitti", "refund": false }
   ],
   "cashMoves": [
-    { "id": "01M5WDWP40S3V9J8M2N4P6Q8T0", "kind": "harcama", "amount": 450, "description": "Buz", "at": "2026-10-26T15:40:00.000Z", "categoryId": 1 }
+    { "id": "01M5WDWP40S3V9J8M2N4P6Q8T0", "kind": "harcama", "amount": 450, "description": "Buz", "at": "2026-10-26T15:40:00.000Z", "categoryId": 1 },
+    { "id": "01M5WFAEZ0X2Y4Z6A8B0C2D4E6", "kind": "teslim", "amount": 2000, "description": "Akşam teslimi", "at": "2026-10-26T18:05:00.000Z", "categoryId": null, "recipient": "Patron" }
   ],
   "okc": {
     "provider": "pavo", "zReport": false, "docs": 4, "cash": 390, "card": 800, "mealCard": 0, "other": 0, "total": 1190,
@@ -798,7 +799,8 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 - Kişisel veri: müşteri ve personel adı, LafPOS kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız
   kişinin türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Çalışan personelden ad
   gitmez; yalnız ladmin personel kimliği (`workedStaffRefs`, §4.8). Tahsilatta müşteri, vardiya sayımında sayan ve
-devralan, indirimde indirimi yapan gitmez (§4.9). Serbest metin nedenler en çok 200
+devralan, indirimde indirimi yapan gitmez (§4.9). Tek istisna teslimin alıcısıdır: paranın kime verildiği yalnız adıyla
+gider (`cashMoves[].recipient`, sahibin kararı 25 Kasım 2026; kimlik gitmez). Serbest metin nedenler en çok 200
   karakter, önekiyle birlikte (`ikram[].reason`'ın "Ödenmez: " ve "Zayi: " öneki dahil; `iptal[].reason`'ın "İade: "
   öneki dahil).
 - lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
@@ -812,7 +814,8 @@ devralan, indirimde indirimi yapan gitmez (§4.9). Serbest metin nedenler en ço
 - **Ortak örnek gövde:** `tests/fixtures/lafmaliyet-gun.golden.json` (iki boy, ek, ikram ve eki, karaoke, cari,
   kartla bahşiş ve tahsilat; 23 Kasım 2026'dan: adisyon indirimi, hazırlanmış ve hazırlanmamış iptal, kişili ödenmez,
   zayi, kalem iadesi ve ödeme iptali, yazarkasadan geçen ve geçmeyen ödeme, yeniden açılış, alınamayan banka gün
-  sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim ve giriş; 24 Kasım 2026'dan gün sonu
+  sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim (25 Kasım 2026'dan alıcısıyla:
+  `"recipient": "Patron"`) ve giriş; 24 Kasım 2026'dan gün sonu
   tamlığıyla (§4.9): gün içinde elle alınmış önceki banka gün sonu, Pavo belgesi, nakit bahşiş, vardiya sayımı, föyde
   yazılan kart slipi ve gün sonu notu). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
   aynı olduğunu sabitler; lafmaliyet aynı dosyayı kendi ayrıştırıcısıyla okur (B07). Gövde bilerek değişirse
@@ -902,9 +905,15 @@ reddetmez.
   karakter Crockford base32, değişmez; aynı gün yeniden gönderilince aynı satırdır), `kind` `harcama` | `teslim` |
   `giris`, `amount` TL (0'dan büyük), `description` personelin yazdığı açıklama (en çok 200 karakter, boş olabilir;
   harcamada zorunlu), `at` yazıldığı an (ISO), `categoryId` harcamanın lafmaliyet gider kategorisi (`expense_categories.id`)
-  ya da `null` (teslim ve girişte hep `null`). Kişi gitmez (kullanıcı kimliği ve adı yok; açıklama serbest metindir,
-  ekran kişi adı yazdırmaz). Tutarlılık: Σ harcama = `z.cashOut`, Σ teslim = `z.handedOver`, Σ giriş ≤ `z.cashIn`
+  ya da `null` (teslim ve girişte hep `null`). Hareketi yazan kişi gitmez (kullanıcı kimliği ve adı yok; açıklama serbest
+  metindir, ekran kişi adı yazdırmaz). Tutarlılık: Σ harcama = `z.cashOut`, Σ teslim = `z.handedOver`, Σ giriş ≤ `z.cashIn`
   (`cashIn` nakit cari tahsilatını ve nakit bahşişi de sayar). Satır sınırı yoktur (bir günde birkaç hareket olur).
+- `cashMoves[].recipient` (25 Kasım 2026, sahibin kararı: "teslim edilirken kime olduğu yazılsın, ladmin'e de
+  gönderilsin"): teslimde paranın verildiği kişi ya da yer, metin (en çok 80 karakter): kasadaki bir hesaba (patron,
+  müdür) teslimde o hesabın teslim anındaki adı, "Banka" ya da personelin elle yazdığı ad. **Yalnız teslimde ve alıcı
+  yazılmışsa** satırın sonunda gider; harcama ve girişte, alıcısız eski teslimde (bu sürümden önce yazılmış) alan hiç
+  yoktur. LafPOS'ta yeni teslim alıcısız kaydedilmez (400 `recipient_required`). Kullanıcı kimliği gitmez, yalnız ad.
+  Okumayan lafmaliyet alanı atar (`z.object`); lafmaliyet "Kasadan çıkanlar"da teslim satırına "Kime" olarak yazabilir.
 
 **Personel alanı (24 Kasım 2026; §4.8).** İsteğe bağlı ve eklemeli; lafmaliyet bozuk geleni atar, günü reddetmez.
 
@@ -1139,8 +1148,16 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
 - **Harcama kategorisi:** harcamaya lafmaliyet'in personelin seçebildiği gider kategorilerinden biri bağlanabilir
   (isteğe bağlı; Kasa › Harcama penceresinde çip). `cash_movements.categoryId` ve yazıldığı andaki adı
   `categoryName` saklanır (kategori lafmaliyet'te sonra değişse ya da liste çekilemese de hareket adını korur).
-  `POST /api/cash/movements { kind, amount, description, categoryId? }`: kategori yalnız harcamada (başkasında 400
-  `category_not_allowed`), son çekilen listede olmalı (değilse 422 `invalid_category`). Gövdeye kimlik gider.
+  `POST /api/cash/movements { kind, amount, description, categoryId?, recipientUserId?, recipientName? }`: kategori yalnız
+  harcamada (başkasında 400 `category_not_allowed`), son çekilen listede olmalı (değilse 422 `invalid_category`). Gövdeye
+  kimlik gider.
+- **Teslimin alıcısı (25 Kasım 2026):** teslimde zorunlu (yoksa 400 `recipient_required`), harcama ve girişte verilirse
+  400 `recipient_not_allowed`. Kasa › Teslim penceresinde "Kime": patron ve müdür hesapları, "Banka" ya da "Başka" (elle
+  ad). Hesap seçilince `recipientUserId` (etkin hesap olmalı, değilse 422 `invalid_reference`) ve adı o anki hâliyle
+  `cash_movements.recipientName`'e yazılır; elle yazılan ad sadeleşir (boşluklar teke iner, en çok 80 karakter).
+  Beklenen nakit formülü değişmez (teslim kime olursa olsun çekmeceden çıkar); Z özeti teslimi alıcıya göre döker
+  (`ZSummary.handedOverBy`, Σ = `handedOver`; alıcısız eski teslim "Belirtilmemiş"), ekran, Z fişi ve WhatsApp metni
+  bunu yazar. Gövdeye yalnız ad gider (`cashMoves[].recipient`, §4 "Faz 3 alanları").
 - **Liste:**
   ```
   GET {LAFMALIYET_URL}/api/panel/pos/gider-kategorileri     (imzalı, aynı anahtar)
@@ -1319,6 +1336,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
 | Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
 | Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
+| Bekliyor | lafpos (bu sürüm) + lafmaliyet | Teslimin alıcısı (`cashMoves[].recipient`, §4 "Faz 3 alanları", §4.7): LafPOS gönderiyor; lafmaliyet'in alanı okuyup "Kasadan çıkanlar"da "Kime" olarak göstermesi ve altın gövde kopyasını (`lafmaliyet-gun*.golden.json`, teslim satırında `"recipient": "Patron"`) güncellemesi bekliyor. Okumayan sürüm alanı atar, gün reddedilmez |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

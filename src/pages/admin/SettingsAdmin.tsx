@@ -45,6 +45,8 @@ type Settings = Record<string, unknown> & {
   quickCash: number[];
   sizeLabels: { M: string; L: string };
   requireDayOpen: boolean;
+  /** Kapanış saati ("SS:DD"); null: hatırlatma kapalı */
+  closingTime: string | null;
   barEnabled: boolean;
   kitchenWarnMinutes: number;
   kitchenAlarmMinutes: number;
@@ -200,8 +202,11 @@ export default function SettingsAdmin() {
   // kullanıcının dokunmadığı alanlar yeni değeri alır, karşılaştırma tabanı (data.data) güncellenir
   const base = useRef<Settings | null>(null);
   const draftRef = useRef(s);
+  // Kapanış saatinin son değeri: anahtar kapatılıp açılınca saat kaybolmaz (kapalıyken kayıtta null)
+  const closingDraft = useRef('23:00');
   useEffect(() => {
     draftRef.current = s;
+    if (s?.closingTime) closingDraft.current = s.closingTime;
   });
   useEffect(() => {
     const next = data.data;
@@ -488,6 +493,32 @@ export default function SettingsAdmin() {
               </p>
             </div>
             <Group title="Gün sonu ve Z">
+              <div>
+                {/* Kapanış saati hatırlatması (sahibin isteği): kapanışa 30 dakika kala gün açıksa gün sonu yetkisi olanın
+                    ekranında sağ altta "Gün sonu al" kartı. Müdür de değiştirir; kapalıyken saat kilitli */}
+                <Toggle
+                  block
+                  checked={s.closingTime != null}
+                  onChange={(v) => set({ closingTime: v ? closingDraft.current : null })}
+                  label="Kapanış saati hatırlatması"
+                  hint="kapanışa 30 dakika kala kasada sağ altta “Gün sonu al” bildirimi çıkar"
+                />
+                <label className="mt-2 flex items-center gap-2 text-sm text-muted">
+                  Kapanış
+                  <Input
+                    type="time"
+                    value={s.closingTime ?? closingDraft.current}
+                    disabled={s.closingTime == null}
+                    aria-label="Kapanış saati"
+                    onChange={(e) => {
+                      if (!/^\d{2}:\d{2}$/.test(e.target.value)) return;
+                      closingDraft.current = e.target.value;
+                      set({ closingTime: e.target.value });
+                    }}
+                    className="tabular w-32"
+                  />
+                </label>
+              </div>
               <div>
                 <Toggle block checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu" hint="açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir" />
                 {/* Saat "06:00" diye seçilir (çıplak "6" saat mi, kaçta mı belli değildi); anahtar kapalıyken kilitli, gün sonu
