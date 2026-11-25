@@ -36,7 +36,7 @@ interface Payload {
   offDevice: { card: number; cash: number; cardTips: number };
   refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
   iptal: { posName: string; siteMenuId: string | null; slot: string | null; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
-  cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[];
+  cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null; recipient?: string }[];
   okc?: { provider: string; zReport: boolean; docs: number; cash: number; card: number; mealCard: number; other: number; total: number; voided: { count: number; cash: number; card: number }; vat: { rate: number; total: number; vat: number }[] | null };
   collections: unknown[];
   shiftCounts: unknown[];

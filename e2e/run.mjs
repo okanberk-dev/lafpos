@@ -43,6 +43,28 @@ const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : nul
 const state = (path, name, act) => ({ path, name, act });
 
 /**
+ * Ayrıntılı gün sonu penceresi (sahibin isteği, 25 Kasım 2026): kapanış bildiriminin "Gün sonu al"ı gibi adresle açılır
+ * (/kasa?gunsonu=1); başında "Kayda geçecekler" (kör kasada ciro ve beklenen nakit yok). Pencere açılınca parametre silinir
+ */
+const dayCloseDialog = state('/kasa?gunsonu=1', 'pencere', (page) => page.getByRole('dialog', { name: /^Ayrıntılı gün sonu · Z/ }).waitFor({ timeout: 8000 }));
+
+/**
+ * Kapanış saati hatırlatması (sağ altta "Gün sonu al" kartı): sunucuya dokunmadan bootstrap'ın kapanış saati 10 dakika
+ * sonraya çekilir. Listenin sonunda: yönlendirme bağlamın kalanında da durur
+ */
+const closingReminder = state('/kasa', 'kapanis-hatirlatmasi', async (page) => {
+  const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(Date.now() + 10 * 60_000);
+  await page.route('**/api/bootstrap', async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    json.settings.closingTime = hm;
+    await route.fulfill({ response: res, json });
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('status', { name: 'Kapanış hatırlatması' }).waitFor({ timeout: 8000 });
+});
+
+/**
  * Tezgâh satışında gönderilmemiş beş San Sebastian (₺290): bekleyen satır ve dört haneli Öde (₺1.500'ü aşar). Yalnız
  * cihazın sepeti değişir (localStorage), sunucuya bir şey gitmez
  */
@@ -199,6 +221,7 @@ const ROUTES = {
       await page.getByText('Masa WWWWWW', { exact: true }).waitFor({ timeout: 5000 });
     }),
     '/kasa',
+    dayCloseDialog,
     '/cihaz',
     '/musteriler',
     '/rezervasyon',
@@ -296,6 +319,12 @@ const ROUTES = {
   kasa: [
     '/kasa',
     state('/kasa', 'vardiya', (page) => page.getByRole('button', { name: 'Vardiya devri', exact: true }).click({ timeout: 5000 })),
+    // Teslim penceresi: "Kime" (patron ve müdür hesapları, Banka, Başka)
+    state('/kasa', 'teslim', async (page) => {
+      await page.getByRole('button', { name: 'Teslim', exact: true }).click({ timeout: 5000 });
+      await page.getByRole('group', { name: 'Kime' }).waitFor({ timeout: 5000 });
+    }),
+    dayCloseDialog,
     '/masalar',
     '/satis',
     '@s2',
@@ -304,6 +333,7 @@ const ROUTES = {
     pending,
     '/cihaz',
     '/yardim',
+    closingReminder,
   ],
   bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })), state('/mutfak', 'gecmis', (page) => page.getByRole('tab', { name: /^Geçmiş/ }).click({ timeout: 5000 })), barLight],
 };

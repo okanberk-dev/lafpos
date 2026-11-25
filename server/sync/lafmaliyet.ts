@@ -537,8 +537,9 @@ export function buildDayPayload(dayId: string) {
       )
       .slice(0, LIST_MAX),
     // Kasa hareketleri satır satır (§4.7; lafmaliyet "Kasadan çıkanlar"): hep gider, hareketsiz günde boş dizi (eski
-    // LafPOS'tan ayrılsın). Kişi gitmez; harcamanın kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut,
-    // Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit tahsilatı ve bahşişi de sayar)
+    // LafPOS'tan ayrılsın). Yazan kişi gitmez; teslimde parayı alan (`recipient`, sahibin kararı) gider; harcamanın
+    // kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut, Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit
+    // tahsilatı ve bahşişi de sayar)
     cashMoves: cashMovesOf(day.id),
     // Gün sonu tamlığı (§4.9): yazarkasanın (ÖKC) kendi belgeleri; cihaz yoksa alan yok
     ...okcField(day.id),
@@ -580,7 +581,11 @@ function workedStaffField(day: Pick<DayRow, 'id' | 'openedBy' | 'closedBy' | 'wo
   return { workedStaffRefs: [...worked].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })) };
 }
 
-/** Günün kasa hareketleri, yazıldığı sırayla (TL; açıklama en çok 200 karakter) */
+/**
+ * Günün kasa hareketleri, yazıldığı sırayla (TL; açıklama en çok 200 karakter). Teslimde paranın kime verildiği
+ * (`recipient`, sahibin isteği 25 Kasım 2026) satırın sonunda ve yalnız yazılmışsa: alıcısız eski teslimin satırı ve
+ * gövde bayt bayt aynı kalır (§4.7)
+ */
 function cashMovesOf(dayId: string) {
   return db
     .select()
@@ -588,7 +593,15 @@ function cashMovesOf(dayId: string) {
     .where(eq(schema.cashMovements.dayId, dayId))
     .orderBy(asc(schema.cashMovements.createdAt), asc(schema.cashMovements.id))
     .all()
-    .map((m) => ({ id: m.id, kind: m.kind, amount: toTL(m.amount), description: cap(m.description) ?? '', at: new Date(m.createdAt).toISOString(), categoryId: m.kind === 'harcama' ? m.categoryId : null }));
+    .map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      amount: toTL(m.amount),
+      description: cap(m.description) ?? '',
+      at: new Date(m.createdAt).toISOString(),
+      categoryId: m.kind === 'harcama' ? m.categoryId : null,
+      ...(m.kind === 'teslim' && m.recipientName ? { recipient: cap(m.recipientName) } : {}),
+    }));
 }
 
 // ─── Gün sonu tamlığı (§4.9, 24 Kasım 2026) ──────────────────────────────────

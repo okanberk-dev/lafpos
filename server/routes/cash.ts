@@ -223,6 +223,9 @@ cashRoutes.post('/movements', async (c) => {
       description: z.string().max(200).default(''),
       // Yalnız harcamada: lafmaliyet'in personel gider kategorisi (GET /cash/expense-categories listesinden)
       categoryId: z.number().int().positive().nullish(),
+      // Yalnız teslimde ve orada zorunlu: parayı alan kullanıcı (bootstrap listesinden) ya da elle yazılan ad ("Banka")
+      recipientUserId: z.string().min(1).max(64).nullish(),
+      recipientName: z.string().max(200).nullish(),
       approverPin: z.string().nullish(),
     }),
   );

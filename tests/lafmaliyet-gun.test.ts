@@ -49,7 +49,7 @@ type Payload = {
   offDevice: { card: number; cash: number; cardTips: number };
   refunds: { amount: number; zField: string; name: string; channel: string | null; reason: string | null }[];
   iptal: { posName: string; qty: number; listValue: number; prepared: boolean; reason: string | null; refund: boolean }[];
-  cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[];
+  cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null; recipient?: string }[];
   /** Gün sonu tamlığı (docs/03-ENTEGRASYON.md §4.9) */
   okc?: { provider: string; zReport: boolean; docs: number; cash: number; card: number; mealCard: number; other: number; total: number; voided: { count: number; cash: number; card: number }; vat: unknown[] | null };
   collections: { name: string; zField: string; channel: string | null; kind: string; count: number; amount: number }[];
@@ -192,7 +192,7 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
       ],
     });
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 12000, description: 'Buz', categoryId: 1 });
-    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'teslim', amount: 20000, description: 'Patrona teslim' });
+    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'teslim', amount: 20000, description: 'Patrona teslim', recipientName: 'Patron' });
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'giris', amount: 5000, description: 'Bozuk para' });
     const moves = db.select().from(schema.cashMovements).where(eq(schema.cashMovements.dayId, day.id)).all().sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
     const fixed = [
@@ -295,7 +295,7 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     expect(z).toMatchObject({ openingCash: 1500, expectedOpening: 1400, openingDiff: 100, openingReason: 'Sabah bozuk para eklendi' });
     expect(payload.cashMoves).toEqual([
       { id: '01M5WDWP40S3V9J8M2N4P6Q8T0', kind: 'harcama', amount: 120, description: 'Buz', at: '2026-10-26T15:40:00.000Z', categoryId: 1 },
-      { id: '01M5WFAEZ0X2Y4Z6A8B0C2D4E6', kind: 'teslim', amount: 200, description: 'Patrona teslim', at: '2026-10-26T16:05:00.000Z', categoryId: null },
+      { id: '01M5WFAEZ0X2Y4Z6A8B0C2D4E6', kind: 'teslim', amount: 200, description: 'Patrona teslim', at: '2026-10-26T16:05:00.000Z', categoryId: null, recipient: 'Patron' },
       { id: '01M5WG5XW0F0G2H4J6K8M0N2P4', kind: 'giris', amount: 50, description: 'Bozuk para', at: '2026-10-26T16:20:00.000Z', categoryId: null },
     ]);
     const moved = (k: string) => payload.cashMoves.filter((m) => m.kind === k).reduce((a, m) => a + m.amount, 0);

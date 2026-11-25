@@ -291,7 +291,7 @@ describe('auth-52: canlı akış oturumu sürekli denetler', () => {
     const s = await openStream(h.tokens.gece);
     await s.readFor(150);
     await h.ok('patron', 'PATCH', `/admin/users/${await userId('Gece müdürü')}`, { active: false });
-    await h.ok('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 250000, description: 'kapatıldıktan sonra' });
+    await h.ok('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 250000, description: 'kapatıldıktan sonra', recipientName: 'Banka' });
     await s.readFor(300);
     expect(s.events().filter((l) => l.includes('kapatıldıktan sonra'))).toEqual([]);
     expect(s.isClosed()).toBe(true);

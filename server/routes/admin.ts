@@ -1063,6 +1063,8 @@ const settingsShape = patchOf(
     quickCash: z.array(kurus).max(8),
     sizeLabels: z.object({ M: z.string().max(12), L: z.string().max(12) }),
     requireDayOpen: z.boolean(),
+    // Kapanış saati (SS:DD); null: hatırlatma kapalı, kayıt silinir (varsayılan null)
+    closingTime: clockTime.nullable(),
     kitchenWarnMinutes: z.number().int().min(1).max(120),
     kitchenAlarmMinutes: z.number().int().min(1).max(240),
     roomBillingStepMinutes: z.number().int().min(1).max(120),

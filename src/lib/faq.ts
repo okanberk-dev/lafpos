@@ -75,9 +75,9 @@ const ENTRIES: Entry[] = [
     question: 'Gün sonunu (Z) nasıl alırım?',
     // Kör kasada sunucu Z özetini göndermez (server/routes/cash.ts): kasa yalnız "Gün kapandı" bildirimini gösterir
     answer: (c) =>
-      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın ve penceredeki [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. ${
+      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın. Pencerenin başında [[Kayda geçecekler]] ayrıntılı gün sonunun neyi kaydettiğini söyler (satışlar, ödeme türleri, kasa hareketleri, sayım); sonra [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. Kapanış saati ayarlıysa kapanışa 30 dakika kala sağ altta [[Gün sonu al]] bildirimi çıkar. ${
         seesCash(c)
-          ? 'Z raporu ekranda açılır ve yazdırılır.'
+          ? 'Ayrıntılı Z raporu ekranda açılır, özeti üstte; Yazdır ile basılır.'
           : 'Rolünüzde kör kasa açık: gün kapanınca Z numarası bildirimde yazar, Z raporu ve sayım farkı yöneticinin ekranında görünür.'
       } Bilgisayarı sonra en az 10 dakika açık ve internete bağlı bırakın: güncellemeler gün sonundan sonra kendiliğinden kurulur.`,
   },
@@ -125,7 +125,7 @@ const ENTRIES: Entry[] = [
     show: any('kasa.hareket'),
     question: 'Kasadan para çıkınca ya da kasaya para girince ne yapmalıyım?',
     answer: (c) =>
-      `[[Kasa]] ekranında masraf için [[Harcama]], patrona ya da bankaya verilen nakit için [[Teslim]], bozuk para gibi eklenen nakit için [[Kasaya giriş]]’e basın; tutarı ve açıklamayı yazın. Her hareket denetim kaydına yazılır${seesCash(c) ? ', beklenen nakde işlenir' : ''} ve gün sonunda lafmaliyet’e satır satır gider.`,
+      `[[Kasa]] ekranında masraf için [[Harcama]], patrona ya da bankaya verilen nakit için [[Teslim]], bozuk para gibi eklenen nakit için [[Kasaya giriş]]’e basın; tutarı ve açıklamayı yazın. Teslimde paranın kime verildiğini [[Kime]]’den seçin (Banka ya da Başka da olur); Z raporu teslimi kişi kişi döker. Her hareket denetim kaydına yazılır${seesCash(c) ? ', beklenen nakde işlenir' : ''} ve gün sonunda ladmin’e (lafmaliyet) satır satır gider.`,
   },
 
   // ——— Satış ve ödeme

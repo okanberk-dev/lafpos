@@ -533,6 +533,10 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
       <Row l="Kasa girişi" r={tlPlain(s.cashIn)} />
       <Row l="Harcama" r={`-${tlPlain(s.cashOut)}`} />
       <Row l="Teslim" r={`-${tlPlain(s.handedOver)}`} />
+      {/* Teslimin kime gittiği (eski Z'de yok) */}
+      {(s.handedOverBy ?? []).map((r) => (
+        <Row small key={r.userId ?? `ad:${r.name}`} l={`· Kime: ${r.name}`} r={`-${tlPlain(r.amount)}`} />
+      ))}
       {s.cariCollections > 0 && <Row l="Açık hesap tahsilatı" r={tlPlain(s.cariCollections)} />}
       <Row strong l="Beklenen nakit" r={tlPlain(s.expectedCash)} />
       {s.countedCash != null && <Row l="Sayılan nakit" r={tlPlain(s.countedCash)} />}

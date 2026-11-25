@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ChevronLeft, ChevronRight, Coins, EyeOff, FileText, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { parseTL, tl, tlPlain } from '@shared/money';
+import { BANK_RECIPIENT, cleanRecipientName, RECIPIENT_MAX } from '@shared/teslim';
 import { fmtDateLong, fmtTime } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO, ZSummary } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -26,13 +27,14 @@ import { CashCount, signedTL } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
 import { DayCloseGuide } from './DayCloseGuide';
+import { DayCloseDone, DayCloseSummary } from './DayCloseSummary';
 import { WorkedStaffCard, type WorkedDTO } from './WorkedStaff';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
 const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-[400px]:[&>svg]:hidden';
 
 type MoveKind = 'harcama' | 'teslim' | 'giris';
-interface Movement {
+export interface Movement {
   id: string;
   kind: MoveKind;
   amount: number;
@@ -41,7 +43,14 @@ interface Movement {
   createdAt: number;
   /** Harcamanın lafmaliyet gider kategorisi (yazıldığı andaki adı) */
   categoryName?: string | null;
+  /** Teslimde parayı alan (kullanıcıysa kimliği; adı yazıldığı anki hâliyle); eski teslimde ve eski sunucuda yok */
+  recipientUserId?: string | null;
+  recipientName?: string | null;
 }
+/**
+ * Teslim penceresinde "Kime" seçimi: patron ya da müdür hesabı, Banka ya da elle yazılan ad ("Başka"). null: seçilmedi
+ */
+type RecipientPick = { kind: 'user'; userId: string } | { kind: 'bank' } | { kind: 'other' } | null;
 /** lafmaliyet'in personelin seçebildiği gider kategorisi (GET /cash/expense-categories) */
 interface ExpenseCategory {
   id: number;
@@ -89,7 +98,7 @@ interface DayDetail {
 const MOVE_KINDS: MoveKind[] = ['harcama', 'teslim', 'giris'];
 const MOVE_LABEL: Record<MoveKind, string> = { harcama: 'Harcama', teslim: 'Teslim', giris: 'Kasaya giriş' };
 const MOVE_ICON = { harcama: ArrowUpFromLine, teslim: Wallet, giris: ArrowDownToLine } satisfies Record<MoveKind, unknown>;
-const MOVE_HINT: Record<MoveKind, string> = { harcama: 'Kasadan nakit çıkan masraf', teslim: 'Patrona ya da bankaya teslim edilen nakit', giris: 'Kasaya eklenen nakit (bozuk para gibi)' };
+const MOVE_HINT: Record<MoveKind, string> = { harcama: 'Kasadan nakit çıkan masraf', teslim: 'Kasadan çıkıp birine ya da bankaya verilen nakit', giris: 'Kasaya eklenen nakit (bozuk para gibi)' };
 const MOVE_SAVE: Record<MoveKind, string> = { harcama: 'Harcamayı kaydet', teslim: 'Teslimi kaydet', giris: 'Girişi kaydet' };
 
 /** En az bu kadar farkta (kuruş) açılışın nedeni zorunlu (sunucudaki `OPENING_REASON_MIN`, lafmaliyet'in 1 TL toleransı) */
@@ -104,6 +113,10 @@ export default function CashPage() {
   const days = useQuery({ queryKey: ['cash', 'days'], queryFn: () => get<DayListItem[]>('/cash/days?limit=60'), enabled: tab === 'gecmis' && can('rapor.gor') });
   const [selected, setSelected] = useState<string | null>(null);
   const detail = useQuery({ queryKey: ['cash', 'detail', selected], queryFn: () => get<DayDetail>(`/cash/days/${selected}`), enabled: !!selected });
+  // Kapanış saati bildiriminin "Gün sonu al"ı (/kasa?gunsonu=1): gün açıksa ve yetki varsa gün sonu penceresi açılır;
+  // her durumda parametre adresten silinir (geri ya da yenile pencereyi yeniden açmasın)
+  const [params, setParams] = useSearchParams();
+  const askClose = params.get('gunsonu') === '1';
 
   const [opening, setOpening] = useState('');
   // Açılışın nedeni: rakam gören kullanıcıda fark ₺1,00 ve üstündeyse, kör kasiyerde sunucu farkı söyleyince istenir.
@@ -116,6 +129,10 @@ export default function CashPage() {
   const [moveAmount, setMoveAmount] = useState('');
   const [moveDesc, setMoveDesc] = useState('');
   const [moveCategory, setMoveCategory] = useState<number | null>(null);
+  // Teslimde paranın kime verildiği (zorunlu): hesap, Banka ya da elle yazılan ad
+  const [moveRecipient, setMoveRecipient] = useState<RecipientPick>(null);
+  const [moveRecipientText, setMoveRecipientText] = useState('');
+  const recipientRef = useRef<HTMLInputElement>(null);
   // Harcama kategorileri: pencere açılınca son liste gelir, lafmaliyet'ten gelen yenisi ekranı kendiliğinden yeniler
   const categories = useQuery({
     queryKey: ['cash', 'categories'],
@@ -124,6 +141,18 @@ export default function CashPage() {
     staleTime: 60_000,
   });
   const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (!askClose || !current.data) return;
+    const d = current.data;
+    if (d.day && can('kasa.gun') && (d.summary || d.blind)) {
+      setTab('bugun');
+      setSelected(null);
+      setClosing(true);
+    }
+    const next = new URLSearchParams(params);
+    next.delete('gunsonu');
+    setParams(next, { replace: true });
+  }, [askClose, current.data, can, params, setParams]);
   const [handover, setHandover] = useState(false);
   const [count, setCount] = useState<CountResult>(emptyCount());
   const [counted, setCounted] = useState(true);
@@ -136,7 +165,7 @@ export default function CashPage() {
   const [reopenReason, setReopenReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
-  const [moveError, setMoveError] = useState<{ amount?: string; desc?: string }>({});
+  const [moveError, setMoveError] = useState<{ amount?: string; desc?: string; recipient?: string }>({});
   const descRef = useRef<HTMLInputElement>(null);
   // Kasa hareketi Enter'la da kaydedilir: istek sürerken ikinci basış ikinci hareketi yazmasın
   const moveBusy = useRef(false);
@@ -216,14 +245,35 @@ export default function CashPage() {
   const openMove = (kind: MoveKind) => {
     setMoveError({});
     setMoveCategory(null);
+    setMoveRecipient(null);
+    setMoveRecipientText('');
     setMoveKind(kind);
+  };
+  // Teslimi alabilecek hesaplar: patron ve müdür (kasiyer kasayı devrederse Vardiya devri'dir); geri kalanı Başka
+  const recipients = boot.users.filter((u) => u.active && (u.role === 'patron' || u.role === 'mudur'));
+  const pickRecipient = (p: Exclude<RecipientPick, null>) => {
+    setMoveRecipient(p);
+    setMoveError((x) => ({ ...x, recipient: undefined }));
+    if (p.kind === 'other') requestAnimationFrame(() => recipientRef.current?.focus());
+  };
+  // Teslimin alıcısı gövdede: hesapta kimliği (ad sunucuda o anki hâliyle yazılır), Banka'da ve elle yazılanda ad
+  const recipientBody = () => {
+    if (moveKind !== 'teslim' || !moveRecipient) return {};
+    if (moveRecipient.kind === 'user') return { recipientUserId: moveRecipient.userId };
+    return { recipientName: moveRecipient.kind === 'bank' ? BANK_RECIPIENT : cleanRecipientName(moveRecipientText) };
   };
   const addMove = async () => {
     if (!moveKind) return;
-    const err = { amount: parseTL(moveAmount || '0') ? undefined : 'Tutarı girin', desc: moveKind === 'harcama' && !moveDesc.trim() ? 'Harcamanın açıklaması gerekli' : undefined };
-    if (err.amount || err.desc) {
+    const recipientMissing = moveKind === 'teslim' && (!moveRecipient || (moveRecipient.kind === 'other' && !cleanRecipientName(moveRecipientText)));
+    const err = {
+      amount: parseTL(moveAmount || '0') ? undefined : 'Tutarı girin',
+      desc: moveKind === 'harcama' && !moveDesc.trim() ? 'Harcamanın açıklaması gerekli' : undefined,
+      recipient: recipientMissing ? (moveRecipient?.kind === 'other' ? 'Teslim alanın adını yazın' : 'Kime teslim edildiğini seçin') : undefined,
+    };
+    if (err.amount || err.desc || err.recipient) {
       setMoveError(err);
-      if (!err.amount && err.desc) descRef.current?.focus();
+      if (!err.amount && err.recipient && moveRecipient?.kind === 'other') recipientRef.current?.focus();
+      else if (!err.amount && !err.recipient && err.desc) descRef.current?.focus();
       return;
     }
     if (moveBusy.current) return;
@@ -231,13 +281,15 @@ export default function CashPage() {
     setMoveSaving(true);
     try {
       const categoryId = moveKind === 'harcama' ? moveCategory : null;
-      const res = await withApproval((pin) => post('/cash/movements', { kind: moveKind, amount: parseTL(moveAmount) ?? 0, description: moveDesc, categoryId, approverPin: pin }));
+      const res = await withApproval((pin) => post('/cash/movements', { kind: moveKind, amount: parseTL(moveAmount) ?? 0, description: moveDesc, categoryId, ...recipientBody(), approverPin: pin }));
       if (res === null) return;
       toast.ok(`${MOVE_LABEL[moveKind]} kaydedildi`);
       setMoveKind(null);
       setMoveAmount('');
       setMoveDesc('');
       setMoveCategory(null);
+      setMoveRecipient(null);
+      setMoveRecipientText('');
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -255,8 +307,14 @@ export default function CashPage() {
       const res = await post<{ day: BusinessDayDTO; summary: ZSummary | null; lafmaliyet: Record<string, unknown> | null; blind?: boolean }>('/cash/day/close', body);
       setClosing(false);
       setCount(emptyCount());
-      if (res.summary) setZResult({ day: res.day, summary: res.summary, lafmaliyet: res.lafmaliyet ?? {}, movements: [] });
-      else toast.ok(body.countedCash == null ? `Gün kapandı (Z ${res.day.zNo}); sayım girilmedi, kasa föyünü yönetici girer` : `Gün kapandı (Z ${res.day.zNo}); sayım kaydedildi, fark yöneticinin ekranında`);
+      // Sonuç penceresi günün hareketlerini de gösterir (kayda ne geçti, teslim kime)
+      if (res.summary) setZResult({ day: res.day, summary: res.summary, lafmaliyet: res.lafmaliyet ?? {}, movements, shiftCounts });
+      else
+        toast.ok(
+          body.countedCash == null
+            ? `Ayrıntılı gün sonu alındı (Z ${res.day.zNo}); sayım girilmedi, kasa föyünü yönetici girer`
+            : `Ayrıntılı gün sonu alındı (Z ${res.day.zNo}); sayım kaydedildi, fark yöneticinin ekranında`,
+        );
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -314,6 +372,8 @@ export default function CashPage() {
   const closedDay = day ? null : (current.data?.closedToday ?? null);
   const views = can('rapor.gor');
   const simulator = boot.integrations.okc.provider === 'simulator';
+  // Gün sonu ladmin'e (lafmaliyet) gider mi: bağlantı kurulu ve deneme (kurulum) modu kapalı (eğitim günü gitmez)
+  const ladminPush = boot.integrations.lafmaliyetPush && !boot.integrations.deneme;
 
   // Görünüm (Bugün, Geçmiş günler) ve eğitim cihazı sahnenin numaralı menüsünde: geniş ekranda solda, darda hap şeridi.
   // Eylemler Bugün'ün kendi şeridinde
@@ -680,6 +740,54 @@ export default function CashPage() {
               </div>
             </div>
           )}
+          {moveKind === 'teslim' && (
+            // Paranın kime verildiği (zorunlu): patron ve müdür hesapları, Banka ya da elle yazılan ad. Z raporu teslimi
+            // alıcıya göre döker, ladmin'e (lafmaliyet) satırla gider
+            <div role="group" aria-labelledby="teslim-kime">
+              <Label hint="zorunlu">
+                <span id="teslim-kime">Kime</span>
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {recipients.map((u) => (
+                  <Chip
+                    key={u.id}
+                    on={moveRecipient?.kind === 'user' && moveRecipient.userId === u.id}
+                    tone="ink"
+                    className="pointer-fine:min-h-11"
+                    onClick={() => pickRecipient({ kind: 'user', userId: u.id })}
+                  >
+                    {u.name}
+                  </Chip>
+                ))}
+                <Chip on={moveRecipient?.kind === 'bank'} tone="ink" className="pointer-fine:min-h-11" onClick={() => pickRecipient({ kind: 'bank' })}>
+                  {BANK_RECIPIENT}
+                </Chip>
+                <Chip on={moveRecipient?.kind === 'other'} tone="ink" className="pointer-fine:min-h-11" onClick={() => pickRecipient({ kind: 'other' })}>
+                  Başka
+                </Chip>
+              </div>
+              {moveRecipient?.kind === 'other' && (
+                <Input
+                  ref={recipientRef}
+                  value={moveRecipientText}
+                  onChange={(e) => {
+                    setMoveRecipientText(e.target.value);
+                    setMoveError((x) => ({ ...x, recipient: undefined }));
+                  }}
+                  maxLength={RECIPIENT_MAX}
+                  aria-label="Teslim alanın adı"
+                  aria-invalid={!!moveError.recipient || undefined}
+                  placeholder="Teslim alanın adı"
+                  className="mt-2"
+                />
+              )}
+              {moveError.recipient && (
+                <p role="alert" className="mt-1.5 text-[13px] text-danger-ink">
+                  {moveError.recipient}
+                </p>
+              )}
+            </div>
+          )}
           <Field label="Açıklama" hint={moveKind === 'harcama' ? 'zorunlu' : 'isteğe bağlı'} error={moveError.desc}>
             <Input
               ref={descRef}
@@ -692,12 +800,14 @@ export default function CashPage() {
                 if (e.key === 'Enter' && !e.repeat) void addMove();
               }}
               enterKeyHint="done"
-              placeholder={moveKind === 'harcama' ? 'Ör. süt (market), fiş no' : moveKind === 'teslim' ? 'Ör. bankaya yatırıldı' : 'Ör. bozuk para'}
+              placeholder={moveKind === 'harcama' ? 'Ör. süt (market), fiş no' : moveKind === 'teslim' ? 'Ör. akşam teslimi' : 'Ör. bozuk para'}
             />
           </Field>
           <Button variant="primary" block loading={moveSaving} onClick={addMove}>
             {moveKind ? MOVE_SAVE[moveKind] : 'Kaydet'}
           </Button>
+          {/* Harcama ve teslim lafmaliyet'in "Kasadan çıkanlar"ına satır satır gider (gün sonu paketiyle) */}
+          {ladminPush && moveKind !== 'giris' && <p className="text-center text-xs text-muted">Gün sonunda ladmin’e (lafmaliyet) satır satır gider</p>}
         </div>
       </Modal>
 
@@ -705,8 +815,8 @@ export default function CashPage() {
         open={closing && (!!summary || blind)}
         onClose={() => setClosing(false)}
         size="lg"
-        title={`Gün sonu · Z ${day?.zNo ?? ''}`}
-        subtitle="Çekmeceyi sayın; banka POS slipi ve yemek kartı tutarlarını girin"
+        title={`Ayrıntılı gün sonu · Z ${day?.zNo ?? ''}`}
+        subtitle="Satışlar, ödemeler, kasa hareketleri ve sayım tek raporda kaydedilir"
         footer={
           // Telefonda iki satır: seçim ve sayılan toplam üstte, Vazgeç ve Günü kapat eşit genişlikte altta
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -728,6 +838,8 @@ export default function CashPage() {
         }
       >
         <div className="space-y-4 p-5">
+          {/* Kayda geçecekler: ayrıntılı gün sonunun neyi kaydettiği bir bakışta (kör kasada ciro ve beklenen nakit yok) */}
+          <DayCloseSummary summary={summary} movements={movements} shiftCounts={shiftCounts} lafmaliyet={ladminPush} />
           {/* Ekibin her akşam aynı sırayla yaptığı adımlar (sahibin istediği gün sonu rehberi) */}
           <DayCloseGuide />
           {counted && <CashCount summary={summary} value={count} onChange={setCount} />}
@@ -760,8 +872,21 @@ export default function CashPage() {
         </div>
       </Modal>
 
-      <Modal open={!!zResult} onClose={() => setZResult(null)} size="xl" title="Gün sonu alındı" subtitle="Z raporu ve lafmaliyet alanları">
-        <div className="p-5">{zResult && <ZView day={zResult.day} summary={zResult.summary} lafmaliyet={zResult.lafmaliyet} />}</div>
+      <Modal
+        open={!!zResult}
+        onClose={() => setZResult(null)}
+        size="xl"
+        title={`Ayrıntılı gün sonu alındı · Z ${zResult?.day.zNo ?? ''}`}
+        subtitle="Özet üstte, ayrıntılı Z raporu altında"
+      >
+        {zResult && (
+          <div className="space-y-4 p-5">
+            <DayCloseDone summary={zResult.summary} closedAt={zResult.day.closedAt} lafmaliyet={boot.integrations.lafmaliyetPush && !zResult.day.trainingDay} />
+            <ZView day={zResult.day} summary={zResult.summary} lafmaliyet={zResult.lafmaliyet}>
+              <CashActivity movements={zResult.movements} counts={zResult.shiftCounts ?? []} past />
+            </ZView>
+          </div>
+        )}
       </Modal>
       <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={shiftCounts.at(-1)?.diff ?? 0} />
     </div>
@@ -808,7 +933,7 @@ function MovementsCard({ movements, past }: { movements: Movement[]; past?: bool
                         <span aria-hidden="true">·</span>
                       </>
                     )}
-                    <span className="whitespace-nowrap">{joinMeta([m.categoryName, m.userName, fmtTime(m.createdAt)])}</span>
+                    <span className="min-w-0 max-w-full truncate">{joinMeta([m.kind === 'teslim' && m.recipientName ? `Kime: ${m.recipientName}` : null, m.categoryName, m.userName, fmtTime(m.createdAt)])}</span>
                   </span>
                 </span>
                 <span className={cn('tabular shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-success-ink' : 'text-ink')}>

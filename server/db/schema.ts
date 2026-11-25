@@ -400,6 +400,13 @@ export const cashMovements = sqliteTable(
      */
     categoryId: integer('category_id'),
     categoryName: text('category_name'),
+    /**
+     * Teslimde parayı kime verildiği (sahibin isteği, 25 Kasım 2026; yalnız teslimde, yenide zorunlu): kullanıcıya
+     * teslimde kimliği, adı yazıldığı anki hâliyle `recipientName` (kullanıcı sonra adını değiştirse de kayıt korunur);
+     * "Banka" ya da elle yazılan alıcıda yalnız ad. Eski teslimde ikisi de boş ("Belirtilmemiş"). docs/03 §4.7
+     */
+    recipientUserId: text('recipient_user_id').references(() => users.id),
+    recipientName: text('recipient_name'),
   },
   (t) => [index('cash_movements_day_idx').on(t.dayId)],
 );

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { odenmezByPerson } from '@shared/comp';
 import { tl } from '@shared/money';
+import { cleanRecipientName, handoverByRecipient } from '@shared/teslim';
 import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs, fmtDateShort } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
@@ -156,7 +157,7 @@ export function addCashMovement(
   t: Tx,
   actor: Actor,
   fx: Effects,
-  input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; categoryId?: number | null },
+  input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; categoryId?: number | null; recipientUserId?: string | null; recipientName?: string | null },
   categories: { id: number; name: string }[] = [],
 ) {
   const approverId = need(actor, 'kasa.hareket');
@@ -171,7 +172,22 @@ export function addCashMovement(
     category = categories.find((c) => c.id === input.categoryId) ?? null;
     if (!category) throw new HttpError(422, 'Seçilen kategori lafmaliyet’in listesinde yok; listeyi yenileyip yeniden seçin', 'invalid_category');
   }
-  const row = { id: ulid(), dayId: day.id, kind: input.kind, amount, description, userId: actor.user.id, createdAt: Date.now(), categoryId: category?.id ?? null, categoryName: category?.name ?? null };
+  // Teslimde paranın kime verildiği zorunlu (sahibin isteği): kullanıcıya teslimde kimliği ve o anki adı, "Banka" ya da
+  // elle yazılan alıcıda yalnız ad. Harcama ve girişte alıcı olmaz
+  const recipient = recipientOf(t, input);
+  const row = {
+    id: ulid(),
+    dayId: day.id,
+    kind: input.kind,
+    amount,
+    description,
+    userId: actor.user.id,
+    createdAt: Date.now(),
+    categoryId: category?.id ?? null,
+    categoryName: category?.name ?? null,
+    recipientUserId: recipient?.userId ?? null,
+    recipientName: recipient?.name ?? null,
+  };
   t.insert(schema.cashMovements).values(row).run();
   const label = { harcama: 'kasadan harcama', teslim: 'kasadan teslim', giris: 'kasaya para girişi' }[input.kind];
   fx.audit(t, {
@@ -182,11 +198,31 @@ export function addCashMovement(
     entity: 'cash_movement',
     entityId: row.id,
     amount,
-    message: `${actor.user.name}: ${label} ${tl(amount)}${description ? ` (${description})` : ''}${category ? ` · ${category.name}` : ''}`,
+    message: `${actor.user.name}: ${label} ${tl(amount)}${recipient ? ` → ${recipient.name}` : ''}${description ? ` (${description})` : ''}${category ? ` · ${category.name}` : ''}`,
     ...(category ? { data: { categoryId: category.id, categoryName: category.name } } : {}),
+    ...(recipient ? { data: { recipientUserId: recipient.userId, recipientName: recipient.name } } : {}),
   });
   fx.emit({ topic: 'cash', kind: 'movement', byUserId: actor.user.id });
   return row;
+}
+
+/**
+ * Teslimin alıcısı: kullanıcı seçildiyse etkin bir hesap olmalı (adı o anki hâliyle saklanır), değilse elle yazılan ad
+ * (ör. "Banka"). Teslimde ikisi de yoksa 400 `recipient_required`; harcama ve girişte alıcı verilirse 400
+ */
+function recipientOf(t: Tx, input: { kind: string; recipientUserId?: string | null; recipientName?: string | null }): { userId: string | null; name: string } | null {
+  const typed = cleanRecipientName(input.recipientName);
+  if (input.kind !== 'teslim') {
+    if (input.recipientUserId || typed) throw bad('Alıcı yalnız teslimde yazılır', 'recipient_not_allowed');
+    return null;
+  }
+  if (input.recipientUserId) {
+    const u = t.select({ id: schema.users.id, name: schema.users.name, active: schema.users.active }).from(schema.users).where(eq(schema.users.id, input.recipientUserId)).get();
+    if (!u?.active) throw new HttpError(422, 'Teslim alan kişi bulunamadı ya da hesabı kapalı', 'invalid_reference');
+    return { userId: u.id, name: cleanRecipientName(u.name) || 'Personel' };
+  }
+  if (!typed) throw bad('Paranın kime teslim edildiğini seçin ya da yazın', 'recipient_required');
+  return { userId: null, name: typed };
 }
 
 /** Cari (açık hesap) tahsilatı: satış değildir, Z cirosuna girmez ama nakitse kasaya girer. */
@@ -364,6 +400,8 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   const cashIn = moves.filter((m) => m.kind === 'giris').reduce((a, m) => a + m.amount, 0);
   const cashOut = moves.filter((m) => m.kind === 'harcama').reduce((a, m) => a + m.amount, 0);
   const handedOver = moves.filter((m) => m.kind === 'teslim').reduce((a, m) => a + m.amount, 0);
+  // Teslim kime olursa olsun çekmeceden çıkar (beklenen nakit aynı formül); döküm yalnız raporda, kime ne kadar gitti
+  const handedOverBy = handoverByRecipient(moves);
   const expectedCash = day.openingCash + cashSales + cashCollections + cashIn - cashOut - handedOver;
   const cariSales = salesPays.filter((p) => methods.find((m) => m.id === p.methodId)?.kind === 'cari').reduce((a, p) => a + p.amount, 0);
   const online = orders.filter(onlineCounted);
@@ -394,6 +432,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     cashIn,
     cashOut,
     handedOver,
+    ...(handedOverBy.length ? { handedOverBy } : {}),
     openingCash: day.openingCash,
     expectedCash,
     countedCash: day.countedCash,

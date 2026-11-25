@@ -129,3 +129,15 @@ export function hmToMinutes(hm: string): number {
   const [h, m] = hm.split(':').map(Number);
   return h * 60 + (m || 0);
 }
+
+/**
+ * İş gününün kapanış anı (ms): Ayarlar'daki kapanış saati ("SS:DD", İstanbul) o iş gününe yerleşir. Gün 05:00'te
+ * döndüğü için 05:00'e kadarki saat ertesi takvim gününe düşer (01:00'de kapanan dükkân: 26 Kasım'ın günü 27 Kasım
+ * 01:00'de kapanır); 05:00 günün sonudur, başı değil
+ */
+export function closingAtMs(date: string, hm: string): number {
+  return businessDayStartMs(date) + (((hmToMinutes(hm) - DAY_ROLLOVER_HOUR * 60 - 1 + 1440) % 1440) + 1) * 60_000;
+}
+
+/** Kapanış hatırlatması kapanıştan bu kadar önce çıkar (sahibin isteği: 30 dakika) */
+export const CLOSING_REMINDER_MS = 30 * 60_000;

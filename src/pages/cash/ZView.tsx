@@ -200,6 +200,16 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
             <Line l="Kasa girişi" k={summary.cashIn} />
             <Line l="Harcama" k={summary.cashOut} />
             <Line l="Teslim" k={summary.handedOver} />
+            {/* Teslimin kime gittiği (alıcıya göre; eski Z'lerde yok). Alıcısız eski teslim "Belirtilmemiş" */}
+            {(summary.handedOverBy ?? []).map((r) => (
+              <li key={r.userId ?? `ad:${r.name}`} className="flex justify-between gap-3 py-1.5 pl-8 pr-4 text-[13px] text-muted">
+                <span className="min-w-0 truncate">
+                  Kime: {r.name}
+                  {r.count > 1 ? ` · ${r.count} teslim` : ''}
+                </span>
+                <span className="tabular whitespace-nowrap">{tl(r.amount)}</span>
+              </li>
+            ))}
             {/* Kart ve havaleyle alınan tahsilat da bu tutarda (çekmeceye yalnız nakdi girer, beklenen nakit onu sayar) */}
             {summary.cariCollections > 0 && <Line l="Açık hesap tahsilatı (tüm ödeme türleri)" k={summary.cariCollections} />}
             {summary.kdv.length > 0 && <Group>KDV</Group>}

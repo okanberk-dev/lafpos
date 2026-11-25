@@ -504,6 +504,13 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   `.toast-tile`; hareket azaltmada hemen yerinde). Eylem ("Geri al") küçük yumuşak düğme; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
   ekranda (`data-action-bar`: adisyonun Gönder / Ödeme şeridi) şeridin de üstünde. Tablet ve bilgisayarda üst ortada.
   "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır; hata ve uyarı hemen okunur ve daha uzun kalır.
+- **Kapanış hatırlatması** (`src/components/ClosingReminder.tsx`, 25 Kasım 2026, sahibin isteği): geçici bildirim değil,
+  duran kart. Ayarlar'daki kapanış saatine 30 dakika kala, gün açıkken, gün sonu yetkisi olanın ekranında **sağ altta**
+  (tablet ve bilgisayar; en çok 24 rem, kabuk boşluğu kadar içeride), telefonda alt sekme çubuğunun üstünde tam genişlik;
+  adisyonun alt eylem şeridi (`data-action-bar`) varken onun da üstünde. Beyaz yüzen yüzey (`--shadow-pop`, saç teli
+  kenar), solda kehribar ikon karosu (çalar saat), başlık "Kapanışa N dk kaldı" ya da "Kapanış saati geçti", altında
+  saat ve tek cümle; düğmeler sağda: "Sonra" (kenarsız) ve ana eylem "Gün sonu al" (Kasa'da gün sonu penceresini açar).
+  Katman `z-40`: pencere, çekmece ve geçici bildirim üstte kalır. Bar ekranında ve yönetimde çıkmaz.
 - **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`
   `px-3`'ü ezer). Yalnız aynı varyanttaki sınıflar birleşir: sayfanın `max-md:hidden` sınıfı kitin `max-sm:flex`
   sınıfını ezmez, ikisi de kalır ve derlenmiş CSS'te sonra gelen kazanır; kit bileşenini bir kırılımda gizlemek için ona

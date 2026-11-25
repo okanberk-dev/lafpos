@@ -265,9 +265,9 @@ describe('kasa hareketleri satır satır ve harcama kategorisi', () => {
     await h.ok('kasa', 'POST', '/cash/movements', { kind: 'harcama', amount: 2500, description: 'Buz', categoryId: 1 });
   });
 
-  it('gövdede cashMoves: her hareket bir satır, kişi yok; toplamlar Z ile tutar', async () => {
+  it('gövdede cashMoves: her hareket bir satır, yazan kişi yok, teslimde alıcı var; toplamlar Z ile tutar', async () => {
     const { openRow } = await mod();
-    await h.ok('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 50000, description: 'Patrona' });
+    await h.ok('kasa', 'POST', '/cash/movements', { kind: 'teslim', amount: 50000, description: 'Patrona', recipientName: 'Banka' });
     await h.ok('kasa', 'POST', '/cash/movements', { kind: 'giris', amount: 3000, description: 'Bozuk para' });
     const id = openRow()!.id;
     const p = await h.ok<{ z: Record<string, number>; cashMoves: { id: string; kind: string; amount: number; description: string; at: string; categoryId: number | null }[] }>('patron', 'GET', `/sync/lafmaliyet/gun/${id}`);
@@ -280,8 +280,9 @@ describe('kasa hareketleri satır satır ve harcama kategorisi', () => {
     for (const m of p.cashMoves) {
       expect(m.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
       expect(new Date(m.at).toISOString()).toBe(m.at);
-      expect(Object.keys(m).sort()).toEqual(['amount', 'at', 'categoryId', 'description', 'id', 'kind']);
+      expect(Object.keys(m).sort()).toEqual(m.kind === 'teslim' ? ['amount', 'at', 'categoryId', 'description', 'id', 'kind', 'recipient'] : ['amount', 'at', 'categoryId', 'description', 'id', 'kind']);
     }
+    expect(p.cashMoves.find((m) => m.kind === 'teslim')).toMatchObject({ recipient: 'Banka' });
     const sum = (k: string) => p.cashMoves.filter((m) => m.kind === k).reduce((a, m) => a + m.amount, 0);
     expect(sum('harcama')).toBeCloseTo(p.z.cashOut, 2);
     expect(sum('teslim')).toBeCloseTo(p.z.handedOver, 2);

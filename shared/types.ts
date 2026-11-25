@@ -1,3 +1,4 @@
+import type { HandoverRecipient } from './teslim';
 import type { OffDeviceTotals, OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
 import type { PlatformId } from './platforms';
@@ -218,6 +219,12 @@ export interface PublicSettings {
   quickCash: number[];
   sizeLabels: { M: string; L: string };
   requireDayOpen: boolean;
+  /**
+   * Kapanış saati ("SS:DD", İstanbul saati); null: kapalı. Gün açıkken kapanışa 30 dakika kala gün sonu yetkisi olanın
+   * ekranında sağ altta "Gün sonu al" bildirimi çıkar (src/components/ClosingReminder.tsx). 05:00'ten önceki saat ertesi
+   * güne düşer (gece yarısını aşan kapanış; `closingAtMs`)
+   */
+  closingTime: string | null;
   kitchenWarnMinutes: number;
   kitchenAlarmMinutes: number;
   roomBillingStepMinutes: number;
@@ -676,6 +683,11 @@ export interface ZSummary {
   cashIn: number;
   cashOut: number;
   handedOver: number;
+  /**
+   * Teslimin alıcıya göre dökümü (shared/teslim.ts `handoverByRecipient`; Σ amount = handedOver). Yalnız teslim varken;
+   * eski Z'lerde ve teslimsiz günde yok. Alıcısız eski teslim "Belirtilmemiş"
+   */
+  handedOverBy?: HandoverRecipient[];
   openingCash: number;
   expectedCash: number;
   countedCash: number | null;
