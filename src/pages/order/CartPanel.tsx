@@ -129,8 +129,10 @@ export function CartPanel({
   const partlyPaid = order.paid > 0 && !order.extPaid && due > 0 && !preview;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
+    // En az 12 rem (kalem listesi en az 3 rem, altında toplamlar): alçak ekranda (yatay telefon, kapanış kartı varken)
+    // toplamlar eylem şeridinin üstüne binmez; yer kalmazsa hesap yaprağı bütünüyle kayar (OrderPage `right`)
+    <div data-cart-panel="" className="flex min-h-48 flex-1 flex-col">
+      <div className="scroll-thin flex min-h-12 flex-1 flex-col overflow-y-auto">
         {empty && (
           <EmptyState art="fincan" title="Adisyon boş" className="my-auto">
             {wide ? 'Soldan ürün seçin. ' : '“Ürün ekle”ye dokunup ürün seçin. '}

@@ -144,11 +144,7 @@ PAVO_SERIAL=<cihazın seri numarası>
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planLafposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
-7. **Adisyonun hesap sütunu çok alçak ekranda kaymalı (kapanış kartından bağımsız):** yaprak alçaldığında Toplam bloğu
-   eylem şeridinin üstüne binebiliyor (gözden geçirme, 25 Kasım 2026). Kapanış kartı bu yüzden telefonda ve alçak
-   ekranda adisyonda çıkmıyor; kalıcı çözüm `OrderPage` sepet yaprağının `overflow-y-auto` olması ve CartPanel'e en az
-   ~7,5 rem vermek, yatay telefonda e2e denetimiyle.
-8. **Kapanış hatırlatmasının sesi ve telefon bildirimi:** bugün yalnız ekranda kart. İstenirse kapanışa 30 dk kala
+7. **Kapanış hatırlatmasının sesi ve telefon bildirimi:** bugün yalnız ekranda kart. İstenirse kapanışa 30 dk kala
    patrona Web Push (`server/sync/bildirim.ts`, yeni tür) ve kasada tek seferlik uyarı sesi eklenir.
 
 ## Çalışma kuralları (kısa)

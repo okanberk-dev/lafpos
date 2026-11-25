@@ -5,7 +5,7 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { CLOSING_SNOOZE_KEY, type ClosingSnooze, closingPhase, snoozeUntil } from '@/lib/closingReminder';
-import { useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
+import { useLocalPref, useTick } from '@/lib/hooks';
 import { isAdminArea } from '@/lib/nav';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { Button } from './ui/Button';
@@ -21,8 +21,8 @@ import { Button } from './ui/Button';
  * ana alan onun kadar kısalır: listenin son satırı, Kasa'nın "Gün sonu (Z)"si ve adisyonun Toplam'ı ile Gönder / Öde'si
  * hiç örtülmez. Boyu html'de `--closing-card-h`: telefonda geçici bildirim kartın üstünde çıkar (lib/toast.tsx).
  * Bar ekranında (tam ekran) ve yönetimde (yapışkan Kaydet şeridi) çıkmaz. Alçak ekranda (yatay telefon, en çok 34 rem: kabuğun alçak ekran eşiği)
- * tek satır. Telefonda ve alçak ekranda adisyonda hiç çıkmaz: sepet, Toplam ve Gönder / Öde sığmazdı (bilgisayar ve
- * tablet adisyonunda hesap sütununun altında durur); öteki ekranlarda görünür.
+ * tek satır. Adisyonda da durur: hesap yaprağı en az 12 rem, yer yetmezse kayar (toplamlar Gönder / Öde'nin üstüne
+ * binmez; CartPanel, OrderPage `right`).
  */
 export function ClosingReminder({ dock = true }: { /** Telefonda alt sekme çubuğu var mı (yoksa ev çubuğu payını kart bırakır) */ dock?: boolean }) {
   const boot = useBoot();
@@ -32,13 +32,11 @@ export function ClosingReminder({ dock = true }: { /** Telefonda alt sekme çubu
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const ref = useRef<HTMLElement>(null);
-  const short = useMediaQuery('(max-height: 34rem)');
-  const wide = useMediaQuery('(min-width: 48rem)');
   const closingTime = boot.settings.closingTime ?? null;
   const day = boot.day;
   const phase = closingPhase(day, closingTime, now, snooze);
   const shown =
-    !!phase && !!day && !!closingTime && can('kasa.gun') && !pathname.startsWith('/mutfak') && !isAdminArea(pathname) && !((short || !wide) && pathname.startsWith('/adisyon'));
+    !!phase && !!day && !!closingTime && can('kasa.gun') && !pathname.startsWith('/mutfak') && !isAdminArea(pathname);
 
   // Kartın boyu (üst payıyla) html'de: telefonda geçici bildirim kartın üstünde durur. Kart kalkınca silinir
   useEffect(() => {
