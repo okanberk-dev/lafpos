@@ -1450,7 +1450,7 @@ export async function runFlows(ctx) {
             assert(cardBox.x + cardBox.width >= (page.viewportSize()?.width ?? 0) - 40, `kart sağ altta değil: ${JSON.stringify(cardBox)}`);
             await page.screenshot({ path: `${ROOT}/e2e/out/bilgisayar-kasa-kapanis-adisyon.png` });
           });
-          // Yatay telefon (alçak ekran): kart tek satır; adisyonda hiç çıkmaz (sepet ve Gönder / Öde sığsın)
+          // Yatay telefon (alçak ekran): kart tek satır; adisyonda da durur, hesap yaprağı kayar (toplamlar eylem şeridine binmez)
           await withPage(ctx, 'yatay-telefon', 'kasa', async (page) => {
             await go(ctx, page, '/masalar');
             const card = page.getByRole('status', { name: 'Kapanış hatırlatması' });
@@ -1460,8 +1460,14 @@ export async function runFlows(ctx) {
             await page.screenshot({ path: `${ROOT}/e2e/out/yatay-telefon-kasa-kapanis-hatirlatmasi.png` });
             await go(ctx, page, '/satis');
             await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
-            await page.locator('[data-action-bar]').first().waitFor({ timeout: 8000 });
-            assert(!(await page.getByRole('status', { name: 'Kapanış hatırlatması' }).count()), 'yatay telefonda adisyonda kapanış kartı çıktı');
+            const bar = page.locator('[data-action-bar]').first();
+            await bar.waitFor({ timeout: 8000 });
+            const onOrder = page.getByRole('status', { name: 'Kapanış hatırlatması' });
+            await onOrder.waitFor({ timeout: 8000 });
+            const [cart, barBox, cardBox, mainBox] = [await page.locator('[data-cart-panel]').boundingBox(), await bar.boundingBox(), await onOrder.boundingBox(), await page.locator('main').boundingBox()];
+            assert(cart && barBox && cart.y + cart.height <= barBox.y + 1, `yatay telefonda sepet eylem şeridine biniyor: ${JSON.stringify({ cart, barBox })}`);
+            assert(cardBox && mainBox && cardBox.y >= mainBox.y + mainBox.height - 1, `yatay telefonda kart adisyonun üstüne biniyor: ${JSON.stringify({ cardBox, mainBox })}`);
+            await page.screenshot({ path: `${ROOT}/e2e/out/yatay-telefon-kasa-kapanis-adisyon.png` });
           });
           // Garson gün sonu almaz: kart yok
           await withPage(ctx, 'telefon', 'garson', async (page) => {

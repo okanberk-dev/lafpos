@@ -694,7 +694,8 @@ export default function OrderPage() {
   );
 
   const right = (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
+    // Yer yetmezse (alçak ekran) hesap yaprağı bütünüyle kayar: toplamlar Gönder / Öde şeridinin üstüne binmez
+    <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
       {waitingBatch && (
         <p role="status" className="mx-3 mb-2 rounded-xl border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] px-3 py-2 text-[13px] font-medium leading-5 text-ink md:mx-0">
           Kasaya ulaşılamıyor: {waitingBatch.lines.reduce((a, l) => a + l.qty, 0)} ürün bekliyor, bağlantı gelince kendiliğinden gönderilecek
