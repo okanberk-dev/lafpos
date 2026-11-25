@@ -164,6 +164,14 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     `tests/uzaktan-raporlar.test.ts`.
   - **Yeniden gönder:** Redis silinir ya da eksik kalırsa Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan ›
     "Raporları yeniden gönder" gönderim geçmişini sıfırlar; tarama 400 günü yaklaşık bir saatte yeniden iter.
+  - **Silinen günler:** "Denemeyi bitir" ve "Geçişi tamamla" (`server/services/deneme.ts`) kasada sildiği günlerin
+    tarihlerini silmeyle aynı işlemde yazar (`sync_state` `cloud.reports.silinen`). Sıradaki canlı bakışta (en geç 5 dk)
+    o tarihlere satışsız gün raporu (`n: 0`, ek verisiz) gider: bulut eski deneme raporunun ve ek verisinin üstüne yazar,
+    Uzaktan o günü gün listesine ve toplamlara katmaz. API değişmedi. O tarihte LafPOS günü kaldıysa (deneme günüyle aynı
+    tarihte gerçek gün) ya da geçmiş ciro (ModPOS) günü varsa boş gün gitmez, o günün raporu gider. Gidemeyen tarih
+    listede kalır; "Raporları yeniden gönder" listeyi silmez. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan
+    tarih (bu sürümden önce yapılmış geçiş) günlük tarama ona gelince (en geç bir gün) aynı yolla boşaltılır
+    (`tests/deneme-uzaktan.test.ts`).
   - Buluta gitmez: maliyet, kâr ve komisyon, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi "Müşteri"), iptal,
     ikram, indirim ve iade nedenleri.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki

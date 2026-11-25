@@ -118,6 +118,8 @@ describe('Denemeyi bitir', () => {
 
   it('yedek alır, hareketleri siler, kurulumu bırakır, ayarları gerçeğe çevirir, denetime yazar', async () => {
     cfgBefore = await configCounts();
+    const before = await mod();
+    const days = before.db.select().from(before.schema.businessDays).all();
     const r = await h.ok<{ already: boolean; backup: string; deleted: { orders: number; days: number }; closedUsers: string[] }>('patron', 'POST', '/admin/deneme/bitir', { pin: PINS.patron, newPin: '482915' });
     expect(r.already).toBe(false);
     expect(r.deleted.orders).toBeGreaterThan(0);
@@ -130,7 +132,10 @@ describe('Denemeyi bitir', () => {
     for (const t of TRANSACTIONAL) expect(count(schema[t]), t).toBe(0);
     const audit = db.select().from(schema.auditLog).all();
     expect(audit).toHaveLength(1);
-    expect(audit[0]).toMatchObject({ action: 'deneme.bitir', severity: 'uyari' });
+    expect(audit[0]).toMatchObject({ action: 'deneme.bitir', severity: 'uyari', data: { remoteDays: 1 } });
+    // Silinen günün tarihi aynı işlemde LafPOS Uzaktan'da boşaltılmak üzere yazıldı (tests/deneme-uzaktan.test.ts)
+    const { getSyncState } = await import('../server/lib/settings');
+    expect(getSyncState('cloud.reports.silinen')).toEqual([days[0]!.date]);
     // Kurulum aynı; örnek PIN'li hesaplar silinmez, kapanır
     expect(await configCounts()).toEqual(cfgBefore);
     expect(getSettings()).toMatchObject({ demoMode: false, okcProvider: 'kapali' });
