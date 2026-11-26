@@ -13,6 +13,7 @@ import { getSettings, getSyncState } from './lib/settings';
 import { autoEodExpected, deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
 import { kablo } from './okc/token-kablo';
 import { syncTokenKablo } from './okc/token-kablo-servis';
+import { redeemInstallCode } from './sync/kurulum-kodu';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -351,6 +352,11 @@ export function startJobs() {
   timers.push(setTimeout(backupTick, 30_000));
   // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
   resumePolling();
+  // Şube kurulumu (ladmin'in şubeye özel kurucusu): kod ladmin'e verilir, şube ve bağlantılar gelir; kod durdukça
+  // (internet yoksa) 5 dakikada bir yeniden
+  const kurulum = () => void redeemInstallCode().catch((e) => console.error('[kurulum] şube kodu', e));
+  timers.push(setTimeout(kurulum, 3_000));
+  timers.push(setInterval(kurulum, 5 * 60_000));
   // Token kablolu (Windows kasa): köprü açılır, kablo takılınca cihaz kendiliğinden tanınır
   try {
     syncTokenKablo();

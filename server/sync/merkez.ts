@@ -8,7 +8,8 @@ import { env } from '../env';
 import { getOpenDay } from '../services/orders';
 import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
-import { getSyncState, setSyncState } from '../lib/settings';
+import { getSettings, getSyncState, setSyncState } from '../lib/settings';
+import { subeEtiketi } from '@shared/baglanti';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { installedVersion, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
 import { underBekci } from './yedek';
@@ -310,6 +311,18 @@ export async function merkezTick(now = Date.now()): Promise<boolean> {
 }
 
 /**
+ * Kayıtta şube: ladmin'den kurulan kasa (server/sync/kurulum-kodu.ts) dükkânın adını ve şube kodunu söyler; Merkez yeni
+ * kaydı bu adla açar (sahip yine onaylar). Kurulumdan gelmeyen kasada alan yok
+ */
+function kayitSube(): { sube?: { ad: string; kod: string | null } } {
+  // kurulum-kodu.ts'in kaydı (döngüsel içe aktarma olmasın diye anahtardan okunur)
+  const ad = getSyncState<{ sube?: { ad?: string } | null }>('kurulum.sube')?.sube?.ad ?? null;
+  if (!ad) return {};
+  const kod = subeEtiketi(getSettings().branchId)?.slice(0, 12) ?? null;
+  return { sube: { ad, kod } };
+}
+
+/**
  * Bir nabız: gerekiyorsa önce kayıt; yanıt saklanır. Hata durumu korur (internetsiz kasa çalışır). `ek`: uzaktan
  * yönetimin hemen attığı ek nabız; zincir en çok bir ek nabızdır
  */
@@ -322,7 +335,7 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
   try {
     if (!me.registered) {
       // Kayıt kafenin ortak anahtarıyla imzalı (dışarıdan kimse kurulum açamaz); kurulumun kendi anahtarı içinde
-      const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt }, 8000);
+      const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt, ...kayitSube() }, 8000);
       if (res.status === 409) {
         // Kimlik başkasınca alınmış (eski rastgele kimlik): yeni anahtar ve ondan türeyen kimlik; sonraki nabız kaydolur
         const key = randomBytes(32).toString('base64url');

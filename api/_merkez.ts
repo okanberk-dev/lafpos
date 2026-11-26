@@ -352,6 +352,14 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // Kasa kendi kuruluş anını söyler (internete geç çıkan kurulumun deneme süresi kuruluştan sayılır); gelecekte olamaz
     const installedAt = intOrNull(body.kurulus);
     if (installedAt && installedAt <= now) fresh.createdAt = installedAt;
+    // ladmin'den kurulan kasa şubesinin adını ve kodunu söyler (server/sync/kurulum-kodu.ts): dükkân bu adla açılır,
+    // sahip yine onaylar. Geçersiz kod düşer (ad kalır)
+    const sube = body.sube && typeof body.sube === 'object' ? (body.sube as Record<string, unknown>) : null;
+    if (sube) {
+      fresh.ad = text(sube.ad, 60) || null;
+      const kod = normalizeBranchCode(sube.kod);
+      if (kod) fresh.kod = kod;
+    }
     if (grave) Object.assign(fresh, { ad: grave.ad, createdAt: grave.createdAt, lisans: grave.lisans, mod: grave.mod, kod: grave.kod ?? null });
     if ((await deps.redis('SET', installKey(id), JSON.stringify(fresh), 'NX')) === 'OK') {
       await deps.redis('SADD', SET_KEY, id);
