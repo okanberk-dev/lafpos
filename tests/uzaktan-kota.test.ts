@@ -8,6 +8,7 @@ import { signedHeaders } from '../server/lib/signature';
 import { get, setConditionalGets, setShopHeader } from '../src/lib/api';
 import { REMOTE_IDLE_POLL_MS, REMOTE_POLL_MS, remotePollMs } from '../src/lib/remote';
 import { type UpstashCall, upstashCommand } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Uzaktan ekranın Upstash bütçesi (docs/KALANLAR.md: "uzaktan ekran gün boyu açık kalırsa ücretsiz kotaya
@@ -16,12 +17,12 @@ import { type UpstashCall, upstashCommand } from './fake-upstash';
  * görünümün saati ilerler; bir saat açık kalan ekranın komut sayısı bütçede; istemci 304'te önbellekteki gövdeyi döner;
  * gizli sekmede yoklama yok; şubeye ayrılan platform gelen kutusunun çekimi ortak kutununki kadar komut.
  */
-const CLOUD = 'https://lafpos.vercel.app';
+const CLOUD = `https://${VERCEL_ALANI}`;
 const SECRET = 'k'.repeat(40);
 const REDIS = 'https://redis.test';
 const store = new Map<string, string>();
 const log: UpstashCall[] = [];
-const ENV = ['LAFPOS_CLOUD_SECRET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA'];
+const ENV = ['ASILPOS_CLOUD_SECRET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA'];
 const saved: Record<string, string | undefined> = {};
 /** Gerçekçi özet: uzaktan demosunun örnek günü (~90 KB) */
 const BASE = JSON.parse(readFileSync(join(__dirname, '../api/demo-ozet.json'), 'utf8')) as { at: number; bootstrap: Record<string, unknown>; patron: Record<string, unknown>; orders: Record<string, unknown> };
@@ -32,7 +33,7 @@ beforeAll(() => {
   for (const k of ENV) saved[k] = process.env[k];
   for (const k of ENV) delete process.env[k];
   // Varsayılan kurulum: parolasız görünüm, demo açık (kafe bağlanınca biter)
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: REDIS, KV_REST_API_TOKEN: 't' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: REDIS, KV_REST_API_TOKEN: 't' });
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input) !== REDIS) throw new Error(`beklenmeyen istek: ${String(input)}`);
     return new Response(JSON.stringify({ result: upstashCommand(store, JSON.parse(String(init!.body)) as string[], log) }));
@@ -120,7 +121,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
     log.length = 0;
     expect(await push(snap(T + 300_000))).toMatchObject({ ok: true, unchanged: true });
     expect(cmds()).toEqual(['HGET', 'HSET']);
-    expect((JSON.parse(store.get('lafpos:snapshot')!) as { at: number }).at).toBe(T);
+    expect((JSON.parse(store.get(`${REDIS_ONEKI}snapshot`)!) as { at: number }).at).toBe(T);
     // Patron paneli yeni sürümü alır; saat nabzın saati (kafe sessiz sayılmaz)
     const beat = await view(token, 'reports/patron', first.tag);
     expect(beat.status).toBe(200);
@@ -158,23 +159,23 @@ describe('uzaktan ekran: Upstash komutu', () => {
       expect(cmds()).toEqual(['HGET', 'EXPIRE', 'HSET']);
 
       // Özet bir yolla silindi (süresi doldu): görünüm 503 der, sürümü siler; kasanın ilk itmesi özeti yeniden yazar
-      store.delete('lafpos:snapshot');
+      store.delete(`${REDIS_ONEKI}snapshot`);
       const token = await login();
       const gone = await view(token, 'floor');
       expect(gone.status).toBe(503);
-      expect(store.has('lafpos:surum')).toBe(false);
+      expect(store.has(`${REDIS_ONEKI}surum`)).toBe(false);
       log.length = 0;
       expect(await push(snap(T + 25 * 3600_000 + 300_000))).toEqual({ ok: true });
       expect(cmds()).toEqual(['HGET', 'GET', 'SET', 'HSET']);
       expect((await view(token, 'floor')).status).toBe(200);
 
       // Uzatma anında anahtar yoksa (EXPIRE 0) yazılır
-      store.delete('lafpos:snapshot');
+      store.delete(`${REDIS_ONEKI}snapshot`);
       vi.setSystemTime(T + 50 * 3600_000);
       log.length = 0;
       expect(await push(snap(T + 50 * 3600_000))).toEqual({ ok: true });
       expect(cmds()).toEqual(['HGET', 'EXPIRE', 'SET', 'HSET']);
-      expect(store.has('lafpos:snapshot')).toBe(true);
+      expect(store.has(`${REDIS_ONEKI}snapshot`)).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -182,8 +183,8 @@ describe('uzaktan ekran: Upstash komutu', () => {
 
   it('bu sürümden önceki kayıt (yalnız eski anahtarlar) okunmaya devam eder; ilk itme sürümü yazar', async () => {
     const T = BASE.at;
-    store.set('lafpos:snapshot', JSON.stringify(snap(T)));
-    store.set('lafpos:dukkanlar', JSON.stringify({ default: T }));
+    store.set(`${REDIS_ONEKI}snapshot`, JSON.stringify(snap(T)));
+    store.set(`${REDIS_ONEKI}dukkanlar`, JSON.stringify({ default: T }));
     const token = await login();
     const old = await view(token, 'reports/patron');
     expect(old.status).toBe(200);
@@ -231,7 +232,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
 
 describe('platform gelen kutusu: Upstash komutu', () => {
   const IDS = { YEMEKSEPETI_MARINA_REMOTE_ID: 'POS_MARINA', YEMEKSEPETI_TUZLA_REMOTE_ID: 'POS_TUZLA' };
-  const own = (list: 'inbox' | 'status', id: string) => `lafpos:ys:${list}:r:${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16)}`;
+  const own = (list: 'inbox' | 'status', id: string) => `${REDIS_ONEKI}ys:${list}:r:${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16)}`;
   /** Kasanın imzalı çekimi; `restoran` yoksa sorgusuz eski kasa */
   async function pull(restoran?: string) {
     const { GET } = await api();
@@ -396,7 +397,7 @@ describe('geçmiş ciro ve patron panelinin etiketi', () => {
     expect(first.status).toBe(200);
     expect((await view(token, 'reports/patron', first.tag)).status).toBe(304);
     // Merkez'e geçmiş yüklendi (api/_merkez.ts): sürüm karmasında dükkânın işareti
-    upstashCommand(store, ['HSET', 'lafpos:surum', 'gecmis:default', '42']);
+    upstashCommand(store, ['HSET', `${REDIS_ONEKI}surum`, 'gecmis:default', '42']);
     const after = await view(token, 'reports/patron', first.tag);
     expect(after.status).toBe(200);
     expect(after.tag).not.toBe(first.tag);

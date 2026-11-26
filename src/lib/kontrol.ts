@@ -5,7 +5,7 @@ import { get, post } from './api';
 import { REMOTE, REMOTE_STALE_MS, remoteSetupQuery, type UzaktanErisim } from './remote';
 
 /**
- * LafPOS Uzaktan › Uzaktan yönetim'in istemcisi (docs/UZAKTAN-YONETIM.md; sözleşme shared/kontrol.ts): panel uçları,
+ * AsilPOS Uzaktan › Uzaktan yönetim'in istemcisi (docs/UZAKTAN-YONETIM.md; sözleşme shared/kontrol.ts): panel uçları,
  * sorgu anahtarları, yoklama ve PIN şifrelemesi. İstekler seçili dükkânın başlığıyla gider (api.ts).
  *
  * Açık PIN yalnız formun belleğinde durur: gönderirken kasanın açık anahtarıyla burada şifrelenir, buluta yalnız şifreli

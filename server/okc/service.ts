@@ -55,7 +55,7 @@ type ReceiptRow = typeof schema.fiscalReceipts.$inferSelect;
 const PENDING = ['gonderildi', 'kilitli'] as const;
 
 export { tokenx, webhookUrl };
-/** LafPOS'un banka gün sonu kıyas tutarı (okc/card-basis.ts; testler ve çağıranlar buradan da alır) */
+/** AsilPOS'un banka gün sonu kıyas tutarı (okc/card-basis.ts; testler ve çağıranlar buradan da alır) */
 export { cardBasis };
 
 usePavoStore({
@@ -121,7 +121,7 @@ export function receiptDTO(r: ReceiptRow) {
     completedAt: r.completedAt,
     basket: r.basket,
     /**
-     * Cihaz fişinin LafPOS'ta oluşturduğu ödemeler: istemci "tutar olarak alınmış ödeme" kuralını (`okc_partial`:
+     * Cihaz fişinin AsilPOS'ta oluşturduğu ödemeler: istemci "tutar olarak alınmış ödeme" kuralını (`okc_partial`:
      * tamamlanmış fişlerin ödemeleri cihazdan sayılır) sunucuyla birebir uygular
      */
     paymentIds: r.paymentIds,
@@ -186,7 +186,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, [...PENDING])))
     .get();
   if (pending) throw conflict('Bu adisyonun cihazda bekleyen sepeti var; önce onu tamamlayın ya da iptal edin', 'okc_pending');
-  // Cihazda fişi kesilmiş ama LafPOS'a tam işlenmemiş kalemler yeniden gitmez (ikinci fişe girerdi); adisyonun
+  // Cihazda fişi kesilmiş ama AsilPOS'a tam işlenmemiş kalemler yeniden gitmez (ikinci fişe girerdi); adisyonun
   // fişe girmemiş kalemleri kalem seçilerek gidebilir (inceleme, 27 Eki 2026)
   const held = fiscalHeldQty(db, orderId);
   if (held.size) {
@@ -200,8 +200,8 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     if (blocked) {
       throw conflict(
         selection?.length
-          ? "Seçilen kalem cihazda kesilmiş ama LafPOS'a tam işlenmemiş bir fişte; yeniden gönderilmez. Kalanı kasadan alın ya da fişi cihazdan iptal edin"
-          : 'Bu adisyonun cihazda kesilmiş ama LafPOS\'a tam işlenmemiş fişi var; o fişin kalemleri yeniden gönderilmez. Kalanı kasadan alın, diğer kalemleri "Kalem seç" ile gönderin ya da fişi cihazdan iptal edin',
+          ? "Seçilen kalem cihazda kesilmiş ama AsilPOS'a tam işlenmemiş bir fişte; yeniden gönderilmez. Kalanı kasadan alın ya da fişi cihazdan iptal edin"
+          : 'Bu adisyonun cihazda kesilmiş ama AsilPOS\'a tam işlenmemiş fişi var; o fişin kalemleri yeniden gönderilmez. Kalanı kasadan alın, diğer kalemleri "Kalem seç" ile gönderin ya da fişi cihazdan iptal edin',
         'okc_unresolved',
       );
     }
@@ -215,7 +215,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
   const deviceIds = new Set(completedReceipts(orderId).flatMap((r) => r.paymentIds));
   const amountPayments = orderPayments(db, orderId).filter((p) => !p.refundedAt && !p.items?.length && !deviceIds.has(p.id));
   if (amountPayments.length && !selection?.length) {
-    throw conflict('Adisyonda tutar olarak alınmış ödeme var. Kalanı LafPOS\'ta alın ya da "Kalem seç" ile cihaza gönderin', 'okc_partial');
+    throw conflict('Adisyonda tutar olarak alınmış ödeme var. Kalanı AsilPOS\'ta alın ya da "Kalem seç" ile cihaza gönderin', 'okc_partial');
   }
 
   const items = orderItems(db, orderId);
@@ -229,7 +229,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       orderNo: order.no,
       title: table?.name ?? (order.type === 'tezgah' ? `Tezgâh ${order.no}` : order.deliveryName ? `${order.deliveryName}` : `Adisyon ${order.no}`),
       filter: section?.name ?? (order.type === 'tezgah' ? 'Tezgâh' : order.type === 'paket' ? 'Paket' : 'Gel-al'),
-      note: `LafPOS #${order.no}`,
+      note: `AsilPOS #${order.no}`,
       items,
       totals: order.totals ?? { lineNet: {} },
       selection: selection?.length ? mergeSelection(selection) : null,
@@ -331,13 +331,13 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
 
 /**
  * Cihazdaki sepeti siler (ödeme alınmadıysa). `force`: internet ya da Token kesintisinde silme isteği gitmiyorsa
- * sepet yetkili onayıyla LafPOS'ta iptal sayılır; yoksa adisyon ödenemez, iptal edilemez, gün kapanmaz (inceleme,
+ * sepet yetkili onayıyla AsilPOS'ta iptal sayılır; yoksa adisyon ödenemez, iptal edilemez, gün kapanmaz (inceleme,
  * 26 Eki 2026). Cihazda yine de ödeme alınırsa geç gelen sonuç `okc.late_paid` alarmı verir.
  */
 export async function cancelDeviceBasket(actor: Actor, receiptId: string, force = false): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
   const r = loadReceipt(receiptId);
-  // Cihazda fişi kesilmiş (eksik ödenmiş ya da LafPOS'a işlenememiş) sepet silinmiş sayılmaz: fiş iptali ödemesini
+  // Cihazda fişi kesilmiş (eksik ödenmiş ya da AsilPOS'a işlenememiş) sepet silinmiş sayılmaz: fiş iptali ödemesini
   // geri alamaz, kalemleri ikinci fişe girerdi (inceleme, 27 Eki 2026). Yetkili onayı istenmeden reddedilir
   if (hasDocument(r)) throw unresolvedReceipt();
   if (!PENDING.includes(r.status as (typeof PENDING)[number]) && r.status !== 'hata') throw conflict('Bu sepet artık iptal edilemez');
@@ -367,7 +367,7 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
   const changed = tx((t) => {
     const n = t
       .update(schema.fiscalReceipts)
-      .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, LafPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
+      .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, AsilPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
       .where(
         and(
           eq(schema.fiscalReceipts.id, r.id),
@@ -390,9 +390,9 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
             severity: 'alarm',
             orderId: r.orderId,
             amount: r.amount,
-            message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşılamadan LafPOS'ta iptal sayıldı. Cihazda ödeme alındıysa mali fişi cihazdan iptal edin`,
+            message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşılamadan AsilPOS'ta iptal sayıldı. Cihazda ödeme alındıysa mali fişi cihazdan iptal edin`,
           }
-        : { userId: actor.user.id, action: 'okc.delete', orderId: r.orderId, amount: r.amount, message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) LafPOS'tan iptal edildi` },
+        : { userId: actor.user.id, action: 'okc.delete', orderId: r.orderId, amount: r.amount, message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) AsilPOS'tan iptal edildi` },
     );
     return n;
   });
@@ -402,7 +402,7 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
     return receiptDTO(now);
   }
   fx.flush();
-  publish(r.orderId, 'okc.cancelled', unreachable ? "Cihaza ulaşılamadı; sepet LafPOS'ta iptal sayıldı" : 'Cihaz sepeti iptal edildi', actor.user.id);
+  publish(r.orderId, 'okc.cancelled', unreachable ? "Cihaza ulaşılamadı; sepet AsilPOS'ta iptal sayıldı" : 'Cihaz sepeti iptal edildi', actor.user.id);
   return receiptDTO(loadReceipt(r.id));
 }
 
@@ -416,8 +416,8 @@ function completedReceipts(orderId: string): ReceiptRow[] {
 
 /**
  * Adisyonun ödenmiş kısmının KDV oranına göre brütü ve cihaza giden servis: cihaz fişleri gönderilen sepetten
- * (fişin iade edilmemiş ödemesi kadar), LafPOS'ta kalem seçerek alınan ödemeler kalemlerin bugünkü payıyla
- * oranlara bölünür. Bütün adisyon sepeti bunu LafPOS'un KDV dökümüne tamamlar (inceleme, 27 Eki 2026).
+ * (fişin iade edilmemiş ödemesi kadar), AsilPOS'ta kalem seçerek alınan ödemeler kalemlerin bugünkü payıyla
+ * oranlara bölünür. Bütün adisyon sepeti bunu AsilPOS'un KDV dökümüne tamamlar (inceleme, 27 Eki 2026).
  */
 function priorOf(orderId: string, items: { id: string; qty: number; kdvRate: number }[], totals: OrderTotals): { byRate: Record<string, number>; service: number } {
   const live = orderPayments(db, orderId).filter((p) => !p.refundedAt);
@@ -432,7 +432,7 @@ function priorOf(orderId: string, items: { id: string; qty: number; kdvRate: num
     for (const id of r.paymentIds) deviceIds.add(id);
     const paid = live.filter((p) => r.paymentIds.includes(p.id)).reduce((a, p) => a + p.amount, 0);
     if (paid <= 0) continue;
-    // Fişin ödemesinin bir kısmı LafPOS'ta iade edildiyse kalan ödeme fişin oranlarına bölünür
+    // Fişin ödemesinin bir kısmı AsilPOS'ta iade edildiyse kalan ödeme fişin oranlarına bölünür
     const sent = basketByRate(r.basket as TokenxBasket);
     add(paid, sent.byRate);
     service += paid === r.amount ? sent.service : allocate(paid, [sent.service, r.amount - sent.service])[0];
@@ -541,7 +541,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
         });
         return out;
       });
-      // Cihazın gerçek ödemeleri olayla gider: sonuç ekranı para üstünü LafPOS'taki seçimden değil bundan hesaplar.
+      // Cihazın gerçek ödemeleri olayla gider: sonuç ekranı para üstünü AsilPOS'taki seçimden değil bundan hesaplar.
       // Fişin kimliği de gider: kasa ekranı işyeri nüshasını onunla alır (store-copy.ts)
       const methods = new Map(db.select({ id: schema.paymentMethods.id, kind: schema.paymentMethods.kind, name: schema.paymentMethods.name }).from(schema.paymentMethods).all().map((m) => [m.id, m]));
       const paid = payments.map((p) => ({ kind: methods.get(p.methodId)?.kind ?? 'diger', name: methods.get(p.methodId)?.name ?? 'Yazarkasa', amount: p.amount }));
@@ -549,9 +549,9 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
       fx.flush();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama LafPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+      db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama AsilPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
       const fx2 = new Effects();
-      fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} ödendi ama LafPOS'a işlenemedi: ${message}` });
+      fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} ödendi ama AsilPOS'a işlenemedi: ${message}` });
       fx2.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message });
       fx2.flush();
     }
@@ -560,8 +560,8 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
 
   if (result.status === 'voided') {
     if (r.status === 'fis_iptal') return;
-    // Belge kesilmişti: tamamlanan, cihazda kapanıp LafPOS'a tam işlenemeyen (hata) ya da iptal sayıldıktan sonra
-    // "ödendi" bildirimi gelen sepet. LafPOS'a işlenmiş ödemesi olan sepet her durumda belgelidir: fiş iptali o
+    // Belge kesilmişti: tamamlanan, cihazda kapanıp AsilPOS'a tam işlenemeyen (hata) ya da iptal sayıldıktan sonra
+    // "ödendi" bildirimi gelen sepet. AsilPOS'a işlenmiş ödemesi olan sepet her durumda belgelidir: fiş iptali o
     // ödemeleri geri alır (eski kayıtta belgeli hata sepeti "silindi" olmuş olabilir; inceleme, 27 Eki 2026)
     const documented = r.status === 'tamamlandi' || hasDocument(r) || r.paymentIds.length > 0 || stored?.status === 'paid';
     const pending = PENDING.includes(r.status as (typeof PENDING)[number]) || (r.status === 'hata' && !stored);
@@ -573,7 +573,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
       // yönetici alarmı görür ve parayı geri verdiyse bugünün kasasından çıkış olarak işler (inceleme, 27 Eki 2026)
       tx((t) => {
         t.update(schema.fiscalReceipts)
-          .set({ status: 'fis_iptal', result, error: `Fiş ${closedDay.date} gününe ait; gün kapandığı için ödeme LafPOS'ta geri alınmadı`, updatedAt: now })
+          .set({ status: 'fis_iptal', result, error: `Fiş ${closedDay.date} gününe ait; gün kapandığı için ödeme AsilPOS'ta geri alınmadı`, updatedAt: now })
           .where(eq(schema.fiscalReceipts.id, r.id))
           .run();
         const order = loadOrder(t, closedDay.orderId);
@@ -584,7 +584,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           severity: 'alarm',
           orderId: order.id,
           amount: r.amount,
-          message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme LafPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
+          message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme AsilPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
         });
       });
       // Gövdedeki yazarkasa belgeleri (okc.voided, okc.card) ve kart kıyası (bankPos.dayCard) değişti: gün paketi
@@ -610,8 +610,8 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           message: out.refunded
             ? `#${target.no} adisyonun yazarkasa fişi iptal edildi; ${tl(out.refunded)} ödeme geri alındı${reopened ? ' ve adisyon yeniden açıldı' : ''}`
             : r.paymentIds.length
-              ? `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; ödemesi LafPOS'ta zaten iptal edilmişti, adisyon değişmedi`
-              : `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; LafPOS'a işlenmiş ödemesi yoktu, adisyon değişmedi`,
+              ? `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; ödemesi AsilPOS'ta zaten iptal edilmişti, adisyon değişmedi`
+              : `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; AsilPOS'a işlenmiş ödemesi yoktu, adisyon değişmedi`,
         });
       });
     } else if (pending) {
@@ -628,7 +628,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
         });
       });
     } else {
-      // LafPOS'ta silinen ya da cihazda vazgeçilen sepete fiş iptali geldi: durum değişmez (LafPOS'un iptali kalır).
+      // AsilPOS'ta silinen ya da cihazda vazgeçilen sepete fiş iptali geldi: durum değişmez (AsilPOS'un iptali kalır).
       // "Ödendi" bildirimi hiç ulaşmadıysa cihazda fiş kesilip iptal edilmiş olabilir; bir kez not düşülür, sonuç
       // saklanır ki tekrarı yeni kayıt yazmasın
       tx((t) => {
@@ -640,7 +640,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           severity: 'uyari',
           orderId: r.orderId,
           amount: r.amount,
-          message: `#${loadOrder(t, r.orderId).no} adisyonun ${r.status === 'silindi' ? "LafPOS'ta iptal sayılan" : 'cihazda vazgeçilen'} yazarkasa sepeti (${tl(r.amount)}) için fiş iptali bildirimi geldi; LafPOS'a işlenmiş ödemesi yok, adisyon değişmedi (${source})`,
+          message: `#${loadOrder(t, r.orderId).no} adisyonun ${r.status === 'silindi' ? "AsilPOS'ta iptal sayılan" : 'cihazda vazgeçilen'} yazarkasa sepeti (${tl(r.amount)}) için fiş iptali bildirimi geldi; AsilPOS'a işlenmiş ödemesi yok, adisyon değişmedi (${source})`,
         });
       });
     }
@@ -666,14 +666,14 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
   fx.flush();
 }
 
-/** Cihazda belge kesildi ama LafPOS'a tam işlenemedi (hata durumunda, sonuç saklı) */
+/** Cihazda belge kesildi ama AsilPOS'a tam işlenemedi (hata durumunda, sonuç saklı) */
 function hasDocument(r: ReceiptRow): boolean {
   return r.status === 'hata' && (r.result as Partial<FiscalResult> | null)?.status === 'paid';
 }
 
 function unresolvedReceipt(meanwhile = false) {
   return conflict(
-    `${meanwhile ? 'Sepet bu arada cihazda fişe dönüştü' : 'Bu sepetin fişi cihazda kesildi'} ama LafPOS'a tam işlenmedi; sepet silinemez. Kalanı kasadan alın ya da fişi cihazdan iptal edin`,
+    `${meanwhile ? 'Sepet bu arada cihazda fişe dönüştü' : 'Bu sepetin fişi cihazda kesildi'} ama AsilPOS'a tam işlenmedi; sepet silinemez. Kalanı kasadan alın ya da fişi cihazdan iptal edin`,
     'okc_unresolved',
   );
 }
@@ -685,7 +685,7 @@ function settledMeanwhile(now: ReceiptRow) {
 }
 
 /**
- * Cihaz belgeyi sepet tutarıyla kesti ama ödemelerin bir kısmının LafPOS'ta karşılığı yok (ikram, ödemesiz ya da
+ * Cihaz belgeyi sepet tutarıyla kesti ama ödemelerin bir kısmının AsilPOS'ta karşılığı yok (ikram, ödemesiz ya da
  * eşlenmemiş tür). Alınan ödemeler tutar olarak işlenir (kasa sayımı doğru kalsın, fiş iptali onları geri alsın);
  * kalemler ödenmiş sayılmaz, sepet hataya düşer ve yöneticiye alarm gider. Bu adisyon kalan çözülene kadar cihaza
  * yeniden gönderilmez: aynı kalemler ikinci fişe girerdi (inceleme, 27 Eki 2026).
@@ -723,16 +723,16 @@ function applyUnderpaid(
         severity: 'alarm',
         orderId: r.orderId,
         amount: gap,
-        message: `#${out.order.no} adisyon yazarkasada ${tl(r.amount)} fişle kapandı${doc ? ` (${doc})` : ''} ama ${tl(gap)} için LafPOS'ta karşılığı olan ödeme yok (ikram, ödemesiz ya da eşlenmemiş tür; ${source}). Kalanı kasadan alın ya da fişi cihazdan iptal edin`,
+        message: `#${out.order.no} adisyon yazarkasada ${tl(r.amount)} fişle kapandı${doc ? ` (${doc})` : ''} ama ${tl(gap)} için AsilPOS'ta karşılığı olan ödeme yok (ikram, ödemesiz ya da eşlenmemiş tür; ${source}). Kalanı kasadan alın ya da fişi cihazdan iptal edin`,
       });
     });
     fx.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message: `Yazarkasada ${tl(gap)} ödemesiz kapandı; adisyonu kontrol edin` });
     fx.flush();
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama LafPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama AsilPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
     const fx2 = new Effects();
-    fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} fiş kesildi ama LafPOS'a işlenemedi: ${message}` });
+    fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} fiş kesildi ama AsilPOS'a işlenemedi: ${message}` });
     fx2.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message });
     fx2.flush();
   }
@@ -912,7 +912,7 @@ export function simulatorCancel(actor: Actor, receiptId: string, voidReceipt = f
   if (r.provider !== 'simulator') throw bad('Bu sepet simülatöre ait değil');
   let approverId: string | null = null;
   if (voidReceipt) {
-    // Fiş iptali ödeme iptalidir: LafPOS'taki ödeme iptaliyle aynı yetki ve aynı gün kuralı
+    // Fiş iptali ödeme iptalidir: AsilPOS'taki ödeme iptaliyle aynı yetki ve aynı gün kuralı
     approverId = need(actor, 'odeme.iade', 'Fiş iptali yetkili onayı gerektirir');
     if (!getOpenDay(db) || closedDayOf(r)) throw conflict('Kapanmış bir güne ait fiş iptal edilemez', 'day_closed');
   }
@@ -943,7 +943,7 @@ export function rememberPavoMediators(list: { id: number | null; name: string | 
   setSyncState('pavo.mediators', list.slice(0, 50));
 }
 
-/** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca LafPOS cihaza satış gönderebilir */
+/** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca AsilPOS cihaza satış gönderebilir */
 export async function pairDevice(actor: Actor) {
   if (getSettings().okcProvider !== 'pavo') throw conflict('Eşleştirme yalnız Pavo bağlantısında', 'okc_no_pair');
   if (!pavoProvider.configured()) throw conflict(pavoProvider.notConfigured, 'okc_not_configured');
@@ -962,7 +962,7 @@ export async function pairDevice(actor: Actor) {
  * Pavo cihazının adresi ve seri numarası (Yönetim › Yazarkasa POS › Pavo). Adres "192.168.1.50" gibi de yazılır
  * (`pavoAddress`: şema yoksa https, port yoksa 4567). Adres ya da seri no değişince eşleştirme sıfırlanır (sıra no ve
  * sertifika izi): başka cihazın sertifikasına güvenilmez, yeniden "Eşleştir" gerekir. Cihazda süren satış ya da gün
- * sonu varken ve LafPOS'ta cihaz sonucunu bekleyen sepet varken değişmez (sonuç eski cihazdan sorulur)
+ * sonu varken ve AsilPOS'ta cihaz sonucunu bekleyen sepet varken değişmez (sonuç eski cihazdan sorulur)
  */
 export function setPavoDevice(actor: Actor, input: { address: string; serial: string }) {
   const url = pavoAddress(input.address);
@@ -1007,15 +1007,15 @@ export async function findPavoDevices(serial?: string | null) {
 
 // ─── Pavo banka gün sonu ────────────────────────────────────────────────────
 
-/** Bir LafPOS gününde alınmış başarılı gün sonu (günün kaydında saklı kalır, sonraki deneme ezmez) */
+/** Bir AsilPOS gününde alınmış başarılı gün sonu (günün kaydında saklı kalır, sonraki deneme ezmez) */
 export interface PavoEodBatch {
   batchNo: string | null;
   deviceDateTime: string | null;
   grandTotalKurus: number | null;
-  /** Denemenin başladığı an (LafPOS saati): sonraki gün sonunun kıyası bundan sonraki kart ödemeleriyle */
+  /** Denemenin başladığı an (AsilPOS saati): sonraki gün sonunun kıyası bundan sonraki kart ödemeleriyle */
   at: number;
   trigger: 'otomatik' | 'elle';
-  /** Deneme başlarken LafPOS günü kapalıydı (gün sonundan sonra alınan gün sonu) */
+  /** Deneme başlarken AsilPOS günü kapalıydı (gün sonundan sonra alınan gün sonu) */
   dayClosed: boolean;
 }
 
@@ -1027,26 +1027,26 @@ export interface PavoEodBatch {
  */
 export interface PavoEodRecord extends PavoEodSummary {
   at: number;
-  /** Denemenin bağlı olduğu LafPOS günü (kapanan gün ya da elle denemede açık gün) */
+  /** Denemenin bağlı olduğu AsilPOS günü (kapanan gün ya da elle denemede açık gün) */
   dayId: string | null;
   trigger: 'otomatik' | 'elle';
   status: 'ok' | 'failed' | 'unknown' | 'running' | 'skipped';
   errorCode: string | null;
   message: string | null;
   /**
-   * LafPOS'un kıyas tutarı (bahşiş dahil, kuruş): günün ilk gün sonunda kapanan günün kart toplamı; aynı günün sonraki
+   * AsilPOS'un kıyas tutarı (bahşiş dahil, kuruş): günün ilk gün sonunda kapanan günün kart toplamı; aynı günün sonraki
    * gün sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan kart ödemeleri. Gün açıkken null
    */
   dayCardKurus: number | null;
   /** Kıyas önceki gün sonundan sonraki ödemelerleyse o gün sonunun batch no'su */
   dayCardSinceBatch?: string | null;
-  /** Deneme başlarken LafPOS günü kapalıydı */
+  /** Deneme başlarken AsilPOS günü kapalıydı */
   dayClosed?: boolean;
   /** Aynı günün bu denemeden önceki başarılı gün sonları (eskiden yeniye); günün gün sonları ezilmez */
   earlier?: PavoEodBatch[];
   /** Denemeden önceki son gün sonunun batch no'su (taban): yanıtı alınamayan deneme bununla doğrulanır */
   prevBatchNo: string | null;
-  /** Tabanın kaynağı (`EodBaseline`); eski kayıtlarda yok: LafPOS'un bildiği */
+  /** Tabanın kaynağı (`EodBaseline`); eski kayıtlarda yok: AsilPOS'un bildiği */
   prevBatchFrom?: EodBaseline['prevBatchFrom'];
   /** Belirsiz ya da alınamayan deneme cihazdan doğrulandıysa o an */
   verifiedAt?: number | null;
@@ -1130,8 +1130,8 @@ function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, n
   const where = [rec.batchNo ? `batch ${rec.batchNo}` : '', rec.deviceDateTime ?? ''].filter(Boolean).join(', ');
   const diff = rec.status === 'ok' && rec.grandTotalKurus != null && rec.dayCardKurus != null ? rec.grandTotalKurus - rec.dayCardKurus : 0;
   const basis = rec.dayCardSinceBatch
-    ? `LafPOS'ta önceki gün sonundan (batch ${rec.dayCardSinceBatch}) sonra alınan kart ödemelerinden (${tl(rec.dayCardKurus ?? 0)})`
-    : `LafPOS gün sonundaki kart toplamından (${tl(rec.dayCardKurus ?? 0)})`;
+    ? `AsilPOS'ta önceki gün sonundan (batch ${rec.dayCardSinceBatch}) sonra alınan kart ödemelerinden (${tl(rec.dayCardKurus ?? 0)})`
+    : `AsilPOS gün sonundaki kart toplamından (${tl(rec.dayCardKurus ?? 0)})`;
   const banks = rec.acquirers.map((a) => `${a.name}${a.totalKurus != null ? ` ${tl(a.totalKurus)}` : ''}`).join(', ');
   const audit = note
     ? note
@@ -1140,7 +1140,7 @@ function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, n
           severity: (diff ? 'uyari' : 'info') as 'uyari' | 'info',
           message: `Pavo cihazında banka gün sonu ${verified ? 'doğrulandı' : 'alındı'}${where ? ` (${where})` : ''}${rec.grandTotalKurus != null ? `: ${tl(rec.grandTotalKurus)}` : ''}${banks ? ` · ${banks}` : ''}${
             diff
-              ? `. Cihazın kart toplamı ${basis} ${tl(Math.abs(diff))} ${diff > 0 ? 'fazla' : 'eksik'}: cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir`
+              ? `. Cihazın kart toplamı ${basis} ${tl(Math.abs(diff))} ${diff > 0 ? 'fazla' : 'eksik'}: cihazda AsilPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir`
               : ''
           }`,
         }
@@ -1168,7 +1168,7 @@ function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, n
   });
   fx.emit({ topic: 'okc', kind: 'okc.eod', message: rec.status === 'ok' ? 'Cihazda gün sonu alındı' : (rec.message ?? undefined) });
   fx.flush();
-  // Kapanmış günün banka gün sonu sonucu lafmaliyet'e de gider (Pavo - LafPOS kıyası): gün paketi yeniden kuyruğa girer ve
+  // Kapanmış günün banka gün sonu sonucu lafmaliyet'e de gider (Pavo - AsilPOS kıyası): gün paketi yeniden kuyruğa girer ve
   // hemen gönderilir (tutulan ilk gövdenin yerine; lafmaliyet gün sonu e-postasını bununla gönderir). Kapanıştaki otomatik
   // deneme atlandıysa da gider (`bankPosPending: false`): lafmaliyet Pavo'yu boşuna beklemez (25 Kasım 2026: ikinci gövde
   // gelmedi, e-posta gitmedi). Dakikalık işi beklemez: güncelleme gün sonundan hemen sonra kurulur
@@ -1205,7 +1205,7 @@ function markEodRunning(rec: PavoEodRecord) {
 }
 
 /**
- * Cihazın son gün sonu (taban), gün sonu gönderilmeden hemen önce. Cihaz yanıt verip son gün sonunu vermezse LafPOS'un
+ * Cihazın son gün sonu (taban), gün sonu gönderilmeden hemen önce. Cihaz yanıt verip son gün sonunu vermezse AsilPOS'un
  * bildiği son batch: hata yanıtı, özetsiz yanıt ya da kopyayı hiç vermeyen cihaz (uç yok, gövde boş; sahada N86
  * `/PrintEODCopy`'ye HTTP 404 döndü ve gün sonu hiç gönderilemedi). Cihaza ulaşılamazsa (bağlantı, zaman aşımı) ya da
  * eşleştirme bozulmuşsa (73, 74) hata atar: gün sonu gönderilmez
@@ -1221,7 +1221,7 @@ async function deviceBaseline(c: NonNullable<ReturnType<typeof pavo>>): Promise<
 }
 
 /**
- * Pavo cihazında banka gün sonu (kart işlemlerinin batch'i kapanır). LafPOS gün sonundan sonra çağrılır, onu
+ * Pavo cihazında banka gün sonu (kart işlemlerinin batch'i kapanır). AsilPOS gün sonundan sonra çağrılır, onu
  * beklemez: çağıran sonucu beklemeden bırakır (`void ... .catch`), cihaz yanıt vermese de gün kapalı kalır.
  * Denenmeyen durumlar (bilgi eksik, kurulum modu, cihaz meşgul, eşleştirme yok, otomatik kapalı; otomatikte ayrıca
  * önceki sonuç belirsiz ya da bu gün için zaten alındı) bilgi kaydıyla atlanır; Pavo seçili değilse hiçbir şey
@@ -1307,10 +1307,10 @@ export function recoverDeviceEod() {
   const day = last?.dayId ? getSyncState<PavoEodRecord>(eodDayKey(last.dayId)) : null;
   const orphan = last?.status === 'running' ? last : day?.status === 'running' ? day : null;
   if (!orphan) return;
-  const rec: PavoEodRecord = { ...orphan, status: 'unknown', message: 'LafPOS gün sonu sürerken kapandı; cihazın yanıtı alınamadı' };
+  const rec: PavoEodRecord = { ...orphan, status: 'unknown', message: 'AsilPOS gün sonu sürerken kapandı; cihazın yanıtı alınamadı' };
   saveEod(rec, null, false, {
     severity: 'alarm',
-    message: 'Pavo cihazında banka gün sonu sürerken LafPOS kapandı; sonuç bilinmiyor, gün sonu cihazda alınmış olabilir. Yeniden denemeden önce Yönetim › Yazarkasa POS › Doğrula',
+    message: 'Pavo cihazında banka gün sonu sürerken AsilPOS kapandı; sonuç bilinmiyor, gün sonu cihazda alınmış olabilir. Yeniden denemeden önce Yönetim › Yazarkasa POS › Doğrula',
   });
 }
 
@@ -1419,7 +1419,7 @@ export async function verifyDeviceEod(actor: Actor) {
     last && last.status !== 'ok'
       ? `Cihazdaki son gün sonu (${seen}) bu denemeden önce; gün sonu alınmamış`
       : last?.batchNo === device.batchNo
-        ? `Cihazdaki son gün sonu LafPOS'takiyle aynı (${seen})`
+        ? `Cihazdaki son gün sonu AsilPOS'takiyle aynı (${seen})`
         : `Cihazdaki son gün sonu: ${seen}`;
   return { changed: false, record: last ? eodFor(user, last) : null, device: eodSummaryFor(user, device), message };
 }
@@ -1443,10 +1443,10 @@ export interface PavoEodSlip {
   deviceDateTime: string | null;
   grandTotalKurus: number | null;
   acquirers: PavoEodSummary['acquirers'];
-  /** LafPOS'un kıyas tutarı (kapanan günün kart toplamı); kayıt kâğıdı olduğundan kör kasada da basılır */
+  /** AsilPOS'un kıyas tutarı (kapanan günün kart toplamı); kayıt kâğıdı olduğundan kör kasada da basılır */
   dayCardKurus: number | null;
   /**
-   * Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır). Gün kapalı değilse ya da
+   * Kapanan günün Z özeti (AsilPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır). Gün kapalı değilse ya da
    * isteyen kasa rakamlarını görmüyorsa (kör kasa) null: kâğıt yalnız banka kısmıyla basılır
    */
   z: { date: string; zNo: number; closedAt: number | null; summary: ZSummary } | null;
@@ -1473,8 +1473,8 @@ const EOD_SLIP_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 /**
  * Son başarılı banka gün sonunun kâğıdı: batch başına bir kez, ilk soran ekrana (iki sekme ya da iki kasa ekranı
  * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Banka tutarları cihazın
- * kendi slibindekilerle aynı; Pavo - LafPOS kart kıyası (`dayCardKurus`) kayıt kâğıdı olduğundan herkese, kör kasada da
- * basılır (sahibin isteği, #154). LafPOS'un Z'si kasa uçlarındaki kuralla: kasa rakamlarını görmeyene hiç gitmez
+ * kendi slibindekilerle aynı; Pavo - AsilPOS kart kıyası (`dayCardKurus`) kayıt kâğıdı olduğundan herkese, kör kasada da
+ * basılır (sahibin isteği, #154). AsilPOS'un Z'si kasa uçlarındaki kuralla: kasa rakamlarını görmeyene hiç gitmez
  * (beklenen nakit, sayılan, fark), personel tutarları yalnız maliyet yetkisi olana (inceleme, 23 Kas 2026)
  */
 export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | null {

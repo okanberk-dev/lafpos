@@ -1,5 +1,5 @@
 /**
- * Raporların kasada ve LafPOS Uzaktan'da aynı kodla hesaplanan parçaları (server/services/reports.ts ve api/uzaktan.ts
+ * Raporların kasada ve AsilPOS Uzaktan'da aynı kodla hesaplanan parçaları (server/services/reports.ts ve api/uzaktan.ts
  * ikisi de bunu kullanır): uzaktaki rakam kasadakiyle birebir aynı olsun diye. Saf işlevler; veritabanı yok.
  */
 

@@ -3,6 +3,7 @@ import type { RemoteDayReport } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Müşterinin telefonunun yazılabileceği biçimler (yalnız '0530' aranmaz: gövdedeki milisaniyelik bir zaman damgası
@@ -11,13 +12,13 @@ import { type Harness, PINS, startApp } from './harness';
 const PHONE_FORMS = ['0530 000 11 22', '05300001122', '5300001122', '000 11 22'];
 
 /**
- * LafPOS Uzaktan raporları (server/sync/cloud-reports.ts → api/uzaktan.ts). Kasa günlük rapor özetlerini iter, bulut
+ * AsilPOS Uzaktan raporları (server/sync/cloud-reports.ts → api/uzaktan.ts). Kasa günlük rapor özetlerini iter, bulut
  * dönemin günlerini toplar. Doğrulama: aynı veriyle uzaktaki Ciro, Saatlik, Ürünler ve Personel kasadakiyle kuruşu
  * kuruşuna aynı (tek gün, çok gün, bugünü içeren dönemin "aynı saate kadar" kıyası); günlerde maliyet, kâr, PIN,
  * müşteri adı ve telefonu yok; internetsizken kuyrukta bekleyen günler internet dönünce tam bir kez gider; ilk
  * açılıştaki tarama 400 günü paketlerle gezer, ikinci tarama değişmeyen günü göndermez. Dönem 400 günle sınırlı.
  */
-const CLOUD = 'https://lafpos-uzak.test';
+const CLOUD = 'https://asilpos-uzak.test';
 const SECRET = 'r'.repeat(40);
 const MUDUR = PINS.mudur;
 const store = new Map<string, string>();
@@ -30,7 +31,7 @@ beforeAll(async () => {
   h = await startApp();
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   const realFetch = globalThis.fetch;
   const { gunzipSync } = await import('node:zlib');
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -167,8 +168,8 @@ describe('uzaktan raporlar', () => {
     expect(again).toEqual({ sent: 0, queued: 0 });
     expect(posted).toHaveLength(0);
     // Bulutta gün başına bir anahtar ve kasanın "bugün"ü
-    expect([...store.keys()].filter((k) => k.startsWith('lafpos:rapor:default:gun:')).sort()).toEqual([addDays(today, -7), addDays(today, -1), today].sort().map((d) => `lafpos:rapor:default:gun:${d}`));
-    expect(JSON.parse(store.get('lafpos:rapor:default:son')!)).toMatchObject({ today, at: NOW });
+    expect([...store.keys()].filter((k) => k.startsWith(`${REDIS_ONEKI}rapor:default:gun:`)).sort()).toEqual([addDays(today, -7), addDays(today, -1), today].sort().map((d) => `${REDIS_ONEKI}rapor:default:gun:${d}`));
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:son`)!)).toMatchObject({ today, at: NOW });
   });
 
   it('uzaktaki Ciro, Saatlik, Ürünler, Personel kasadakiyle aynı (tek gün, çok gün, bugün)', async () => {
@@ -333,7 +334,7 @@ describe('uzaktan raporlar', () => {
     const { patronLive } = await import('../server/services/reports');
     const { salesUntil } = await import('../api/uzaktan');
     const live = patronLive(false);
-    const lastWeek = JSON.parse(store.get(`lafpos:rapor:default:gun:${addDays(today, -7)}`)!) as RemoteDayReport;
+    const lastWeek = JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${addDays(today, -7)}`)!) as RemoteDayReport;
     const elapsed = live.now - businessDayStartMs(today);
     const fromSummary = salesUntil(lastWeek, businessDayStartMs(addDays(today, -7)) + elapsed);
     expect(fromSummary.netSales).toBe(live.compare.lastWeek.netSales);
@@ -341,7 +342,7 @@ describe('uzaktan raporlar', () => {
   });
 
   it('günlerde maliyet, kâr, PIN, müşteri adı ve telefonu yok', () => {
-    const days = [...store.entries()].filter(([k]) => k.startsWith('lafpos:rapor:')).map(([, v]) => v);
+    const days = [...store.entries()].filter(([k]) => k.startsWith(`${REDIS_ONEKI}rapor:`)).map(([, v]) => v);
     expect(days.length).toBeGreaterThan(0);
     const text = days.join('\n');
     for (const bad of ['Ayşe', 'Yılmaz', ...PHONE_FORMS, '"cost"', '"margin"', '"costsAt"', '"revenueNet"', 'pin', 'phone', 'Müşteri şikâyeti']) expect(text).not.toContain(bad);
@@ -388,7 +389,7 @@ describe('uzaktan raporlar', () => {
     await cu.catchUp();
     expect(posted.filter((p) => p.path === 'uzaktan/rapor')).toHaveLength(0);
     // Bulut yeni rakamı gösterir
-    const stored = JSON.parse(store.get(`lafpos:rapor:default:gun:${today}`)!) as RemoteDayReport;
+    const stored = JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${today}`)!) as RemoteDayReport;
     const { summaryReport } = await import('../server/services/reports');
     expect(stored.s.rev).toBe(summaryReport({ from: today, to: today }).netSales);
   });
@@ -397,7 +398,7 @@ describe('uzaktan raporlar', () => {
     const { signedHeaders } = await import('../server/lib/signature');
     const { gzipSync } = await import('node:zlib');
     const { POST } = await import('../api/uzaktan');
-    const key = `lafpos:rapor:default:gun:${today}`;
+    const key = `${REDIS_ONEKI}rapor:default:gun:${today}`;
     const cur = JSON.parse(store.get(key)!) as RemoteDayReport;
     const old = { ...cur, at: cur.at - 60_000, s: { ...cur.s, rev: 1 } };
     const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop: 'default', today, at: cur.at - 60_000, days: [old] })).toString('base64') });

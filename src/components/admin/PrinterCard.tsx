@@ -90,7 +90,7 @@ export function PrinterCard() {
         <div className="space-y-3 text-sm">
           {!d.reportedAt ? (
             <p className="text-[13px] leading-5 text-[var(--admin-text-mute)]">
-              Kasa bilgisayarındaki yazıcılar kasa ekranı açılırken burada listelenir (masaüstündeki LafPOS Kasa). Yazıcıyı USB ile takın; Windows sürücüsünü kurduktan sonra kasa
+              Kasa bilgisayarındaki yazıcılar kasa ekranı açılırken burada listelenir (masaüstündeki AsilPOS Kasa). Yazıcıyı USB ile takın; Windows sürücüsünü kurduktan sonra kasa
               ekranını kapatıp açın
             </p>
           ) : (

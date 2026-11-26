@@ -9,7 +9,7 @@ Son güncelleme: 26 Kasım 2026.
 
 - **Kasa:** Pavo N86 (satış, iptal, eşleştirme, banka gün sonu; `docs/04-YAZARKASA.md` §8), lafmobil masa çağrıları,
   Windows 10'da düşük kaynak, deneme modu ve "Denemeyi bitir, gerçek kullanıma başla".
-- **Kurulum ve güncelleme:** LafPOS-Kurulum.exe her main push'unda GitHub Release; anahtarsız otomatik güncelleme
+- **Kurulum ve güncelleme:** AsilPOS-Kurulum.exe her main push'unda GitHub Release; anahtarsız otomatik güncelleme
   (`/guncelleme/`, gün kapalıyken); Windows CI'da gerçek kurulum, güncelleme (75 kodu, `app.eski`, `node.yeni`) ve
   geri dönüş denemesi (`ci-kurulum.mjs`); Vercel kanalının derleme numarası commit zamanı (doğrulandı).
 - **Site:** lafpos.laffogato.net'te e-posta, parola ve davet koduyla üyelik; İndir ve anahtarsız web kurucusu.
@@ -38,7 +38,7 @@ Son güncelleme: 26 Kasım 2026.
   menü ve alttan açılan Daha; **Uzaktan yönetim** (personel, PIN, roller, Tükendi, servis modu, panel erişimi;
   `docs/UZAKTAN-YONETIM.md`); patron panelinde dönem kıyası (hafta, ay, son 7 gün), ödeme dağılımı ve yeni sıra; **kasa
   güncellemesinde seçim** (Şimdi güncelle / Gün sonunda güncelle, kaldığı yerden devam; `docs/05-KASA-BILGISAYARI.md`
-  §6); **tasarım sistemi LafPOS Keel** (`DESIGN.md` §0, `src/styles/keel.css`, `.claude/skills/lafpos-design`).
+  §6); **tasarım sistemi AsilPOS Keel** (`DESIGN.md` §0, `src/styles/keel.css`, `.claude/skills/asilpos-design`).
   Marina Merkez'de otomatik güncellemede.
 - **25 Kasım 2026 (#176 ve ardı; lafmaliyet#144):** kapanış saati hatırlatması (Ayarlar › Gün sonu ve Z; 30 dk kala
   sağ altta "Gün sonu al", kabuğun akışında, hiçbir şeyi örtmez), teslimde zorunlu **Kime** (Z, fiş, WhatsApp, gün sonu
@@ -54,7 +54,7 @@ Son güncelleme: 26 Kasım 2026.
   bir kez daha, bayat gitmez) ve kart ilk göründüğünde kasada bir kez kısa ses çalar; sitenin kabul etmediği bildirim
   (400) kuyruğu tıkamaz; kartın "Gün sonu al"ı önbellek tazeyken de pencereyi hemen açar.
 - **Gün sonu e-postası Pavo'yu beklerken kaybolmaz (26 Kasım 2026):** 25 Kasım akşamı Marina'nın gün sonu e-postası
-  gitmedi (ladmin sonucu taşıyan ikinci gövdeyi bekliyordu, gelmedi; gece bekleme bitmiyordu). LafPOS Pavo bekleniyorsa
+  gitmedi (ladmin sonucu taşıyan ikinci gövdeyi bekliyordu, gelmedi; gece bekleme bitmiyordu). AsilPOS Pavo bekleniyorsa
   ilk gövdeyi en çok 150 sn tutar, gün sonu bitince (ya da atlanınca) gün hemen ve tek gövdeyle gider; yeni alan
   `bankPosPending` (`docs/03-ENTEGRASYON.md` §4.10). ladmin tarafı (lafmaliyet aynı adlı dal) beklemeyi aynı istekte
   bitirir; e-postalar orada ortak, ferah ve telefona uygun tasarıma geçti.
@@ -67,7 +67,7 @@ Son güncelleme: 26 Kasım 2026.
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
 
-- **İlk kurulum:** LafPOS-Kurulum.exe (ya da sitede İndir) ile kurulum; Yönetim › Bağlantı bilgileri › "Hazır
+- **İlk kurulum:** AsilPOS-Kurulum.exe (ya da sitede İndir) ile kurulum; Yönetim › Bağlantı bilgileri › "Hazır
   satırları yapıştır"a bağlantı satırları (aşağıda; "deneme bittikten sonra" notlu satırlar o an atlanır). Genel
   bakış'taki Kurulum kartı adımları sırayla gösterir. İlk gerçek Windows'ta bakılacak: kaydedince bekçinin sunucuyu
   birkaç saniyede yeniden başlattığı ve ekranın "yeni bilgilerle açıldı" dediği.
@@ -79,7 +79,7 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
 - **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin
   `C:\ProgramData\LafPOS\backups`'a yazıldığı ve kapanan hesapların Personel'den yeni PIN'le açıldığı görülür.
-  Silinen deneme günleri LafPOS Uzaktan › Raporlar'dan da birkaç dakikada kalkmalı.
+  Silinen deneme günleri AsilPOS Uzaktan › Raporlar'dan da birkaç dakikada kalkmalı.
 - **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
   "Bekleyenler gönderildi" ve lafmaliyet'te gün bir kez.
 - **Uzaktan raporlar:** kafe bağlanınca tarama yaklaşık bir saatte 400 günü iter; Raporlar › Ciro "Geçen ay"
@@ -93,9 +93,10 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
 
 Kafedeki bağlantı satırları (Yönetim › Bağlantı bilgileri'ne yapıştırılır). **Anahtarlar 21 Kasım 2026'da yenilendi:**
 Vercel kayıtlarında kasanın 20 Kasım'daki istekleri siteden ve lafmaliyet'ten 401 almıştı (kasadaki anahtarlar
-Vercel'dekilerle uyuşmuyordu), LafPOS Uzaktan'a imzalı istek hiç gelmemişti. Üç projede anahtar yeniden üretildi
-(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, lafpos `LAFPOS_CLOUD_SECRET`; üretim yeniden yayımlandı) ve yeni satırlar
-sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`, 21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
+Vercel'dekilerle uyuşmuyordu), AsilPOS Uzaktan'a imzalı istek hiç gelmemişti. Üç projede anahtar yeniden üretildi
+(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, `lafpos` projesi `LAFPOS_CLOUD_SECRET`; ad değişikliğinden önceki adlar, yeni
+kod ikisini de okur; üretim yeniden yayımlandı) ve yeni satırlar sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`,
+21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
 **geçersiz**. Dosya kaybolursa anahtarlar yeniden üretilir (`scripts/vercel/baglanti-kur.sh --yenile` ya da Vercel'de
 elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", geri okunamaz. Kasa bağlanınca doğrulama: Yönetim
 › Genel bakış › Sistem sağlığı ve Site ve lafmaliyet sayfasındaki durum satırları.
@@ -103,8 +104,8 @@ elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", ge
 ```
 LAFMALIYET_URL=https://ladmin.laffogato.net
 LAFMALIYET_SYNC_SECRET=...
-LAFPOS_CLOUD_URL=https://lafpos.laffogato.net
-LAFPOS_CLOUD_SECRET=...
+ASILPOS_CLOUD_URL=https://lafpos.laffogato.net
+ASILPOS_CLOUD_SECRET=...
 LAFFOGATO_URL=https://laffogato.net        (deneme bittikten sonra)
 LAFFOGATO_SYNC_SECRET=...                  (deneme bittikten sonra)
 PAVO_URL=https://<cihazın IP adresi>:4567
@@ -113,7 +114,7 @@ PAVO_SERIAL=<cihazın seri numarası>
 
 - **Gün sonu e-postası (26 Kasım 2026):** bu sürüm Marina'ya kurulduktan sonraki ilk gün sonunda ladmin'in e-postası
   gün sonundan en geç ~3 dakika sonra (Pavo'nun banka gün sonu bitince) tek e-posta olarak gelmeli; Pavo atlanırsa
-  hemen. Gelmezse Yönetim › Entegrasyon'da lafmaliyet satırına ve ladmin › Ayarlar › LafPOS kartına bakılır. ladmin'de
+  hemen. Gelmezse Yönetim › Entegrasyon'da lafmaliyet satırına ve ladmin › Ayarlar › AsilPOS kartına bakılır. ladmin'de
   gün sonu e-postasını yalnız Kasa › Rapor alıcıları alır (25 Kasım'dan beri).
 - **Kapanış saati (25 Kasım 2026):** yeni sürüm Marina'ya kurulunca Yönetim › Ayarlar ve yedek › Gün sonu ve Z ›
   "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Saat girilince patronun telefonuna da
@@ -124,11 +125,11 @@ PAVO_SERIAL=<cihazın seri numarası>
 
 - **Personel mesaisi:** 4 Kasım 2026'da sahibin kararıyla kaldırıldı (`docs/02-PLAN.md` "Mesai kaldırıldı"). Yeniden
   istenirse eski tasarım ve tablo (`time_entries`) duruyor; yalnız vardiya kasa sayımı kullanılıyor.
-- **Marina şubesi (karar verildi, 21 Kasım 2026):** önce Marina LafPOS'a geçer, Tuzla ModPOS'ta kalır. LafPOS'un
-  varsayılan şubesi `marina`; lafmaliyet'te LafPOS'un şubesi Marina (`LAFPOS_BRANCH_ID`), başka şubeye ayarlı kasanın
+- **Marina şubesi (karar verildi, 21 Kasım 2026):** önce Marina AsilPOS'a geçer, Tuzla ModPOS'ta kalır. AsilPOS'un
+  varsayılan şubesi `marina`; lafmaliyet'te AsilPOS'un şubesi Marina (`ASILPOS_BRANCH_ID`), başka şubeye ayarlı kasanın
   günü reddedilir. Marina'nın ModPOS'u yedek olarak çekilmeye devam eder (lafmaliyet'te şubenin kasa kaynağı ModPOS
-  kalır); geçiş gününden sonra sayılan LafPOS'un günüdür. Marina'da LafPOS kurulup denenince lafmaliyet'te geçiş günü
-  seçilir. Tuzla da geçecekse lafmaliyet'te LafPOS'un şubesi listeye döner (ayrı iş).
+  kalır); geçiş gününden sonra sayılan AsilPOS'un günüdür. Marina'da AsilPOS kurulup denenince lafmaliyet'te geçiş günü
+  seçilir. Tuzla da geçecekse lafmaliyet'te AsilPOS'un şubesi listeye döner (ayrı iş).
 - **Stok ve reçete düşümü:** lafmaliyet'in tasarımı aylık sayım ve dönemsel FIFO (`docs/STOK-DEGERLEME.md`); satıştan
   anlık düşüm yok. Kritik stok uyarısı isteniyorsa önce lafmaliyet'te anlık stok tasarımı gerekir.
 - **Merkez için iki aşamalı giriş:** üye girişi davet kodu, parola ve deneme sınırıyla korunuyor. Telefonda doğrulama
@@ -137,8 +138,8 @@ PAVO_SERIAL=<cihazın seri numarası>
   "Yine de çalıştır" anlatımı kalır.
 - **Kasa hareketi ladmin'e anında mı (25 Kasım 2026):** harcama ve teslim bugün gün sonu paketiyle (Z'den sonra)
   ladmin'e gider. Sahip "girildiği an gitsin" derse sözleşme değişir: lafmaliyet'te açık günün hareketleri için ayrı
-  imzalı uç ve LafPOS'ta senkron bütçesine (AGENTS.md kural 6) uyan itme gerekir. Sorulmadan yapılmaz.
-- **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, LafPOS'un payı çok küçük). Kafe
+  imzalı uç ve AsilPOS'ta senkron bütçesine (AGENTS.md kural 6) uyan itme gerekir. Sorulmadan yapılmaz.
+- **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, AsilPOS'un payı çok küçük). Kafe
   bağlanınca bir ay sonra Vercel › Usage ve Upstash › Usage bir kez bakılır.
 
 ## 3. Dış bilgi gelince yapılacaklar
@@ -153,20 +154,20 @@ PAVO_SERIAL=<cihazın seri numarası>
 1. **baslat.cmd güncellemeyle değişmez (bilerek):** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i
    değiştirir. Çalışan toplu dosyayı değiştirmek güvenli değil (cmd.exe dosyayı satır satır okur). 21 Kasım'daki Node
    değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
-2. **Tasarım turu:** dil LafPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `lafpos-design` kontrol
+2. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
-3. **Şube başına ayrı kafe anahtarı:** bugün `LAFPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
+3. **Şube başına ayrı kafe anahtarı:** bugün `ASILPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
    anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
    başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
 4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
 5. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
-   varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planLafposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
+   varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
 
 ## Çalışma kuralları (kısa)
 
 - Dal `claude/<konu>`; `main`'e doğrudan push yok, PR ile. Sahip main'e göndermeyi istedi: CI yeşilse PR birleştirilir.
 - Commit öncesi `npm run typecheck && npm test`; arayüze dokunduysan `npm run build && npm run e2e`
-  (`LAFPOS_E2E_CHROME=/opt/pw-browsers/chromium` bulut ortamında).
+  (`ASILPOS_E2E_CHROME=/opt/pw-browsers/chromium` bulut ortamında).
 - Gizli değer hiçbir dosyaya ve commit'e girmez; `data/` ve `.env` asla.
 - Sahip yazılımcı değil: arayüz ve belge dili sade Türkçe; ondan teknik adım istenmez.

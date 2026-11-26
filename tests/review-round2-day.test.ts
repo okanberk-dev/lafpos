@@ -45,7 +45,7 @@ describe('yeniden açılan gün', () => {
     expect(seen).toContain('settings:day.reopened');
     expect(reopened.reopenedAt).toBe(IST('2026-10-27T03:05:00'));
 
-    delete process.env.LAFPOS_NO_JOBS;
+    delete process.env.ASILPOS_NO_JOBS;
     const { startJobs, stopJobs } = await import('../server/jobs');
     startJobs();
     try {
@@ -59,7 +59,7 @@ describe('yeniden açılan gün', () => {
       expect((await h.ok<{ day: unknown }>('kasa', 'GET', '/cash/day')).day).toBeNull();
     } finally {
       stopJobs();
-      process.env.LAFPOS_NO_JOBS = '1';
+      process.env.ASILPOS_NO_JOBS = '1';
       vi.useRealTimers();
     }
   });

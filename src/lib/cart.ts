@@ -50,8 +50,8 @@ const sameLine = (a: Omit<PendingLine, 'key'>, b: Omit<PendingLine, 'key'>) =>
 
 const safeStorage = createJSONStorage(() => {
   try {
-    localStorage.setItem('lafpos.probe', '1');
-    localStorage.removeItem('lafpos.probe');
+    localStorage.setItem('asilpos.probe', '1');
+    localStorage.removeItem('asilpos.probe');
     return localStorage;
   } catch {
     const mem = new Map<string, string>();
@@ -96,7 +96,7 @@ export const useCart = create<CartState>()(
           return { byOrder: next };
         }),
     }),
-    { name: 'lafpos.cart', storage: safeStorage },
+    { name: 'asilpos.cart', storage: safeStorage },
   ),
 );
 

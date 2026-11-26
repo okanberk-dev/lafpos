@@ -65,7 +65,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
     showClock: true,
     showOptions: true,
   },
-  // Uzaktan yönetim açık: sahip LafPOS Uzaktan'dan personel, PIN, Tükendi ve servis modunu yönetir; patron kasadan kapatır
+  // Uzaktan yönetim açık: sahip AsilPOS Uzaktan'dan personel, PIN, Tükendi ve servis modunu yönetir; patron kasadan kapatır
   remoteControl: true,
 };
 
@@ -92,10 +92,10 @@ export interface PrivateSettings {
   okcMode: 'anlik' | 'liste';
   /** KDV oranı -> cihazdaki kısım no ("10" -> 1) */
   okcSectionMap: Record<string, number>;
-  /** Yemek kartı operatör kimliği -> LafPOS ödeme türü (ör. "1005" -> Multinet) */
+  /** Yemek kartı operatör kimliği -> AsilPOS ödeme türü (ör. "1005" -> Multinet) */
   okcOperatorMethods: Record<string, string>;
   /**
-   * Pavo: cihazın ödeme aracı no'su (`/PaymentMediators`, ör. "5" Multinet) -> LafPOS ödeme türü (yemek kartı). Eşlenen
+   * Pavo: cihazın ödeme aracı no'su (`/PaymentMediators`, ör. "5" Multinet) -> AsilPOS ödeme türü (yemek kartı). Eşlenen
    * yemek kartı kasada seçilince cihaza o araçla gider, cihazın yanıtındaki aynı no o türe yazılır (docs/04-YAZARKASA.md §8.6)
    */
   okcPavoMediatorMethods: Record<string, string>;
@@ -110,7 +110,7 @@ export interface PrivateSettings {
    */
   okcTokenKabloOto: boolean;
   /**
-   * Pavo: LafPOS gün sonundan hemen sonra cihazda banka gün sonu (`/PerformEOD`). Gün sonunu beklemez ve bozmaz;
+   * Pavo: AsilPOS gün sonundan hemen sonra cihazda banka gün sonu (`/PerformEOD`). Gün sonunu beklemez ve bozmaz;
    * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
    */
   okcPavoAutoEod: boolean;
@@ -146,9 +146,9 @@ export interface PrivateSettings {
   zNoStart: number | null;
   /**
    * Bu kasanın şubesi: lafmaliyet'teki şube kimliği (`tuzla`, `marina`; lafmaliyet docs/SUBE.md). Gün sonu paketine
-   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Varsayılan `marina` (ilk LafPOS kasası
+   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Varsayılan `marina` (ilk AsilPOS kasası
    * Marina'da); başka şubenin kasası kurulurken Yönetim › Ayarlar'dan değiştirilir (yalnız patron). Boş bırakılamaz:
-   * panel yalnız kendi LafPOS şubesinin (marina) gününü alır, başkasına 409 wrong_branch verir. Platform anahtarlarının Vercel
+   * panel yalnız kendi AsilPOS şubesinin (marina) gününü alır, başkasına 409 wrong_branch verir. Platform anahtarlarının Vercel
    * adındaki şube de bundan gelir (`subeEtiketi`: 'tuzla' → 'TUZLA'; docs/PAKET-PLATFORMLARI.md "Anahtarlar buluttan").
    */
   branchId: string;
@@ -189,7 +189,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   receiptPrinter: null,
   rolePermissions: {},
   zNoStart: null,
-  // İlk LafPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar ve yedek › Şube kimliği'nden değişir
+  // İlk AsilPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar ve yedek › Şube kimliği'nden değişir
   branchId: 'marina',
   platforms: PLATFORM_DEFAULTS,
   liveSince: null,

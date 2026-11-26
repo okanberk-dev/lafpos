@@ -195,7 +195,7 @@ function KitchenScreen() {
 
   const canSoldOut = can('urun.tukendi') || can('menu.yonet');
   const callScreen = REMOTE ? null : (
-    <ToolButton onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')} title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)">
+    <ToolButton onClick={() => window.open(appUrl('/cagri'), 'asilpos-cagri')} title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)">
       <MonitorUp className="size-4" /> Çağrı ekranı
     </ToolButton>
   );
@@ -423,7 +423,7 @@ function KitchenScreen() {
             const online = t.source === 'laffogato';
             const allStarted = live.every((i) => i.status !== 'yeni');
             // Paket platformu: kurye ve müşteri platformun kodunu söyler ("0761"); kod büyük yazılır, platformun adı yanında
-            // küçük (dar kartta kırpılan ad, kod değil). LafPOS'un çağrı numarası ve kabul eden kişi platform fişinde yok
+            // küçük (dar kartta kırpılan ad, kod değil). AsilPOS'un çağrı numarası ve kabul eden kişi platform fişinde yok
             const platformName = t.platform ? PLATFORM_LABEL[t.platform] : '';
             const platformCode = t.platform && t.label.startsWith(platformName) ? t.label.slice(platformName.length).trim() : '';
             // Self modlarda numara, yarı selfte masa no büyük rozet: barista çağıracağı ya da götürüleceği yeri görür

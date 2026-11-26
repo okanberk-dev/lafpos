@@ -4,9 +4,9 @@ import { getSyncState } from '../lib/settings';
 import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
- * Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): gün açılırken beklenen nakit önceki gerçek günün devridir. LafPOS'ta gün
+ * Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): gün açılırken beklenen nakit önceki gerçek günün devridir. AsilPOS'ta gün
  * sonundan sonra teslim yok (teslim gün içinde yazılır, beklenenden düşer): yerel devir günün sayımıdır. lafmaliyet'in
- * değeri (`nextOpening`: kasa raporu varsa sayılan − teslim, yoksa LafPOS'un sayımı) panelde düzeltilen raporu da görür;
+ * değeri (`nextOpening`: kasa raporu varsa sayılan − teslim, yoksa AsilPOS'un sayımı) panelde düzeltilen raporu da görür;
  * varsa o geçer. Ağ işi yoktur: lafmaliyet'in değeri gün sonu yanıtından (gönderim kaydı) ve tembel devir okumasından
  * (sync/lafmaliyet.ts `devirIfStale`, sync_state `lafmaliyet.devir`) okunur.
  */
@@ -38,7 +38,7 @@ export interface DevirState {
 export interface OpeningExpectation {
   /** Beklenen açılış nakdi (kuruş) */
   amount: number;
-  /** `lafmaliyet`: panelin devri; `lafpos`: kasanın kendi sayımı */
+  /** `lafmaliyet`: panelin devri; `ACILIS_KASA` (eski adla): kasanın kendi sayımı */
   source: 'lafmaliyet' | typeof ACILIS_KASA;
   /** lafmaliyet'in kaynağı (yalnız `source: 'lafmaliyet'`) */
   ladminSource?: NextOpening['source'];
@@ -82,7 +82,7 @@ function pushedCount(payload: unknown): number | null {
  *
  * lafmaliyet devri kayıtlı Kasa raporundan hesaplar ve raporu yanıtı gönderdikten sonra yazar: bir gönderimin yanıtı o
  * gönderimin sayımını görmez. Yeniden sayım ya da yeniden kapanışın yanıtı (`kasa_raporu`) önceki bir gönderimin
- * sayımına eşitse ve bu gönderiminkine değilse rapor LafPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt
+ * sayımına eşitse ve bu gönderiminkine değilse rapor AsilPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt
  * eskidir, lafmaliyet raporu bu gönderimin sayımıyla günceller (yerel sayım geçer). Panelde düzeltilen rapor önceki
  * sayımın yankısı değildir, o yanıt geçer. Günün son gönderiminden önce okunan devir de o gönderimin sayımını görmedi
  */

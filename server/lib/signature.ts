@@ -3,7 +3,7 @@ import { isNetworkError, noteReachable, noteUnreachable } from './internet';
 
 /**
  * laffogato ↔ lafmaliyet panel bağlantısının imza kuralı (laffogato `src/lib/panel/karaoke-sync-core.ts`).
- * İki proje aynı test vektörlerini sabitler; LafPOS da `tests/signature.test.ts`'te aynılarını sabitler.
+ * İki proje aynı test vektörlerini sabitler; AsilPOS da `tests/signature.test.ts`'te aynılarını sabitler.
  * Kanonik metin: zaman damgası, yöntem, yol, sıralı ve kodlanmış sorgu, gövdenin SHA-256'sı. Alan adı girmez.
  */
 

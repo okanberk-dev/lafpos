@@ -5,12 +5,12 @@ import { TOKENX_PAYMENT, type TokenxBasket, type TokenxItem, type TokenxSale } f
  * Adisyondan cihaz sepeti üretir (saf fonksiyon). Kurallar:
  * - İptal ve ikram kalemleri sepete girmez (ücretsiz).
  * - Her kalem liste fiyatıyla gider; indirim payı kaleme `adjust.totalValue` olarak eklenir, böylece fişin
- *   toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır.
+ *   toplamı AsilPOS'un hesabıyla kuruşu kuruşuna aynıdır.
  * - Kalem bazlı seçimde yalnız seçilen adetler gider. Tutar ödeme ekranıyla aynı hesaptır (`itemsBreakdown`): kalan
  *   bütün adetler satırın kalanını alır (net pay eksi canlı ödemelerin bu satıra ödediği), kısmi adetler adet
  *   paylarından sırayla. Yoksa iptal edilen adet ödemesinden sonra cihaz 1 kuruş eksik isterdi (money-17).
  * - KDV oranı cihazdaki kısım (sectionNo) ile eşlenir; eşleşmeyen oran hata verir.
- * - Bütün adisyon gönderiminde cihaz fişlerinin toplamı her KDV oranında LafPOS'un dökümüne tamamlanır (`prior`).
+ * - Bütün adisyon gönderiminde cihaz fişlerinin toplamı her KDV oranında AsilPOS'un dökümüne tamamlanır (`prior`).
  */
 
 /** Servis ücreti satırının adı (önceki fişlerde cihaza giden servis bununla bulunur) */
@@ -54,8 +54,8 @@ export interface BuildBasketInput {
   remainingDue?: number;
   /**
    * Bütün adisyon gönderiminde adisyonun daha önce ödenmiş kısmının KDV oranına göre brütü (cihaz fişleri ve
-   * LafPOS'ta kalem seçerek alınan ödemeler) ve cihaza giden servis ücreti. Verilirse sepet her oranda
-   * `totals.kdv - prior.byRate` olur: cihaz fişlerinin KDV dökümü LafPOS'unkiyle aynı kalır.
+   * AsilPOS'ta kalem seçerek alınan ödemeler) ve cihaza giden servis ücreti. Verilirse sepet her oranda
+   * `totals.kdv - prior.byRate` olur: cihaz fişlerinin KDV dökümü AsilPOS'unkiyle aynı kalır.
    */
   prior?: { byRate: Record<string, number>; service: number };
   /** Servis ücretinin KDV oranı (shared/order-calc.ts ile aynı) */
@@ -123,7 +123,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
     const service = Math.max(0, input.totals.service ?? 0) - (input.prior?.service ?? 0);
     if (service > 0) flat(serviceRate, SERVICE_LINE, service, 'servis');
 
-    // Oran oran: sepet LafPOS'un KDV dökümünden önceki fişleri düşünce kalan brüte eşitlenir. Fark önce aynı oranın
+    // Oran oran: sepet AsilPOS'un KDV dökümünden önceki fişleri düşünce kalan brüte eşitlenir. Fark önce aynı oranın
     // satırlarına işlenir; yazılamayan artı fark yuvarlamadan büyükse o oranda "İndirim farkı" satırı olur
     if (input.prior && input.totals.kdv) {
       const target = new Map<number, number>();
@@ -132,7 +132,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
       for (const p of slots) if (!target.has(p.rate)) target.set(p.rate, 0);
       for (const [rate, want] of target) {
         const own = slots.filter((p) => p.rate === rate);
-        // Fark yalnız kalemlerin indirim payına yazılır; servis satırı LafPOS'un servisi olarak kalır (inceleme, 27 Eki 2026)
+        // Fark yalnız kalemlerin indirim payına yazılır; servis satırı AsilPOS'un servisi olarak kalır (inceleme, 27 Eki 2026)
         const left = absorb(own.filter((p) => p.kind === 'kalem'), want - own.reduce((a, p) => a + p.net, 0));
         // Kalem başına en çok 2 kuruşluk kayma indirim yuvarlamasıdır; oranlar arasında dengelenir
         const rounding = 2 * input.items.filter((i) => i.kdvRate === rate && !i.voided && !i.complimentary).length;
@@ -144,7 +144,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
     // kalem kalmadıysa (yalnız servis) son çare servis satırına: cihazın toplamı adisyonun kalanından sapmaz
     const drift = absorb(slots.filter((p) => p.kind === 'kalem'), input.remainingDue - sum());
     if (absorb(slots.filter((p) => p.kind === 'servis'), drift) !== 0) {
-      throw new Error("Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da LafPOS'ta alın");
+      throw new Error("Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da AsilPOS'ta alın");
     }
   }
   // Kayma servis ya da fark satırını sıfırladıysa satır gitmez
@@ -185,7 +185,7 @@ export function basketByRate(basket: Pick<TokenxBasket, 'items'>): { byRate: Rec
 
 export type MethodKind = 'nakit' | 'kart' | 'yemek' | 'havale' | 'cari' | 'online' | 'diger';
 
-/** Cihazdaki ödeme tipini LafPOS ödeme türüne çevirir */
+/** Cihazdaki ödeme tipini AsilPOS ödeme türüne çevirir */
 export function methodKindFor(type: number): MethodKind {
   switch (type) {
     case TOKENX_PAYMENT.NAKIT:
@@ -215,8 +215,8 @@ export interface SalePayment {
 }
 
 /**
- * Cihaz sonucundaki ödeme kalemlerini LafPOS ödemelerine çevirir. Toplam sepet tutarını aşan kısım (ör.
- * yuvarlama) kırpılır; eksik kalan kısım için kalem üretilmez (adisyon açık kalır, kalan LafPOS'ta alınır).
+ * Cihaz sonucundaki ödeme kalemlerini AsilPOS ödemelerine çevirir. Toplam sepet tutarını aşan kısım (ör.
+ * yuvarlama) kırpılır; eksik kalan kısım için kalem üretilmez (adisyon açık kalır, kalan AsilPOS'ta alınır).
  */
 export function salePayments(sale: TokenxSale, basketAmount: number): SalePayment[] {
   const raw = (sale.paymentItems ?? [])

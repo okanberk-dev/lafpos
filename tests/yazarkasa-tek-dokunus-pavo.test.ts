@@ -16,7 +16,7 @@ describe('Pavo: ret ve ulaşılamayan cihaz', () => {
     pavoTiming.sendWaitMs = 300;
     pavoTiming.askEveryMs = 0;
     device = await startFakePavo();
-    h = await startApp({ PAVO_URL: device.url, PAVO_SERIAL: device.serial, PAVO_FINGERPRINT: 'LafPOS-test' });
+    h = await startApp({ PAVO_URL: device.url, PAVO_SERIAL: device.serial, PAVO_FINGERPRINT: 'AsilPOS-test' });
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'pavo' });
     await h.ok('patron', 'POST', '/okc/pair');

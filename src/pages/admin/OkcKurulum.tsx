@@ -317,7 +317,7 @@ export function MealCardMap({
       title="Yemek kartları cihazda"
       subtitle={
         pavo
-          ? 'Eşlenen yemek kartı kasada seçilince cihaza o ödeme aracıyla gider; eşlenmeyen kart LafPOS’a yazılır. Liste cihazdan gelir (“Bağlantıyı dene”)'
+          ? 'Eşlenen yemek kartı kasada seçilince cihaza o ödeme aracıyla gider; eşlenmeyen kart AsilPOS’a yazılır. Liste cihazdan gelir (“Bağlantıyı dene”)'
           : 'Kasada seçilen yemek kartı cihazda o uygulamayla açılır ve bilgi fişi kesilir; eşlenmezse kasiyer cihazda seçer'
       }
       bodyClassName="space-y-4"

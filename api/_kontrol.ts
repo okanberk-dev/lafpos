@@ -1,12 +1,12 @@
 /**
- * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): LafPOS Uzaktan'ın panel uçları, kasaya giden komut kuyruğu ve panele kimin
+ * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): AsilPOS Uzaktan'ın panel uçları, kasaya giden komut kuyruğu ve panele kimin
  * gireceği. api/uzaktan.ts `kontrol/` ile başlayan istekleri buraya verir (alt çizgili dosya Vercel'de ayrı işlev olmaz);
  * kasaya teslim ve sonuç Merkez nabzında (`nabizKontrol`, api/_merkez.ts). Sözleşme shared/kontrol.ts.
  *
  * Komut: üyenin rolü (`uyeYapabilir`; patron hesabına ve rol yetkilerine yalnız sahip), kasanın son özeti (sözleşme
  * sürümü, desteklediği türler, uzaktan yönetim açık mı), `komutDogrula`, gün sonunda kasa çevrimiçi mi, kuyruk ve üye
  * başına saat sınırı. Geçen komut kasadaki adlarla özetlenir, kurulum ve üyenin rolüyle birlikte kafenin ortak
- * anahtarıyla (LAFPOS_CLOUD_SECRET) imzalanır ve kuyruğa girer: Redis'e yazabilen biri anahtarı bilmeden kasaya komut
+ * anahtarıyla (ASILPOS_CLOUD_SECRET) imzalanır ve kuyruğa girer: Redis'e yazabilen biri anahtarı bilmeden kasaya komut
  * sokamaz, bir şubenin komutunu başkasına taşıyamaz, rolü değiştiremez. Kasa rolü ve hedefin gerçek rolünü yeniden
  * denetler (bulutun özeti eski olabilir). Panel yalnız satırları görür; komutun verisi (şifreli PIN) ve imzası dönmez.
  *
@@ -74,9 +74,9 @@ export interface KontrolDeps {
   demo: boolean;
   /** Görünümün dükkânı: Merkez kurulum kimliği (Merkez'e bağlı olmayan eski kasa `default`) */
   dukkan: () => Promise<string>;
-  /** Kafenin ortak anahtarı (LAFPOS_CLOUD_SECRET): komut imzası */
+  /** Kafenin ortak anahtarı (ASILPOS_CLOUD_SECRET): komut imzası */
   secret: string;
-  /** Vercel ortamındaki sahip e-postaları (LAFPOS_UYE_EPOSTA); boşsa üyelik kapalı (parolalı ya da parolasız görünüm) */
+  /** Vercel ortamındaki sahip e-postaları (ASILPOS_UYE_EPOSTA); boşsa üyelik kapalı (parolalı ya da parolasız görünüm) */
   sahipler: string[];
   /** Üye kaydı değişti ya da silindi: oturum önbelleğinden düşsün */
   uyeDegisti?: (eposta: string) => void;
@@ -162,7 +162,7 @@ async function govde(req: Request): Promise<Record<string, unknown> | Response> 
   return fail(400, 'İstek okunamadı', 'bad_body');
 }
 
-/** Komutun imzası: HMAC-SHA256(LAFPOS_CLOUD_SECRET, imzaMetni), base64url; kasa aynı metinden sabit zamanlı karşılaştırır */
+/** Komutun imzası: HMAC-SHA256(ASILPOS_CLOUD_SECRET, imzaMetni), base64url; kasa aynı metinden sabit zamanlı karşılaştırır */
 export const komutImzasi = (secret: string, k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>) => createHmac('sha256', secret).update(imzaMetni(k)).digest('base64url');
 
 /** Kasanın açık anahtarı kasadan mı geldi: imzası kafenin ortak anahtarıyla ve bu kurulumla tutuyor mu (sabit zamanlı) */
@@ -321,7 +321,7 @@ async function uyeIslemi(yol: string, req: Request, deps: KontrolDeps, ben: Kont
   const rol = davetRolu(body.rol);
   if (!rol) return fail(400, 'Rol anlaşılamadı', 'bad_body');
   // Davet yalnız üyelik açıkken: üye girişi ortamdaki sahip e-postasıyla açılır
-  if (yol === 'uye' && !deps.sahipler.length) return fail(409, 'Panele kişi eklemek için önce Vercel’de sahip e-postasını (LAFPOS_UYE_EPOSTA) tanımlayın', 'member_mode_off');
+  if (yol === 'uye' && !deps.sahipler.length) return fail(409, 'Panele kişi eklemek için önce Vercel’de sahip e-postasını (ASILPOS_UYE_EPOSTA) tanımlayın', 'member_mode_off');
   const [rawUye, rawDavet] = ((await deps.redis('MGET', uyeKey(eposta), davetKey(eposta))) as unknown[] | null) ?? [];
   const kayit = parse<UyeKaydi>(rawUye);
   const davet = davetGecerli(rawDavet, now);
@@ -367,7 +367,7 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
 
   // Kasanın son özeti: sürüm, desteklediği türler ve uzaktan yönetim açık mı
   const durum = parse<unknown>(await deps.redis('GET', durumKey(id)));
-  if (durumGecerli(durum) && durum.v > KONTROL_SURUM) return fail(409, 'LafPOS Uzaktan bu kasa sürümünü henüz tanımıyor; site güncellenince yeniden deneyin', 'bulut_eski');
+  if (durumGecerli(durum) && durum.v > KONTROL_SURUM) return fail(409, 'AsilPOS Uzaktan bu kasa sürümünü henüz tanımıyor; site güncellenince yeniden deneyin', 'bulut_eski');
   if (!durumGecerli(durum) || !durum.turler.includes(tur)) return fail(409, 'Kasa güncel değil: önce Merkez’den güncelleme gönderin', 'kasa_eski');
   if (!durum.acik) return fail(409, 'Kasada uzaktan yönetim kapalı (kasada Yönetim › Ağ ve uzaktan erişim)', 'kontrol_kapali');
 
@@ -507,7 +507,7 @@ export async function kontrol(req: Request, _url: URL, path: string, deps: Kontr
     if (post) return fail(403, 'Örnek görünümde değişiklik yapılmaz', 'remote_readonly');
     return json(yol === 'durum' ? demoPanel(now) : { uyeler: demoUyeler(now) });
   }
-  if (!(deps.secret.length >= 32)) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
+  if (!(deps.secret.length >= 32)) return fail(503, 'AsilPOS Uzaktan kurulmamış (ASILPOS_CLOUD_SECRET)', 'not_configured');
   const ben = await deps.oturum();
   if (!ben) {
     if (await deps.gorunum?.()) return fail(403, 'Uzaktan yönetim için üye girişi gerekir', 'remote_admin');

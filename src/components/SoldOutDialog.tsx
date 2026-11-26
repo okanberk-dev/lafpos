@@ -19,7 +19,7 @@ type Tab = 'urun' | 'secenek';
  * sitede ve uygulamada da tükenir; internet yokken kasada hemen geçerli olur, site internet gelince güncellenir
  * (shared/tukendi.ts); tükenenler listenin başında. Sitenin kapattığı ürünü ("Sitede satışta değil")
  * yalnız menü yetkisi olan açar: kasiyerde düğmesi yok, sunucu da reddeder. Seçenekler sekmesi (yulaf sütü bitti)
- * yalnız LafPOS'ta değişir: seçenek penceresinde gri görünür, kasa satışı almaz.
+ * yalnız AsilPOS'ta değişir: seçenek penceresinde gri görünür, kasa satışı almaz.
  */
 export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const boot = useBoot();

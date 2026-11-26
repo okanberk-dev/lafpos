@@ -26,20 +26,20 @@ const BUILTINS: Record<string, string> = {
   '@hono/node-server/serve-static': at('demo/shims/serve-static.ts'),
 };
 
-const VIRTUAL = 'virtual:lafpos-demo';
-const MISSING = '\0lafpos-demo-yok';
+const VIRTUAL = 'virtual:asilpos-demo';
+const MISSING = '\0asilpos-demo-yok';
 /** sql.js Node'da olduğunu anlayınca kullandığı modüller: tarayıcıda o yola girmez */
-const EMPTY = '\0lafpos-demo-bos';
+const EMPTY = '\0asilpos-demo-bos';
 
 /**
- * LafPOS sunucusunu tarayıcıda çalıştırmak için (vite build --mode demo, docs/DEMO.md).
+ * AsilPOS sunucusunu tarayıcıda çalıştırmak için (vite build --mode demo, docs/DEMO.md).
  * - `server`: sunucu modüllerini demo karşılıklarına çevirir (env, veritabanı).
  * - `builtins`: Node modüllerini tarayıcı karşılıklarına çevirir (testte Node'un kendisi kalır).
- * - `virtual:lafpos-demo` arayüzün demo çalışma zamanına açılan kapısıdır; demo dışındaki derlemede boştur.
+ * - `virtual:asilpos-demo` arayüzün demo çalışma zamanına açılan kapısıdır; demo dışındaki derlemede boştur.
  */
-export function lafposDemo(opts: { server: boolean; builtins: boolean }): Plugin {
+export function asilposDemo(opts: { server: boolean; builtins: boolean }): Plugin {
   return {
-    name: 'lafpos-demo',
+    name: 'asilpos-demo',
     enforce: 'pre',
     async resolveId(source, importer, options) {
       if (source === VIRTUAL) return opts.server ? at('demo/runtime.ts') : MISSING;

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { addDays, businessDate } from '@shared/time';
 import { type Harness, startApp } from './harness';
+import { ACILIS_KASA } from '@shared/eski-adlar';
 
 /**
  * Kasa zincirinin istek bütçesi (docs/03-ENTEGRASYON.md §5): lafmaliyet bağlantısı tanımlı değilken (LAFMALIYET_URL
@@ -32,7 +33,7 @@ describe('bağlantı yokken kasa zinciri', () => {
     await h.ok('kasa', 'POST', '/cash/movements', { kind: 'harcama', amount: 1000, description: 'Buz' });
     db.update(schema.businessDays).set({ date: addDays(businessDate(Date.now()), -1) }).where(eq(schema.businessDays.id, day.id)).run();
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: 50000 });
-    expect((await h.ok<{ opening: unknown }>('mudur', 'GET', '/cash/day')).opening).toMatchObject({ suggested: 50000, source: 'lafpos' });
+    expect((await h.ok<{ opening: unknown }>('mudur', 'GET', '/cash/day')).opening).toMatchObject({ suggested: 50000, source: ACILIS_KASA });
     expect(await lm.devirIfStale()).toBe(false);
     expect(await lm.categoriesIfStale()).toBe(false);
     await new Promise((r) => setTimeout(r, 50));

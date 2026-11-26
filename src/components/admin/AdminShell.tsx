@@ -47,7 +47,7 @@ const COUNT_TEXT: Partial<Record<AdminSection['key'], (n: number) => string>> = 
 const countText = (key: AdminSection['key'], n: number) => COUNT_TEXT[key]?.(n) ?? String(n);
 
 /**
- * Yönetim paneli kabuğu (LafPOS Sahne): tablet ve bilgisayarda kasanın üst çubuğunun altında gri sahne. Geniş ekranda
+ * Yönetim paneli kabuğu (AsilPOS Sahne): tablet ve bilgisayarda kasanın üst çubuğunun altında gri sahne. Geniş ekranda
  * (lg) sol sütunda shadcn'in Sidebar'ı gibi sade yan menü (grup başlıkları, ikonlu bölümler, seçili satır beyaz;
  * dipte kasaya dönüş ve sıkı görünüm), sağda beyaz yaprakta sayfanın başlığı, eylemleri ve içeriği. Tablette menü yatay
  * kayan hap şeridi. Telefonda kendi üst şeridi (geri, ad, arama, bağlantı, kişi) ve kasanın alt sekme çubuğu; bölüm

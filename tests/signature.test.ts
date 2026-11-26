@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalString, sign } from '../server/lib/signature';
+import { TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
- * lafmaliyet'in sabitlediği vektörlerin aynısı (lafmaliyet `tests/karaoke.test.ts`, `tests/lafpos.test.ts`). Sitenin
+ * lafmaliyet'in sabitlediği vektörlerin aynısı (lafmaliyet `tests/karaoke.test.ts`, `tests/asilpos.test.ts`). Sitenin
  * testi 16 Kasım 2026'da kaldırıldı; vektörleri laffogato `docs/PANEL-KARAOKE.md` ve `docs/PANEL-ORDERS.md`'de durur.
- * Bu test kırılırsa LafPOS'un imzalı istekleri sitede 401 alır.
+ * Bu test kırılırsa AsilPOS'un imzalı istekleri sitede 401 alır.
  */
 const SECRET = 'test-secret-0123456789-abcdefghijklmnop';
 const TS = 1760000000;
@@ -18,22 +19,23 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     expect(sign(SECRET, { timestamp: TS, method: 'POST', url: PING_URL, body: PING_BODY })).toBe('1d993513ad228ef2b3c43bc4c32c76d792a20aa4563d31001320cc95cfbd9c69');
   });
 
-  it('lafmaliyet\'in LafPOS uçları için sabitlediği vektörler (lafmaliyet tests/lafpos.test.ts)', () => {
-    // Gün sonu itmesi ve maliyet okuması: LafPOS'un imzası bu iki değeri vermezse lafmaliyet 401 döner
-    const dayBody = '{"version":1,"source":"lafpos","date":"2026-10-26"}';
+  it('lafmaliyet\'in AsilPOS uçları için sabitlediği vektörler (lafmaliyet tests/asilpos.test.ts)', () => {
+    // Gün sonu itmesi ve maliyet okuması: AsilPOS'un imzası bu iki değeri vermezse lafmaliyet 401 döner
+    // Gövde telde eski adla (source): vektör lafmaliyet'teki testle aynı kalmalı
+    const dayBody = `{"version":1,"source":"${TEL_KAYNAK}","date":"2026-10-26"}`;
     expect(sign(SECRET, { timestamp: TS, method: 'POST', url: new URL('https://ladmin.laffogato.net/api/pos/gun'), body: dayBody })).toBe('5ab02280859d09c6afb003f9cc62bbfdd46b1738f6a25c9a6cf8a475113639cb');
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/urunler'), body: '' })).toBe('4693defb7ef97b132908d552133471db2827261b6468b2ef565effa6fcbf8a3c');
     // ModPOS dönemi (server/sync/modpos.ts): şube sorguda, imzaya girer
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/modpos-gunler?sube=marina'), body: '' })).toBe('e653d2f73b92e4fa1f6acc750f6702872e7e3a68204f9adad8f17e5bf6dd9023');
   });
 
-  it('kasa zinciri uçları (docs/03-ENTEGRASYON.md §4.6, §4.7; lafmaliyet tests/lafpos.test.ts aynı vektörler)', () => {
+  it('kasa zinciri uçları (docs/03-ENTEGRASYON.md §4.6, §4.7; lafmaliyet tests/asilpos.test.ts aynı vektörler)', () => {
     // Devir okuması (sorgu imzaya girer) ve gider kategorileri: ikisi de gövdesiz imzalı GET
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/devir?date=2026-11-22'), body: '' })).toBe('d0d42a100852f660d76a81e1f1631684faef9838a67f1788ded57de92640205b');
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/gider-kategorileri'), body: '' })).toBe('7309e560164d15d4ccb5c17ecaa6355bde88073a238c1cc5976f1858431c10b1');
   });
 
-  it('personel listesi ucu (docs/03-ENTEGRASYON.md §4.8; lafmaliyet tests/lafpos.test.ts aynı vektörü sabitler)', () => {
+  it('personel listesi ucu (docs/03-ENTEGRASYON.md §4.8; lafmaliyet tests/asilpos.test.ts aynı vektörü sabitler)', () => {
     // Kasanın şubesi sorguda (imzaya girer): lafmaliyet başka şubeye 409 wrong_branch döner
     expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/personel?sube=marina'), body: '' })).toBe('b6933a6b1b6469c8e430564d5f31c9002ca2ed6a2100fd3cc41df4ccc2d77f31');
   });

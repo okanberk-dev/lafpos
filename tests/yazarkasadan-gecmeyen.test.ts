@@ -10,8 +10,8 @@ import { type Harness, PINS, startApp } from './harness';
 /**
  * "Yazarkasadan geçmeyen" (docs/04-YAZARKASA.md §4.2): satış ödemelerinden mali fişi yazarkasada kesilmeyenlerin kart ve
  * nakit toplamı, bahşiş hariç. Tanım tek yerde (shared/order-calc.ts `offDeviceTotals`); X, Z, fiş, Raporlar, patron
- * paneli ve LafPOS Uzaktan aynı rakamı yazar. Karışık ödemeli bir gün: cihazdan geçen kart, nakit ve yemek kartı, LafPOS'ta
- * bahşişli kart, kısmi nakit (kalanı cihazdan ve LafPOS'tan), yemek kartı, iptal edilip yeniden alınan ödeme, açık hesap
+ * paneli ve AsilPOS Uzaktan aynı rakamı yazar. Karışık ödemeli bir gün: cihazdan geçen kart, nakit ve yemek kartı, AsilPOS'ta
+ * bahşişli kart, kısmi nakit (kalanı cihazdan ve AsilPOS'tan), yemek kartı, iptal edilip yeniden alınan ödeme, açık hesap
  * satışı ve tahsilatı. Kör kasaya gitmez; eski kasanın (alanı taşımayan) günü uzakta satır yazmaz, ₺0 göstermez.
  */
 
@@ -78,7 +78,7 @@ describe('karışık ödemeli gün (eğitim cihazıyla)', () => {
     return sent.receipt.amount;
   };
 
-  it('gün: cihazdan ve LafPOS’tan karışık ödemeler', async () => {
+  it('gün: cihazdan ve AsilPOS’tan karışık ödemeler', async () => {
     // Cihazda kart: fişi kesildi, sayılmaz
     const a = await newOrder();
     await onDevice(a, [{ type: 3, amount: a.total }]);
@@ -92,11 +92,11 @@ describe('karışık ödemeli gün (eğitim cihazıyla)', () => {
     ]);
     device.cash += half;
     device.card += b.total - half;
-    // LafPOS'ta bahşişli kart: satış tutarı sayılır, bahşiş değil
+    // AsilPOS'ta bahşişli kart: satış tutarı sayılır, bahşiş değil
     const c = await newOrder();
     await payHere(c, 'Kredi kartı', c.total, 500);
     expected.card += c.total;
-    // Kısmi: çeyreği LafPOS'ta nakit, bir kalemi cihazdan kart, kalanı LafPOS'ta kart
+    // Kısmi: çeyreği AsilPOS'ta nakit, bir kalemi cihazdan kart, kalanı AsilPOS'ta kart
     const d = await newOrder(2);
     const quarter = Math.floor(d.total / 4);
     const part = await payHere(d, 'Nakit', quarter);
@@ -108,7 +108,7 @@ describe('karışık ödemeli gün (eğitim cihazıyla)', () => {
     const closedD = await payHere(d, 'Kredi kartı', rest);
     expect(closedD.order.status).toBe('kapali');
     expected.card += rest;
-    // Yemek kartı (LafPOS'ta ve cihazda): kart ve nakde girmez
+    // Yemek kartı (AsilPOS'ta ve cihazda): kart ve nakde girmez
     const e = await newOrder();
     await payHere(e, 'Pluxee', e.total);
     const g = await newOrder();
@@ -119,7 +119,7 @@ describe('karışık ödemeli gün (eğitim cihazıyla)', () => {
     await h.ok('kasa', 'POST', `/orders/${f.id}/payments/${wrong.order.payments.at(-1)!.id}/refund`, { reason: 'Yanlış tür', approverPin: PINS.mudur });
     await payHere(f, 'Kredi kartı', f.total);
     expected.card += f.total;
-    // "LafPOS'a yaz (fiş ayrıca)": nakit
+    // "AsilPOS'a yaz (fiş ayrıca)": nakit
     const i = await newOrder(1);
     await payHere(i, 'Nakit', i.total);
     expected.cash += i.total;
@@ -157,7 +157,7 @@ describe('karışık ödemeli gün (eğitim cihazıyla)', () => {
     await h.login('kasa', PINS.kasa);
   });
 
-  it('LafPOS Uzaktan kasayla aynı: canlı özet, günün raporu ve dönem toplamı; eski kasanın gününde satır yok', async () => {
+  it('AsilPOS Uzaktan kasayla aynı: canlı özet, günün raporu ve dönem toplamı; eski kasanın gününde satır yok', async () => {
     const { buildSnapshot } = await import('../server/sync/cloud');
     const { buildDayReport } = await import('../server/sync/cloud-reports');
     const { summaryReport } = await import('../server/services/reports');

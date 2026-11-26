@@ -14,30 +14,30 @@ export function configFrom(vars: Record<string, string | undefined>) {
     sessionHours: Number(posEnv(vars, 'SESSION_HOURS') ?? 14),
 
     /**
-     * laffogato (site + mobil uygulama API'si). Varsayılanı yok: yalnız .env'de açıkça yazılınca dolu, boşken LafPOS
+     * laffogato (site + mobil uygulama API'si). Varsayılanı yok: yalnız .env'de açıkça yazılınca dolu, boşken AsilPOS
      * siteye hiçbir istek atmaz (menü, görsel, online sipariş, Tükendi; sahibin 26 Ekim kararı, docs/03-ENTEGRASYON.md §2)
      */
     laffogatoUrl: (vars.LAFFOGATO_URL ?? '').trim().replace(/\/+$/, ''),
-    /** Sitenin imzalı uçları: sitedeki LAFPOS_SYNC_SECRET değeri (en az 32 karakter) */
+    /** Sitenin imzalı uçları: sitedeki imza anahtarının (shared/eski-adlar.ts `SITE_ANAHTAR_ENV`) değeri (en az 32 karakter) */
     laffogatoPanelSecret: (vars.LAFFOGATO_SYNC_SECRET ?? vars.LAFFOGATO_PANEL_SECRET ?? '').trim(),
 
     /** lafmaliyet (maliyet / arka ofis paneli) */
     lafmaliyetUrl: (vars.LAFMALIYET_URL ?? '').trim().replace(/\/+$/, ''),
-    /** lafmaliyet'in imzalı POS uçları: paneldeki LAFPOS_SYNC_SECRET değeri */
+    /** lafmaliyet'in imzalı POS uçları: paneldeki ASILPOS_SYNC_SECRET (eski adıyla da) değeri */
     lafmaliyetToken: (vars.LAFMALIYET_SYNC_SECRET ?? '').trim(),
 
-    /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
+    /** AsilPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki ASILPOS_CLOUD_SECRET) */
     cloudUrl: (posEnv(vars, 'CLOUD_URL') ?? '').replace(/\/$/, ''),
     cloudSecret: (posEnv(vars, 'CLOUD_SECRET') ?? '').trim(),
     /**
-     * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan LafPOS Uzaktan'ın adresi. LAFPOS_MERKEZ_URL=0 kapatır;
+     * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan AsilPOS Uzaktan'ın adresi. ASILPOS_MERKEZ_URL=0 kapatır;
      * ikisi de yoksa lisans uygulanmaz ve güncelleme kanalın son sürümünü izler (server/sync/merkez.ts)
      */
     merkezUrl: posEnv(vars, 'MERKEZ_URL')?.trim() === '0' ? '' : (posEnv(vars, 'MERKEZ_URL') ?? posEnv(vars, 'CLOUD_URL') ?? '').trim().replace(/\/+$/, ''),
 
     /**
-     * Yemeksepeti (Delivery Hero POS middleware): siparişler LafPOS Uzaktan aktarıcısına (Vercel) iter, kasa oradan çeker
-     * (LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET de gerekir); kabul, ret ve aşama kasadan middleware'e
+     * Yemeksepeti (Delivery Hero POS middleware): siparişler AsilPOS Uzaktan aktarıcısına (Vercel) iter, kasa oradan çeker
+     * (ASILPOS_CLOUD_URL ve ASILPOS_CLOUD_SECRET de gerekir); kabul, ret ve aşama kasadan middleware'e
      */
     yemeksepeti: {
       /** Delivery Hero'nun verdiği middleware adresi (ör. https://integration-middleware.stg.restaurant-partners.com) */
@@ -48,8 +48,8 @@ export function configFrom(vars: Record<string, string | undefined>) {
       remoteId: (vars.YEMEKSEPETI_REMOTE_ID ?? '').trim(),
     },
     /**
-     * Getir Yemek (GetirFood API): Getir'in verdiği uygulama anahtarı ve restoran anahtarı; siparişler LafPOS Uzaktan
-     * aktarıcısına (Vercel) iter, kasa oradan çeker (LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET de gerekir), yedek olarak
+     * Getir Yemek (GetirFood API): Getir'in verdiği uygulama anahtarı ve restoran anahtarı; siparişler AsilPOS Uzaktan
+     * aktarıcısına (Vercel) iter, kasa oradan çeker (ASILPOS_CLOUD_URL ve ASILPOS_CLOUD_SECRET de gerekir), yedek olarak
      * doğrudan Getir'den okur. Getir'e verilen webhook anahtarı (GETIR_WEBHOOK_SECRET) yalnız Vercel'de durur, kasada
      * gerekmez (server/delivery/getir.ts)
      */

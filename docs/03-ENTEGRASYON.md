@@ -1,34 +1,34 @@
-# Entegrasyon sözleşmesi: LafPOS ↔ laffogato ↔ lafmaliyet
+# Entegrasyon sözleşmesi: AsilPOS ↔ laffogato ↔ lafmaliyet
 
-Bu belge LafPOS'un diğer iki sistemle hangi uçtan, hangi alanlarla, ne sıklıkla konuştuğunu tanımlar.
+Bu belge AsilPOS'un diğer iki sistemle hangi uçtan, hangi alanlarla, ne sıklıkla konuştuğunu tanımlar.
 Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 
-**Bütün bağlantılar varsayılan kapalı** (sahibin 26 Ekim 2026 kararı: "lafposu tüm hepsinde aktif edince kullanmaya
-başlayayım, hemen aktif olmasın ki şu anki sistem bozulmasın"). `.env`'de adres ve anahtar yokken LafPOS dışarıya
+**Bütün bağlantılar varsayılan kapalı** (sahibin 26 Ekim 2026 kararı: "asilposu tüm hepsinde aktif edince kullanmaya
+başlayayım, hemen aktif olmasın ki şu anki sistem bozulmasın"). `.env`'de adres ve anahtar yokken AsilPOS dışarıya
 hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalışır. Açma adımları tek listede: §8
-**Açılış sırası** (lafmaliyet `docs/LAFPOS.md` › "Açılış sırası" ile aynı adımlar).
+**Açılış sırası** (lafmaliyet `docs/ASILPOS.md` › "Açılış sırası" ile aynı adımlar).
 
 ## 1. Sahiplik
 
-| Veri | Sahibi | LafPOS'ta |
+| Veri | Sahibi | AsilPOS'ta |
 | --- | --- | --- |
 | Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır (internet yokken kasada hemen geçerli, siteye giden kutusundan gider); sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
-| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur. Seçeneğin kasadaki Tükendi'si (`option_items.soldOut`) yalnız LafPOS'ta, siteye gitmez (§2.3 Seçenek tükendi) |
-| POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
-| POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
-| Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
-| Masa, adisyon, ödeme, gün sonu, personel PIN'leri | LafPOS | |
+| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek AsilPOS'ta yerel gruptur. Seçeneğin kasadaki Tükendi'si (`option_items.soldOut`) yalnız AsilPOS'ta, siteye gitmez (§2.3 Seçenek tükendi) |
+| POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | AsilPOS | senkron dokunmaz |
+| POS'a özel ürünler (karaoke saati, kampanya) | AsilPOS | `extSource` boş |
+| Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | AsilPOS kopyalamaz |
+| Masa, adisyon, ödeme, gün sonu, personel PIN'leri | AsilPOS | |
 | Online sipariş (uygulama, web, masa QR) | laffogato (şubeli; §2 "Şube") | kasanın şubesinin siparişleri bar ekranında gösterilir, aşaması geri yazılır, tahsil edilmez; başka şubenin siparişi gelmez |
 | Karaoke rezervasyonu (gün, saat, ödeme) | laffogato (`/karaoke` ve uygulama) | bugünkü liste salt okunur (§2.4); oda yerel rezervasyona verilmez, sayaç rezervasyona bağlanır |
-| Sadakat damgası | laffogato (uygulama) | LafPOS'un yerel damga kartı varsayılan kapalı (`stampCategoryKeys: []`), site bağlantısı kuruluyken hiç açılmaz |
+| Sadakat damgası | laffogato (uygulama) | AsilPOS'un yerel damga kartı varsayılan kapalı (`stampCategoryKeys: []`), site bağlantısı kuruluyken hiç açılmaz |
 
-## 2. laffogato → LafPOS: menü
+## 2. laffogato → AsilPOS: menü
 
-**Bağlantı varsayılan kapalı** (sahibin 26 Ekim kararı): LafPOS siteye yalnız kasa bilgisayarının `.env`'inde
+**Bağlantı varsayılan kapalı** (sahibin 26 Ekim kararı): AsilPOS siteye yalnız kasa bilgisayarının `.env`'inde
 (Windows kurulumunda `ayarlar.env`) `LAFFOGATO_URL` açıkça yazılıysa bağlanır; varsayılan adres yoktur. Yazılmamışsa
 hiçbir istek gitmez: menü yoklaması, ürün görseli, sipariş sürüm sinyali, Tükendi yazımı. Yönetim › Site ve lafmaliyet
 "Site bağlantısı kurulmadı" der, elle "Siteyle eşitle" ve online sipariş "Yenile" aynı mesajla 409 `not_configured`
-döner, Tükendi yalnız LafPOS'ta değişir. İmzalı uçlar (§2.3) ayrıca `LAFFOGATO_SYNC_SECRET` ister. Kurulum betiği
+döner, Tükendi yalnız AsilPOS'ta değişir. İmzalı uçlar (§2.3) ayrıca `LAFFOGATO_SYNC_SECRET` ister. Kurulum betiği
 (`scripts/vercel/baglanti-kur.sh`) kafeye girecek ayar dosyasına `LAFFOGATO_URL=https://laffogato.net` satırını yazar;
 `.env.example`'da (ve ondan üretilen `ayarlar.env.ornek`'te) satır yorumludur. Kurulum ayar dosyasını yalnız ilk
 kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada `ayarlar.env`'de yorumsuz
@@ -38,13 +38,13 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 ### Şube (22 Kasım 2026; laffogato #279)
 
 Site şubelidir: sipariş, masa kodu (`cafe_tables`), masa çağrısı ve Satışta bilgisi bir şubenindir (masa siparişi ve
-çağrısı masanın şubesi; gel-al, kurye, kargo ve karaoke Tuzla'nın). LafPOS'un anahtarı sitenin `LAFPOS_BRANCHES`'teki
-şubeler adına konuşur (varsayılan `marina`; laffogato `docs/LAFPOS.md` "Şube"). LafPOS her imzalı istekte kendi şubesini
+çağrısı masanın şubesi; gel-al, kurye, kargo ve karaoke Tuzla'nın). AsilPOS'un anahtarı sitenin `LAFPOS_BRANCHES`'teki
+şubeler adına konuşur (varsayılan `marina`; laffogato `docs/ASILPOS.md` "Şube"). AsilPOS her imzalı istekte kendi şubesini
 söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `branchId`, varsayılan `marina`; `server/sync/laffogato-link.ts`):
 
 - GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke` ve
   sürüm sinyali `/api/pos/orders/version`. Sinyal laffogato #298'den beri şubenindir (`version` ve `menu` şubenin
-  okuyacağı listenin özeti); şube söylenmezse site anahtarın ilk şubesini varsayar, sitede birden çok LafPOS şubesi
+  okuyacağı listenin özeti); şube söylenmezse site anahtarın ilk şubesini varsayar, sitede birden çok AsilPOS şubesi
   olunca kasa başka şubenin işaretini okurdu.
 - POST / PUT gövdesinde `"branch": "<id>"`: aşama, çağrıya "Gördüm", Satışta yazımı (giden kutusundaki de, gönderim
   anındaki şubeyle) ve masa kodları.
@@ -58,7 +58,7 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
   "çağrı başka şubenin"). Masa kodlarında liste park edilir; Site ve lafmaliyet "bir kod sitede başka şubenin masası" der,
   düzeltme sitenin panelinde (Masalar › masa › Düzenle › Şube).
 - Karaoke odası Tuzla'dadır: başka şube adına site boş liste (`complete: true`) verir.
-- Fiyat sitenindir; LafPOS yazamaz. 23 Kasım 2026'dan beri (laffogato #301) şubenin kendi satış fiyatı olabilir: imzalı
+- Fiyat sitenindir; AsilPOS yazamaz. 23 Kasım 2026'dan beri (laffogato #301) şubenin kendi satış fiyatı olabilir: imzalı
   okumada fiyat kasanın şubesinde **şu an geçerli** fiyattır, herkese açık menü ise Tuzla'nın (ana şube) fiyatıdır.
   Ayrıntı §2.1 "Şube fiyatı".
 
@@ -71,11 +71,11 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
   uyanmaları en büyük israftır.
 - 304 gelirse değişiklik yok. 200 gelirse fark hesaplanır.
 - **Sıklık:** açık iş günü varken 15 dakikada bir otomatik (ayarla kapatılabilir). Açık gün yokken (gece) hiç; gün
-  açılınca (ya da yeniden açılınca) bir kez. LafPOS siteye kendi Satışta yazımını yaptıktan (Tükendi, Satışa aç,
+  açılınca (ya da yeniden açılınca) bir kez. AsilPOS siteye kendi Satışta yazımını yaptıktan (Tükendi, Satışa aç,
   porsiyon) 5 saniye sonra bir kez: site o an zaten uyanık; bekleyen bir eşitleme varsa ya da son 20 saniyede
   eşitlendiyse bu eşitleme kurulmaz (işaret eşitlemesi onu kapsar). Ayrıca "Siteyle eşitle" düğmesi. **Sitede fiyat
   ya da Satışta değişince** (sitenin menü formu ya da lafmaliyet panelinin yazımı) 20 saniyelik sipariş sürüm
-  sinyalindeki `menu` işareti değişir; LafPOS gün açıkken 1 saniye sonra ETag'siz eşitler, **işaret eşitlemeleri arası
+  sinyalindeki `menu` işareti değişir; AsilPOS gün açıkken 1 saniye sonra ETag'siz eşitler, **işaret eşitlemeleri arası
   en az 60 saniye**: art arda düzenlemeler (lafmaliyet'ten 30 fiyat) sonda tek eşitlemede toplanır (`server/jobs.ts`
   `MARKER_SYNC_MIN_MS`). **Gece** (açık gün yokken) işaret değişse de istek gitmez; gün açılınca bir kez ETag'siz.
   Sitenin her yayını (deploy) genel işaretleri yeniler (laffogato işaret anahtarı `VERCEL_DEPLOYMENT_ID` içerir):
@@ -139,7 +139,7 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
 
 ### 2.2 Eşleme
 
-| Site alanı | LafPOS alanı | Kural |
+| Site alanı | AsilPOS alanı | Kural |
 | --- | --- | --- |
 | `categories[].key` | `categories.extKey` | 12 sabit kategori; `title` → ad |
 | `items[].id` (`mnu-0011`) | `products.extId`, `extSource = 'laffogato'` | tekil |
@@ -155,7 +155,7 @@ söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `bran
 Elle "Siteyle eşitle" önce **önizleme** gösterir: yeni ürün, fiyatı değişen, adı değişen, KDV'si değişen, siteden
 kalkan, yeniden satışa çıkan; onaylanınca uygular. Otomatik senkron önizlemesiz uygular. İkisi de tek veritabanı
 işleminde yapılır ve değişiklik varsa `audit_log`'a "menü senkronu" olarak yazılır. POS sırası yalnız ürün ilk
-gelirken sitenin sırasından verilir; sonra LafPOS'undur.
+gelirken sitenin sırasından verilir; sonra AsilPOS'undur.
 
 **Satışta / Tükendi:**
 
@@ -163,11 +163,11 @@ gelirken sitenin sırasından verilir; sonra LafPOS'undur.
   olabilir): sitede Tükendi olan ürün, eski menü listelese de açılmaz; sitede yeniden açılan, eski menü
   listelemese de kapanmaz.
 - Anahtar yokken herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de listelenmiş ve o
-  zamandan beri LafPOS'ta Tükendi yapılmış ürün (site değişmedikçe) kapalı kalır.
+  zamandan beri AsilPOS'ta Tükendi yapılmış ürün (site değişmedikçe) kapalı kalır.
 - Porsiyon sayacı biten ürünü site açamaz. Sayaç 0'dan doldurulunca (Yönetim › Ürünler) Tükendi ürün önce sitede
   satışa açılır (`POST /api/panel/menu`); site kabul etmezse sayaç da değişmez. Sayacı bitmemiş ürünün başka bir
   alanını (istasyon, renk) kaydetmek Satışta bilgisine dokunmaz, siteye istek göndermez.
-- LafPOS'un siteye henüz gönderemediği Satışta yazımı bekleyen ürünün (giden kutusu, §2.3 "Porsiyon") Satışta
+- AsilPOS'un siteye henüz gönderemediği Satışta yazımı bekleyen ürünün (giden kutusu, §2.3 "Porsiyon") Satışta
   bilgisine eşitleme dokunmaz: site görüntüsü o yazımdan eskidir. Site zaten istenen durumdaysa ya da kalem sitede
   artık yoksa bekleyen yazım düşer.
 - Eşitlemenin panel okuması ve uygulaması, siteye giden Satışta yazımlarıyla aynı kilitte yapılır: istek yoldayken
@@ -177,8 +177,8 @@ gelirken sitenin sırasından verilir; sonra LafPOS'undur.
 
 `.env`: `LAFFOGATO_URL` ve `LAFFOGATO_SYNC_SECRET`. Anahtarın değeri sitenin **`LAFPOS_SYNC_SECRET`** ortam
 değişkeniyle aynıdır (en az 32 karakter). Site bu anahtarı panel uçlarında `KARAOKE_SYNC_SECRET`'a ek olarak kabul eder
-(laffogato#263); iki anahtar ayrı döndürülür. **Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz:** site, LafPOS
-anahtarı panelinkiyle aynıysa onu LafPOS anahtarı saymaz (laffogato `src/lib/panel/signed-callers.ts`); sürüm sinyali
+(laffogato#263); iki anahtar ayrı döndürülür. **Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz:** site, AsilPOS
+anahtarı panelinkiyle aynıysa onu AsilPOS anahtarı saymaz (laffogato `src/lib/panel/signed-callers.ts`); sürüm sinyali
 503 döner, yazımlar panelinmiş gibi kaydedilirdi.
 
 İmza sitenin `src/lib/panel/karaoke-sync-core.ts` kuralının aynısı:
@@ -193,17 +193,17 @@ Uyum `tests/signature.test.ts`'te doğrulanır: lafmaliyet'in testlerinin sabitl
 pingi, gün sonu, maliyet okuması) ve sitenin belgesindeki çağrı yanıtı vektörü (laffogato `docs/PANEL-ORDERS.md`).
 Sitenin kendi imza testi 16 Kasım 2026'da kaldırıldı.
 
-| Uç | LafPOS kullanımı | Sıklık |
+| Uç | AsilPOS kullanımı | Sıklık |
 | --- | --- | --- |
 | `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1); şubenin şu anki fiyatı ve bir sonraki fiyat anı (`nextPriceAt`, §2.1 "Şube fiyatı") | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok), şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca), kasa yeniden başlayınca bir kez ve elle |
-| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
+| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: AsilPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version?branch=<id>` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; site veritabanını yalnız genel işaret değişince, şubenin özeti için bir kez okur |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor, branch}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
 | `POST /api/panel/calls/ack {id, actor, branch}` | masa çağrısına "Gördüm" (aşağıda "Masa çağrıları") | kullanıcı işlemi |
 | `GET /api/panel/karaoke?from=<gün>&to=<gün>&branch=<id>` | bugünün karaoke rezervasyonları: oda kutusu, masa planı, oda ücreti (§2.4) | `karaoke` işareti değişince, gün açıkken en sık 5 dk'da bir; oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn) |
 
-`actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
+`actor` AsilPOS kullanıcısının adıdır. AsilPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
 
 **Sipariş sürüm sinyali:** `GET /api/pos/orders/version?branch=<id>` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version":
 "<metin>", "karaoke": "<metin>", "menu": "<metin>" }` (`karaoke` laffogato#264'ten beri, karaoke okumasının işareti,
@@ -212,7 +212,7 @@ Sitenin kendi imza testi 16 Kasım 2026'da kaldırıldı.
 `version` ve `menu` şubenindir: genel işaret değişince (herhangi bir şubenin yazımı) site o şubenin okuyacağı listeyi
 bir kez okur ve özetini verir; değer yalnız o şubenin listesi değişince değişir (Tuzla'nın siparişi Marina'nın kasasına
 çekim yaptırmaz). Özet okunamazsa genel işaret döner ve site aynı işaret altında 2 dakika yeniden denemez (laffogato
-#299). LafPOS bunu gün açıkken 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker. Böylece online
+#299). AsilPOS bunu gün açıkken 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker. Böylece online
 sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer. Veritabanına yalnız bir yazımın ardından,
 veritabanı o yazımla uyanıkken dokunduğu için 5 dakika kuralının (`AGENTS.md` kural 6) dışındadır.
 - **Gece** (açık iş günü yokken) sinyal en sık 3 dakikada bir sorulur (21 Kasım 2026; kasa bilgisayarı ve site gece
@@ -230,12 +230,12 @@ veritabanı o yazımla uyanıkken dokunduğu için 5 dakika kuralının (`AGENTS
 
 `GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
 başarısız sayılır, hiçbir sipariş kapatılmaz. **Biçim sürümü:** iki imzalı liste de `version` taşır (laffogato
-`PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`; bugün `1`). Değer `1` değilse (başka sayı, metin, `null`) LafPOS listeyi
+`PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`; bugün `1`). Değer `1` değilse (başka sayı, metin, `null`) AsilPOS listeyi
 okumaz: sipariş çekimi başarısız sayılır (502 `site_orders`, "Site siparişleri tanınmayan biçimde (sürüm N)"; hiçbir
 sipariş kapanmaz, hata Yönetim › Site ve lafmaliyet'te görünür), menü senkronu panel listesi alınamamış gibi davranır
 (fiyat, ad, KDV ve yeni ürünler uygulanır, Satışta bilgisine dokunulmaz). Alanı hiç göndermeyen eski site okunur.
 
-Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya
+Liste, istendiği andaki hâldir: istek gittikten sonra AsilPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya
 giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri
 alınır; sonraki çekme geçerlidir.
 
@@ -250,7 +250,7 @@ alan eklenir. Hepsi isteğe bağlıdır; göndermeyen site bugünkü gibi okunur
 3. `closed: [{ id, outcome }]` — son 48 saatte akıştan çıkan kafe siparişleri, `outcome`: `completed`, `cancelled` ya
    da `refunded`. Okunamayan satır atlanır. Bkz. "Kapanış".
 
-Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
+Online siparişler AsilPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda
 "Online (sitede ödendi)" olarak görünür: gün açıksa açık güne, değilse ödeme anının iş gününe (05:00 kuralı)
 yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşınır.
@@ -260,7 +260,7 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   yerel `S4` ↔ sitedeki `Masa S4`). Büyük-küçük harf ve boşluk farkı gözetilmez, birden çok masaya uyan ad eşlenmez;
   sitenin masa QR kodu gerekmez. Masayı tutmaz: garson masaya dokununca kendi adisyonunu açar (masada yalnız online
   sipariş varsa seçimde "Yeni hesap aç"), masa taşımada dolu sayılmaz ve online siparişle birleştirilmez.
-- **Masa QR'ı LafPOS üretir** (27 Ekim 2026, `claude/qr-self-servis`): Yönetim › Masa planı'nda masa başına 10 simgelik
+- **Masa QR'ı AsilPOS üretir** (27 Ekim 2026, `claude/qr-self-servis`): Yönetim › Masa planı'nda masa başına 10 simgelik
   Crockford kod (`tables.qrCode`; sitenin `cafe_tables.code` kuralıyla aynı: `shared/table-qr.ts`, laffogato
   `src/lib/admin/cafe-tables-core.ts`), QR içeriği sitenin masa adresi `https://laffogato.net/masa/<kod>` (apex'e
   sabit; basılı kart adres değişse de çalışır). A4 masa kartları aynı ekrandan yazdırılır; "Kodu yenile" yeni kod
@@ -269,21 +269,21 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   canlı masalar tam, emekli kodlardan en yenileri sığdığı kadar (eskiler sitede zaten kapandı; aşan liste 400 alır ve
   hiçbir kod gitmezdi). Sipariş eşlemesi önce `tableCode` (yalnız etkin masa; aşağıda),
   sonra yukarıdaki etiket kuralı.
-  Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato#268 (28 Ekim 2026) ile
+  Sitenin AsilPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato#268 (28 Ekim 2026) ile
   sitede**:
   1. `GET /api/panel/orders` masa siparişinde `tableCode` (siparişin `orders.tableCode` anlık görüntüsü; eski site
-     göndermez, LafPOS etiketle eşlemeye düşer).
-  2. İmzalı `PUT /api/panel/tables` (LafPOS'un anahtarı) `{ tables: [{ code, name, active }], actor }`: kodu
+     göndermez, AsilPOS etiketle eşlemeye düşer).
+  2. İmzalı `PUT /api/panel/tables` (AsilPOS'un anahtarı) `{ tables: [{ code, name, active }], actor }`: kodu
      `cafe_tables`'a ekler (yeni satır, `rotatedAt` boş) ya da aynı kodlu satırın adını ve etkinliğini günceller;
      listede olmayan, sitede tanımlı masaya dokunmaz; `active: false` sitede devre dışı bırakır. Liste en çok 200
      masa, gövde en çok 64 KB. 200 `{ ok: true, count, created, updated, unchanged }`, 400 `{ error: "invalid", field }`,
      401, 413 `too_large` (64 KB'ı aşan gövde), 503 `not_configured` (sitede `LAFPOS_SYNC_SECRET` yok) ya da
-     `unavailable` (veritabanına yazılamadı). LafPOS kod üretince, yenileyince ve QR'lı masanın adı ya da etkinliği
+     `unavailable` (veritabanına yazılamadı). AsilPOS kod üretince, yenileyince ve QR'lı masanın adı ya da etkinliği
      değişince tam listeyi giden kutusundan gönderir (kind `tables.sync`, tek kayıt, son liste geçerli).
      Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, kayıt kalır ve 6 saatte bir yeniden denenir (kod
      üretimi ve Yönetim › Site ve lafmaliyet'teki "Şimdi yeniden gönder" (`POST /api/admin/tables/qr/sync`) hemen dener);
      400 / 403 / 409 / 413 / 422 park edilir; 503 ve ağ hatası artan beklemeyle (en çok 6 saat) yeniden denenir.
-- **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS
+- **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa AsilPOS
   `closed`'da adı geçenler dışında hiçbir siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı"
   diye kapanır (`extStage = 'gone'`): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim kaydına yazılır.
   Neden kalktığını `closed` söyler (`orders.extOutcome`; denetim metni "sitede iptal edildi" gibi); `closed`
@@ -293,20 +293,20 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   Raporlar'da ve Uzaktan özette görünür. İptal ya da iade sonradan `completed`'a dönmez. **Sitede iptal ya da iade edilen** (`cancelled`, `refunded`) ve kasada ödenen (`till`) sipariş "Online
   (sitede ödendi)" toplamına (Z, Raporlar, Uzaktan özet; `onlineCounted`) girmez: site ve lafmaliyet'in online kanalı
   onu saymaz. Sonucu bilinmeyen sayılır. Yerelde kapanmış ama sitede hâlâ açık görünen sipariş yeniden açılır (sonucu
-  silinir). LafPOS'ta son aşamaya getirilen sipariş `extStage = 'done'` kapanır.
+  silinir). AsilPOS'ta son aşamaya getirilen sipariş `extStage = 'done'` kapanır.
 - **Kasada ödenen** (`paidAtTill: true`; uygulama siparişinde kart düştü, müşteri kasada ödedi, personel sitede
   "Ödendi olarak işaretle"): parası ve mali fişi kasanındır, site onu `counter` sayıp online cirodan ve tüketim
-  satırlarından çıkarır. LafPOS onu **yazmaz**: "sitede ödendi" kaydı açılmaz, bara fiş düşmez, toplama girmez; tek fiş
+  satırlarından çıkarır. AsilPOS onu **yazmaz**: "sitede ödendi" kaydı açılmaz, bara fiş düşmez, toplama girmez; tek fiş
   ve tek satış personelin çaldığı adisyondur (§8 personel yordamı). Cihazlara bir kez uyarı düşer (`orders` ›
   `online.till`, "Online sipariş #N kasada ödendi; adisyon olarak çalın"; ses ve bildirim) ve denetim kaydına uyarı
   (`online.paid_at_till`); görülen kimlik 48 saat saklanır (`sync_state` `laffogato.paidAtTill`), uyarı tekrar etmez.
   Önceden "sitede ödendi" yazılmış sipariş (alan sonradan geldi) kapanır (`extOutcome = 'till'`), hazırlanmamış
   kalemleri bar ekranında iptal görünür. Faz 2 L5 aynı alanla siparişi site fiyatlarıyla açık adisyona çevirebilir.
 - **Kalem iptali** (sitede `changeItemStatus`, paid/preparing siparişte satır "İptal"): site satırı listeden çıkarır,
-  tutar değişmez. LafPOS kalemleri her çekimde uzlaştırır: satırın konumu (`lines[].index`, LafPOS'ta
+  tutar değişmez. AsilPOS kalemleri her çekimde uzlaştırır: satırın konumu (`lines[].index`, AsilPOS'ta
   `order_items.extLine`) listede yoksa kalem iptal olur (`voidReason` "Sitede iptal edildi", bar ekranında 10 dakika
   "iptal" görünür, denetim `online.line_cancelled`); servis edilmiş kaleme dokunulmaz. Sitede "Bekliyor"a geri alınan
-  satır kalemi geri açar (`online.line_restored`), LafPOS'ta hiç olmayan satır eklenir. Konum gelmeyen (eski) sitede
+  satır kalemi geri açar (`online.line_restored`), AsilPOS'ta hiç olmayan satır eklenir. Konum gelmeyen (eski) sitede
   satırlar içeriğiyle (ürün, boy, seçenek metni, not, adet) sayılarak eşlenir; aynı iki satırdan hangisinin iptal
   edildiği ayırt edilemez, birinin iptali yeter. Konumu yazılmamış eski kalem, site konum göndermeye başlayınca içeriği
   tutan satırın konumunu alır; aynı içerikli kalemlerden önce canlı olan, sonra kasada iptal edilen, en son sitede
@@ -315,8 +315,8 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
 - **Aşama:** site 409 `wrong_branch` dönerse sipariş başka şubenindir, yeniden denenmez (§2 "Şube"). 409 (`stale`,
   sipariş bu arada değişti) ya da 404 (`not_found`, "Sipariş sitede bulunamadı")
   dönerse liste yeniden çekilir.
-- **Bar istasyonu** (21 Kasım 2026): kalem, sitenin `menuItemId`'sine bağlı LafPOS ürününün ya da kategorisinin
-  istasyonuna düşer. Ürün LafPOS'ta yoksa (menü henüz eşitlenmedi, sitede yeni açılan kalem) ya da ürünün ve
+- **Bar istasyonu** (21 Kasım 2026): kalem, sitenin `menuItemId`'sine bağlı AsilPOS ürününün ya da kategorisinin
+  istasyonuna düşer. Ürün AsilPOS'ta yoksa (menü henüz eşitlenmedi, sitede yeni açılan kalem) ya da ürünün ve
   kategorisinin istasyonu yoksa barın istasyonuna (`kind = 'bar'`, yoksa `mutfak`; menü eşitlemesinin kuralı) düşer:
   sitede ödenmiş sipariş bar ekranından ve çağrı ekranından kaybolmaz. Ürünü ya da istasyonu boş kalmış kalem (eski
   sürüm, sonradan eşitlenen menü) sonraki çekimde yeniden bağlanır (ürün, KDV oranı, istasyon); tutar ve iş günü
@@ -334,29 +334,29 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   düşürür). Okunamayan satır (kimlik, etiket ya da zaman yok) atlanır; bilinmeyen sebep "Çağırıyor" diye görünür; alanı
   göndermeyen eski site eldeki listeye dokunmaz. Masa siparişlerin kuralıyla bulunur (önce QR kodu, sonra etiket);
   bulunamazsa sitenin etiketiyle görünür. Liste `sync_state` (`laffogato.calls`) içinde durur ve her başarılı çekimde
-  yenisiyle değişir: listeden düşen çağrı (sitede ya da köşkün panelinde yanıtlandı, süresi geçti) LafPOS'tan da düşer,
+  yenisiyle değişir: listeden düşen çağrı (sitede ya da köşkün panelinde yanıtlandı, süresi geçti) AsilPOS'tan da düşer,
   15 dakikası dolan çağrı liste yenilenmeden de düşer. Yeni çağrı `tables` › `site.call.new` yayar ("Masa 4 · Su
   istiyor"; yalnız masa ve sebep), cihazlarda çalar (§2.5) ve masa planında masanın kartında mor zil rozeti çıkar.
   **"Gördüm"** (`POST /api/sync/calls/:id/ack`; `siparis.al` ya da `mutfak.ekran`) çağrıyı sitede yanıtlar (imzalı
   `POST /api/panel/calls/ack {id, actor, branch}` (`branch` 22 Kasım 2026, §2 "Şube"), `actor` kullanıcının adı en çok 80 karakter; site
   `lafpos:<ad>` yazar), sonra yerelde düşürür, denetim kaydına yazar (`table.call_ack`) ve `site.call.done` yayar:
   bütün cihazlarda susar. Site 404 (çağrı sitede yok) ya da 409 `wrong_branch` (başka şubenin) derse yine düşer; siteye ulaşılamazsa ya da site başka bir kod
-  dönerse 502 `site_call`, çağrı açık kalır, yeniden denenir. LafPOS'ta yanıtlanan çağrı, yanıttan önce istenmiş bir
+  dönerse 502 `site_call`, çağrı açık kalır, yeniden denenir. AsilPOS'ta yanıtlanan çağrı, yanıttan önce istenmiş bir
   listede gelse de geri gelmez; daha yeni bir listeden önce istenmiş (ağda gecikmiş) liste yok sayılır. Bilgisayarın
   saati geri alınırsa (Windows saat eşitlemesi) saklanan an ileride kalır: liste yine işlenir, an bugünün saatine döner
   (siparişlerin kuralı).
 
-**Tükendi kilidi** (`products.soldOutBy`): LafPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos`,
+**Tükendi kilidi** (`products.soldOutBy`): AsilPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos` (eski adla saklanan değer),
 sitenin kapattığı (senkron) `site` diye işaretlenir. Şubeli site panel menüsünde `onMenu` gönderir: kilit yalnız
 sitenin menüden kaldırdığı kalemde (`onMenu: false`); menüde olup yalnız bu şubede Tükendi olan kalem (kasa ya da köşkün
-paneli kapattı) `lafpos` sayılır, site onu LafPOS'tan açtırır. `onMenu` göndermeyen eski sitede sitenin kapattığı her
+paneli kapattı) `lafpos` sayılır, site onu AsilPOS'tan açtırır. `onMenu` göndermeyen eski sitede sitenin kapattığı her
 kalem kilitlidir. Kasiyer (`urun.tukendi`) yalnız `lafpos`'u açar; kilitli olan kasada "Sitede satışta değil" diye
 görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü yetkisi olan (`menu.yonet`) açmayı dener: açış önce
-siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer. Site menüden kaldırılmış kalemi LafPOS'a açtırmaz (409
-`site_closed`): kasa "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz. Sitenin yönetim panelinde menüye geri
+siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer. Site menüden kaldırılmış kalemi AsilPOS'a açtırmaz (409
+`site_closed`): kasa "Site bu ürünü menüden kaldırmış; AsilPOS'tan açılamaz. Sitenin yönetim panelinde menüye geri
 koyun" der (409), yerelde değişmez. İnternetsizken kuyruğa giren açışı site böyle reddederse ürün kasada hemen yeniden kapanır
 (`soldOutBy = 'site'`; denetim `product.sold_out`, açışı kimin yaptığıyla) ve kayıt "Site bu ürünü menüden kaldırmış;
-LafPOS'tan açılamaz, kasada da kapatıldı" metniyle Yönetim › Site ve lafmaliyet'te kalır (yeniden denenmez).
+AsilPOS'tan açılamaz, kasada da kapatıldı" metniyle Yönetim › Site ve lafmaliyet'te kalır (yeniden denenmez).
 
 **İnternet yokken Tükendi** (Tükenen ürünler penceresi, Yönetim › Ürünler; `POST /api/sync/products/:id/availability`):
 kasada elle Tükendi / Satışa aç internetsiz de çalışır. Siteye ulaşılamazsa (ağ hatası, 8 sn'lik zaman aşımı; ya da
@@ -374,7 +374,7 @@ değişmez, 502 `site_menu` (bugünkü gibi); kuyruktaki yazımı site sonradan 
 Site ve lafmaliyet'te kalır, sitenin durumu geçerlidir. Tükendi kilidi internetsiz de geçerlidir: sitenin kapattığını kasiyer
 açamaz (403), menü yetkisi olan açar, açış kuyruktan gider. Porsiyon doldurma (Yönetim › Ürünler) kuyruğa girmez:
 önce site, site yanıt vermezse hiçbir alan kaydedilmez (aşağıda "Porsiyon"). Seçeneğin Tükendi'si zaten yalnız
-LafPOS'tadır. Testler: `tests/internetsiz-tukendi.test.ts`.
+AsilPOS'tadır. Testler: `tests/internetsiz-tukendi.test.ts`.
 
 **Seçenek tükendi** (`option_items.soldOut`, göç 0013): yulaf sütü bitince kasiyer ya da bar (`urun.tukendi`, menü
 yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapar ve açar (`POST /api/option-items/:id/sold-out
@@ -419,14 +419,14 @@ Giden kutusunu lafmaliyet de kullanır; her biri yalnız kendi kayıtlarını g�
 ### 2.4 Karaoke rezervasyonları (yalnız okuma)
 
 Karaoke odası sitede (`/karaoke` ve uygulama) rezerve edilir ve çoğunlukla orada ödenir; sitede ödenen saat online
-karaoke cirosudur (laffogato `docs/PANEL-SALES.md`, lafmaliyet onu sitenin satışlarından ekler). LafPOS bugünün
+karaoke cirosudur (laffogato `docs/PANEL-SALES.md`, lafmaliyet onu sitenin satışlarından ekler). AsilPOS bugünün
 rezervasyonlarını okur: oda sitede rezerveyken kasada boş görünmesin, sitede ödenmiş saat kasada yeniden ücretlenmesin.
-Rezervasyonu yalnız site yazar, taşır, iptal eder; LafPOS hiçbir şey yazmaz. Kod: `server/sync/laffogato-karaoke.ts`
+Rezervasyonu yalnız site yazar, taşır, iptal eder; AsilPOS hiçbir şey yazmaz. Kod: `server/sync/laffogato-karaoke.ts`
 (okuma), `shared/karaoke.ts` (kurallar), `server/services/rooms.ts` (ücret).
 
-**Uç:** `GET /api/panel/karaoke?from=<iş günü>&to=<iş günü>`, imzalı, LafPOS anahtarıyla (laffogato#264; yanıt panelin
-aldığıyla aynı, laffogato `docs/LAFPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
-kuralı, `from = to`); rezervasyon en geç 24:00'te biter, gece yarısını aşmaz. Site LafPOS'un anahtarına yalnız dünden
+**Uç:** `GET /api/panel/karaoke?from=<iş günü>&to=<iş günü>`, imzalı, AsilPOS anahtarıyla (laffogato#264; yanıt panelin
+aldığıyla aynı, laffogato `docs/ASILPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
+kuralı, `from = to`); rezervasyon en geç 24:00'te biter, gece yarısını aşmaz. Site AsilPOS'un anahtarına yalnız dünden
 yarına (İstanbul) açar; daha geniş pencere 403. Hiç istek gitmez: `.env`'de `LAFFOGATO_URL` ya da
 `LAFFOGATO_SYNC_SECRET` yoksa ya da planda oda türünde (`kind: 'oda'`) etkin masa yoksa. Oda Tuzla'nındır: başka şube
 adına site boş liste verir (§2 "Şube").
@@ -438,7 +438,7 @@ adına site boş liste verir (§2 "Şube").
     "firstName": "Ayşe", "note": "Doğum günü", "totalMinor": 180000, "channel": "web" } ] }
 ```
 
-LafPOS `id`, `date`, `startHour`, `hours`, `guests`, `status`, `paymentStatus`, `firstName`, `note`, `totalMinor` ve
+AsilPOS `id`, `date`, `startHour`, `hours`, `guests`, `status`, `paymentStatus`, `firstName`, `note`, `totalMinor` ve
 `channel`'ı okur (`startsAt`/`endsAt` gün ve saatten yeniden hesaplanır, İstanbul sabit UTC+3); `createdAt`/`updatedAt`
 ve `refundMinor` okunmaz. `refundMinor` (laffogato 29 Ekim 2026, ekleme) iptal edilmiş rezervasyonun iade tutarıdır;
 `0` hiçbir şeyin geri gitmediğini söyler (sitede %0 kuralında misafirin geç isteğiyle saat satışa açıldı, ödeme
@@ -467,7 +467,7 @@ Bilinmeyen durum sitenin kuralıyla güvenli tarafa okunur: bilinmeyen `status` 
 - Oda kutusu açılınca liste geride kaldıysa: sinyal canlıysa yalnız işaret değiştiyse, değilse liste 5 dakikadan
   eskiyse. Sayaç dururken bağlı rezervasyon varsa aynı kural (ödemesi bu arada tamamlanmış olabilir).
 - Elle "Yenile" (oda kutusu): en sık 30 saniyede bir.
-- 401, 403 ya da 503 `not_configured`: "site karaokeyi LafPOS'a açmadı"; otomatik çekim 30 dakika bekler, oda kutusu
+- 401, 403 ya da 503 `not_configured`: "site karaokeyi AsilPOS'a açmadı"; otomatik çekim 30 dakika bekler, oda kutusu
   bunu sakin bir notla söyler. Diğer hatalarda eldeki liste "güncel olmayabilir" notuyla gösterilir.
 
 **Oda sayacı.** Oda kutusu listeyi alırken "Başlat" bekler ("Rezervasyonlar yükleniyor"): sitede ödenmiş rezervasyon
@@ -514,17 +514,17 @@ olduğu gibi kalır.
 uyarır: aşan süre kasada odanın ücretiyle alınır.
 
 **Kişisel veri.** Siteden yalnız ad, gün ve saat, kişi sayısı, durumlar, not, tutar ve kanal gelir; soyad, e-posta,
-telefon, ödeme referansı gelmez (sitenin `toPanelReservation` beyaz listesi). LafPOS listeyi yalnız son okunan iş
+telefon, ödeme referansı gelmez (sitenin `toPanelReservation` beyaz listesi). AsilPOS listeyi yalnız son okunan iş
 günü için tutar (`sync_state`, yeni gün gelince üzerine yazılır); sayaç oturumunda, adisyon satırında ve denetim
-kaydında ad ve not yoktur, yalnız rezervasyon kodu. LafPOS Uzaktan'a giden özette site rezervasyonunun adı, notu ve kodu (KRK-…; oda satırının notunda da) yoktur: yalnız
-saat, kişi sayısı ve ödeme durumu. Laffogato `docs/LAFPOS.md` "Kişisel veri" rezervasyonu yalnız kafedeki makineye
+kaydında ad ve not yoktur, yalnız rezervasyon kodu. AsilPOS Uzaktan'a giden özette site rezervasyonunun adı, notu ve kodu (KRK-…; oda satırının notunda da) yoktur: yalnız
+saat, kişi sayısı ve ödeme durumu. Laffogato `docs/ASILPOS.md` "Kişisel veri" rezervasyonu yalnız kafedeki makineye
 açar.
 
 ### 2.5 Sesli uyarılar (20 Kasım 2026)
 
-Operatör: "diğerlerine sipariş, karaoke gelince LafPOS'ta da ötsün, ses çıkarsın ki ayarlama yapabilelim". Uyarılar
+Operatör: "diğerlerine sipariş, karaoke gelince AsilPOS'ta da ötsün, ses çıkarsın ki ayarlama yapabilelim". Uyarılar
 yalnız var olan çekimlerden doğar (§2.3 online siparişler, §2.4 karaoke): **yeni uç, yeni alan, yeni istek yok**, sıklık
-değişmez (`AGENTS.md` kural 6); LafPOS siteye yalnız masa çağrısının "Gördüm"ünü yazar (kullanıcı işlemi, §2.3 "Masa
+değişmez (`AGENTS.md` kural 6); AsilPOS siteye yalnız masa çağrısının "Gördüm"ünü yazar (kullanıcı işlemi, §2.3 "Masa
 çağrıları"), siparişin ve karaokenin "Gördüm"ü yalnız o cihazda kalır. Kod:
 `shared/site-alerts.ts`, `src/lib/siteAlerts.ts` (kurallar), `src/components/SiteInbox.tsx` (şerit ve ses),
 `src/lib/sound.ts` (zil); olay türleri `shared/events.ts` `SITE_EVENT`.
@@ -532,7 +532,7 @@ değişmez (`AGENTS.md` kural 6); LafPOS siteye yalnız masa çağrısının "G�
 - **Yeni online sipariş** (uygulama, web, masa QR): sitenin panelindeki ve köşk bar ekranındaki (ladmin) zille aynı
   motif (Do6, Mi6, Sol6, iki kez; sıkıştırıcıdan) 3 saniyede bir çalar, masa siparişi biraz daha yüksek; ekranın üstünde
   mor şerit durur ("Yeni online sipariş · #10101 · Masa 4", dokununca liste, "Aç" adisyonu açar). Susar: o cihazda
-  "Gördüm" (24 saat hatırlanır), sipariş o cihazda açılınca, aşaması değişince (LafPOS'ta, sitede ya da köşkte
+  "Gördüm" (24 saat hatırlanır), sipariş o cihazda açılınca, aşaması değişince (AsilPOS'ta, sitede ya da köşkte
   "Hazırlanıyor"), siteden kalkınca ya da ödemesinden 4 saat geçince. Duyan: `siparis.al` ya da `mutfak.ekran`. Liste
   `GET /api/sync/alerts` (aynı yetki; yalnız yerel veritabanı, açık ve sitede hâlâ `new` aşamasındaki siparişler).
   Bar ekranı online fişte kendi sesini çalmaz (kabuğun zili çalıyorsa). Planlı siparişin 4 saati planlı saatinden 30
@@ -554,7 +554,7 @@ değişmez (`AGENTS.md` kural 6); LafPOS siteye yalnız masa çağrısının "G�
   açar: kabuk ilk dokunuşta açar, kilitliyken şerit "Sesi açmak için dokunun" der.
 - `.env`'de `LAFFOGATO_URL` yoksa (varsayılan; tarayıcı demosu da) hiçbiri çalmaz: liste boş, olay yok, istek yok.
 
-## 3. LafPOS → lafmaliyet: elle yedek (CSV / kopyala)
+## 3. AsilPOS → lafmaliyet: elle yedek (CSV / kopyala)
 
 Bağlantı kurulmamışken (ya da lafmaliyet'teki geçiş gününden önceki aylar için) gün sonu ve ürün satışları elle
 aktarılır. Bağlantı kuruluyken günler §4 ile kendiliğinden gider; Raporlar › lafmaliyet aktarımı bunu söyler:
@@ -608,7 +608,7 @@ KARAOKE ODASI;3;3.000,00
 Gün sonu ekranında, lafmaliyet Kasa raporu alanları **aynı sırada** gösterilir, "Kopyala" ile metin olarak
 alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 
-| lafmaliyet alanı | LafPOS kaynağı |
+| lafmaliyet alanı | AsilPOS kaynağı |
 | --- | --- |
 | `z_no` | `business_days.zNo` (geçişte ModPOS'un son Z'sinden devam eder: Yönetim › Ayarlar › İlk Z numarası, §8) |
 | `receipts` | tutarı 0'dan büyük kapanan POS adisyonu sayısı (online, iptal ve tamamı ikram adisyonlar hariç) |
@@ -643,10 +643,10 @@ kapatır).
 gerekirse kasa ekranındaki "Günü yeniden aç" (yetkili onayı, neden zorunlu, denetim kaydına alarm) aynı Z
 numarasıyla günü açar. Gün yeniden kapanınca lafmaliyet'e aynı tarih ve Z ile gider, öncekinin yerine geçer.
 
-## 4. LafPOS → lafmaliyet: imzalı gün sonu (canlıda)
+## 4. AsilPOS → lafmaliyet: imzalı gün sonu (canlıda)
 
 lafmaliyet'te canlı (lafmaliyet#34, #36; durum ve geçiş günü B07 #44, günlük satışlar B08 #46). Kafedeki sunucu
-internetten erişilebilir olmadığı için "ping + çekme" yerine **imzalı itme**: LafPOS gün sonunda ve sonradan
+internetten erişilebilir olmadığı için "ping + çekme" yerine **imzalı itme**: AsilPOS gün sonunda ve sonradan
 düzeltmede (yeniden sayım, yeniden açılıp kapanan gün) aynı iş gününü yeniden gönderir (aynı `date` üzerine yazar,
 idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa artan beklemeyle sonra gider. `.env`'de
 `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` yokken hiçbir şey kuyruğa girmez, istek gitmez. Kurulum modunda kapanan
@@ -655,12 +655,12 @@ gün (eğitim günü) hiç gitmez, kurulum modu sonra kapansa da (§4.3).
 **Şube (`sube`, 4 Kasım 2026; 21 Kasım 2026'da güncellendi).** lafmaliyet ciroyu şubeye göre ayırır (lafmaliyet
 `docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId` (varsayılan `marina`),
 lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter). **Sahibin kararı (21 Kasım
-2026): ilk LafPOS kasası Marina'da, Tuzla ModPOS'ta kalır.** lafmaliyet'te LafPOS'un şubesi tek sabittir
-(`LAFPOS_BRANCH_ID = "marina"`): gün o şubeye yazılır, geçiş günü yalnız o şubenin kasasınındır, kilit ve Z denetimi
+2026): ilk AsilPOS kasası Marina'da, Tuzla ModPOS'ta kalır.** lafmaliyet'te AsilPOS'un şubesi tek sabittir
+(`ASILPOS_BRANCH_ID = "marina"`): gün o şubeye yazılır, geçiş günü yalnız o şubenin kasasınındır, kilit ve Z denetimi
 (gün, şube) başına. Paketin `sube`'si bundan başkaysa gün yazılmaz: 409 `wrong_branch` (kasa bunu kalıcı hata sayar ve
 "Şube'yi düzeltip yeniden gönderin" der). Marina'nın ModPOS'u da yedek olarak çekilmeye devam eder (şubenin kasa
-kaynağı lafmaliyet'te ModPOS kalır): geçiş gününden önce o sayılır, sonra LafPOS'un günü; ModPOS'unki saklanır ama
-hesaba girmez. Tuzla da LafPOS'a geçince lafmaliyet'te LafPOS'un şubesi listeye döner (ayrı iş).
+kaynağı lafmaliyet'te ModPOS kalır): geçiş gününden önce o sayılır, sonra AsilPOS'un günü; ModPOS'unki saklanır ama
+hesaba girmez. Tuzla da AsilPOS'a geçince lafmaliyet'te AsilPOS'un şubesi listeye döner (ayrı iş).
 
 **Şube kilidi (23 Kasım 2026).** lafmaliyet bu kasanın bir gününü kabul ettikten (200) sonra şube kimliği kilitlidir:
 yanlış değişiklik sonraki günleri başka şubeye yazdırır ya da 409 `wrong_branch` ile biriktirir. `PUT
@@ -673,10 +673,10 @@ metni onu söyler, ona dönmek onay istemez. Hiç gün kabul edilmemişse (ya da
 
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
-x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYNC_SECRET, LafPOS'ta LAFMALIYET_SYNC_SECRET)
+x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te ASILPOS_SYNC_SECRET ya da eski adıyla LAFPOS_SYNC_SECRET, AsilPOS'ta LAFMALIYET_SYNC_SECRET)
 {
   "version": 1,
-  "source": "lafpos",
+  "source": "lafpos",                 // telde eski adla (ad değişikliği: panel ikisini de okur)
   "revision": 2,
   "correction": { "kind": "reopen", "reason": "Geç gelen masa" },
   "sube": "marina",
@@ -733,21 +733,21 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 
 - Gövde en çok 256 KB, katı JSON. `date` ve `zNo` aynı olan ikinci istek öncekinin yerine geçer (idempotent,
   yeniden açılıp kapanan gün). Aynı `date` başka bir `zNo` ile gelirse lafmaliyet hiçbir şey yazmaz, 409
-  `{ error: "z_conflict", date, zNo }` döner (`zNo` kayıtlı olanınki); LafPOS bir tarihe tek Z verdiği için bu
+  `{ error: "z_conflict", date, zNo }` döner (`zNo` kayıtlı olanınki); AsilPOS bir tarihe tek Z verdiği için bu
   yalnız elle karışıklıkta olur.
 - `cashIn` ve `expectedCash` isteğe bağlıdır (eski gövdede yok): lafmaliyet beklenen nakdi bunlarla
-  LafPOS'unkine eşitler; `cashIn` yoksa 0 sayar.
+  AsilPOS'unkine eşitler; `cashIn` yoksa 0 sayar.
 - `cardTips` (kartla bahşiş) ve `cardCollections` (kartla cari tahsilatı) isteğe bağlıdır, TL: banka POS'unun
   gördüğü ama Z'nin `card` alanına girmeyen tutarlar. lafmaliyet kart farkını bunlarla açıklar; okumayan sürüm
   alanı atar (`z.object`), yani gönderim sırası serbesttir.
   İşletme bahşiş almaz (Ayarlar `tipsEnabled` varsayılan kapalı, ödeme `tip > 0` 400 `tip_disabled`): `cardTips`
   yalnız eski kayıtlarda 0'dan büyük olur.
-- `bankPos` (22 Kasım 2026, #154) isteğe bağlıdır: yazarkasa POS'unun (Pavo) banka gün sonu ve LafPOS kıyası. Yalnız
+- `bankPos` (22 Kasım 2026, #154) isteğe bağlıdır: yazarkasa POS'unun (Pavo) banka gün sonu ve AsilPOS kıyası. Yalnız
   günün banka gün sonu denendiyse ve bittiyse gider (`status` `ok`, `failed` ya da `unknown`; cihazda sürerken alan
   gitmez); Pavo yoksa ya da denenmediyse alan yoktur. `lafposCard` kartla bahşişi ve kartla açık hesap tahsilatını
   da içerir (ikisi de bankaya gider); bankanın batch'inde olmayan kart düşer (23 Kasım 2026): yazarkasadan geçmeyen
   kart (`offDevice.card`, bahşişiyle: başka POS ya da "Başka yoldan aldım") ve gün kapandıktan sonra yazarkasada fişi
-  iptal edilen ödemenin kartı (`fis_iptal`; LafPOS'ta ödeme canlı kalır). 22.11'de ₺870 yazarkasadan geçmeyen kart
+  iptal edilen ödemenin kartı (`fis_iptal`; AsilPOS'ta ödeme canlı kalır). 22.11'de ₺870 yazarkasadan geçmeyen kart
   Pavo'nun batch'inde "eksik" görünüyordu. `errorCode` (23 Kasım 2026) cihazın hata kodu (alınamayan gün sonu, ör.
   `"5085"`), alındıysa `null`. Banka gün sonu çoğu zaman gün
   kapandıktan sonra biter: sonucu gelince aynı gün yeniden gönderilir (`date` ve `zNo` aynı, idempotent). Okumayan
@@ -757,18 +757,18 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
     "status": "ok",                     // ok · failed · unknown (alındı mı bilinmiyor); cihazda sürerken alan gitmez
     "batchNo": "0042", "at": "2026-10-26T23:41:07.000Z",
     "pavoCard": 29230.5,                // cihazın bankalara gönderdiği kart toplamı (TL); bilinmiyorsa null
-    "lafposCard": 29230.5,              // LafPOS'ta bankaya giden kart tutarı (kart, kartla bahşiş, kartla açık hesap
+    "lafposCard": 29230.5,              // AsilPOS'ta bankaya giden kart tutarı (kart, kartla bahşiş, kartla açık hesap
                                         // tahsilatı; TL); aynı günün ikinci gün sonunda yalnız öncekinden sonra
                                         // alınanlar; bilinmiyorsa null
     "diff": 0,                          // pavoCard − lafposCard; ikisinden biri yoksa null
     "acquirers": [{ "name": "Garanti BBVA", "count": 51, "total": 18120.5 }],
-    "message": null,                    // başarısız ya da belirsizse cihazın ya da LafPOS'un açıklaması
+    "message": null,                    // başarısız ya da belirsizse cihazın ya da AsilPOS'un açıklaması
     "errorCode": null,                  // cihazın hata kodu ("5085"); alındıysa ya da kod yoksa null
     "batches": [                        // günün bütün başarılı banka gün sonları, eskiden yeniye (§4.9)
       { "batchNo": "000278", "at": "2026-11-24T11:10:00.000Z", "total": 240, "trigger": "elle", "dayClosed": false },
       { "batchNo": "000279", "at": "2026-11-24T21:31:00.000Z", "total": 755, "trigger": "elle", "dayClosed": true }
     ],
-    "dayCard": 995                      // LafPOS'ta günün bankaya giden bütün kartı; gün açıkken null (§4.9)
+    "dayCard": 995                      // AsilPOS'ta günün bankaya giden bütün kartı; gün açıkken null (§4.9)
   }
   ```
 - **Ekler** (süt, şurup, ekstra shot) içeceğin satırından ayrı satırdır: `ALTERNATIF SÜT`, `SYRUP`, `EXTRA SHOT`;
@@ -780,14 +780,14 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
   adisyonun ikramı tüketim değildir); ikram edilen içeceğin ekleri ayrı kayıttır, menü değeri satıştaki oranla
   bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir. Ödenmez kapanan adisyonun kalemleri
   (personel yemeği, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
-  (ör. `"Ödenmez: Personel yemeği"`); ödenmezin LafPOS'ta bağlandığı kayıtlı kişinin (personel ya da müşteri)
+  (ör. `"Ödenmez: Personel yemeği"`); ödenmezin AsilPOS'ta bağlandığı kayıtlı kişinin (personel ya da müşteri)
   adı ve kimliği pakete girmez, yalnız türü (`personKind`, aşağıda). Zayi yazılan kalem (döküldü, yanlış
   hazırlandı, bozuk; ödeme ekranındaki "Zayi" ya da kalem sayfasındaki "Zayi yaz") de aynı listededir, `reason`
   "Zayi: " ile başlar (ör. `"Zayi: Döküldü"`);
   lafmaliyet bunları `waste_entries`'e `kind = 'zayi'` ile alabilir. Ön ekler `shared/comp.ts` `compReasonText`.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
-  `null`, alan her zaman var). LafPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`
+  `null`, alan her zaman var). AsilPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`
   `PAYMENT_CHANNELS`); Komisyon ekranı aylık kanal satışını buradan doldurabilir. Nakit türü (`kind = nakit`)
   yalnız `zField = cash`'e bağlanır, `cash`'e de yalnız nakit türü. Beklenen nakit de Z'nin nakit alanı da
   ödemeye dondurulan `zField`'dan sayılır: ödeme almış bir tür sonradan nakitten karta çevrilse de iki rakam
@@ -796,7 +796,7 @@ iki tarafta özeti sabitler). Bu bölüm alanları tanımlar.
 - Tutarlar TL (lafmaliyet'in para biçimi), iki ondalık. `lines` lafmaliyet'in planladığı
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
   eşlemesinden bulunur, bulunamazsa `posMatchKey(posName)` ile `pos_mappings`).
-- Kişisel veri: müşteri ve personel adı, LafPOS kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız
+- Kişisel veri: müşteri ve personel adı, AsilPOS kullanıcı ya da müşteri kimliği, telefon gitmez. Ödenmezde yalnız
   kişinin türü gider (`personKind`: personel, musteri, patron); kim olduğu gitmez (KVKK). Çalışan personelden ad
   gitmez; yalnız ladmin personel kimliği (`workedStaffRefs`, §4.8). Tahsilatta müşteri, vardiya sayımında sayan ve
 devralan, indirimde indirimi yapan gitmez (§4.9). Tek istisna teslimin alıcısıdır: paranın kime verildiği yalnız adıyla
@@ -806,7 +806,7 @@ gider (`cashMoves[].recipient`, sahibin kararı 25 Kasım 2026; kimlik gitmez). 
 - lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
   (§4.2). Ürün satışları aylık modele (B08), Kasa raporu ön doldurması, ikram ve ödeme kanalları geçiş gününden
   sonraki günlerde lafmaliyet partileriyle (B09-B11) okunur; ikram lafmaliyet'te `ikram[]` olarak saklanır, Zayi
-  & ikram'a elle girilmez. Yanıtlar §4.2'de. 400, 409, 413 ve 422 kalıcıdır: LafPOS tekrar denemez, kaydı giden
+  & ikram'a elle girilmez. Yanıtlar §4.2'de. 400, 409, 413 ve 422 kalıcıdır: AsilPOS tekrar denemez, kaydı giden
   kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Site ve lafmaliyet; metin "Kendiliğinden yeniden denenmez" der),
   denetim kaydına alarm yazar ve patronun telefonuna bir kez bildirir (§4.11); düzeltilince Kasa › Geçmiş günler'de günün
   Z raporundaki "Gönder" ile yeniden gider.
@@ -818,25 +818,25 @@ gider (`cashMoves[].recipient`, sahibin kararı 25 Kasım 2026; kimlik gitmez). 
   sonu; kasa zinciriyle: beklenenli açılış ve nedeni, kategorili harcama, teslim (25 Kasım 2026'dan alıcısıyla:
   `"recipient": "Patron"`) ve giriş; 24 Kasım 2026'dan gün sonu
   tamlığıyla (§4.9): gün içinde elle alınmış önceki banka gün sonu, Pavo belgesi, nakit bahşiş, vardiya sayımı, föyde
-  yazılan kart slipi ve gün sonu notu). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
+  yazılan kart slipi ve gün sonu notu). `tests/lafmaliyet-gun.test.ts` AsilPOS'un ürettiği gövdenin bu dosyayla bayt bayt
   aynı olduğunu sabitler; lafmaliyet aynı dosyayı kendi ayrıştırıcısıyla okur (B07). Gövde bilerek değişirse
-  `LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
+  `ASILPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
   aynı PR serisinde güncellenir. İkinci örnek `tests/fixtures/lafmaliyet-gun-personel.golden.json` aynı gündür, üç
   kullanıcı lafmaliyet personeline bağlıyken: ilkinden tek farkı sondaki `workedStaffRefs` (§4.8); bağlantı yokken
   gövde ilk dosyayla bayt bayt aynı kalır (aynı test denetler). İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`,
   `/api/panel/pos/modpos-gunler?sube=marina`, `/api/panel/pos/devir`, `/api/panel/pos/gider-kategorileri`, `/api/panel/pos/personel?sube=marina`)
   `tests/signature.test.ts`'te iki tarafta aynı.
-- **Kabul günü:** `tests/fixtures/kabul-gunu-2026-11-22.json`, Marina 22.11.2026'nın LafPOS günü (hesap sözleşmesinin
+- **Kabul günü:** `tests/fixtures/kabul-gunu-2026-11-22.json`, Marina 22.11.2026'nın AsilPOS günü (hesap sözleşmesinin
   örnek rakamları: liste 7.440,00, indirim 90,00, ikram 130,00, ödenmez 935,00, ciro 6.285,00, kart 5.030,00, nakit
   1.255,00, 26 fiş, KDV %10 matrah 5.713,64; tek harcama ₺800,00 "Diğer fatura dışı", fişsiz; sayılan ₺1.279,50, 23.11
   açılışı ₺1.279,50 bekler; Pavo'nun 22 belgesi: nakit 1.055,00 + kart 4.160,00 = Z − yazarkasadan geçmeyen, banka gün
   sonu tek batch ₺4.160,00). `tests/kabul-gunu.test.ts` günü kasada adisyonlarla kurar, gövdeyi
   dosyayla bayt bayt karşılaştırır ve her rakamı ayrıca denetler; lafmaliyet aynı adlı dosyayı okur. Bilerek değişirse
-  `LAFPOS_KABUL=1 npx vitest run tests/kabul-gunu.test.ts` ile yeniden üretilir, lafmaliyet'teki kopya aynı PR
+  `ASILPOS_KABUL=1 npx vitest run tests/kabul-gunu.test.ts` ile yeniden üretilir, lafmaliyet'teki kopya aynı PR
   serisinde güncellenir.
 
 **Faz 2 alanları (23 Kasım 2026).** Hepsi isteğe bağlı ve eklemelidir (`version` 1 kalır): okumayan lafmaliyet atar
-(`z.object`); lafmaliyet her yeni alanı bozuk gelse de günü reddetmeyecek biçimde okur (400 LafPOS'ta kalıcıdır).
+(`z.object`); lafmaliyet her yeni alanı bozuk gelse de günü reddetmeyecek biçimde okur (400 AsilPOS'ta kalıcıdır).
 Saklı eski Z'de (ödenmez, zayi, yazarkasadan geçmeyen alanları yokken kapanmış gün) aynı alanlar ödemelerden ve
 kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondalık, 0 ya da büyük.
 
@@ -845,7 +845,7 @@ kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondal
   (önizleme, altın gövde) ve gönderilirken yeniden (gönderimler sırayla gider, `sube` gibi): yanıtı beklenen gönderim
   (en çok 15 sn) sürerken aynı gün yeniden kuyruğa girerse yoldaki kayıt silinmez, 200 alırsa gönderilmiş sayılır ve
   sonraki gövde bir sonraki sırayı alır; gidemezse (yerine yenisi girdiyse ya da gün yeniden açıldıysa) atılır.
-  Aynı sıra yalnız yanıtı yolda kaybolan (lafmaliyet'in aldığı ama LafPOS'a 200'ü ulaşmayan) gönderimden sonra
+  Aynı sıra yalnız yanıtı yolda kaybolan (lafmaliyet'in aldığı ama AsilPOS'a 200'ü ulaşmayan) gönderimden sonra
   yeniden gidebilir; o zaman sonra gelen gövde yenisidir.
 - `correction`: `{ kind: "reopen" | "recount", reason }`, yalnız düzeltmeyi taşıyan gövdede. `reopen`: kapanmış gün
   yeniden açıldı, `reason` açarken yazılan neden (`business_days.reopenReason`). `recount`: kapandıktan sonra
@@ -872,7 +872,7 @@ kalemlerden yeniden hesaplanır; gövde yine geçerlidir. Tutarlar TL, iki ondal
 - `z.vat[]`: `{ rate, base, vat }`, günün KDV dökümü (kapanmış kasa adisyonları, servis dahil; adisyon başına
   yuvarlanmış, oran başına toplam). lafmaliyet yeniden hesaplamaz; `Σ (base + vat) = zTotal`.
 - `z.openedAt`, `z.closedAt`: günün açılış ve son kapanış anı (ISO). `z.okcZNo`: yazarkasanın mali Z'si, günün en son
-  tamamlanan cihaz fişinden (metin; yoksa `null`). LafPOS'un `zNo`'sundan ayrıdır. Cihaz Z numarasını sayı olarak
+  tamamlanan cihaz fişinden (metin; yoksa `null`). AsilPOS'un `zNo`'sundan ayrıdır. Cihaz Z numarasını sayı olarak
   verir (baştaki sıfır cihazda da yok). Pavo satış sonucunda Z numarası vermez: Marina'nın Pavo'lu gününde alan
   bugün `null`dır (Z numarası yalnız Z numarası dönen cihazda, ör. Token, dolar).
 - `lines[].gross`: satırın liste değeri, indirimden önce (mutlu saat birim fiyata işlenmiştir, indirim sayılmaz);
@@ -902,7 +902,7 @@ reddetmez.
   karakter); fark en az ₺1,00 ise zorunludur, altında isteğe bağlı, yoksa `null`. lafmaliyet bunları Kasa raporunun
   açılış notuna yazabilir ("Açılış önceki raporun devrinden X az/fazla").
 - `cashMoves[]`: `{ id, kind, amount, description, at, categoryId, recipient? }`, günün kasa hareketleri yazıldığı sırayla (§4.7).
-  **Hep gider**, hareketsiz günde `[]`: lafmaliyet "hareket yok"u "eski LafPOS"tan ayırır. `id` hareketin ULID'i (26
+  **Hep gider**, hareketsiz günde `[]`: lafmaliyet "hareket yok"u "eski AsilPOS"tan ayırır. `id` hareketin ULID'i (26
   karakter Crockford base32, değişmez; aynı gün yeniden gönderilince aynı satırdır), `kind` `harcama` | `teslim` |
   `giris`, `amount` TL (0'dan büyük), `description` personelin yazdığı açıklama (en çok 200 karakter, boş olabilir;
   harcamada zorunlu), `at` yazıldığı an (ISO), `categoryId` harcamanın lafmaliyet gider kategorisi (`expense_categories.id`)
@@ -913,8 +913,8 @@ reddetmez.
   gönderilsin"): teslimde paranın verildiği kişi ya da yer, metin (en çok 60 karakter: lafmaliyet'te satırın "Kime" alanı, `cash_outs.store`): kasadaki bir hesaba (patron,
   müdür) teslimde o hesabın teslim anındaki adı, "Banka" ya da personelin elle yazdığı ad. **Yalnız teslimde ve alıcı
   yazılmışsa** satırın sonunda gider; harcama ve girişte, alıcısız eski teslimde (bu sürümden önce yazılmış) alan hiç
-  yoktur. LafPOS'ta yeni teslim alıcısız kaydedilmez (400 `recipient_required`). Kullanıcı kimliği gitmez, yalnız ad.
-  Okumayan lafmaliyet alanı atar (`z.object`), günü reddetmez. lafmaliyet#144'ten (25 Kasım 2026) alan okunur: LafPOS
+  yoktur. AsilPOS'ta yeni teslim alıcısız kaydedilmez (400 `recipient_required`). Kullanıcı kimliği gitmez, yalnız ad.
+  Okumayan lafmaliyet alanı atar (`z.object`), günü reddetmez. lafmaliyet#144'ten (25 Kasım 2026) alan okunur: AsilPOS
   teslim satırının "Kime"si (`cash_outs.store`, listede "Teslim · Patron") alıcı olur; Kime'si boş sahiplenilen ya da
   önceden yazılmış satır yeniden gönderimde dolar, panelde yazılmış Kime'ye dokunulmaz; gün görünümünde teslim kişi
   kişi.
@@ -922,13 +922,13 @@ reddetmez.
 **Personel alanı (24 Kasım 2026; §4.8).** İsteğe bağlı ve eklemeli; lafmaliyet bozuk geleni atar, günü reddetmez.
 
 - `workedStaffRefs`: `string[]`, o gün çalışanların lafmaliyet personel kimlikleri (`"s:<staff.id>"`, bordro satırı),
-  tekil, sayı sırasıyla (`s:7` `s:12`'den önce). **Yalnız en az bir LafPOS kullanıcısı lafmaliyet personeline bağlıyken
+  tekil, sayı sırasıyla (`s:7` `s:12`'den önce). **Yalnız en az bir AsilPOS kullanıcısı lafmaliyet personeline bağlıyken
   gider**; yoksa alan hiç yoktur ("bilinmiyor": eski gövde bayt bayt aynı). `[]`: bağlı kişi var ama o gün bağlı
-  kişilerden kimse çalışmadı. Gövdenin sonundadır. Ad, saat ya da LafPOS kullanıcı kimliği gitmez; yalnız o gün var
+  kişilerden kimse çalışmadı. Gövdenin sonundadır. Ad, saat ya da AsilPOS kullanıcı kimliği gitmez; yalnız o gün var
   olup olmadığı. Liste gönderim anında çözülür (`sube` gibi): gün kapandıktan sonra kurulan bağlantı ve "Bugün
   çalışanlar" düzeltmesi sonraki gönderimde gider.
 
-### 4.1 Ürün maliyetleri (lafmaliyet → LafPOS)
+### 4.1 Ürün maliyetleri (lafmaliyet → AsilPOS)
 
 ```
 GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
@@ -937,7 +937,7 @@ GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
 ] }
 ```
 
-`costMinor`: reçeteden birim maliyet, kuruş, KDV hariç. LafPOS bunu yalnız `rapor.maliyet` yetkisi olanlara
+`costMinor`: reçeteden birim maliyet, kuruş, KDV hariç. AsilPOS bunu yalnız `rapor.maliyet` yetkisi olanlara
 gösterir (patron panelinde ve Raporlar › Ürünler'de brüt kâr, Yönetim › Ürünler'de marj). Başka alan gitmez.
 Kâr ve marj **KDV hariç** fiyattan hesaplanır (`shared/money.ts` `netOfKdv`, `netMarginPct`): Yönetim › Ürünler'deki
 "KDV hariç marj" M / tek boy fiyatından (maliyet M'nin; iki boylu üründe "(M)"). Raporlar'ın brüt kârı eklerin
@@ -959,32 +959,32 @@ maliyet bölümü ve "Maliyetleri çek" (`senkron.yonet` **ve** `rapor.maliyet`)
   "Maliyetleri çek". Hata gün sonunu bozmaz, sonraki gün sonu yeniden dener. Son çekim 7 günden eskiyse Raporlar ›
   Ürünler ve patron paneli "Maliyetler N gün önce alındı" der; bu satır ve tarihi yalnız `rapor.maliyet` yetkisine
   gider, personel maliyetin varlığını da görmez.
-- **Geçiş günü bu uçta yoktur:** LafPOS onu yalnız gün sonu yanıtından öğrenir (§4.2; tek kaynak). Bu uç kurulum
+- **Geçiş günü bu uçta yoktur:** AsilPOS onu yalnız gün sonu yanıtından öğrenir (§4.2; tek kaynak). Bu uç kurulum
   modunda da çalışır: yazmayan imzalı GET olduğu için anahtarı ve saati sınamanın yoludur.
 
 ### 4.2 Yanıt ve geçiş günü
 
-LafPOS'a geçiş gününün **sahibi lafmaliyet'tir** (Ayarlar › LafPOS (kasa) › LafPOS'a geçiş günü). LafPOS kendi
+AsilPOS'a geçiş gününün **sahibi lafmaliyet'tir** (Ayarlar › AsilPOS (kasa) › AsilPOS'a geçiş günü). AsilPOS kendi
 tarihini tutmaz, bütün gerçek günleri gönderir; neyin hesaplara girdiğine lafmaliyet karar verir ve yanıtta söyler:
 geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **deneme** olarak saklanır, hiçbir hesaba girmez.
 
-| Yanıt | Gövde | LafPOS |
+| Yanıt | Gövde | AsilPOS |
 | --- | --- | --- |
 | 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay, nextOpening, staff }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines`, `nextOpening`, `staff` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
-| 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; LafPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
-| 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
-| 409 | `{ error: "wrong_branch", sube, expected }` | Kalıcı: kasanın şubesi (`sube`) lafmaliyet'in LafPOS şubesi (`expected`, marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği düzeltilip yeniden gönderilir. Şube gönderirken güncel ayardan yazılır |
-| 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
+| 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; AsilPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
+| 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki ASILPOS_SYNC_SECRET (eski adıyla LAFPOS_SYNC_SECRET) ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
+| 409 | `{ error: "wrong_branch", sube, expected }` | Kalıcı: kasanın şubesi (`sube`) lafmaliyet'in AsilPOS şubesi (`expected`, marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği düzeltilip yeniden gönderilir. Şube gönderirken güncel ayardan yazılır |
+| 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › AsilPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
 | 413 | `{ error: "too_large" }` | Kalıcı (gövde 256 KB'tan büyük) |
 | 422 | (lafmaliyet bugün göndermez) | Kalıcı |
-| 503 | `{ error: "not_configured" }` | Yeniden denenir; "lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil". Gövdesi başka olan 503 (bakım, barındırma) geçici hata yazar |
+| 503 | `{ error: "not_configured" }` | Yeniden denenir; "lafmaliyet'te ASILPOS_SYNC_SECRET (eski adıyla LAFPOS_SYNC_SECRET) tanımlı değil". Gövdesi başka olan 503 (bakım, barındırma) geçici hata yazar |
 | 404, 405 | — | Yeniden denenir; adres yanlış ("adreste lafmaliyet yok") |
 | 3xx | — | İzlenmez, yeniden denenir; adres yönlendiriyor (http, www ya da sonda yol): adres yönlendirmesiz yazılır |
 | 500 | `{ error: "server_error" }` | Yeniden denenir |
 
 - `nextOpening` (23 Kasım 2026): `{ amount, source }` ya da `null`, ertesi günün beklenen açılışı (TL; kasa zinciri
   §4.6). `source: "kasa_raporu"`: lafmaliyet'te bu günün (tarih, şube) Kasa raporu var, `amount` = sayılan − teslim;
-  `source: "lafpos"`: rapor yok, gövdenin `z.countedCash`'i; `null`: gün sayılmadı. Eski lafmaliyet göndermez; bozuksa
+  `source: "lafpos"` (yeni panel `"asilpos"` da gönderebilir, kasa ikisini okur): rapor yok, gövdenin `z.countedCash`'i; `null`: gün sayılmadı. Eski lafmaliyet göndermez; bozuksa
   yazılmaz. Kasa rakamlarını görmeyen kullanıcıya (kör kasiyer) bağlantı durumunda ve "Gönder"in yanıtında gitmez.
 - `staff` (24 Kasım 2026): `{ counted: string[], unknown: string[], otherBranch: string[] }`, yalnız gövde
   `workedStaffRefs` taşıdıysa: lafmaliyet'in o gün saydığı, bulamadığı (ladmin'de silinmiş ya da yeniden açılmış kayıt)
@@ -993,10 +993,10 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
   durumunda `staffIssues` bulunamayan ve başka şubenin kimliklerini bu kasadaki adıyla verir, Yönetim › Entegrasyon
   "lafmaliyet N personelin gününü saydı; …" satırını yazar.
 - `counted`: gün geçiş gününden önce değilse `true`. `switchDay`: lafmaliyet'teki geçiş günü (`null`: seçilmedi, kasa
-  ModPOS). Eski lafmaliyet bu alanları göndermez: yoksa ya da bozuksa yazılmaz, LafPOS "geçiş günü bilinmiyor" der.
+  ModPOS). Eski lafmaliyet bu alanları göndermez: yoksa ya da bozuksa yazılmaz, AsilPOS "geçiş günü bilinmiyor" der.
 - Yönetim › Site ve lafmaliyet son gönderilen günü yazar: "lafmaliyet 3 Kasım gününü saymıyor (geçiş günü 10 Kasım): deneme
   olarak saklandı" ya da "12 Kasım lafmaliyet'te sayılıyor"; eşleşmeyen satır varsa "lafmaliyet'te eşleşmeyen N ürün"
-  ve adları (lafmaliyet Ayarlar › LafPOS (kasa) › Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden
+  ve adları (lafmaliyet Ayarlar › AsilPOS (kasa) › Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden
   gönderilmeden bağlanır). N = `lines - matched` (lafmaliyet en çok 50 ad gönderir; ikisi yoksa gelen adların sayısı).
 - Giden kutusu sayıları: `pending` gönderilmemiş bütün günler, `failing` bunlardan denenip gidemeyenler (hata ya da
   kalıcı ret). Genel bakış'ın alarmı ve menü sayacı yalnız `failing`'i sayar; "Geçmiş günleri gönder"le kuyruğa yeni
@@ -1020,7 +1020,7 @@ yazarkasası); kasa her ekranda "Deneme modu: yapılan satışlar gerçek sayıl
   görünmez, kart nedenini yazar.
 - Kurulum modu açıkken "Gönder" ve "Geçmiş günleri gönder" 409 `training_mode` döner ("Kurulum modunda lafmaliyet'e
   gün gönderilmez").
-- Bu işaretten önce kapanan gün (`trainingDay` boş) de gitmez: LafPOS o zaman canlıda değildi, o günler eğitimdi.
+- Bu işaretten önce kapanan gün (`trainingDay` boş) de gitmez: AsilPOS o zaman canlıda değildi, o günler eğitimdi.
   lafmaliyet'e yalnız kurulum modu dışında kapanan gün (`trainingDay = false`) gider. Gün yeniden açılınca işaret
   silinir, yeniden kapanışta yeniden yazılır.
 
@@ -1055,9 +1055,9 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
   `training_mode`.
 - `exportedAt` yalnız `reopenDay` ile sıfırlanır (gün yeniden açılınca yeniden kapanışta tekrar gider).
 
-### 4.5 ModPOS dönemi (lafmaliyet → LafPOS)
+### 4.5 ModPOS dönemi (lafmaliyet → AsilPOS)
 
-LafPOS'tan önceki kasa programının (ModPOS) günleri lafmaliyet'ten gelir; sahibin Merkez'e elle yüklediği geçmiş ciro
+AsilPOS'tan önceki kasa programının (ModPOS) günleri lafmaliyet'ten gelir; sahibin Merkez'e elle yüklediği geçmiş ciro
 (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro") aynı tarihte bunun yerine geçmez, bu onun yerine geçer.
 
 ```
@@ -1071,12 +1071,12 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
 ```
 
 - **Gün:** şubenin geçiş gününden önceki günleri (en çok 400), kasa raporundan ya da yalnız ModPOS föyünden (`kaynak`;
-  eski lafmaliyet göndermez). `ciro` = ödemelerin toplamı (indirim sonrası, ödenmez ve ikram hariç). Tutarlar TL, LafPOS
+  eski lafmaliyet göndermez). `ciro` = ödemelerin toplamı (indirim sonrası, ödenmez ve ikram hariç). Tutarlar TL, AsilPOS
   kuruşa çevirir (`server/sync/modpos.ts` `modposDays`): ciro dışı = ödenmez + ikram (lafmaliyet ikisini `odenmez`'de
   tek tutar gönderir, `ikram` 0); `indirim: null` (föy günü) "indirim bilinmiyor"dur: brüt = ciro, raporlar indirimi ₺0
   gibi göstermez, "N ModPOS gününde bilinmiyor" der. KDV satırları geldiği gibi kullanılır (Marina'da %20 yalnız
   karaoke); ciroyu kuruşu kuruşuna tutmuyorsa ya da yoksa rapor %10 sayar, %20 hiç varsayılmaz. Ödeme türünün adedi
-  bilinmez (0). Geçiş günü ve LafPOS'un bugünü ile sonrası alınmaz.
+  bilinmez (0). Geçiş günü ve AsilPOS'un bugünü ile sonrası alınmaz.
 - **Ürün listesi:** dönem için tek blok, indirim öncesi; ad, boy (tek boyluda null), adet (ondalıklı olabilir) ve tutar.
   Toplamı günlerin cirosuyla denetlenmez (lafmaliyet'in listesi kuruşu kuruşuna tutmayabilir); bozuk satır (eksi ya da
   sayı olmayan tutar) tek başına düşer, 120 karakterden uzun ad kısaltılır; zarfı bozuksa ya da satır kalmazsa alınmaz.
@@ -1086,8 +1086,8 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
   Bozuk gövdede, HTTP hatasında ya da başka şubenin yanıtında önceki günler kalır; hata Yönetim › Site ve lafmaliyet ›
   "ModPOS dönemi"nde görünür. Yalnız gün sayısı ve aralık görünür, tutar değil.
 - **Kullanım:** patron panelinin kıyası, kasadaki Raporlar (Ciro, Ürünler, Saatlik; "ModPOS" etiketli; Ürünler'de dönem
-  bloğu yalnız dönemin hepsi seçiliyse) ve LafPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
-  iter (server/sync/cloud-reports.ts), yalnız LafPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi
+  bloğu yalnız dönemin hepsi seçiliyse) ve AsilPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
+  iter (server/sync/cloud-reports.ts), yalnız AsilPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi
   o günlerle gider (satırları yalnız son günde), lafmaliyet'te silinen gün Uzaktan'da boşaltılır (docs/07-UZAKTAN-ERISIM.md "Geçmiş ciro"). İş günü,
   Z zinciri ve lafmaliyet'e giden gün paketi (§4) bu günleri hiç görmez.
 - **Sıklık:** kendiliğinden iş günü başına bir kez (05:00'ten ya da kasa açıldıktan sonraki ilk tur), elle Yönetim ›
@@ -1101,7 +1101,7 @@ Sahibin kararı (Faz 3): gün açılırken çekmecedeki nakit önceki günün de
 Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` `openDay`.
 
 - **Devir (beklenen açılış):** en son kapanan gün (Z sırasıyla) gerçek günse (kurulum modu dışında kapandı, §4.3) onun
-  devri; eğitim günüyse ya da hiç kapanan gün yoksa beklenen yoktur. LafPOS'ta gün sonundan sonra teslim yok (teslim gün
+  devri; eğitim günüyse ya da hiç kapanan gün yoksa beklenen yoktur. AsilPOS'ta gün sonundan sonra teslim yok (teslim gün
   içinde yazılır ve beklenenden düşer): yerel devir günün sayımıdır (`countedCash`). lafmaliyet'in değeri varsa o geçer
   (panelde düzeltilen Kasa raporunu da görür): günün kendi 200 almış gönderim kaydının `nextOpening`'i (en yenisi; tek
   `lastAnswer` değil, geçmiş günler sırasız gidebilir) ya da tembel devir okumasının değeri, hangisi daha yeniyse. Günün
@@ -1110,12 +1110,12 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
 - **Yeniden gönderimin yanıtı eskidir:** lafmaliyet devri kayıtlı Kasa raporundan hesaplar ve raporu yanıtı gönderdikten
   sonra yazar (`after()`): bir gönderimin yanıtı o gönderimin sayımını görmez. Yeniden sayım ya da yeniden açılıp
   kapanan günün yanıtı `kasa_raporu` der ve tutarı günün önceki bir gönderiminin sayımına eşitse (bu gönderiminkine
-  değil), rapor LafPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt okunmaz, yerel sayım geçer (lafmaliyet
+  değil), rapor AsilPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt okunmaz, yerel sayım geçer (lafmaliyet
   raporu bu sayımla günceller). Panelde düzeltilen rapor önceki sayımın yankısı değildir, yanıtı geçer; sayımsız
   yeniden kapanışta da (lafmaliyet raporun sayımını korur). Günün son gönderiminden önce okunan devir de eskidir.
   Doğrusu ertesi sabahki tembel devir okumasıyla gelir (lafmaliyet o anda raporu yazmıştır).
 - **`GET /api/cash/day`** gün kapalıyken `opening` döner: kasa rakamlarını gören kullanıcıya (`kasa.rakam` ya da
-  `rapor.gor`) `{ suggested, source, ladminSource?, fromDate }` (`suggested` kuruş, `source` `lafmaliyet` | `lafpos`,
+  `rapor.gor`) `{ suggested, source, ladminSource?, fromDate }` (`suggested` kuruş, `source` `lafmaliyet` | `lafpos` (kasanın sayımı; eski adla),
   `fromDate` devrin günü; `ladminSource` yalnız `source: "lafmaliyet"`'te, lafmaliyet'in kaynağı `kasa_raporu` |
   `lafpos`); kör kasiyere yalnız `{ check: true }`; beklenen yoksa `null`. Kasa ekranı "Günü aç" kartında beklenen
   tutarı, kaynağını ve "Bu tutarı yaz"ı gösterir (sayım yerine geçmez): "22 Kasım 2026 Pazar devri, lafmaliyet kasa
@@ -1145,7 +1145,7 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
 
 ### 4.7 Kasa hareketleri satır satır ve gider kategorileri (23 Kasım 2026)
 
-Sahibin kararı (lafmaliyet `docs/LAFPOS.md` "Soru 5"): kasadan çıkan para lafmaliyet'in "Kasadan çıkanlar"ına satır
+Sahibin kararı (lafmaliyet `docs/ASILPOS.md` "Soru 5"): kasadan çıkan para lafmaliyet'in "Kasadan çıkanlar"ına satır
 satır gider. Gövdenin `cashMoves[]`'ı (§4 "Faz 3 alanları") her harcama, teslim ve girişi kimliğiyle taşır; lafmaliyet
 harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden gönderilince aynı kimlikli satırı günceller.
 
@@ -1174,19 +1174,19 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
   hiç çekilmediyse liste boştur ve harcama kategorisiz kaydedilir.
 - **Bağlantı yokken** (`LAFMALIYET_URL` boş) devir de kategori de istenmez (`tests/kasa-zinciri-butce.test.ts`).
 - İmza vektörleri (`/api/panel/pos/devir?date=2026-11-22`, `/api/panel/pos/gider-kategorileri`) `tests/signature.test.ts`'te
-  ve lafmaliyet `tests/lafpos.test.ts`'te aynı.
+  ve lafmaliyet `tests/asilpos.test.ts`'te aynı.
 
 ### 4.8 Personel bağlantısı ve o gün çalışanlar (24 Kasım 2026)
 
 Sahibin kararı (23 Kasım 2026): personel kimliği bağlanır; "ladmin'de zaten hesapları var, doğru hesabı bağladığından
-emin ol". lafmaliyet yemek kartını ve çalışılan günleri bordro satırına (`staff`) yazar; LafPOS kullanıcısı o satıra
+emin ol". lafmaliyet yemek kartını ve çalışılan günleri bordro satırına (`staff`) yazar; AsilPOS kullanıcısı o satıra
 **yalnız elle ve onayla** bağlanır. Hiçbir şey kendiliğinden bağlanmaz ya da önceden seçilmez; ad benzerliği yalnız
 ipucudur.
 
 - **Bağlantı:** `users.staffRef` (`"s:<staff.id>"`, boş olabilir, tekil; göç `0025_personel_baglanti`). Yönetim ›
   Personel › kişi › "lafmaliyet personeli": aday listesi ad benzerliğine göre sıralı (Türkçe katlanmış: büyük-küçük
   harf, ı/i, ş/s, ç/c, ğ/g, ö/o, ü/u farkı sayılmaz; `shared/name-match.ts`), hiçbiri işaretli gelmez. Seçince onay
-  penceresi iki tarafı yan yana gösterir ("LafPOS: Ayşe · Kasiyer / Barista" ↔ "ladmin (s:12): Ayşe Yılmaz · hesap:
+  penceresi iki tarafı yan yana gösterir ("AsilPOS: Ayşe · Kasiyer / Barista" ↔ "ladmin (s:12): Ayşe Yılmaz · hesap:
   ayse@… · Marina"); ad tam uymuyorsa ya da aynı ada uyan birden çok etkin kayıt varsa ayrıca "Eminim" işaretlenir.
   "Ad uyuyor" yalnız ilk ad uyup öteki sözcükler (ya da baş harfleri) ladmin adıyla çelişmediğinde çıkar ("Ayşe" ↔
   "Ayşe Yılmaz", "Ayşe Y." ↔ "Ayşe Yılmaz"); ilk ad uyup soyad ya da baş harf çelişirse ("Ayşe Kara", "Ayşe K." ↔ "Ayşe
@@ -1201,17 +1201,17 @@ ipucudur.
   ```
   Şubenin bu ay ya da geçen ay geçerli bordro satırları; `account` satıra bağlı ladmin giriş hesabının görünen adı ya
   da `null`. Maaş, e-posta (hesap adı dışında) ve ay gitmez; `Cache-Control: no-store`. `sube` kasanın şubesi değilse
-  lafmaliyet 409 `wrong_branch` döner. LafPOS'ta `GET /api/admin/ladmin-personel` (`personel.yonet`) listeyi yalnız
+  lafmaliyet 409 `wrong_branch` döner. AsilPOS'ta `GET /api/admin/ladmin-personel` (`personel.yonet`) listeyi yalnız
   istenince çeker ve **yalnız bellekte** en çok 5 dakika tutar (diske, yedeğe girmez): `{ at, sube, items[] (+
   linkedUserId), missing[] }`; `?yenile=1` önbelleği atlar (en sık 30 saniyede bir). Bağlantı yoksa 503
   `not_configured`, ladmin'e ulaşılamazsa, eski sürümse (404) ya da yanıt bozuksa (başka şubenin listesi dahil) 503
   `ladmin_unavailable`; liste uydurulmaz. Adlar yalnız seçicide görünür.
 - **Doğrulama:** `PATCH /api/admin/users/:id { staffRef }` (`patchOf` ile): bağlamak taze liste ister (5 dakikadan
   eski liste yeniden çekilir; çekilemezse 503, bağlantı kurulmaz), kayıt listede olmalı (değilse 422
-  `staff_ref_unknown`), ladmin'de etkin olmalı (422 `staff_ref_inactive`), başka LafPOS kullanıcısına bağlı olmamalı (409
+  `staff_ref_unknown`), ladmin'de etkin olmalı (422 `staff_ref_inactive`), başka AsilPOS kullanıcısına bağlı olmamalı (409
   `staff_ref_taken`; veritabanında da tekil dizin). `staffRef: null` bağlantıyı kaldırır, internetsiz de olur.
   Denetimde `user.staff_link` (`entity: user`, `data: { staffRef, previous }`; yeni bağlantı bilgi, değiştirme ve
-  kaldırma uyarı önemiyle): LafPOS adı ve kimlik yazılır, ladmin'deki ad yazılmaz. `GET /api/admin/users` `staffRef`'i
+  kaldırma uyarı önemiyle): AsilPOS adı ve kimlik yazılır, ladmin'deki ad yazılmaz. `GET /api/admin/users` `staffRef`'i
   verir.
 - **O gün çalışanlar:** mesai kaydı yok (4 Kasım 2026'da kaldırıldı). Liste günün kayıtlarından çıkar: günü açan ve
   kapatan, adisyonu açan, kapatan ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan
@@ -1230,28 +1230,28 @@ ipucudur.
   lafmaliyet'in sayıp saymadığı 200 yanıtının `staff`'ında döner (§4.2).
 - **KVKK:** lafmaliyet'e ad gitmez; yalnız ladmin personel kimliği ve o gün var olup olmadığı (saat yok). Kimlik
   takma addır (lafmaliyet kişiyi bulur): amaç bordro ve yemek kartı, lafmaliyet'te yalnız yöneticiye görünür. Adlar
-  lafmaliyet → LafPOS yönünde, yalnız seçicide ve bellekte.
+  lafmaliyet → AsilPOS yönünde, yalnız seçicide ve bellekte.
 - İmza vektörü (`GET /api/panel/pos/personel?sube=marina`, zaman 1760000000, testlerin anahtarı)
-  `tests/signature.test.ts`'te; lafmaliyet `tests/lafpos.test.ts` aynısını sabitler. Testler `tests/personel-baglanti.test.ts`
+  `tests/signature.test.ts`'te; lafmaliyet `tests/asilpos.test.ts` aynısını sabitler. Testler `tests/personel-baglanti.test.ts`
   (sahte lafmaliyet sunucusuyla).
 
 ### 4.9 Gün sonu tamlığı: kasa ve cihaz verisi eksiksiz (24 Kasım 2026)
 
-Sahibin isteği (24 Kasım 2026): LafPOS'a girilen her şey lafmaliyet'e eksiksiz gitsin; LafPOS günü kapatınca kasa raporu
-LafPOS'tan ve kasanın zaten bildiği cihaz (Pavo) verisinden tamamlansın; gün sonunda personelin ladmin'de yaptığı tek
+Sahibin isteği (24 Kasım 2026): AsilPOS'a girilen her şey lafmaliyet'e eksiksiz gitsin; AsilPOS günü kapatınca kasa raporu
+AsilPOS'tan ve kasanın zaten bildiği cihaz (Pavo) verisinden tamamlansın; gün sonunda personelin ladmin'de yaptığı tek
 iş fotoğraf yüklemek olsun. Bunun için gövdeye aşağıdaki alanlar eklendi. Hepsi isteğe bağlı ve eklemelidir (`version` 1
 kalır); lafmaliyet her birini bozuk gelse de günü reddetmeyecek biçimde okur (`.optional().catch(undefined)`), eski
-LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitmez. lafmaliyet bunları gün özetinin
+AsilPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitmez. lafmaliyet bunları gün özetinin
 (`dayHash`) dışında tutar: aynı günün yeniden gönderimi "Düzeltildi" e-postası açmaz.
 
-- `bankPos.batches[]`: `{ batchNo, at, total, trigger: "otomatik" | "elle", dayClosed }`, bu LafPOS gününe bağlı bütün
+- `bankPos.batches[]`: `{ batchNo, at, total, trigger: "otomatik" | "elle", dayClosed }`, bu AsilPOS gününe bağlı bütün
   başarılı (`ok`) Pavo banka gün sonları, eskiden yeniye, en çok 20 (fazlası olursa yeniler kalır). Gün içinde elle
-  alınan gün sonu (`dayClosed: false`) ve kapanıştan sonrakiler; `at` LafPOS'un denediği an (ISO), `total` cihazın
+  alınan gün sonu (`dayClosed: false`) ve kapanıştan sonrakiler; `at` AsilPOS'un denediği an (ISO), `total` cihazın
   `grandTotals` TL satırı (bilinmiyorsa `null`). `bankPos` varken hep var: hiçbiri alınamadıysa `[]` (ör. `failed`,
   önceki batch yok). Denetimde gün içinde elle alınan batch 000278 (₺240,00) lafmaliyet'e hiç ulaşmıyordu, yalnız son
   batch 000279 (₺755,00) gidiyordu; günün bankaya gideni ₺995,00'dı. `pavoCard`, `lafposCard` ve `diff` eski
   anlamındadır (yalnız son batch).
-- `bankPos.dayCard`: LafPOS'ta günün bankaya giden bütün kartı (`cardBasis(gün, [])`: Z kartı + kart bahşişi + kartla
+- `bankPos.dayCard`: AsilPOS'ta günün bankaya giden bütün kartı (`cardBasis(gün, [])`: Z kartı + kart bahşişi + kartla
   açık hesap tahsilatı − yazarkasadan geçmeyen kart, bahşişiyle − gün kapandıktan sonra cihazda fişi iptal edilen kart).
   Gün açıkken ya da özetsiz `null`. lafmaliyet Banka POS'u Pavo'nun batch'lerinden doldurur ve bununla kıyaslar.
   Kartla açık hesap tahsilatı Pavo'dan çekildi sayılır; başka POS'tan çekildiyse fark çıkar.
@@ -1261,7 +1261,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   `provider` günün son gerçek belgesinin cihazı, yoksa ayardaki. `zReport` cihaz mali Z basar mı: Token `true`, Pavo
   `false` (Marina'nın Pavo'su VUK 507, e-Arşiv; satış belgelerinde Z no yok, `z.okcZNo` hep `null`). Pavo istenince
   gün sonunda ayrıntılı bir Z fişi (batch'ler ve Z rakamları) basar (sahip, 24.11.2026; docs/04-YAZARKASA.md §8):
-  personel o fişin fotoğrafını lafmaliyet'e ekler, lafmaliyet onu gövdeyle karşılaştırır (lafmaliyet `docs/LAFPOS.md`
+  personel o fişin fotoğrafını lafmaliyet'e ekler, lafmaliyet onu gövdeyle karşılaştırır (lafmaliyet `docs/ASILPOS.md`
   "Gün sonu otomasyonu"). `docs` günün adisyonlarının tamamlanan (`tamamlandi`) cihaz belgeleri. `cash`, `card`,
   `mealCard`, `other`: o belgelerden geçen, iade edilmemiş ödemeler, ödemenin Z alanına göre (online ve diğer
   `other`'da); `total` dördünün toplamı. `voided`: gün kapandıktan sonra cihazda iptal edilen (`fis_iptal`) belgeler,
@@ -1270,7 +1270,7 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   günün fişi cihazda iptal edilince (`okc.void_closed_day`) gün yeniden kuyruğa girer (yeni `revision`, düzeltme
   değil): `okc.voided`, `okc.card` ve `bankPos.dayCard` lafmaliyet'e elle "Gönder" beklemeden ulaşır. `vat` tamamlanan
   belgelerin sepetlerinden, oran başına KDV dahil toplam ve KDV (belge başına yuvarlanır, cihaz gibi); sepet
-  okunamazsa `null`. lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ LafPOS kıyası böylece
+  okunamazsa `null`. lafmaliyet bu günde yazarkasa alanlarını bundan doldurur (yazarkasa ↔ AsilPOS kıyası böylece
   kendiliğinden tutar; gerçek denetim personelin fotoğrafıdır).
 - `offDevice.cardTips`: yazarkasadan geçmeyen (hiçbir cihaz fişinde olmayan) iade edilmemiş kart satışlarının bahşişi
   (`cardBasis`'in batch dışı kısmının bahşişi). `offDevice` ile hep gider. lafmaliyet bankaya beklenen kartı
@@ -1291,19 +1291,19 @@ LafPOS'ta alanlar yoktur. Tutarlar TL, iki ondalık; kişi adı ve kimliği gitm
   işaretli; gün başından birikir). Hep gider (`[]`). Sayan ve devralan gitmez.
 - `discountLines[]`: `{ scope: "order" | "item", posName, type: "percent" | "amount", value, amount, reason }`,
   kapanmış kasa adisyonlarının indirimleri (en çok 2000): adisyon indirimi türüyle (`value` yüzde ya da TL) ve kalem
-  indirimi (`posName` `lines` ile aynı ad; LafPOS kalem indirimini tutar olarak saklar: `type` hep `amount`). `amount`
+  indirimi (`posName` `lines` ile aynı ad; AsilPOS kalem indirimini tutar olarak saklar: `type` hep `amount`). `amount`
   uygulanan tutar; `Σ amount = z.discounts`. Hep gider (`[]`). İndirimi yapan gitmez.
 - Gövdenin sırası: yeni üst alanlar `cashMoves`'tan sonra, `workedStaffRefs`'ten (sonda kalır) önce.
 
 ### 4.10 Pavo'yu beklerken gün sonu e-postası (25 Kasım 2026)
 
 25 Kasım akşamı Marina'nın gün sonu e-postası gitmedi. lafmaliyet e-postayı Pavo'nun sonucunu (`bankPos`) taşıyan gövdeyle
-tek seferde gönderir ve ilk gövde sonucsuz gelince bekler. LafPOS sonucu taşıyan ikinci gövdeyi göndermediğinde gece
-beklemeyi bitiren bir tetik yoktu. İki tarafta düzeltildi; eski LafPOS ile yeni lafmaliyet ve tersi birlikte çalışır.
+tek seferde gönderir ve ilk gövde sonucsuz gelince bekler. AsilPOS sonucu taşıyan ikinci gövdeyi göndermediğinde gece
+beklemeyi bitiren bir tetik yoktu. İki tarafta düzeltildi; eski AsilPOS ile yeni lafmaliyet ve tersi birlikte çalışır.
 
 - **`bankPosPending`** (isteğe bağlı, yalnız Pavo seçiliyken ve gövdede `bankPos` yokken gider): `true` Pavo'nun banka gün
   sonu bu gün için sürüyor ya da kapanışta başlayacak; `false` başlamayacak, atlandı ya da bitti. lafmaliyet `false`'ta
-  beklemez, `true`'da en çok 2 dakika bekler; alan yoksa (eski LafPOS) önceki günün sonucuna bakar.
+  beklemez, `true`'da en çok 2 dakika bekler; alan yoksa (eski AsilPOS) önceki günün sonucuna bakar.
 - **İlk gövde tutulur:** gün kapanınca Pavo'nun otomatik gün sonu başlayacaksa (`autoEodExpected`: Pavo seçili, ayar açık,
   cihaz eşleşmiş ve boş, önceki sonuç belirsiz değil) gövde giden kutusunda en çok `EOD_FIRST_PUSH_HOLD_MS` (150 sn)
   tutulur. Gün sonu bitince (alındı, alınamadı, belirsiz) gün sonucuyla yeniden kuyruğa girer ve **hemen** gönderilir
@@ -1311,7 +1311,7 @@ beklemeyi bitiren bir tetik yoktu. İki tarafta düzeltildi; eski LafPOS ile yen
   gövde sürenin sonunda `bankPosPending: true` ile gider.
 - **Atlanan deneme de gönderilir:** kapanıştaki otomatik deneme atlanırsa (cihaz meşgul, ayar kapalı, eşleşme yok, önceki
   sonuç belirsiz) gün `bankPosPending: false` ile hemen gider; lafmaliyet boşuna beklemez.
-- **lafmaliyet tarafı** (lafmaliyet docs/LAFPOS.md "Pavo'yu bekler"): bekleme günün ilk gelişinden sayılır; beklemeye alan
+- **lafmaliyet tarafı** (lafmaliyet docs/ASILPOS.md "Pavo'yu bekler"): bekleme günün ilk gelişinden sayılır; beklemeye alan
   gönderimin kendi işi süresi içinde sonucu yoklar, gelmezse e-postayı Pavo'suz gönderir (sonuç sonra gelirse kısa Pavo
   e-postası). E-posta hiçbir gece sonraki bir tetiğe kalmaz.
 
@@ -1338,23 +1338,24 @@ bilmiyordu. İkisi de artık denetim kaydına alarm yazar ve patronun telefonuna
   yerine yenisi giren ya da gün yeniden açıldığı için atılan kayıt bildirilmez. Anahtarlar `sync_state`
   `lafmaliyet.alarms`'ta (en yeni 50).
 
-## 4b. Şube kurulumu: lafmaliyet (ladmin) → LafPOS (26 Kasım 2026)
+## 4b. Şube kurulumu: lafmaliyet (ladmin) → AsilPOS (26 Kasım 2026)
 
-Yeni şube ladmin'de eklenir, kasası kendiliğinden kurulur (ladmin `docs/LAFPOS.md` › Şube kurulumu):
+Yeni şube ladmin'de eklenir, kasası kendiliğinden kurulur (ladmin `docs/ASILPOS.md` › Şube kurulumu):
 
 1. ladmin › Ayarlar › Şubeler'de **yalnız ana yönetici** (`info@nextgenlab.com.tr`) şubeyi e-postasıyla ekler. Şubenin
-   panel hesabı açılır, şubeye özel **kurulum bağlantısı** (`https://ladmin.laffogato.net/lafpos/indir/<kod>`, 14 gün,
+   panel hesabı açılır, şubeye özel **kurulum bağlantısı** (`https://ladmin.laffogato.net/asilpos/indir/<kod>`, 14 gün,
    tek kurulumluk) şubenin e-postasına gider ve şube hesabının Hesabım sayfasında durur.
-2. Bağlantı, kanaldaki genel web kurucusunu (`LafPOS-Kur.cmd`, `scripts/kasa/windows/kurulum/web-kurucu.ps1`) indirir;
+2. Bağlantı, kanaldaki genel web kurucusunu (`AsilPOS-Kur.cmd`, `scripts/kasa/windows/kurulum/web-kurucu.ps1`) indirir;
    ladmin içindeki iki boş satırı doldurur: `$KurulumAdresi = '<ladmin kökü>'`, `$KurulumKodu = '<kod>'`. Satırların
    yazımı sözleşmedir (iki depoda testli). Genel kurucuda ikisi boştur, kod taşımaz.
 3. Kurucu kodu veri klasörüne yazar: `C:\ProgramData\LafPOS\kurulum-kodu.json` `{ "adres", "kod" }` (UTF-8, BOM'suz).
 4. Sunucu açılışta (ve kod durdukça 5 dakikada bir) kodu verir (`server/sync/kurulum-kodu.ts`):
 
 ```
-POST {adres}/api/lafpos/kurulum   { "kod": "…" }
+POST {adres}/api/asilpos/kurulum   { "kod": "…" }   (404: eski panel, aynısı /api/lafpos/kurulum'a)
 200 { "ok": true, "sube": { "id": "kadikoy", "ad": "Kadıköy" },
       "baglanti": { "LAFMALIYET_URL", "LAFMALIYET_SYNC_SECRET", "LAFPOS_CLOUD_URL"?, "LAFPOS_CLOUD_SECRET"?, "LAFFOGATO_URL"?, "LAFFOGATO_SYNC_SECRET"? } }
+      (Uzaktan anahtarları telde eski adla; kasa ASILPOS_CLOUD_* adıyla da kabul eder, dosyada duran adla yazar)
 404 kod yok · 410 kullanılmış, iptal ya da süresi dolmuş · 400 biçim · 429 çok deneme
 ```
 
@@ -1364,20 +1365,20 @@ POST {adres}/api/lafpos/kurulum   { "kod": "…" }
      karakterlik anahtar) ayarlar dosyasına yazılır; bekçi sunucuyu yeni ayarlarla yeniden başlatır.
    - Başarıda ve kalıcı hatada (404, 410) dosya `kurulum-kodu.json.kullanildi` olur; internet yoksa kalır, yeniden denenir.
      Durum `sync_state` `kurulum.sube`.
-5. LafPOS Uzaktan'a (Merkez) ilk kayıt şubenin adını ve kodunu taşır (`sube: { ad, kod }`; kod şube kimliğinin büyük
+5. AsilPOS Uzaktan'a (Merkez) ilk kayıt şubenin adını ve kodunu taşır (`sube: { ad, kod }`; kod şube kimliğinin büyük
    harflisi): dükkân bu adla açılır, sahip yine onaylar.
 
 **Anahtar değişimi (26 Kasım 2026).** Kurulu kasalar Uzaktan ve site bağlantısını da ladmin'den alır
 (`server/sync/baglanti-dagitim.ts`): 10 dakikada bir `GET {LAFMALIYET_URL}/api/panel/pos/baglanti?sube=<id>&uygulanan=<sürüm>`
-(lafmaliyet anahtarıyla imzalı) → `{ ok, surum, baglanti: { LAFPOS_CLOUD_URL, LAFPOS_CLOUD_SECRET, LAFFOGATO_URL,
+(lafmaliyet anahtarıyla imzalı) → `{ ok, surum, baglanti: { ASILPOS_CLOUD_URL, ASILPOS_CLOUD_SECRET, LAFFOGATO_URL,
 LAFFOGATO_SYNC_SECRET } }`. Değişen değer bekletilir (`sync_state` `baglanti.bekleyen`) ve **gün kapanınca** (gün açık
 değilse hemen) ayarlar dosyasına yazılır, bekçi yeniden başlatır; denetime `settings.connections` (anahtar adları,
 değer değil). Yalnız kasada tanımlı bağlantı (adresi dolu) güncellenir: kapalı tutulan site bağlantısı kendiliğinden
 açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz: ladmin'e yeni değer yazılır, kasalar gece alır, sunucudaki
 anahtar sonra değişir (`uygulanan` ladmin'in günlüğünde görünür).
 
-**Sınır:** lafmaliyet bugün tek LafPOS şubesinin gününü alır (§4 "Şube"); Marina LafPOS'tayken ikinci şubenin kasası
-kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de çoklu LafPOS şubesi ayrı iş).
+**Sınır:** lafmaliyet bugün tek AsilPOS şubesinin gününü alır (§4 "Şube"); Marina AsilPOS'tayken ikinci şubenin kasası
+kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de çoklu AsilPOS şubesi ayrı iş).
 
 ## 5. Sıklık ve bütçe
 
@@ -1405,94 +1406,94 @@ kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de
 | Durum | Repo | İş |
 | --- | --- | --- |
 | Birleşti | laffogato#263 (d1de10f) | `LAFPOS_SYNC_SECRET` panel uçlarında ek anahtar; `GET /api/pos/orders/version` |
-| Birleşti | lafmaliyet#34, #36 | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales`, Kasa raporunda "LafPOS'tan doldur" |
-| Birleşti | lafmaliyet#44 (B07) | LafPOS durumu ve onarımı (Ayarlar › LafPOS (kasa)), geçiş günü ayarı, 200 yanıtına `counted` ve `switchDay`, Kasa bandı geçiş gününe bağlı, eşit anahtar engeli |
-| Birleşti | lafmaliyet#46 (B08) | LafPOS günlük satışları aylık modele; 200 yanıtına `matched` ve `unmatched` |
+| Birleşti | lafmaliyet#34, #36 | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales`, Kasa raporunda "AsilPOS'tan doldur" |
+| Birleşti | lafmaliyet#44 (B07) | AsilPOS durumu ve onarımı (Ayarlar › AsilPOS (kasa)), geçiş günü ayarı, 200 yanıtına `counted` ve `switchDay`, Kasa bandı geçiş gününe bağlı, eşit anahtar engeli |
+| Birleşti | lafmaliyet#46 (B08) | AsilPOS günlük satışları aylık modele; 200 yanıtına `matched` ve `unmatched` |
 | Birleşti | lafpos#11 (L1), #12 (L3), #22 (L2) | Gün sonu satırları, ekler, eski gün engeli; site bağlantısı (sipariş sinyali, Tükendi, menü yoklaması, `.env`'siz istek yok); eğitim günü kapısı, geçmiş günler, yanıt alanları, maliyet doğrulaması ve günlük çekim, açılış sırası (§8) |
-| Birleşti | laffogato#264 (cc0e40a), #265 (F1) | `GET /api/panel/karaoke` LafPOS anahtarına açık (dünden yarına), sürüm yanıtında `karaoke` işareti |
+| Birleşti | laffogato#264 (cc0e40a), #265 (F1) | `GET /api/panel/karaoke` AsilPOS anahtarına açık (dünden yarına), sürüm yanıtında `karaoke` işareti |
 | Birleşti | lafpos#24 | Ödeme ekranında Zayi: gün sonu `ikram[]` satırında `reason` "Zayi: " ile başlar (§4) |
-| Birleşti | lafpos#26 | Masa QR'ı LafPOS üretir; siparişte `tableCode` ile eşleme, kodlar giden kutusundan `PUT /api/panel/tables`'a (§2.3) |
-| Birleşti | lafpos#25 (L4) | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
-| Birleşti | laffogato#268 | Panel siparişinde `tableCode`; imzalı `PUT /api/panel/tables` (LafPOS anahtarı; §2.3) |
+| Birleşti | lafpos#26 | Masa QR'ı AsilPOS üretir; siparişte `tableCode` ile eşleme, kodlar giden kutusundan `PUT /api/panel/tables`'a (§2.3) |
+| Birleşti | lafpos#25 (L4) | Karaoke: AsilPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
+| Birleşti | laffogato#268 | Panel siparişinde `tableCode`; imzalı `PUT /api/panel/tables` (AsilPOS anahtarı; §2.3) |
 | Birleşti | lafmaliyet#49 (B09), #51 (B10), #54 (B11) | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
-| Birleşti | laffogato#279 + lafpos | Site şubeli; LafPOS her imzalı istekte şubesini söyler, başka şubenin listesini ve kaydını yazmaz (§2 "Şube") |
+| Birleşti | laffogato#279 + asilpos | Site şubeli; AsilPOS her imzalı istekte şubesini söyler, başka şubenin listesini ve kaydını yazmaz (§2 "Şube") |
 | Birleşti | laffogato#298, #299 + lafpos#160, #163 | Panel siparişinde `paidAtTill`, `lines[].index` ve yanıtta `closed` (§2.3 "Sözleşme eklemeleri"); şubenin sürüm sinyali ve menü işareti, `?branch=`; şubede kapalı ürünün Tükendi kilidi (`onMenu`, 409 `site_closed`) |
 | Birleşti | lafpos#167 + lafmaliyet#124, #125 (hesap uyumu) | Gün sonu gövdesinin Faz 2 alanları (§4), hesap sözleşmesi, kabul günü dosyası, banka gün sonu kıyasında yazarkasadan geçmeyen kart, şube kilidi |
 | Birleşti | lafpos#169 + lafmaliyet#126 (kasa zinciri, Faz 3) | Açılışta devir ve fark nedeni (§4.6), 200 yanıtında ve `GET /api/panel/pos/devir`'de `nextOpening`, kasa hareketleri satır satır ve gider kategorileri (§4.7) |
 | Birleşti | lafpos#170 + lafmaliyet#134 (personel bağlantısı) | Kullanıcının lafmaliyet personeline elle, onaylı bağlanması, `GET /api/panel/pos/personel`, gövdede `workedStaffRefs`, 200 yanıtında `staff`, "Bugün çalışanlar" düzeltmesi (§4.8) |
-| Birleşti | lafpos#171 + lafmaliyet#132, #135 (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te LafPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
+| Birleşti | lafpos#171 + lafmaliyet#132, #135 (gün sonu tamlığı) | Gövdede günün bütün banka gün sonları ve bütün kıyası, yazarkasanın belgeleri (`okc`), yazarkasadan geçmeyen kartın bahşişi, nakit bahşiş, tahsilatlar, ödeme türünün türü, gün sonu notu, föy slipleri, vardiya sayımları, indirim satırları (§4.9); lafmaliyet'te AsilPOS gününün kasa raporu bunlardan, personel yalnız fotoğraf yükler |
 | Birleşti | lafpos#168 + lafmaliyet#123 (ModPOS dönemi) | Geçişten önceki ModPOS günleri ve ürün listesi lafmaliyet'ten (`GET /api/panel/pos/modpos-gunler`, §4.5); kasa Raporlar'da ve Uzaktan'da gösterir |
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
-| Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); LafPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
-| Birleşti | lafpos#176, #177 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): LafPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, LafPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144, birleşti). Okumayan sürüm alanı atar, gün reddedilmez |
-| Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile LafPOS onu bara düşürmez) |
+| Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); AsilPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
+| Birleşti | lafpos#176, #177 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): AsilPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, AsilPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144, birleşti). Okumayan sürüm alanı atar, gün reddedilmez |
+| Faz 2 | laffogato F2 + asilpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile AsilPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
 ## 7. Yazarkasa POS (ÖKC) bağlantısı
 
-Mali fiş ÖKC'den kesilir; LafPOS adisyonu cihaza "sepet" olarak gönderir, ödeme ve fiş cihazda olur, sonuç
-(Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir. Ayrıntı:
+Mali fiş ÖKC'den kesilir; AsilPOS adisyonu cihaza "sepet" olarak gönderir, ödeme ve fiş cihazda olur, sonuç
+(Z no, fiş no, ödeme kalemleri) AsilPOS'a döner ve adisyonun ödemesi olarak kaydedilir. Ayrıntı:
 `docs/04-YAZARKASA.md`.
 
 ## 8. Açılış sırası
 
-Sahibin istediği tek liste (26 Ekim 2026). lafmaliyet deposunda `docs/LAFPOS.md` › "Açılış sırası" aynı adımlardır:
-**1. anahtarlar → 2. deneme gönderimi → 3. geçiş günü**; aşağıdakiler her adımın LafPOS tarafındaki ayrıntısıdır.
+Sahibin istediği tek liste (26 Ekim 2026). lafmaliyet deposunda `docs/ASILPOS.md` › "Açılış sırası" aynı adımlardır:
+**1. anahtarlar → 2. deneme gönderimi → 3. geçiş günü**; aşağıdakiler her adımın AsilPOS tarafındaki ayrıntısıdır.
 PR'ların birleşip yayına çıkması hiçbir şeyi açmaz: anahtar, `.env` ve geçiş günü yokken laffogato, lafmaliyet ve
-LafPOS bugünkü gibi çalışır, kasa ModPOS'tur.
+AsilPOS bugünkü gibi çalışır, kasa ModPOS'tur.
 
-**Ön koşul.** LafPOS (L1-L4), lafmaliyet (B07-B08; B09-B11 durumu §6) ve laffogato (F1) birleşmiş ve yayında (durum
-§6); LafPOS kafe bilgisayarına kurulmuş. Anahtarlar **en erken lafmaliyet B07 yayındayken** girilir: o sürümden önce
-lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
+**Ön koşul.** AsilPOS (L1-L4), lafmaliyet (B07-B08; B09-B11 durumu §6) ve laffogato (F1) birleşmiş ve yayında (durum
+§6); AsilPOS kafe bilgisayarına kurulmuş. Anahtarlar **en erken lafmaliyet B07 yayındayken** girilir: o sürümden önce
+lafmaliyet Kasa formu AsilPOS gününü geçiş günü olmadan gösterirdi.
 
 1. **Anahtarlar**
-   - lafmaliyet Production (Vercel): `LAFPOS_SYNC_SECRET`, en az 32 karakter (`openssl rand -base64 48`); paneli
+   - lafmaliyet Production (Vercel): `ASILPOS_SYNC_SECRET` (eski adıyla `LAFPOS_SYNC_SECRET`), en az 32 karakter (`openssl rand -base64 48`); paneli
      yeniden yayınlayın.
    - laffogato Production: `LAFPOS_SYNC_SECRET`, **ayrı bir değer**. İki projede adları aynı, değerleri ayrıdır;
-     ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır (aynıysa site ve panel LafPOS'u kabul etmez).
-   - LafPOS `.env` (Windows kurulumunda Başlat › LafPOS › LafPOS ayarları, `ayarlar.env`), şimdilik yalnız
+     ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır (aynıysa site ve panel AsilPOS'u kabul etmez).
+   - AsilPOS `.env` (Windows kurulumunda Başlat › AsilPOS › AsilPOS ayarları, `ayarlar.env`), şimdilik yalnız
      lafmaliyet satırları: `LAFMALIYET_URL=https://ladmin.laffogato.net`, `LAFMALIYET_SYNC_SECRET` = panelin
-     `LAFPOS_SYNC_SECRET`'ı (`server/env-config.ts`). Kurulum modundayken bunlar güvenlidir: gün gitmez (§4.3),
-     yalnız maliyet okuma çalışır (gün sonunda ve "Maliyetleri çek"; yazmayan imzalı GET). İsteğe bağlı LafPOS Uzaktan: `LAFPOS_CLOUD_URL`,
-     `LAFPOS_CLOUD_SECRET`.
+     `ASILPOS_SYNC_SECRET`'ı (eski adıyla `LAFPOS_SYNC_SECRET`; `server/env-config.ts`). Kurulum modundayken bunlar güvenlidir: gün gitmez (§4.3),
+     yalnız maliyet okuma çalışır (gün sonunda ve "Maliyetleri çek"; yazmayan imzalı GET). İsteğe bağlı AsilPOS Uzaktan: `ASILPOS_CLOUD_URL`,
+     `ASILPOS_CLOUD_SECRET`.
    - **Şube:** site şubelidir (§2 "Şube"); Marina kasasının Şube kimliği `marina` kalır (sitenin `LAFPOS_BRANCHES`
      varsayılanı da `marina`). Anahtar girilince kasa yalnız Marina'nın siparişlerini, çağrılarını ve Satışta'sını
      okur ve yazar; Tuzla'nınkine dokunmaz.
    - Site satırları (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`) bu adımda **girilmez**, 2. adımın başında girilir:
-     girildiği andan itibaren LafPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı
+     girildiği andan itibaren AsilPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı
      değiştirir, kurulum modunda da. `scripts/vercel/baglanti-kur.sh` anahtarları üretip üç projeye yazar ve kafeye
      girecek satırları bir dosyaya döker; site satırlarını o dosyadan 2. adımda alın.
-   - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/LAFPOS.md`).
+   - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/ASILPOS.md`).
 2. **Deneme gönderimi**
-   - Eğitim bitti: LafPOS'ta "Denemeyi bitir, gerçek kullanıma başla" (§4.3) yapıldı; kurulum modu kapalı, Yönetim ›
+   - Eğitim bitti: AsilPOS'ta "Denemeyi bitir, gerçek kullanıma başla" (§4.3) yapıldı; kurulum modu kapalı, Yönetim ›
      Yazarkasa POS **`kapali`** (eğitim simülatörü değil). ModPOS'la paralel deneme gününde `kapali` kalır, mali fişi ModPOS
      keser; `tokenx` ancak geçiş gününden itibaren ve Token'ın test ortamından sonra açılır (`docs/04-YAZARKASA.md`).
      Simülatörde kalan gün eğitim günüdür ve hiç gitmez (§4.3).
-   - Şimdi site satırları LafPOS `.env`'ine girilir: `LAFFOGATO_URL=https://laffogato.net` (varsayılanı yok),
-     `LAFFOGATO_SYNC_SECRET` = sitenin `LAFPOS_SYNC_SECRET`'ı; LafPOS yeniden başlatılır.
+   - Şimdi site satırları AsilPOS `.env`'ine girilir: `LAFFOGATO_URL=https://laffogato.net` (varsayılanı yok),
+     `LAFFOGATO_SYNC_SECRET` = sitenin `LAFPOS_SYNC_SECRET`'ı; AsilPOS yeniden başlatılır.
    - Yönetim › Site ve lafmaliyet › "Maliyetleri çek" 200 döner: imza ve saat çalışıyor. Kart "Kurulum modu" demiyor.
    - Karaoke (§2.4): karaoke odasının adisyonunda oda kutusu bugünün site rezervasyonlarını gösterir ("site karaokeyi
-     LafPOS'a açmadı" diyorsa sitenin `LAFPOS_SYNC_SECRET`'ı ile `LAFFOGATO_SYNC_SECRET` aynı değil). Yönetim › Masa
+     AsilPOS'a açmadı" diyorsa sitenin `LAFPOS_SYNC_SECRET`'ı ile `LAFFOGATO_SYNC_SECRET` aynı değil). Yönetim › Masa
      planı'nda saat ücreti uyarısı yoksa odanın ücreti sitedekiyle aynıdır.
-   - Gerçek bir gün LafPOS'ta (kurulum modu kapandıktan sonra) açılıp kapatılır (ModPOS'la paralel olabilir).
-     lafmaliyet Ayarlar › LafPOS (kasa)'da gün **Deneme** görünür, yanıt `counted: false`; LafPOS Site ve lafmaliyet'te
+   - Gerçek bir gün AsilPOS'ta (kurulum modu kapandıktan sonra) açılıp kapatılır (ModPOS'la paralel olabilir).
+     lafmaliyet Ayarlar › AsilPOS (kasa)'da gün **Deneme** görünür, yanıt `counted: false`; AsilPOS Site ve lafmaliyet'te
      "lafmaliyet … gününü saymıyor: geçiş günü seçilmedi". Başka hiçbir ekranda görünmez. Retler iki kartta da
      görünür.
    - Eşleşmeyen ürünler (iki kartta da listelenir): lafmaliyet'te **Bağla** ya da Ürünler › Site menüsü'nde sitenin
      kalemine bağlanır; "Yalnız sitede" boşlukları satılan her kalem için kapanır. Liste öneridir, ön koşul değil.
    - Yalnız ModPOS'ta satılan ürünler (Su (PET), Kuzu Kulağı, Ice Caramel Latte …) için karar: siteye eklenir
-     (tercih) ya da LafPOS yerel ürünü olur, `posName` = eski ModPOS adı.
-   - LafPOS Yönetim › Ödeme türleri'nde yemek kartı ve platform kanalları (`pluxee` … `yemeksepeti` …) seçili.
-   - Eğitim günleri lafmaliyet'e gitmez (§4.3); "Denemeyi bitir" onları LafPOS'tan da siler (öncesinde yedek). Veri
-     klasörü silinmez (kurulumu da siler, LafPOS deneme moduna döner). lafmaliyet kartında yine de bir eğitim günü görünürse orada silinir.
+     (tercih) ya da AsilPOS yerel ürünü olur, `posName` = eski ModPOS adı.
+   - AsilPOS Yönetim › Ödeme türleri'nde yemek kartı ve platform kanalları (`pluxee` … `yemeksepeti` …) seçili.
+   - Eğitim günleri lafmaliyet'e gitmez (§4.3); "Denemeyi bitir" onları AsilPOS'tan da siler (öncesinde yedek). Veri
+     klasörü silinmez (kurulumu da siler, AsilPOS deneme moduna döner). lafmaliyet kartında yine de bir eğitim günü görünürse orada silinir.
 3. **Geçiş günü**
-   - lafmaliyet Ayarlar › LafPOS (kasa) › LafPOS'a geçiş günü girilir (tercihen ayın 1'i). Ay ortasıysa o ayın
+   - lafmaliyet Ayarlar › AsilPOS (kasa) › AsilPOS'a geçiş günü girilir (tercihen ayın 1'i). Ay ortasıysa o ayın
      ModPOS ürün listesi geçiş gününden önceki günler için Satışlar'a yüklenir (1-9 Kasım; yükleme o güne kırpar).
-   - LafPOS geçiş gününü bir sonraki gün sonunun yanıtından öğrenir (Site ve lafmaliyet'te yazar, "Geçmiş günler"in
+   - AsilPOS geçiş gününü bir sonraki gün sonunun yanıtından öğrenir (Site ve lafmaliyet'te yazar, "Geçmiş günler"in
      varsayılan başlangıcı olur). Geçiş gününden bu yana kapanmış ama gitmemiş gün varsa "Geçmiş günleri gönder" (§4.4);
      eğitim günlerini atlar.
    - Yazarkasa gerçek fişe geçecekse Yönetim › Yazarkasa POS `tokenx` (Token'ın test ortamında denendikten sonra).
-   - **İlk Z numarası:** ModPOS'ta son gün sonu alındıktan sonra, geçiş günü LafPOS'ta gün açılmadan önce Yönetim ›
+   - **İlk Z numarası:** ModPOS'ta son gün sonu alındıktan sonra, geçiş günü AsilPOS'ta gün açılmadan önce Yönetim ›
      Ayarlar › Kasa ve gün › İlk Z numarası = ModPOS'un son Z numarası + 1 (son Z 1200 ise 1201); Z zinciri, dolayısıyla
      Kasa raporunun Z no'su ModPOS'unkinden devam eder. Açılan günün Z'si kayıtlı en büyük Z + 1'dir, ilk Z numarası daha
      büyükse odur (`shared/z-no.ts`): ayar yalnız yukarı doğru etkiler, kayıtlı günlerin numarası değişmez (eğitim ve
@@ -1500,14 +1501,14 @@ lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
      (422 `z_start_low`, "Z numarası geri alınamaz; son Z N"); boşaltmak zinciri geri almaz. Yalnız ayar yetkisiyle
      (`ayar.yonet`) değişir, denetim kaydına uyarı olarak düşer (`settings.z_start`, eski → yeni). Alanın altında son Z
      ve sıradaki günün Z'si yazar.
-   - İlk gün: LafPOS'ta gün sonu → lafmaliyet kartında gün, `counted: true`; Kasa raporu kendiliğinden dolu, banka
+   - İlk gün: AsilPOS'ta gün sonu → lafmaliyet kartında gün, `counted: true`; Kasa raporu kendiliğinden dolu, banka
      POS ve yazarkasa Z eklenip gönderilir; Kasadaki fiyatlar kaybolur.
 
 **Personel yordamı** (kod değil): uygulama / web siparişi kasada nakit ya da kartla ödenirse sitede "Ödendi"
-işaretlenir ve LafPOS'ta normal adisyon olarak çalınır, bugün ModPOS'ta olduğu gibi (site onu `counter` sayıp online
+işaretlenir ve AsilPOS'ta normal adisyon olarak çalınır, bugün ModPOS'ta olduğu gibi (site onu `counter` sayıp online
 cirodan ve tüketim satırlarından çıkarır, çift sayım olmaz; otomatik aktarım Faz 2). Site `paidAtTill` gönderince
-LafPOS o siparişi "sitede ödendi" diye yazmaz ve bara düşürmez, yalnız "#N kasada ödendi; adisyon olarak çalın" uyarısı
+AsilPOS o siparişi "sitede ödendi" diye yazmaz ve bara düşürmez, yalnız "#N kasada ödendi; adisyon olarak çalın" uyarısı
 verir: bara tek fiş, Z'ye tek satış gider (§2.3 "Kasada ödenen").
 
-**Geri almak:** lafmaliyet'te geçiş gününü boşaltmak her şeyi ModPOS'a döndürür, hiçbir kayıt silinmez. LafPOS
-`.env`'deki satırları silmek (ya da başına `#`) bağlantıyı kapatır; LafPOS yeniden başlayınca dışarıya istek gitmez.
+**Geri almak:** lafmaliyet'te geçiş gününü boşaltmak her şeyi ModPOS'a döndürür, hiçbir kayıt silinmez. AsilPOS
+`.env`'deki satırları silmek (ya da başına `#`) bağlantıyı kapatır; AsilPOS yeniden başlayınca dışarıya istek gitmez.

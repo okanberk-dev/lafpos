@@ -1,5 +1,5 @@
 /**
- * LafPOS Uzaktan raporları: kasanın her iş günü için buluta ittiği günlük rapor özeti (server/sync/cloud-reports.ts
+ * AsilPOS Uzaktan raporları: kasanın her iş günü için buluta ittiği günlük rapor özeti (server/sync/cloud-reports.ts
  * kurar, api/uzaktan.ts saklar ve dönem için toplar). Yalnız tür: api/uzaktan.ts bunu `import type` ile alır (Vercel
  * işlevi göreli içe aktarmayı çalışma anında çözemez, tür derlemede silinir).
  *
@@ -10,7 +10,7 @@
 import type { CheckRow, CrossPay, ItemListRow, OdenmezPersonRow, PlatformDayRow, PrepDone } from './remote-calc';
 import type { PushedHistoryProducts } from './gecmis';
 
-/** Merkez'e bağlı olmayan eski kasanın dükkânı; bağlı kasada kurulum kimliği (`lafpos:rapor:<dükkân>:gun:<tarih>`) */
+/** Merkez'e bağlı olmayan eski kasanın dükkânı; bağlı kasada kurulum kimliği (Redis `<önek>rapor:<dükkân>:gun:<tarih>`) */
 export const REMOTE_SHOP = 'default';
 
 /** Uzaktan raporların tutulduğu ve bir raporun alabileceği en uzun dönem (gün; kasadaki MAX_RANGE_DAYS ile aynı) */
@@ -77,9 +77,9 @@ export interface RemoteDayReport {
   staff: [string, string, number, number, number, number, number, number, number, number, number][];
   /** Gün aşırı ödemeler (shared/remote-calc.ts `CrossPay`); eski kasanın özetinde yok */
   xpay?: CrossPay[];
-  /** Geçmiş ciro günü (shared/gecmis.ts `historyReport`): önceki kasa programının adı ("ModPOS"); LafPOS gününde yok */
+  /** Geçmiş ciro günü (shared/gecmis.ts `historyReport`): önceki kasa programının adı ("ModPOS"); AsilPOS gününde yok */
   kaynak?: string;
-  /** Geçmiş gündeki önceki programın Z numarası ("Z-2026-002"); LafPOS'un Z'si `z`'de, sayı */
+  /** Geçmiş gündeki önceki programın Z numarası ("Z-2026-002"); AsilPOS'un Z'si `z`'de, sayı */
   zText?: string;
   /** Geçmiş gününün indirimi bilinmiyor (yalnız ModPOS föyünden): `s.disc` 0 ama raporlar onu bilinen sıfır saymaz */
   indirimBilinmiyor?: true;

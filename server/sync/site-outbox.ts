@@ -50,7 +50,7 @@ export interface TablesPushState {
 
 /**
  * QR kodlu masaların listesini siteye gönderilmek üzere giden kutusuna koyar (docs/03-ENTEGRASYON.md §2.3 "Masa QR"):
- * kod üretilince, yenilenince, masa adı ya da etkinliği değişince. Site kodu `cafe_tables`'a alır; böylece LafPOS'un
+ * kod üretilince, yenilenince, masa adı ya da etkinliği değişince. Site kodu `cafe_tables`'a alır; böylece AsilPOS'un
  * ürettiği QR sitede ve uygulamada masayı bulur. Bağlantı anahtarı yokken kuyruğa girmez.
  */
 export function enqueueSiteTables(t: Tx | DB): boolean {
@@ -117,7 +117,7 @@ export function dropSiteSoldOut(t: Tx | DB, extId: string | null) {
 
 /**
  * Menü eşitlemesi (kilit içinde, panelin taze listesiyle): sitenin zaten istenen durumda olduğu ve sitede artık
- * olmayan kalemlerin yazımı düşer. Kalanların ürünü `held` olarak döner: site görüntüsü LafPOS'un henüz gönderemediği
+ * olmayan kalemlerin yazımı düşer. Kalanların ürünü `held` olarak döner: site görüntüsü AsilPOS'un henüz gönderemediği
  * yazımdan eskidir, eşitleme o ürünün Satışta bilgisine dokunmaz. Reddedilmiş yazım ürünü tutmaz (sitenin durumu
  * geçerli), yalnız uyarı olarak kalır.
  */
@@ -200,7 +200,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
             .set({
               attempts: row.attempts + 1,
               lastError: siteClosed
-                ? "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz, kasada da kapatıldı. Sitenin yönetim panelinde menüye geri koyun"
+                ? "Site bu ürünü menüden kaldırmış; AsilPOS'tan açılamaz, kasada da kapatıldı. Sitenin yönetim panelinde menüye geri koyun"
                 : `Site Satışta bilgisini reddetti (HTTP ${status})`,
               nextAttemptAt: PARKED,
             })
@@ -220,7 +220,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
                 action: 'product.sold_out',
                 entity: 'product',
                 entityId: p.id,
-                message: `${p.name} sitede menüden kaldırılmış; ${payload.actor ? `${payload.actor} kullanıcısının ` : ''}LafPOS'taki açışı geri alındı`,
+                message: `${p.name} sitede menüden kaldırılmış; ${payload.actor ? `${payload.actor} kullanıcısının ` : ''}AsilPOS'taki açışı geri alındı`,
               });
             }
             if (closed.length) fx.emit({ topic: 'menu', kind: 'product.sold_out' });

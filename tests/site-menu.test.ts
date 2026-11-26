@@ -3,6 +3,7 @@ import type { BootstrapDTO } from '@shared/types';
 import type { SiteMenu } from '../server/sync/laffogato-menu';
 import { type FakeSite, siteMenuFixture, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * Menü senkronu ve Tükendi kilidi (L3 madde 3-4). Herkese açık menü CDN'den gelir, dakikalarca bayat kalabilir;
@@ -100,7 +101,7 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
   it('panel listesi tanınmayan biçimde gelirse (version 1 değil) Satışta bilgisi değişmez; alanı göndermeyen eski site okunur', async () => {
     const { runMenuSync } = await import('../server/sync/menu-sync');
     expect((await product('mnu-0007')).active).toBe(true);
-    // Panel Latte'yi Tükendi der ama biçimi LafPOS bilmiyor: liste okunmaz, ad ve yeni ürünler yine uygulanır; bağlı
+    // Panel Latte'yi Tükendi der ama biçimi AsilPOS bilmiyor: liste okunmaz, ad ve yeni ürünler yine uygulanır; bağlı
     // ürünün fiyatı herkese açık listeden (Tuzla) yazılmaz
     site.panelActive.set('mnu-0007', false);
     const raised = siteMenuFixture();
@@ -164,7 +165,7 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
     expect(site.menuPosts.slice(posts)).toEqual([expect.objectContaining({ id: 'mnu-0011', isActive: false })]);
     const after = await product('mnu-0011');
     expect(after.active).toBe(false);
-    expect(after.soldOutBy).toBe('lafpos');
+    expect(after.soldOutBy).toBe(TUKENDI_KASA);
     await h.ok('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: true });
   });
 });
@@ -192,14 +193,14 @@ describe('Tükendi kilidi', () => {
     expect(audit.find((a) => a.action === 'product.available')?.message).toMatch(/sitede kapatılmıştı/);
   });
 
-  it('LafPOS\'un kapattığını kasiyer yine açar (site de onu listelemese)', async () => {
+  it('AsilPOS\'un kapattığını kasiyer yine açar (site de onu listelemese)', async () => {
     const p = await product('mnu-0023');
     await h.ok('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: false });
     expect(site.menuPosts.at(-1)).toMatchObject({ id: 'mnu-0023', isActive: false });
-    expect((await product('mnu-0023')).soldOutBy).toBe('lafpos');
+    expect((await product('mnu-0023')).soldOutBy).toBe(TUKENDI_KASA);
     site.menu = without('mnu-0023') as never;
     await sync();
-    expect((await product('mnu-0023')).soldOutBy).toBe('lafpos');
+    expect((await product('mnu-0023')).soldOutBy).toBe(TUKENDI_KASA);
     await h.ok('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: true });
     expect((await product('mnu-0023')).active).toBe(true);
     expect(site.menuPosts.at(-1)).toMatchObject({ id: 'mnu-0023', isActive: true });

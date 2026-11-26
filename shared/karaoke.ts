@@ -1,7 +1,7 @@
 import { tl } from './money';
 
 /**
- * Sitedeki karaoke rezervasyonunu kasa nasıl okur. Kurallar sitenindir (laffogato `docs/LAFPOS.md` › "Karaoke
+ * Sitedeki karaoke rezervasyonunu kasa nasıl okur. Kurallar sitenindir (laffogato `docs/ASILPOS.md` › "Karaoke
  * satırını kasa nasıl okur"; `holdsSlot`, `karaokeMoneyOf`); burada kasanın iki sorusuna çevrilir: oda bu saatte
  * tutulu mu, blok önceden ödenmiş mi. Saf: sunucu (ücretlendirme) ve ekran (oda kutusu, masa planı) aynı kuralı okur.
  * docs/03-ENTEGRASYON.md §2.4

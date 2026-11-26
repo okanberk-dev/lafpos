@@ -1,17 +1,17 @@
 ---
 name: build-admin-panel
-description: Research, scope, build and verify a new LafPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the LafPOS Pano look (finance-dashboard metrics in L'Affogato green: brand rail, floating white cards, Inter). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
+description: Research, scope, build and verify a new AsilPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the AsilPOS Pano look (finance-dashboard metrics in L'Affogato green: brand rail, floating white cards, Inter). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
 ---
 
 # Yönetim paneline bir alan eklemek: oku, kapsamı sor, kur, gerçekten doğrula
 
 > **Kaynak:** `RiosenBeq/laffogato` `.claude/skills/build-admin-panel` @ `ab5c0ae` (operatörün kendi skill'i),
-> LafPOS'a uyarlandı (26 Eki 2026). Oradaki yöntem de
+> AsilPOS'a uyarlandı (26 Eki 2026). Oradaki yöntem de
 > [Owais232/Admin-Panel-Skill-LLM-Models](https://github.com/Owais232/Admin-Panel-Skill-LLM-Models)'in altı
 > aşamasından yeniden yazılmıştı. Next.js, server action ve Postgres varsayımları burada geçerli değil:
-> LafPOS yerel bir Hono sunucusu, SQLite (Drizzle) ve React SPA'dır.
+> AsilPOS yerel bir Hono sunucusu, SQLite (Drizzle) ve React SPA'dır.
 
-Görünümün kaynağı `DESIGN.md` (**LafPOS Pano**, 20 Kasım 2026: finans panosunun ölçüleri L'Affogato kimliğinde; Inter,
+Görünümün kaynağı `DESIGN.md` (**AsilPOS Pano**, 20 Kasım 2026: finans panosunun ölçüleri L'Affogato kimliğinde; Inter,
 tek açık gri zemin, zeminde yüzen beyaz kartlar (köşe 24), solda ev yeşilinin degradesinde marka rayı, ev yeşili ana eylem
 ve açık nane ok halkası, durum kobalt mavisi, zamanı daralan ahududu; yönetimde solda beyaz alt menü kartı) ve tablo, KPI
 şeridi ve çekmece ölçüleri için **Innex** tarifi (`docs/ADMIN-INNEX.md`). Renk ve yazı için tarifin hex değerleri değil `src/index.css`'teki
@@ -33,7 +33,7 @@ Kod yazmadan önce neyin yönetileceğini koddan öğren:
    ve `shared/money.ts`'tedir.
 4. **Dışarıya etkisi.** Değişen alan laffogato'ya (menü eşitleme, tükendi, online sipariş) ya da
    lafmaliyet'e (gün sonu, satış listesi, maliyet) gidiyor mu? Sözleşme `docs/03-ENTEGRASYON.md`; siteden
-   gelen alanlar (ad, fiyat, boy, KDV) LafPOS'ta değiştirilmez.
+   gelen alanlar (ad, fiyat, boy, KDV) AsilPOS'ta değiştirilmez.
 5. **Denetim ve canlılık.** Hassas işlem `Effects.audit` ile denetim kaydına yazılır, yazma bitince
    `bus.publish` ile ekranlara olay gider (AGENTS.md kural 4-5).
 
@@ -57,7 +57,7 @@ paleti (`CommandPalette` aynı listeyi okur).
 ## Aşama 4: Kur, her adımda doğrula
 
 - Her adımdan sonra `npm run typecheck` ve ilgili test (`tests/api-flow.test.ts` sunucu akışları için).
-- Liste sayfası yönetim sahnesinin yaprağındadır (görünümü LafPOS Sahne): sayfa başlığı şeridi (başlık, açıklama, sağda ikincil sonra birincil
+- Liste sayfası yönetim sahnesinin yaprağındadır (görünümü AsilPOS Sahne): sayfa başlığı şeridi (başlık, açıklama, sağda ikincil sonra birincil
   düğme), varsa KPI şeridi (her rakamın yanında referans), durum sekmeleri (sayılı), tek satır araç
   çubuğu, kart içinde tablo, satıra tıklayınca sağdan hızlı bakış.
 - Telefon: kart yok, tablo satır kartına döner, çekmece alt sayfa olur, her hedef en az 44 px

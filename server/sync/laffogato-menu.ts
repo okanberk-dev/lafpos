@@ -11,8 +11,8 @@ import { SITE_GROUP_KEYS, siteGroupsFor } from './option-profile';
 import { SITE_ISTEMCI, TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
- * laffogato menüsünü LafPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
- * Site fiyatın, Satışta bilgisinin ve KDV'nin sahibidir; LafPOS'a özel alanlar (istasyon, kısa ad, renk,
+ * laffogato menüsünü AsilPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
+ * Site fiyatın, Satışta bilgisinin ve KDV'nin sahibidir; AsilPOS'a özel alanlar (istasyon, kısa ad, renk,
  * gizli, sık kullanılan, porsiyon sayacı, posName) senkronda korunur. docs/03-ENTEGRASYON.md §2
  */
 
@@ -201,12 +201,12 @@ function lastSyncAt(local: LocalProduct[]): number {
 }
 
 /**
- * Bağlı ürün LafPOS'ta satışta mı olmalı. Porsiyon sayacı biten ürünü site açamaz (sayaç LafPOS'un). Anahtar
+ * Bağlı ürün AsilPOS'ta satışta mı olmalı. Porsiyon sayacı biten ürünü site açamaz (sayaç AsilPOS'un). Anahtar
  * varsa imzalı panelin Satışta bilgisi geçerlidir: panel veritabanından tazedir ve her kalemi verir, herkese açık
  * menü ise CDN'den dakikalarca eski gelebilir (s-maxage=300, stale-while-revalidate). Herkese açık listede görünen
  * ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık kalem kapanmaz, panelde hiç olmayan kalem
  * sitede silinmiştir. Panel yoksa herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de
- * listelenmiş ve o zamandan beri LafPOS'ta (anahtarsız) Tükendi yapılmış ürün, site değişmedikçe kapalı kalır.
+ * listelenmiş ve o zamandan beri AsilPOS'ta (anahtarsız) Tükendi yapılmış ürün, site değişmedikçe kapalı kalır.
  */
 export function shouldBeActive(p: LocalProduct, listed: boolean, panel: PanelMenu | null, lastSync: number): boolean {
   if (p.portionsLeft === 0) return false;
@@ -219,10 +219,10 @@ type SoldOutBy = typeof TUKENDI_KASA | 'site';
 
 /**
  * Senkrondan sonra Tükendi'nin sahibi. Açılan üründe yok. Site `onMenu` gönderiyorsa (şubeli site) kilit yalnız
- * sitenin menüden kaldırdığı kalemde ('site'): site LafPOS'un onu açmasını 409 `site_closed` ile reddeder. Menüde olup
- * yalnız bu şubede Tükendi olan kalemi (kasa ya da köşkün paneli kapattı) site LafPOS'tan açtırır: kasada açılır
- * ('lafpos'). `onMenu` yoksa eski kural: zaten kapalı üründe kim kapattıysa o kalır, eski kayıtta (sahipsiz) site;
- * yeni kapananda porsiyon bittiyse LafPOS, değilse site.
+ * sitenin menüden kaldırdığı kalemde ('site'): site AsilPOS'un onu açmasını 409 `site_closed` ile reddeder. Menüde olup
+ * yalnız bu şubede Tükendi olan kalemi (kasa ya da köşkün paneli kapattı) site AsilPOS'tan açtırır: kasada açılır
+ * (`TUKENDI_KASA`). `onMenu` yoksa eski kural: zaten kapalı üründe kim kapattıysa o kalır, eski kayıtta (sahipsiz) site;
+ * yeni kapananda porsiyon bittiyse AsilPOS, değilse site.
  */
 export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | null; portionsLeft: number | null }, active: boolean, onMenu?: boolean): SoldOutBy | null {
   if (active) return null;
@@ -234,7 +234,7 @@ export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | 
 
 /**
  * Eşitlemenin Satışta kuralı. `keep`: imzalı panel alınamadı (anahtar varken): bağlı ürünlerin Satışta bilgisine
- * dokunulmaz, fiyat, ad, KDV ve yeni ürünler yine uygulanır. `held`: LafPOS'un siteye henüz gönderemediği Satışta
+ * dokunulmaz, fiyat, ad, KDV ve yeni ürünler yine uygulanır. `held`: AsilPOS'un siteye henüz gönderemediği Satışta
  * yazımı bekleyen ürünler (giden kutusu); sitenin anlık görüntüsü o yazımdan eskidir, ürünün durumu korunur.
  */
 export interface AvailabilityRule {
@@ -458,7 +458,7 @@ export function applyMenu(
       updated++;
     } else {
       productId = ulid();
-      // POS sırası LafPOS'un (docs/03 §1): yalnız ürün ilk gelirken sitenin sırası verilir. Panel alınamadıysa
+      // POS sırası AsilPOS'un (docs/03 §1): yalnız ürün ilk gelirken sitenin sırası verilir. Panel alınamadıysa
       // herkese açık listede görünen yeni kalem satıştadır
       const active = (rule.keep ? undefined : panel?.get(i.id)?.isActive) ?? true;
       // Yalnız bu şubede Tükendi (menüde) olan yeni kalem kasada açılabilir; kilit yalnız sitenin menüden kaldırdığında

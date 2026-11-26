@@ -8,9 +8,9 @@ import { type FakeSite, type PanelOrderFixture, startFakeSite } from './fake-sit
 import { type Harness, startApp } from './harness';
 
 /**
- * Sistemler arası sözleşme uyumu (docs/03-ENTEGRASYON.md): site şubelidir, LafPOS kendi şubesi adına okur ve yazar,
+ * Sistemler arası sözleşme uyumu (docs/03-ENTEGRASYON.md): site şubelidir, AsilPOS kendi şubesi adına okur ve yazar,
  * başka şubenin listesini ve kaydını yazmaz; kasada ödenen site siparişi bara düşmez ve "sitede ödendi" sayılmaz;
- * sitede iptal edilen kalem LafPOS'ta da iptal olur; CDN'deki bayat liste fiyatı geri bırakmaz; menü işareti bütçeli
+ * sitede iptal edilen kalem AsilPOS'ta da iptal olur; CDN'deki bayat liste fiyatı geri bırakmaz; menü işareti bütçeli
  * (gece yok, en sık 60 sn); marj KDV hariç; platform ücreti hizmet satırı; eklerin maliyeti brüt kâra girer.
  */
 const SECRET = 's'.repeat(48);
@@ -91,7 +91,7 @@ function collect(bus: { on: (e: 'event', f: (e: LiveEvent) => void) => void; off
   return { events, stop: () => bus.off('event', on) };
 }
 
-describe('şube: site şubeli (laffogato #279), LafPOS kendi şubesi adına okur ve yazar', () => {
+describe('şube: site şubeli (laffogato #279), AsilPOS kendi şubesi adına okur ve yazar', () => {
   it('istekler kasanın şubesini söyler; başka şubenin listesi yazılmaz, eski site bugünkü gibi', async () => {
     const { orders } = await mod();
     site.answerBranch = null;
@@ -208,7 +208,7 @@ describe('kasada ödenen site siparişi (paidAtTill)', () => {
   });
 });
 
-describe('kalem iptali: sitede iptal edilen satır LafPOS bar ekranında kalmaz', () => {
+describe('kalem iptali: sitede iptal edilen satır AsilPOS bar ekranında kalmaz', () => {
   it('konumla (index): iptal edilen kalem iptal, geri alınan geri gelir; tutar değişmez', async () => {
     const { orders } = await mod();
     const lines = [line('mnu-0003', 'Latte', 0, 2), line('mnu-0011', 'Cheesecake', 1)];
@@ -410,7 +410,7 @@ describe('menü işareti bütçesi', () => {
     jobs.onSiteMenuChanged();
     const pending = jobs.pendingMenuSync()!;
     expect(pending.at - Date.now()).toBeGreaterThan(50_000);
-    // LafPOS'un kendi Tükendi yazımı: bekleyen eşitleme varken ikinci eşitleme kurulmaz
+    // AsilPOS'un kendi Tükendi yazımı: bekleyen eşitleme varken ikinci eşitleme kurulmaz
     jobs.onSiteMenuWritten();
     expect(jobs.pendingMenuSync()).toEqual(pending);
     await jobs.runScheduledSync();

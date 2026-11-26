@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 import { EmptyState } from './ui/misc';
 
 /**
- * Grafikler (dataviz kuralları; LafPOS Keel, 22 Kasım 2026): raporlar, yönetim özeti ve patron paneli aynı dili kullanır.
+ * Grafikler (dataviz kuralları; AsilPOS Keel, 22 Kasım 2026): raporlar, yönetim özeti ve patron paneli aynı dili kullanır.
  * Tek seri, sütunlar gri bağlam (`--chart-soft`) ve tek vurgulu sütun nane (`--chart-hi`: en yüksek değer ya da
  * sayfanın seçtiği; üstünde nane değer hapı ve beyaz nokta), çizgi ve lejant `--chart-accent`, ödeme türleri her yerde
  * aynı renkte (`--k-pay-*`), değişim hapı tek (`Delta`/`KPill`), kıyas

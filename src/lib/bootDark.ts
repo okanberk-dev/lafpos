@@ -21,7 +21,7 @@ const normalizePath = (path: string) => path.replace(/\/+$/, '') || '/';
 export const isBootDarkPath = (path: string) => BOOT_DARK_PATHS.includes(normalizePath(path));
 
 /** Müşteri ekranının son görünümü bu cihazda (CustomerDisplayPage yazar): sonraki açılışın ilk karesi o temada */
-export const DISPLAY_CONFIG_KEY = 'lafpos.musteri-ekrani';
+export const DISPLAY_CONFIG_KEY = 'asilpos.musteri-ekrani';
 
 /**
  * Açılış adresinin ilk karedeki teması: sayfanın kuracağı temayla aynı karar (bar ekranında açık seçilmişse açık;

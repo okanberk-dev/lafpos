@@ -1,10 +1,10 @@
 /**
- * Merkez (lafpos.laffogato.net/merkez): dükkânlar, lisans ve seçerek güncelleme. api/uzaktan.ts yolu `merkez/` ile
+ * Merkez (Uzaktan'ın `/merkez` yolu): dükkânlar, lisans ve seçerek güncelleme. api/uzaktan.ts yolu `merkez/` ile
  * başlayan istekleri buraya verir (alt çizgili dosya Vercel'de ayrı işlev olmaz).
  *
  * Kurulum kaydı: kasa ilk açılışta gizli anahtar üretir, kurulum kimliği anahtarın özetidir (`installIdFor`; kimliği
  * bilen başkası onu kendi anahtarıyla kaydedemez). İnternete ilk çıktığında `POST merkez/kayit` ile bildirir; istek
- * kafenin ortak anahtarıyla (LAFPOS_CLOUD_SECRET) imzalıdır, dışarıdan kimse kurulum açamaz. Merkez'de "Onay bekliyor"
+ * kafenin ortak anahtarıyla (ASILPOS_CLOUD_SECRET) imzalıdır, dışarıdan kimse kurulum açamaz. Merkez'de "Onay bekliyor"
  * görünür. Kayıt bir kez açılır: aynı kimliğe başka anahtar yazılamaz. Sonraki istekler (`merkez/nabiz`) kurulumun
  * kendi anahtarıyla imzalıdır (server/lib/signature.ts kuralı). Kayıt IP başına saatte 10, onay bekleyen en çok 50.
  *
@@ -80,7 +80,7 @@ export interface MerkezDeps {
   redis: (...cmd: (string | number)[]) => Promise<unknown>;
   /** İmzayı verilen anahtarla doğrular (api/uzaktan.ts verifyPush) */
   verify: (key: string, req: Request, url: URL, body: string) => boolean;
-  /** Kafenin ortak anahtarıyla (LAFPOS_CLOUD_SECRET) imzalı mı: kayıt yalnız kasadan */
+  /** Kafenin ortak anahtarıyla (ASILPOS_CLOUD_SECRET) imzalı mı: kayıt yalnız kasadan */
   signedShared: (body: string) => boolean;
   /** Panel için gerçek oturum var mı (üye ya da parolalı giriş) */
   admin: () => Promise<boolean>;
@@ -380,7 +380,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     const raw = await req.text();
     if (raw.length > BEAT_MAX) return fail(413, 'Nabız çok büyük', 'too_large');
     // Kurulum, nabız kaydı ve uzaktan yönetimin işaretleri (kuyruk, özet, teslim) tek okumada
-    // Geçmiş ciro (shared/gecmis.ts) de aynı okumada: kasa kendi patron panelinde LafPOS öncesi günleri görsün
+    // Geçmiş ciro (shared/gecmis.ts) de aynı okumada: kasa kendi patron panelinde AsilPOS öncesi günleri görsün
     const [rawInst, rawBeat, rawGecmis, ...kontrolOnce] = ((await deps.redis('MGET', installKey(id), statusKey(id), historyKey(id), ...nabizAnahtarlari(id))) as (string | null)[] | null) ?? [];
     const inst = merged(rawInst, rawBeat);
     if (!inst) return fail(404, 'Kurulum kayıtlı değil', 'not_registered');
@@ -479,7 +479,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       return json({ ok: true });
     }
 
-    // Geçmiş ciro (shared/gecmis.ts): dükkânın LafPOS'tan önceki kasa programında kalan günleri. Bulutta ayrı anahtarda
+    // Geçmiş ciro (shared/gecmis.ts): dükkânın AsilPOS'tan önceki kasa programında kalan günleri. Bulutta ayrı anahtarda
     // durur, kasaya gitmez; boş liste kaydı siler. Uzaktan'ın kıyasları ve raporları o günleri de görür
     if (path === 'merkez/gecmis') {
       const id = String(body.id ?? '');

@@ -215,7 +215,7 @@ export default function OrdersPage() {
             // Adet olarak ("2 ürün" yazan kartta "2 hazır")
             const readyQty = o.items.filter((i) => readyIds.includes(i.id)).reduce((a, i) => a + i.qty, 0);
             // Self modlarda kasanın tezgâh ve gel-al siparişinin çağrı numarası ("No 34"; müşteri onunla bekler), adıyla;
-            // paket platformunun gel-al'ında platformun kısa kodu (müşteri LafPOS numarasını bilmez, çağrı ekranı gibi)
+            // paket platformunun gel-al'ında platformun kısa kodu (müşteri AsilPOS numarasını bilmez, çağrı ekranı gibi)
             const { name, head } = orderCardName(o, mode);
             const paidAhead = o.status === 'kapali';
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);

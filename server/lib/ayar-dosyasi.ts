@@ -3,16 +3,16 @@ import { resolve } from 'node:path';
 import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
 import { cloudKeys, currentSube, pullState } from './platform-anahtar';
-import { posEnv } from '@shared/pos-env';
+import { envDegeri, eskiEnvAdi, posEnv, yazilacakEnvAdi } from '@shared/pos-env';
 
 /**
- * Ayarlar dosyası (Windows kurulumunda C:\ProgramData\LafPOS\ayarlar.env): dış sistemlerin adresleri ve anahtarları
+ * Ayarlar dosyası (Windows kurulumunda veri klasöründeki ayarlar.env; klasör eski adla, shared/eski-adlar.ts): dış sistemlerin adresleri ve anahtarları
  * burada durur, veritabanında değil (veritabanı buluta yedeklenir; yedeğin şifresi de bu dosyadaki anahtardan). Yönetim
  * › Bağlantı bilgileri bu dosyaya yazar; bekçi (scripts/kasa/windows/kurulum/bekci.mjs) dosyanın değiştiğini 5 sn'de
  * görür ve sunucuyu yeni ayarlarla yeniden başlatır. Dosyanın öbür satırları ve yorumları korunur, BOM ve satır sonu
  * (CRLF) da: sahip dosyayı Not Defteri'nde açınca aynı düzeni görür.
  *
- * Yalnız Windows kurulumunda (bekçi altında) ya da LAFPOS_AYAR_DOSYASI verilince yazılır; git ile çalışan sunucuda
+ * Yalnız Windows kurulumunda (bekçi altında) ya da ASILPOS_AYAR_DOSYASI verilince yazılır; git ile çalışan sunucuda
  * ve tarayıcı demosunda `.env` elle düzenlenir.
  */
 
@@ -26,7 +26,7 @@ export function settingsFile(): SettingsFile | null {
   const bekci = posEnv(process.env, 'STDIN_CONTROL') === '1';
   const explicit = posEnv(process.env, 'AYAR_DOSYASI')?.trim();
   if (explicit) return { path: resolve(explicit), restart: bekci ? 'otomatik' : 'elle' };
-  // Eski bekçi dosyanın yolunu söylemez: veri klasörü kurulumun klasörüdür (LAFPOS_DATA_DIR = C:\ProgramData\LafPOS)
+  // Eski bekçi dosyanın yolunu söylemez: veri klasörü kurulumun klasörüdür (ASILPOS_DATA_DIR, ProgramData altındaki kurulum klasörü)
   if (bekci) return { path: resolve(env.dataDir, 'ayarlar.env'), restart: 'otomatik' };
   return null;
 }
@@ -48,17 +48,55 @@ export function readEnvText(text: string): Record<string, string> {
 
 const HEADER = '# Yönetim › Bağlantı bilgileri';
 
+/** Dosyanın etkin (yorum olmayan) satırlarındaki anahtarlar */
+function activeKeys(lines: string[]): Set<string> {
+  const keys = new Set<string>();
+  for (const line of lines) {
+    const t = line.trim();
+    const eq = t.indexOf('=');
+    if (!t.startsWith('#') && eq > 0) keys.add(t.slice(0, eq).trim());
+  }
+  return keys;
+}
+
+/**
+ * Yeni adla (`ASILPOS_X`) gelen değişikliği dosyanın adına çevirir: kurulu kasanın dosyasında yalnız eski ad duruyorsa
+ * o satır değişir (shared/pos-env.ts `yazilacakEnvAdi`), ikisi de duruyorsa ikisi; kaldırmada ikisi de kalkar. Dosya
+ * yeniden adlandırılmaz: eski sürüme dönülürse eski sunucu aynı satırı okur
+ */
+function toFileNames(keys: Set<string>, edits: Record<string, string | null>): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const [key, v] of Object.entries(edits)) {
+    const eski = eskiEnvAdi(key);
+    if (!eski) {
+      out[key] = v;
+      continue;
+    }
+    if (v == null) {
+      out[key] = null;
+      out[eski] = null;
+      continue;
+    }
+    const target = yazilacakEnvAdi(keys, key);
+    out[target] = v;
+    if (target === key && keys.has(eski)) out[eski] = v;
+  }
+  return out;
+}
+
 /**
  * Değişiklikleri dosyanın metnine işler (saf). Değer: yeni değer; null: satır kaldırılır. Etkin satır yerinde değişir
- * (aynı anahtarın sonraki tekrarları düşer); etkin satır yoksa örnek dosyadaki yorumlu satırın (`# ANAHTAR=`) altına,
- * o da yoksa dosyanın sonuna, başlık satırının altına eklenir. BOM ve satır sonu korunur
+ * (aynı anahtarın sonraki tekrarları düşer); etkin satır yoksa örnek dosyadaki yorumlu satırın (`# ANAHTAR=`, eski adla
+ * da) altına, o da yoksa dosyanın sonuna, başlık satırının altına eklenir. BOM ve satır sonu korunur. Yeni adla gelen
+ * anahtar dosyada eski adla duruyorsa o satır değişir (`toFileNames`)
  */
-export function applyEnvEdits(text: string, edits: Record<string, string | null>): string {
+export function applyEnvEdits(text: string, requested: Record<string, string | null>): string {
   const bom = text.startsWith('\uFEFF');
   const body = bom ? text.slice(1) : text;
   const eol = body.includes('\r\n') ? '\r\n' : '\n';
   const lines = body.length ? body.split(/\r?\n/) : [];
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  const edits = toFileNames(activeKeys(lines), requested);
   const done = new Set<string>();
   const out: string[] = [];
   for (const line of lines) {
@@ -76,7 +114,8 @@ export function applyEnvEdits(text: string, edits: Record<string, string | null>
   }
   for (const [key, v] of Object.entries(edits)) {
     if (done.has(key) || v == null) continue;
-    const template = out.findIndex((l) => new RegExp(`^#\\s*${key}=`).test(l.trim()));
+    const names = [key, eskiEnvAdi(key)].filter((n): n is string => !!n).join('|');
+    const template = out.findIndex((l) => new RegExp(`^#\\s*(${names})=`).test(l.trim()));
     if (template >= 0) {
       out.splice(template + 1, 0, `${key}=${v}`);
     } else {
@@ -115,8 +154,9 @@ export function writeEnvEdits(file: SettingsFile, edits: Record<string, string |
 export function connectionView() {
   const file = settingsFile();
   const vars = file ? readEnvText(readFile(file.path)) : {};
-  const running = (key: string) => (process.env[key] ?? '').trim();
-  const pendingKeys = file ? CONN_FIELDS.filter((f) => (vars[f.key] ?? '').trim() !== running(f.key)).map((f) => f.key) : [];
+  // Yeni ya da eski adla (kurulu kasanın dosyası eski adla durur)
+  const running = (key: string) => (envDegeri(process.env, key) ?? '').trim();
+  const pendingKeys = file ? CONN_FIELDS.filter((f) => (envDegeri(vars, f.key) ?? '').trim() !== running(f.key)).map((f) => f.key) : [];
   // Buluttan gelen platform anahtarları (#75 İş 2): bulutta dolu olan yereli ezer; değeri hiç dönmez, yalnız kaynak.
   // Yalnız bu şube için çekilmiş olanlar sayılır (şube değişince eskisininkiler kullanılmaz)
   const cloud = cloudKeys();
@@ -132,14 +172,14 @@ export function connectionView() {
       id: g.id,
       fields: g.fields.map((f) => {
         if (cloudValues[f.key]) return { key: f.key, set: true, value: null, source: 'bulut' as const };
-        const v = (file ? vars[f.key] : process.env[f.key])?.trim() ?? '';
+        const v = envDegeri(file ? vars : process.env, f.key)?.trim() ?? '';
         return { key: f.key, set: v !== '', value: f.kind === 'secret' || !v ? null : v, ...(CLOUD_KEYS.includes(f.key) && v ? { source: 'yerel' as const } : {}) };
       }),
     })),
     /**
      * Son çekim: bu şube için son başarılı çekimin anı (yerel kopyadan; başka şube için çekildiyse null), son denemenin
      * sonucu. `sube`: kasanın şube etiketi, Vercel adındaki ŞUBE (yalnız ad, değer değil; geçersizse null). `uzaktan`:
-     * LafPOS Uzaktan kurulu mu (değilse buluttan hiçbir şey gelmez)
+     * AsilPOS Uzaktan kurulu mu (değilse buluttan hiçbir şey gelmez)
      */
     bulut: { at: forThis ? cloud.at : null, ok: pull.ok, error: pull.error, sube, uzaktan: !!env.cloudUrl && env.cloudSecret.length >= 32 },
   };

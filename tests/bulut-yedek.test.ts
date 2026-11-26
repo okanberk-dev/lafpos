@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { signedHeaders } from '../server/lib/signature';
 import { type Harness, PINS, startApp } from './harness';
+import { VERITABANI_DOSYASI, YEDEK_DOSYA_ONEKI } from '@shared/eski-adlar';
 
 /**
- * Bulut yedeği: kasa yedeği şifreler (anahtar buluta gitmez), LafPOS Uzaktan imzalı adres verir, geri yüklemede bekçi
+ * Bulut yedeği: kasa yedeği şifreler (anahtar buluta gitmez), AsilPOS Uzaktan imzalı adres verir, geri yüklemede bekçi
  * mevcut veritabanının kopyasını alıp yedeği yerine koyar. Vercel Blob bellekte sahte.
  */
 const CLOUD = 'https://yedek.test';
@@ -28,7 +29,7 @@ beforeAll(async () => {
   h = await startApp();
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, BLOB_READ_WRITE_TOKEN: 'rw', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, BLOB_READ_WRITE_TOKEN: 'rw', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -87,7 +88,7 @@ describe('bulut yedeği', () => {
     const ok = (await (await call('uzaktan/yedek/yukle', { boyut: 10 })).json()) as { pathname: string };
     expect(ok.pathname).toMatch(/^yedek\/abc123\/\d{8}-\d{6}\.lpy$/);
     expect((await call('uzaktan/yedek/yukle', { boyut: 0 })).status).toBe(400);
-    expect((await call('uzaktan/yedek/indir', { pathname: '../lafpos.db' })).status).toBe(400);
+    expect((await call('uzaktan/yedek/indir', { pathname: `../${VERITABANI_DOSYASI}` })).status).toBe(400);
     expect((await call('uzaktan/yedek/indir', { pathname: 'raporlar/x.lpy' })).status).toBe(400);
   });
 
@@ -109,7 +110,7 @@ describe('bulut yedeği', () => {
     const pathname = list.yedekler[0]!.pathname;
     // Bekçisiz (git ile çalışan) sunucuda yapılmaz
     expect((await h.call('patron', 'POST', '/admin/bulut-yedek/geri-yukle', { pathname, pin: PINS.patron })).status).toBe(409);
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     const { setRestartHook } = await import('../server/sync/yedek');
     const emit = vi.fn();
     setRestartHook(emit);
@@ -129,27 +130,27 @@ describe('bulut yedeği', () => {
       await new Promise((r) => setTimeout(r, 700));
       expect(emit).toHaveBeenCalledTimes(1);
     } finally {
-      delete process.env.LAFPOS_STDIN_CONTROL;
+      delete process.env.ASILPOS_STDIN_CONTROL;
     }
   });
 
   it('bekçi: önce mevcut veritabanının kopyası, sonra yedek yerine; -wal silinir; bekleyen yoksa dokunmaz', async () => {
     const file = '../scripts/kasa/windows/kurulum/geri-yukle.mjs';
     const { applyPendingRestore } = (await import(file)) as { applyPendingRestore: (home: string, now?: Date) => string | null };
-    const home = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
+    const home = mkdtempSync(join(tmpdir(), 'asilpos-geri-'));
     try {
       expect(applyPendingRestore(home)).toBeNull();
-      writeFileSync(join(home, 'lafpos.db'), 'eski');
-      writeFileSync(join(home, 'lafpos.db-wal'), 'eski-wal');
+      writeFileSync(join(home, `${VERITABANI_DOSYASI}`), 'eski');
+      writeFileSync(join(home, `${VERITABANI_DOSYASI}-wal`), 'eski-wal');
       mkdirSync(join(home, 'geri-yukle'));
       writeFileSync(join(home, 'geri-yukle', 'hazir.db'), 'yeni');
       const when = new Date(2026, 10, 21, 14, 5, 9);
       writeFileSync(join(home, 'geri-yukle', 'istek.json'), JSON.stringify({ pathname: 'yedek/a.db.gz', by: 'u1', byName: 'Patron', at: when.getTime() - 2000 }));
       expect(applyPendingRestore(home, when)).toMatch(/geri yüklendi/);
-      expect(readFileSync(join(home, 'lafpos.db'), 'utf8')).toBe('yeni');
-      expect(existsSync(join(home, 'lafpos.db-wal'))).toBe(false);
-      expect(readFileSync(join(home, 'backups', 'lafpos-geri-yukleme-oncesi-20261121-140509.db'), 'utf8')).toBe('eski');
-      expect(readFileSync(join(home, 'backups', 'lafpos-geri-yukleme-oncesi-20261121-140509.db-wal'), 'utf8')).toBe('eski-wal');
+      expect(readFileSync(join(home, `${VERITABANI_DOSYASI}`), 'utf8')).toBe('yeni');
+      expect(existsSync(join(home, `${VERITABANI_DOSYASI}-wal`))).toBe(false);
+      expect(readFileSync(join(home, 'backups', `${YEDEK_DOSYA_ONEKI}geri-yukleme-oncesi-20261121-140509.db`), 'utf8')).toBe('eski');
+      expect(readFileSync(join(home, 'backups', `${YEDEK_DOSYA_ONEKI}geri-yukleme-oncesi-20261121-140509.db-wal`), 'utf8')).toBe('eski-wal');
       expect(readdirSync(join(home, 'geri-yukle'))).toEqual(['son.json']);
       // Kim, hangi yedek: sunucu açılışta denetim kaydına yazar (eski veritabanına yazılan satır yerine konunca gider)
       expect(JSON.parse(readFileSync(join(home, 'geri-yukle', 'son.json'), 'utf8'))).toMatchObject({ pathname: 'yedek/a.db.gz', by: 'u1', byName: 'Patron' });
@@ -167,15 +168,15 @@ describe('bulut yedeği', () => {
     };
     const busy = () => Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
     const prepare = (home: string, when: Date) => {
-      writeFileSync(join(home, 'lafpos.db'), 'eski');
-      writeFileSync(join(home, 'lafpos.db-wal'), 'eski-wal');
+      writeFileSync(join(home, `${VERITABANI_DOSYASI}`), 'eski');
+      writeFileSync(join(home, `${VERITABANI_DOSYASI}-wal`), 'eski-wal');
       mkdirSync(join(home, 'geri-yukle'), { recursive: true });
       writeFileSync(join(home, 'geri-yukle', 'hazir.db'), 'yeni');
       writeFileSync(join(home, 'geri-yukle', 'istek.json'), JSON.stringify({ pathname: 'yedek/a.db.gz', by: 'u1', at: when.getTime() - 2000 }));
     };
     const when = new Date(2026, 10, 21, 14, 5, 9);
     // Geçici kilit: iki deneme düşer, üçüncüsü geçer
-    const a = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
+    const a = mkdtempSync(join(tmpdir(), 'asilpos-geri-'));
     try {
       prepare(a, when);
       let fails = 2;
@@ -184,12 +185,12 @@ describe('bulut yedeği', () => {
         renameSync(from, to);
       };
       expect(applyPendingRestore(a, when, { rename: flaky, waitMs: 1 })).toMatch(/geri yüklendi/);
-      expect(readFileSync(join(a, 'lafpos.db'), 'utf8')).toBe('yeni');
+      expect(readFileSync(join(a, `${VERITABANI_DOSYASI}`), 'utf8')).toBe('yeni');
     } finally {
       rmSync(a, { recursive: true, force: true });
     }
     // Kalıcı kilit: yedek yerine konamaz, geri alma da düşer
-    const b = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
+    const b = mkdtempSync(join(tmpdir(), 'asilpos-geri-'));
     try {
       prepare(b, when);
       let calls = 0;
@@ -204,16 +205,16 @@ describe('bulut yedeği', () => {
         err = e as Error & { code?: string };
       }
       expect(err?.code).toBe('RESTORE_STUCK');
-      expect(existsSync(join(b, 'lafpos.db'))).toBe(false);
+      expect(existsSync(join(b, `${VERITABANI_DOSYASI}`))).toBe(false);
       expect(existsSync(join(b, 'geri-yukle', 'hazir.db'))).toBe(true);
       expect(existsSync(join(b, 'geri-yukle', 'istek.json'))).toBe(true);
       // Bekçi sunucuyu açmadan önce kenara alınan veritabanını -wal ile yerine taşır
       expect(recoverMissingDb(b, new Date(when.getTime() + 1000))).toBeNull();
-      expect(readFileSync(join(b, 'lafpos.db'), 'utf8')).toBe('eski');
-      expect(readFileSync(join(b, 'lafpos.db-wal'), 'utf8')).toBe('eski-wal');
+      expect(readFileSync(join(b, `${VERITABANI_DOSYASI}`), 'utf8')).toBe('eski');
+      expect(readFileSync(join(b, `${VERITABANI_DOSYASI}-wal`), 'utf8')).toBe('eski-wal');
       // Veritabanı yok, hazır yedek duruyor ve geri taşınacak kopya yok: açılmaz
-      rmSync(join(b, 'lafpos.db'));
-      rmSync(join(b, 'lafpos.db-wal'));
+      rmSync(join(b, `${VERITABANI_DOSYASI}`));
+      rmSync(join(b, `${VERITABANI_DOSYASI}-wal`));
       expect(recoverMissingDb(b, new Date(when.getTime() + 1000))).toMatch(/açılmıyor/);
       // Yeni kurulum (veritabanı, yedek, kopya yok): açılır
       rmSync(join(b, 'geri-yukle'), { recursive: true });
@@ -226,16 +227,16 @@ describe('bulut yedeği', () => {
   it('bekçi: isteği eski ya da yok olan hazır yedek günler sonra yerine konmaz, iptal edilir (bulgu 14)', async () => {
     const file = '../scripts/kasa/windows/kurulum/geri-yukle.mjs';
     const { applyPendingRestore } = (await import(file)) as { applyPendingRestore: (home: string, now?: Date) => string | null };
-    const home = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
+    const home = mkdtempSync(join(tmpdir(), 'asilpos-geri-'));
     try {
       const now = new Date(2026, 10, 24, 9, 0, 0);
       for (const istek of [null, JSON.stringify({ pathname: 'yedek/a.db.gz', by: 'u1', at: now.getTime() - 3 * 86400_000 }), '{bozuk']) {
-        writeFileSync(join(home, 'lafpos.db'), 'canli');
+        writeFileSync(join(home, `${VERITABANI_DOSYASI}`), 'canli');
         mkdirSync(join(home, 'geri-yukle'), { recursive: true });
         writeFileSync(join(home, 'geri-yukle', 'hazir.db'), 'eski-yedek');
         if (istek) writeFileSync(join(home, 'geri-yukle', 'istek.json'), istek);
         expect(applyPendingRestore(home, now)).toMatch(/iptal/);
-        expect(readFileSync(join(home, 'lafpos.db'), 'utf8')).toBe('canli');
+        expect(readFileSync(join(home, `${VERITABANI_DOSYASI}`), 'utf8')).toBe('canli');
         expect(existsSync(join(home, 'geri-yukle', 'hazir.db'))).toBe(false);
         expect(JSON.parse(readFileSync(join(home, 'geri-yukle', 'son.json'), 'utf8'))).toMatchObject({ hata: expect.any(String) });
         // Bir sonraki açılışta yapacak bir şey yok

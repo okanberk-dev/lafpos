@@ -1,10 +1,10 @@
 import { foldTr } from './search';
 
 /**
- * LafPOS kullanıcısının adı ile lafmaliyet (ladmin) personel kaydının adı ne kadar benziyor: yalnız ipucu (Yönetim ›
+ * AsilPOS kullanıcısının adı ile lafmaliyet (ladmin) personel kaydının adı ne kadar benziyor: yalnız ipucu (Yönetim ›
  * Personel › ladmin personeli seçicisinde sıralama ve "Eminim" onayı). Hiçbir zaman kendiliğinden seçmez ya da bağlamaz
  * (sahip kararı 2). Türkçe katlanmış karşılaştırma: büyük-küçük harf, ı/i, ş/s, ç/c, ğ/g, ö/o, ü/u farkı sayılmaz.
- * LafPOS'taki ad çoğu zaman yalnız ilk addır ("Ayşe"), ladmin'deki tam ad ("Ayşe Yılmaz").
+ * AsilPOS'taki ad çoğu zaman yalnız ilk addır ("Ayşe"), ladmin'deki tam ad ("Ayşe Yılmaz").
  */
 
 export type NameMatch = 'yuksek' | 'orta' | 'dusuk';

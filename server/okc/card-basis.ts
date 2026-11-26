@@ -4,7 +4,7 @@ import { deviceReceipts } from '../services/days';
 import type { PavoEodBatch, PavoEodRecord } from './service';
 
 /**
- * Pavo banka gün sonunun LafPOS tarafı: günün başarılı gün sonları ve LafPOS'un kıyas tutarı. Cihaz koduna (okc/service.ts)
+ * Pavo banka gün sonunun AsilPOS tarafı: günün başarılı gün sonları ve AsilPOS'un kıyas tutarı. Cihaz koduna (okc/service.ts)
  * ve lafmaliyet gövdesine (sync/lafmaliyet.ts `bankPos.batches`, `bankPos.dayCard`) ortak; service.ts gövde kuyruğunu
  * çağırdığı için gövde bu kuralları buradan okur (döngüsel içe aktarma olmasın)
  */
@@ -21,13 +21,13 @@ export function batchesOf(rec: PavoEodRecord | null | undefined): PavoEodBatch[]
 }
 
 /**
- * LafPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
+ * AsilPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
  * alanı ve kartla alınan bahşiş: bankaya giden tutar). Aynı günün sonraki gün sonu (gün yeniden açılıp kapandı ya da
  * gün içinde elle alındı): önceki gün sonundan sonra alınan, iade edilmemiş kart ödemeleri; günün bütün kartıyla
  * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. İkisine de kartla açık hesap tahsilatı eklenir. Gün açıksa null.
  * Bankanın batch'inde olmayan kart satışı ikisinden de düşer (bahşişiyle, aynı çekimdir): mali fişi yazarkasada
  * kesilmeyen ödeme (yazarkasadan geçmeyen: başka POS'tan ya da "Başka yoldan aldım"; 22.11'de ₺870 "eksik" görünüyordu)
- * ve gün kapandıktan sonra cihazda fişi iptal edilen ödeme (`fis_iptal`: LafPOS'ta ödeme canlı kalır, Z'nin kartında durur)
+ * ve gün kapandıktan sonra cihazda fişi iptal edilen ödeme (`fis_iptal`: AsilPOS'ta ödeme canlı kalır, Z'nin kartında durur)
  */
 export function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
   const none = { dayCardKurus: null, dayCardSinceBatch: null };

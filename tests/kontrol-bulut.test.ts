@@ -21,6 +21,7 @@ import {
 } from '../shared/kontrol';
 import { ROLE_DEFAULTS } from '../shared/permissions';
 import { type UpstashCall, upstashCommand } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Uzaktan yönetimin bulut tarafı (api/_kontrol.ts, api/_merkez.ts nabzı, api/uzaktan.ts üye rolleri;
@@ -28,7 +29,7 @@ import { type UpstashCall, upstashCommand } from './fake-upstash';
  * sonuç, özet isteği, nabzın Redis bütçesi, açık PIN'in hiçbir yere girmediği, panel üyelerinin daveti ve kaldırılması.
  * Kasa gerçek bulut işleyicisiyle imzalı konuşur; Upstash yerine bellekte sahte Redis (tests/fake-upstash.ts).
  */
-const ORIGIN = 'https://lafpos.vercel.app';
+const ORIGIN = `https://${VERCEL_ALANI}`;
 const SECRET = 'b'.repeat(40);
 const OWNER = 'sahip@ornek.test';
 const OWNER_PASSWORD = 'sahip-parola-2026';
@@ -50,7 +51,7 @@ const ciphers: string[] = [];
 let araya: ((cmd: string[]) => boolean) | null = null;
 /** Güncelleme kanalının son derlemesi (surum.json); null: kanal okunamıyor (çoğu testte) */
 let kanal: Record<string, unknown> | null = null;
-const ENV = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UYE_EPOSTA', 'LAFPOS_UYE_DAVET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI'];
+const ENV = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UYE_EPOSTA', 'ASILPOS_UYE_DAVET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UZAKTAN_PAROLA', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI'];
 const saved: Record<string, string | undefined> = {};
 
 // Kasanın PIN anahtarı: tarayıcı açık anahtarla şifreler (RSA-OAEP, SHA-256)
@@ -65,7 +66,7 @@ function sifrele(pin: string): string {
 beforeAll(() => {
   for (const k of ENV) saved[k] = process.env[k];
   for (const k of ENV) delete process.env[k];
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UYE_EPOSTA: OWNER, LAFPOS_UYE_DAVET: INVITE, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UYE_EPOSTA: OWNER, ASILPOS_UYE_DAVET: INVITE, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'https://redis.test') {
@@ -84,7 +85,7 @@ afterAll(() => {
   for (const k of ENV) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
 });
 beforeEach(() => {
-  for (const k of [...store.keys()]) if (k.startsWith('lafpos:giris:')) store.delete(k);
+  for (const k of [...store.keys()]) if (k.startsWith(`${REDIS_ONEKI}giris:`)) store.delete(k);
 });
 
 const api = () => import('../api/uzaktan');
@@ -163,14 +164,14 @@ const ozetGonder = (d: KontrolDurumu = durumOrnek(), key = KASA_KEY) => nabiz({ 
 
 /** Uzaktan yönetimin bütün anahtarlarını siler (sayaç dahil) ve özeti yeniden yazar */
 async function sifirla(d: KontrolDurumu = durumOrnek()) {
-  for (const k of [...store.keys()]) if (k.startsWith('lafpos:kontrol:')) store.delete(k);
+  for (const k of [...store.keys()]) if (k.startsWith(`${REDIS_ONEKI}kontrol:`)) store.delete(k);
   await ozetGonder(d);
 }
 
-const queueOf = (id = kasaId) => JSON.parse(store.get(`lafpos:kontrol:komut:${id}`) ?? '{}') as Record<string, string>;
-const historyOf = (id = kasaId) => (JSON.parse(store.get(`lafpos:kontrol:gecmis:${id}`) ?? '[]') as string[]).map((s) => JSON.parse(s) as KontrolGecmisi);
+const queueOf = (id = kasaId) => JSON.parse(store.get(`${REDIS_ONEKI}kontrol:komut:${id}`) ?? '{}') as Record<string, string>;
+const historyOf = (id = kasaId) => (JSON.parse(store.get(`${REDIS_ONEKI}kontrol:gecmis:${id}`) ?? '[]') as string[]).map((s) => JSON.parse(s) as KontrolGecmisi);
 /** Redis komutları; oturumun üye kaydı okuması hariç (bir dakika bellekte: sayısı saate bağlı) */
-const cmds = () => log.filter((c) => !c.key.startsWith('lafpos:uye:')).map((c) => c.cmd);
+const cmds = () => log.filter((c) => !c.key.startsWith(`${REDIS_ONEKI}uye:`)).map((c) => c.cmd);
 
 async function girisYap(eposta: string, parola: string): Promise<string> {
   const res = await call<{ token: string }>('POST', 'uzaktan/giris', { body: { eposta, parola }, shop: null });
@@ -207,7 +208,7 @@ describe('uzaktan yönetim: oturum ve rol kapısı', () => {
   it('jetonsuz 401; parolasız görünüm 403 remote_admin; parolalı giriş sahiptir', async () => {
     expect((await panel('yok')).status).toBe(401);
     expect((await komut('yok', 'urun.satis', { id: 'u1', satista: false })).status).toBe(401);
-    delete process.env.LAFPOS_UYE_EPOSTA;
+    delete process.env.ASILPOS_UYE_EPOSTA;
     try {
       // Parolasız görünüm: oturum geçerli ama gerçek değil
       const open = await call<{ token: string }>('POST', 'uzaktan/giris', { body: {}, shop: null });
@@ -218,7 +219,7 @@ describe('uzaktan yönetim: oturum ve rol kapısı', () => {
       expect((await call('GET', 'auth/me', { token: open.body.token })).status).toBe(200);
 
       // Parolalı giriş: sahip, e-postası yok (`parola`); üyelik kapalıyken panele kişi eklenmez
-      Object.assign(process.env, { LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', LAFPOS_UZAKTAN_PAROLA: 'bulut-parola-12' });
+      Object.assign(process.env, { ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', ASILPOS_UZAKTAN_PAROLA: 'bulut-parola-12' });
       const real = await call<{ token: string }>('POST', 'uzaktan/giris', { body: { parola: 'bulut-parola-12' }, shop: null });
       expect(real.status).toBe(200);
       const view = await panel(real.body.token);
@@ -229,9 +230,9 @@ describe('uzaktan yönetim: oturum ve rol kapısı', () => {
       expect(sent.body.komut).toMatchObject({ kim: 'parola', ozet: 'Tükendi: Limonata', durum: 'bekliyor' });
       expect((await call('POST', 'kontrol/uye', { token: real.body.token, body: { eposta: 'yeni@ornek.test', rol: 'izleyici' } })).body.code).toBe('member_mode_off');
     } finally {
-      process.env.LAFPOS_UYE_EPOSTA = OWNER;
-      delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
-      delete process.env.LAFPOS_UZAKTAN_PAROLA;
+      process.env.ASILPOS_UYE_EPOSTA = OWNER;
+      delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
+      delete process.env.ASILPOS_UZAKTAN_PAROLA;
       await sifirla();
     }
   });
@@ -273,7 +274,7 @@ describe('uzaktan yönetim: oturum ve rol kapısı', () => {
   });
 
   it('örnek görünüm: kafe bağlanmadan örnek gün ve üyeler, her işlem 403', async () => {
-    delete process.env.LAFPOS_UZAKTAN_DEMO;
+    delete process.env.ASILPOS_UZAKTAN_DEMO;
     try {
       const demo = await call<{ token: string; demo: boolean }>('POST', 'uzaktan/giris', { body: {}, shop: null });
       expect(demo.body.demo).toBe(true);
@@ -297,7 +298,7 @@ describe('uzaktan yönetim: oturum ve rol kapısı', () => {
         expect([res.status, res.body.code], path).toEqual([403, 'remote_readonly']);
       }
     } finally {
-      process.env.LAFPOS_UZAKTAN_DEMO = '0';
+      process.env.ASILPOS_UZAKTAN_DEMO = '0';
     }
   });
 });
@@ -313,10 +314,10 @@ describe('uzaktan yönetim: kasanın özeti, doğrulama ve sınırlar', () => {
   });
 
   it('özet yoksa, eski sürümdeyse ya da türü desteklemiyorsa 409; kasada kapalıysa 409', async () => {
-    store.delete(`lafpos:kontrol:durum:${kasaId}`);
+    store.delete(`${REDIS_ONEKI}kontrol:durum:${kasaId}`);
     const none = await komut(sahip, 'ayar.servis', { mod: 'self' });
     expect([none.status, none.body.code, none.body.error]).toEqual([409, 'kasa_eski', 'Kasa güncel değil: önce Merkez’den güncelleme gönderin']);
-    store.set(`lafpos:kontrol:durum:${kasaId}`, JSON.stringify({ ...durumOrnek(), v: 0 }));
+    store.set(`${REDIS_ONEKI}kontrol:durum:${kasaId}`, JSON.stringify({ ...durumOrnek(), v: 0 }));
     expect((await komut(sahip, 'ayar.servis', { mod: 'self' })).body.code).toBe('kasa_eski');
     await sifirla(durumOrnek({ turler: ['urun.satis'] }));
     expect((await komut(sahip, 'ayar.servis', { mod: 'self' })).body.code).toBe('kasa_eski');
@@ -345,7 +346,7 @@ describe('uzaktan yönetim: kasanın özeti, doğrulama ve sınırlar', () => {
     expect((await call('GET', 'kontrol/yok', { token: sahip })).status).toBe(404);
     expect(Object.keys(queueOf())).toHaveLength(0);
     // Geçersiz istekler saatlik sayaca girmez
-    expect([...store.keys()].some((k) => k.startsWith('lafpos:kontrol:sayac:'))).toBe(false);
+    expect([...store.keys()].some((k) => k.startsWith(`${REDIS_ONEKI}kontrol:sayac:`))).toBe(false);
   });
 
   it(`kuyruk en çok ${KUYRUK_EN_COK}, saatte en çok ${SAATLIK_EN_COK} komut`, async () => {
@@ -368,14 +369,14 @@ describe('uzaktan yönetim: kasanın özeti, doğrulama ve sınırlar', () => {
 
       await sifirla();
       const saat = Math.floor(Date.now() / 3600_000);
-      store.set(`lafpos:kontrol:sayac:${kasaId}:${saat}:${OWNER}`, String(SAATLIK_EN_COK - 1));
+      store.set(`${REDIS_ONEKI}kontrol:sayac:${kasaId}:${saat}:${OWNER}`, String(SAATLIK_EN_COK - 1));
       expect((await komut(sahip, 'urun.satis', { id: 'u1', satista: false })).status).toBe(200);
       const limited = await komut(sahip, 'urun.satis', { id: 'u2', satista: false });
       expect([limited.status, limited.body.code]).toEqual([429, 'rate_limited']);
       // Sayaç üye başına: bir üyenin sınırı dolunca öteki gönderir (yönetici sahibi bekletemez, tersi de)
-      store.set(`lafpos:kontrol:sayac:${kasaId}:${saat}:mudur@ornek.test`, String(SAATLIK_EN_COK));
+      store.set(`${REDIS_ONEKI}kontrol:sayac:${kasaId}:${saat}:mudur@ornek.test`, String(SAATLIK_EN_COK));
       expect((await komut(yonetici, 'urun.satis', { id: 'u4', satista: false })).body.code).toBe('rate_limited');
-      store.delete(`lafpos:kontrol:sayac:${kasaId}:${saat}:${OWNER}`);
+      store.delete(`${REDIS_ONEKI}kontrol:sayac:${kasaId}:${saat}:${OWNER}`);
       expect((await komut(sahip, 'urun.satis', { id: 'u5', satista: false })).status).toBe(200);
       // Sonraki saat yeniden açılır
       vi.setSystemTime(base + 3600_000);
@@ -481,9 +482,9 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
       },
     });
     expect(beat.kontrol).toEqual({ durumIste: false, komutlar: [] });
-    expect(store.has(`lafpos:kontrol:komut:${kasaId}`)).toBe(false);
-    expect(store.has(`lafpos:kontrol:var:${kasaId}`)).toBe(false);
-    expect(store.has(`lafpos:kontrol:teslim:${kasaId}`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}kontrol:komut:${kasaId}`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}kontrol:var:${kasaId}`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}kontrol:teslim:${kasaId}`)).toBe(false);
     const history = historyOf();
     expect(history.map((h) => [h.id, h.durum])).toEqual([
       [second.id, 'reddedildi'],
@@ -512,17 +513,17 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     const own = await call('POST', 'kontrol/iptal', { token: yonetici, body: { id: b.id } });
     expect(own.status).toBe(200);
     expect(own.body.komut).toMatchObject({ id: b.id, durum: 'iptal', mesaj: 'İptal eden: mudur@ornek.test' });
-    expect(store.has(`lafpos:kontrol:var:${kasaId}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}kontrol:var:${kasaId}`)).toBe(true);
     expect((await call('POST', 'kontrol/iptal', { token: sahip, body: { id: a.id } })).status).toBe(200);
     // Kuyruk boşaldı: işaret silinir, nabız kuyruğu okumaz
-    expect(store.has(`lafpos:kontrol:var:${kasaId}`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}kontrol:var:${kasaId}`)).toBe(false);
     expect((await call('POST', 'kontrol/iptal', { token: sahip, body: { id: a.id } })).status).toBe(404);
     expect(historyOf().slice(0, 2).map((h) => [h.id, h.durum])).toEqual([
       [a.id, 'iptal'],
       [b.id, 'iptal'],
     ]);
     // Geçmiş kırpılır
-    store.set(`lafpos:kontrol:gecmis:${kasaId}`, JSON.stringify(Array.from({ length: GECMIS_EN_COK }, () => JSON.stringify({ ...a, durum: 'uygulandi', bitti: 1 }))));
+    store.set(`${REDIS_ONEKI}kontrol:gecmis:${kasaId}`, JSON.stringify(Array.from({ length: GECMIS_EN_COK }, () => JSON.stringify({ ...a, durum: 'uygulandi', bitti: 1 }))));
     const c = (await komut(sahip, 'urun.satis', { id: 'u_c', satista: false })).body.komut as KontrolGecmisi;
     await call('POST', 'kontrol/iptal', { token: sahip, body: { id: c.id } });
     expect(historyOf()).toHaveLength(GECMIS_EN_COK);
@@ -540,15 +541,15 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     araya = (cmd) => {
       if (cmd[0] !== 'HVALS') return false;
       const kayit = { id: arayaGiren, tur: 'urun.satis', veri: { id: 'u_iki', satista: false }, at: Date.now(), kim: OWNER, kurulum: kasaId, rol: 'sahip', ozet: 'Tükendi: araya', imza: 'x' };
-      upstashCommand(store, ['HSET', `lafpos:kontrol:komut:${kasaId}`, arayaGiren, JSON.stringify(kayit)]);
-      upstashCommand(store, ['SET', `lafpos:kontrol:var:${kasaId}`, '1']);
+      upstashCommand(store, ['HSET', `${REDIS_ONEKI}kontrol:komut:${kasaId}`, arayaGiren, JSON.stringify(kayit)]);
+      upstashCommand(store, ['SET', `${REDIS_ONEKI}kontrol:var:${kasaId}`, '1']);
       return true;
     };
     const sonuc = await nabiz({ kontrol: { ozet, sonuclar: [{ id: ilk.id, durum: 'uygulandi', mesaj: '', at: Date.now() }] } });
     expect(araya).toBeNull();
     expect(sonuc.kontrol!.komutlar).toEqual([]);
     // Nabız işareti sildikten sonra kuyruğu yeniden saydı: işaret geri kondu, komut panelde bekliyor ve kasaya gider
-    expect(store.has(`lafpos:kontrol:var:${kasaId}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}kontrol:var:${kasaId}`)).toBe(true);
     expect((await panel(sahip)).body.bekleyen.map((b) => b.id)).toEqual([arayaGiren]);
     expect((await nabiz({ kontrol: { ozet } })).kontrol!.komutlar.map((k) => k.id)).toEqual([arayaGiren]);
     await sifirla();
@@ -560,9 +561,9 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     // İptal teslim anını eski okur; tam o anda nabız teslim anını yazar ve kuyruğu okur (komut kasaya gider)
     let teslimEdilen: string[] = [];
     araya = (cmd) => {
-      if (cmd[0] !== 'GET' || cmd[1] !== `lafpos:kontrol:teslim:${kasaId}`) return false;
-      upstashCommand(store, ['SET', `lafpos:kontrol:teslim:${kasaId}`, String(Date.now() + 2_000)]);
-      teslimEdilen = (upstashCommand(store, ['HVALS', `lafpos:kontrol:komut:${kasaId}`]) as string[]).map((r) => (JSON.parse(r) as KomutKaydi).id);
+      if (cmd[0] !== 'GET' || cmd[1] !== `${REDIS_ONEKI}kontrol:teslim:${kasaId}`) return false;
+      upstashCommand(store, ['SET', `${REDIS_ONEKI}kontrol:teslim:${kasaId}`, String(Date.now() + 2_000)]);
+      teslimEdilen = (upstashCommand(store, ['HVALS', `${REDIS_ONEKI}kontrol:komut:${kasaId}`]) as string[]).map((r) => (JSON.parse(r) as KomutKaydi).id);
       return true;
     };
     const res = await call('POST', 'kontrol/iptal', { token: sahip, body: { id: c.id } });
@@ -570,7 +571,7 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     expect([res.status, res.body.code]).toEqual([409, 'delivered']);
     // Kayıt kuyrukta (kasanın sonucu geçmişe yazılsın), işaret yerinde, geçmişte "iptal" yok
     expect(Object.keys(queueOf())).toEqual([c.id]);
-    expect(store.has(`lafpos:kontrol:var:${kasaId}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}kontrol:var:${kasaId}`)).toBe(true);
     expect(historyOf().some((x) => x.id === c.id)).toBe(false);
     await nabiz({ kontrol: { ozet: durumParmakIzi(durumOrnek()), sonuclar: [{ id: c.id, durum: 'uygulandi', mesaj: 'Uygulandı', at: Date.now() }] } });
     expect(historyOf()[0]).toMatchObject({ id: c.id, durum: 'uygulandi' });
@@ -585,9 +586,9 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     // Redis'e yazabilen biri anahtarı kendininkiyle değiştirir: imzayı ortak anahtar olmadan kuramaz; başka şubenin imzalı
     // anahtarı da bu kurulumda tutmaz
     const sahte = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
-    const kayitli = JSON.parse(store.get(`lafpos:kontrol:durum:${kasaId}`)!) as KontrolDurumu;
+    const kayitli = JSON.parse(store.get(`${REDIS_ONEKI}kontrol:durum:${kasaId}`)!) as KontrolDurumu;
     for (const anahtarImza of [kayitli.anahtarImza, undefined, 'x'.repeat(43), anahtarImzasi('baskakurulum00000000000', sahte)]) {
-      store.set(`lafpos:kontrol:durum:${kasaId}`, JSON.stringify({ ...kayitli, anahtar: sahte, anahtarImza }));
+      store.set(`${REDIS_ONEKI}kontrol:durum:${kasaId}`, JSON.stringify({ ...kayitli, anahtar: sahte, anahtarImza }));
       const d = (await panel(sahip)).body.durum!;
       expect(d.anahtar).toBe('');
       // Özetin geri kalanı görünür (PIN dışındaki işlemler sürer)
@@ -606,7 +607,7 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     // Kasa yanlış parmak izi söylese de bulut kendisi hesaplar
     const d = durumOrnek({ servisModu: 'self' });
     expect((await nabiz({ kontrol: { ozet: 'yanlis', durum: d } }, key2)).kontrol!.durumIste).toBe(true);
-    expect(store.get(`lafpos:kontrol:ozet:${id2}`)).toBe(durumParmakIzi(d));
+    expect(store.get(`${REDIS_ONEKI}kontrol:ozet:${id2}`)).toBe(durumParmakIzi(d));
     log.length = 0;
     expect((await nabiz({ kontrol: { ozet: durumParmakIzi(d) } }, key2)).kontrol!.durumIste).toBe(false);
     expect(cmds()).toEqual(['MGET', 'SET', 'MGET']);
@@ -619,18 +620,18 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
     // Sözleşme dışı alan saklanmaz, parmak izi kasanın gönderdiğinden (kasa yeniden göndermeye zorlanmaz)
     const extra = { ...d, servisModu: 'masa', fazla: 'x', personel: d.personel.map((p) => ({ ...p, pinOzeti: 'gizli' })) } as KontrolDurumu;
     expect((await nabiz({ kontrol: { ozet: durumParmakIzi(extra), durum: extra } }, key2)).kontrol!.durumIste).toBe(false);
-    const stored = store.get(`lafpos:kontrol:durum:${id2}`)!;
+    const stored = store.get(`${REDIS_ONEKI}kontrol:durum:${id2}`)!;
     expect(stored).not.toContain('pinOzeti');
     expect(stored).not.toContain('fazla');
     expect(JSON.parse(stored).servisModu).toBe('masa');
 
     // Bozuk ya da 64 KB'tan büyük özet saklanmaz
-    const before = store.get(`lafpos:kontrol:durum:${id2}`);
+    const before = store.get(`${REDIS_ONEKI}kontrol:durum:${id2}`);
     await nabiz({ kontrol: { ozet: 'x', durum: { v: 1, acik: true } } }, key2);
     const huge = durumOrnek({ personel: Array.from({ length: 500 }, (_, i) => ({ id: `p${i}`, ad: 'Ç'.repeat(40), rol: 'garson' as const, renk: '#000000', aktif: true, indirim: 0, sonGiris: null })) });
     expect(Buffer.byteLength(JSON.stringify(huge))).toBeGreaterThan(64 * 1024);
     expect((await nabiz({ kontrol: { ozet: durumParmakIzi(huge), durum: huge } }, key2)).kontrol!.durumIste).toBe(true);
-    expect(store.get(`lafpos:kontrol:durum:${id2}`)).toBe(before);
+    expect(store.get(`${REDIS_ONEKI}kontrol:durum:${id2}`)).toBe(before);
   });
 
   it('açık PIN hiçbir Redis değerinde ve hiçbir yanıtta yok; panelde şifreli PIN ve imza yok', async () => {
@@ -650,13 +651,13 @@ describe('uzaktan yönetim: imza, nabızla teslim ve sonuç', () => {
       for (const s of imzalar) expect(text.includes(s)).toBe(false);
     }
     // Geçmişte yalnız özet: şifreli PIN de yok
-    const history = store.get(`lafpos:kontrol:gecmis:${kasaId}`) ?? '';
+    const history = store.get(`${REDIS_ONEKI}kontrol:gecmis:${kasaId}`) ?? '';
     for (const c of ciphers) expect(history.includes(c)).toBe(false);
   });
 });
 
 describe('uzaktan gün sonu ve güncelleme', () => {
-  const kurulum = () => JSON.parse(store.get(`lafpos:merkez:kurulum:${kasaId}`)!) as Record<string, unknown>;
+  const kurulum = () => JSON.parse(store.get(`${REDIS_ONEKI}merkez:kurulum:${kasaId}`)!) as Record<string, unknown>;
   const merkezSatiri = async () => (await call<{ kurulumlar: Record<string, unknown>[] }>('GET', 'merkez/kurulumlar', { token: sahip })).body.kurulumlar.find((x) => x.id === kasaId)!;
   afterEach(async () => {
     kanal = null;
@@ -675,13 +676,13 @@ describe('uzaktan gün sonu ve güncelleme', () => {
 
   it('kasa çevrimdışıyken gün sonu kuyruğa girmez (saatler sonra o arada açılan günü kapatırdı); öteki işlem girer', async () => {
     await sifirla();
-    const k = `lafpos:merkez:durum:${kasaId}`;
+    const k = `${REDIS_ONEKI}merkez:durum:${kasaId}`;
     store.set(k, JSON.stringify({ ...JSON.parse(store.get(k)!), lastSeen: Date.now() - 11 * 60_000 }));
     const off = await komut(sahip, 'gun.sonu', { not: '' }, { guncelle: true });
     expect([off.status, off.body.code, off.body.error]).toEqual([409, 'kasa_cevrimdisi', 'Kasa şu an çevrimdışı: gün sonu yalnız kasa bağlıyken uzaktan alınır. Kasa yeniden bağlanınca deneyin']);
     expect(Object.keys(queueOf())).toHaveLength(0);
     expect(kurulum().guncelleIstek).toBeUndefined();
-    expect([...store.keys()].some((x) => x.startsWith('lafpos:kontrol:sayac:'))).toBe(false);
+    expect([...store.keys()].some((x) => x.startsWith(`${REDIS_ONEKI}kontrol:sayac:`))).toBe(false);
     // Öteki işlemler kasa açılınca (24 saat içinde) uygulanmak üzere sıraya girer
     expect((await komut(sahip, 'ayar.servis', { mod: 'self' })).status).toBe(200);
     await sifirla();
@@ -761,7 +762,7 @@ describe('panel üyeleri', () => {
     expect(davet.body.kod).toMatch(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
     expect(davet.body.bitis).toBeGreaterThan(Date.now() + DAVET_OMRU_MS - 60_000);
     // Redis'te kodun kendisi değil özeti
-    const saved = store.get(`lafpos:uye-davet:${eposta}`)!;
+    const saved = store.get(`${REDIS_ONEKI}uye-davet:${eposta}`)!;
     expect(saved).not.toContain(davet.body.kod.replace(/-/g, ''));
     expect(saved).not.toContain(davet.body.kod);
     expect(JSON.parse(saved)).toMatchObject({ rol: 'yonetici', kim: OWNER, kod: expect.stringMatching(/^[0-9a-f]{64}$/) });
@@ -776,8 +777,8 @@ describe('panel üyeleri', () => {
     // Kod büyük-küçük harf, boşluk ve tireden bağımsız
     const made = await call<{ token: string }>('POST', 'uzaktan/uye', { body: { eposta, parola: 'yeni-parola-2026', davet: ` ${davet.body.kod.toLowerCase().replace(/-/g, ' ')} ` }, shop: null });
     expect(made.status).toBe(200);
-    expect(store.has(`lafpos:uye-davet:${eposta}`)).toBe(false);
-    expect(JSON.parse(store.get(`lafpos:uye:${eposta}`)!)).toMatchObject({ rol: 'yonetici', h: expect.stringMatching(/^s1\$/) });
+    expect(store.has(`${REDIS_ONEKI}uye-davet:${eposta}`)).toBe(false);
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}uye:${eposta}`)!)).toMatchObject({ rol: 'yonetici', h: expect.stringMatching(/^s1\$/) });
     // Kod bir kez
     expect((await call('POST', 'uzaktan/uye', { body: { eposta, parola: 'baska-parola-2026', davet: davet.body.kod }, shop: null })).status).toBe(403);
     list = (await call<{ uyeler: UzaktanUye[] }>('GET', 'kontrol/uyeler', { token: sahip })).body.uyeler;
@@ -796,7 +797,7 @@ describe('panel üyeleri', () => {
 
     // Kaldırma: kayıt silinir, oturum düşer
     expect((await call('POST', 'kontrol/uye-sil', { token: sahip, body: { eposta } })).status).toBe(200);
-    expect(store.has(`lafpos:uye:${eposta}`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}uye:${eposta}`)).toBe(false);
     expect((await panel(token)).status).toBe(401);
     expect((await call('GET', 'bootstrap', { token })).status).toBe(401);
     expect((await call('POST', 'uzaktan/giris', { body: { eposta, parola: 'yeni-parola-2026' }, shop: null })).status).toBe(401);
@@ -810,7 +811,7 @@ describe('panel üyeleri', () => {
       const res = await call('POST', path, { token: sahip, body: { eposta: OWNER.toUpperCase(), rol: 'izleyici' } });
       expect([res.status, res.body.code], path).toEqual([409, 'owner_fixed']);
     }
-    expect(store.has(`lafpos:uye:${OWNER}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}uye:${OWNER}`)).toBe(true);
     const list = (await call<{ uyeler: UzaktanUye[] }>('GET', 'kontrol/uyeler', { token: sahip })).body.uyeler;
     expect(list[0]).toMatchObject({ eposta: OWNER, rol: 'sahip', durum: 'aktif', sabit: true });
     expect(list.filter((u) => !u.sabit).map((u) => [u.eposta, u.rol])).toEqual([
@@ -827,7 +828,7 @@ describe('panel üyeleri', () => {
       expect((await call('POST', 'kontrol/uye', { token, body: { eposta: 'kotu@ornek.test', rol: 'yonetici' } })).body.code).toBe('not_allowed');
       expect((await call('POST', 'kontrol/uye-sil', { token, body: { eposta: 'izler@ornek.test' } })).body.code).toBe('not_allowed');
     }
-    expect(store.has('lafpos:uye:izler@ornek.test')).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}uye:izler@ornek.test`)).toBe(true);
   });
 
   it('davet edilen üye Merkez ve bildirimde 403 alır, oturumu düşmez; süresi dolan davet listeden düşer', async () => {
@@ -846,6 +847,6 @@ describe('panel üyeleri', () => {
     vi.setSystemTime(Date.now() + DAVET_OMRU_MS + 60_000);
     const list = (await call<{ uyeler: UzaktanUye[] }>('GET', 'kontrol/uyeler', { token: sahip })).body.uyeler;
     expect(list.some((u) => u.eposta === 'gec@ornek.test')).toBe(false);
-    expect(JSON.parse(store.get('lafpos:uyeler') ?? '[]')).not.toContain('gec@ornek.test');
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}uyeler`) ?? '[]')).not.toContain('gec@ornek.test');
   });
 });

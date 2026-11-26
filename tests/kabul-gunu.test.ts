@@ -2,13 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
+import { ACILIS_KASA, TEL_KART_ALANI } from '@shared/eski-adlar';
 
 /**
- * Kabul günü: Marina 22.11.2026'nın LafPOS günü, kasada adisyonlarla kurulur ve gün sonu gövdesi (`POST /api/pos/gun`,
+ * Kabul günü: Marina 22.11.2026'nın AsilPOS günü, kasada adisyonlarla kurulur ve gün sonu gövdesi (`POST /api/pos/gun`,
  * docs/03-ENTEGRASYON.md §4) iki deponun ortak dosyasıyla bayt bayt karşılaştırılır: lafmaliyet aynı dosyayı
  * (`tests/fixtures/kabul-gunu-2026-11-22.json`) kendi ayrıştırıcısıyla okur ve aynı rakamları bekler. Rakamlar hesap
  * sözleşmesinin (docs/hesap-sozlesmesi.md) örnek günüdür; her biri aşağıda ayrıca denetlenir. Gün bilerek değişirse
- * yeniden üretilir: LAFPOS_KABUL=1 npx vitest run tests/kabul-gunu.test.ts (lafmaliyet'teki kopya aynı PR serisinde).
+ * yeniden üretilir: ASILPOS_KABUL=1 npx vitest run tests/kabul-gunu.test.ts (lafmaliyet'teki kopya aynı PR serisinde).
  *
  * Gün: açılış ₺1.120,00; liste ₺7.440,00, iki adisyon indirimi (₺52,50 + ₺37,50), ikram ₺130,00, ödenmez ₺935,00,
  * ciro ₺6.285,00 (kart ₺5.030,00, nakit ₺1.255,00, yemek kartı yok), 26 fiş, KDV %10 matrah ₺5.713,64 KDV ₺571,36
@@ -48,11 +49,11 @@ let h: Harness;
 beforeAll(async () => {
   h = await startApp();
   // Gerçek gün: kurulum modu kapalı, gerçek kullanım başlamış. Yazarkasa eğitim cihazında (simülatör): cihazdan geçen
-  // ödemenin fişi kesilir, LafPOS'ta alınan ödeme yazarkasadan geçmeyen sayılır
+  // ödemenin fişi kesilir, AsilPOS'ta alınan ödeme yazarkasadan geçmeyen sayılır
   await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik' });
   const { updateSettings } = await import('../server/lib/settings');
   updateSettings({ demoMode: false, liveSince: Date.parse('2026-11-21T23:00:00+03:00') });
-  // ModPOS'un son Z'si Z-2026-010 (21.11): LafPOS'un ilk günü Z 11
+  // ModPOS'un son Z'si Z-2026-010 (21.11): AsilPOS'un ilk günü Z 11
   await h.ok('patron', 'PUT', '/admin/settings', { zNoStart: 11 });
 }, 60_000);
 afterAll(() => h.cleanup());
@@ -82,7 +83,7 @@ const prepare = (o: OrderDTO, name: string, n = 0) => h.ok('kasa', 'POST', '/kit
 const voidItem = (o: OrderDTO, name: string, reason: string, n = 0) => h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${nth(o, name, n).id}/void`, { reason });
 const comp = (o: OrderDTO, name: string, body: Record<string, unknown>) => h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${nth(o, name).id}/comp`, body);
 const discount = (o: OrderDTO, value: number, reason: string) => h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value, reason });
-/** LafPOS'ta alınan ödeme (yazarkasadan geçmez) */
+/** AsilPOS'ta alınan ödeme (yazarkasadan geçmez) */
 const payHere = (o: OrderDTO, methodName: string, amount = o.total - o.paid) => h.ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method(methodName).id, amount });
 /** Yazarkasada (eğitim cihazı) alınan ödeme: sepet gider, cihaz öder, fiş kesilir; 1 nakit, 3 kredi kartı */
 async function payOnDevice(o: OrderDTO, type: 1 | 3) {
@@ -119,7 +120,7 @@ describe('kabul günü: Marina 22.11.2026', () => {
     b = await discount(b, 3750, 'Doğum günü');
     await payOnDevice(b, 3);
 
-    // Yazarkasadan geçmeyen kart (LafPOS'ta alındı) ₺870,00: iki ödeme iptaliyle (₺50,00 ve ₺45,00) ve iki iptalle
+    // Yazarkasadan geçmeyen kart (AsilPOS'ta alındı) ₺870,00: iki ödeme iptaliyle (₺50,00 ve ₺45,00) ve iki iptalle
     let r1 = await sell([M('Espresso'), M('Espresso')]);
     await prepare(r1, 'Espresso', 1);
     r1 = await voidItem(r1, 'Espresso', 'Yanlış sipariş', 1);
@@ -212,7 +213,7 @@ describe('kabul günü: Marina 22.11.2026', () => {
     const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.dayId, dayId));
     const { inArray } = await import('drizzle-orm');
     db.update(schema.fiscalReceipts).set({ provider: 'pavo' }).where(inArray(schema.fiscalReceipts.orderId, orderIds)).run();
-    // Banka gün sonu (Pavo): batch'te yalnız yazarkasadan geçen kart. LafPOS'un kıyas tutarı yazarkasadan geçmeyen
+    // Banka gün sonu (Pavo): batch'te yalnız yazarkasadan geçen kart. AsilPOS'un kıyas tutarı yazarkasadan geçmeyen
     // ₺870,00'ı beklemez (okc/service.ts cardBasis)
     const { cardBasis } = await import('../server/okc/service');
     basis = cardBasis(dayId, []).dayCardKurus;
@@ -239,7 +240,7 @@ describe('kabul günü: Marina 22.11.2026', () => {
       .sort((x, y) => y - x);
 
     p = await h.ok<Payload>('patron', 'GET', `/sync/lafmaliyet/gun/${dayId}`);
-    if (process.env.LAFPOS_KABUL === '1') {
+    if (process.env.ASILPOS_KABUL === '1') {
       mkdirSync(new URL('./fixtures/', import.meta.url), { recursive: true });
       writeFileSync(FIXTURE, `${JSON.stringify(p, null, 2)}\n`);
     }
@@ -319,20 +320,20 @@ describe('kabul günü: Marina 22.11.2026', () => {
 
   it('kasa: açılış ₺1.120,00 + nakit satış ₺1.255,00 − harcama ₺800,00 = beklenen ₺1.575,00; sayılan ₺1.279,50, fark −₺295,50, devir ₺1.279,50', () => {
     expect(p.z).toMatchObject({ openingCash: 1120, cashOut: 800, cashIn: 0, handedOver: 0, expectedCash: 1575, countedCash: 1279.5, cashDiff: -295.5 });
-    // Devir = sayılan − gün sonu teslim (LafPOS'ta gün sonu teslim yok): ertesi günün beklenen açılışı
+    // Devir = sayılan − gün sonu teslim (AsilPOS'ta gün sonu teslim yok): ertesi günün beklenen açılışı
     expect(p.z.countedCash! - p.z.handedOver!).toBe(1279.5);
   });
 
   it('harcama tek satır: ₺800,00, Diğer fatura dışı (lafmaliyet kategorisi 3), fişsiz; kişi yok', () => {
     expect(p.cashMoves).toEqual([{ id: '01M81R1GV0K7Q2W9X4Y6Z8A0B2', kind: 'harcama', amount: 800, description: 'Fişsiz', at: '2026-11-22T13:45:00.000Z', categoryId: 3 }]);
-    // İlk LafPOS günü: önceki gerçek gün yok (ModPOS dönemi), beklenen açılış bilinmiyor
+    // İlk AsilPOS günü: önceki gerçek gün yok (ModPOS dönemi), beklenen açılış bilinmiyor
     expect(p.z).toMatchObject({ expectedOpening: null, openingDiff: null, openingReason: null });
   });
 
   it('23.11 açılışı ₺1.279,50 bekler: rakam gören öneriyi görür, kör kasiyer yalnız "sayın" uyarısını; farkta neden zorunlu', async () => {
     const seen = await h.ok<{ day: unknown; opening: unknown }>('mudur', 'GET', '/cash/day');
     expect(seen.day).toBeNull();
-    expect(seen.opening).toEqual({ suggested: 127950, source: 'lafpos', fromDate: DATE });
+    expect(seen.opening).toEqual({ suggested: 127950, source: ACILIS_KASA, fromDate: DATE });
     expect((await h.ok<{ opening: unknown }>('kasa', 'GET', '/cash/day')).opening).toEqual({ check: true });
     const blind = await h.call<{ code: string; error: string }>('kasa', 'POST', '/cash/day/open', { openingCash: 127000 });
     expect(blind.status).toBe(422);
@@ -342,9 +343,9 @@ describe('kabul günü: Marina 22.11.2026', () => {
     expect(opened.openingCash).toBe(127950);
   });
 
-  it("banka gün sonu: LafPOS yazarkasadan geçmeyen ₺870,00'ı Pavo'nun batch'inde beklemez (fark yok)", () => {
+  it("banka gün sonu: AsilPOS yazarkasadan geçmeyen ₺870,00'ı Pavo'nun batch'inde beklemez (fark yok)", () => {
     expect(basis).toBe(416000);
-    expect(p.bankPos).toMatchObject({ status: 'ok', pavoCard: 4160, lafposCard: 4160, diff: 0, errorCode: null });
+    expect(p.bankPos).toMatchObject({ status: 'ok', pavoCard: 4160, [TEL_KART_ALANI]: 4160, diff: 0, errorCode: null });
     // Günün tek banka gün sonu ve günün bütün kıyası (gün sonu tamlığı, §4.9)
     expect(p.bankPos!.batches).toEqual([{ batchNo: '0001', at: '2026-11-22T21:26:00.000Z', total: 4160, trigger: 'otomatik', dayClosed: true }]);
     expect(p.bankPos!.dayCard).toBe(4160);

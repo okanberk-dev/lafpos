@@ -23,7 +23,7 @@ const KEY = ['guncelleme', 'teklif'];
 
 /**
  * Kasada güncelleme teklifi (sahibin isteği, 22 Kas 2026): yeni sürüm indirilmiş ve gün açıkken bekliyorsa iki seçenek
- * sorulur. "Şimdi güncelle": satış ve ödeme yokken hemen kurulur, LafPOS kendiliğinden yeniden açılır ve herkes kaldığı
+ * sorulur. "Şimdi güncelle": satış ve ödeme yokken hemen kurulur, AsilPOS kendiliğinden yeniden açılır ve herkes kaldığı
  * yerden devam eder (src/lib/buildWatch.ts). "Gün sonunda güncelle": gün kapatılınca kurulur (eski davranış). Seçim
  * sürüme bağlıdır ve kasada saklanır. Sahip sürümü Merkez'den gönderdiyse sorulmaz: kendiliğinden gün sonunda kurulur
  * (server/sync/merkez.ts effectiveUpdateChoice). Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür
@@ -77,7 +77,7 @@ export function UpdateOffer() {
           <Loader2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 animate-spin text-[var(--admin-primary)] motion-reduce:animate-none" />
           <p role="status">
             {d.mesgul ? 'Satış ya da ödeme bitince kurulacak. ' : ''}
-            LafPOS kısa süre kapanıp kendiliğinden yeniden açılır. Açık masalar, gönderilmemiş sepetler ve oturumunuz korunur; kaldığınız ekrandan devam edersiniz
+            AsilPOS kısa süre kapanıp kendiliğinden yeniden açılır. Açık masalar, gönderilmemiş sepetler ve oturumunuz korunur; kaldığınız ekrandan devam edersiniz
           </p>
         </div>
       </Modal>
@@ -92,7 +92,7 @@ export function UpdateOffer() {
       hideClose
       size="sm"
       title="Yeni sürüm hazır"
-      subtitle={`LafPOS ${d.yeni.surum} indirildi. Ne zaman kurulsun?`}
+      subtitle={`AsilPOS ${d.yeni.surum} indirildi. Ne zaman kurulsun?`}
       footer={
         <div className="grid w-full gap-2 sm:grid-cols-2">
           <Button variant="secondary" block icon={<CalendarClock className="size-4" />} loading={choose.isPending && choose.variables === 'gunsonu'} disabled={choose.isPending} onClick={() => choose.mutate('gunsonu')}>
@@ -106,7 +106,7 @@ export function UpdateOffer() {
     >
       <div data-guncelleme className="grid gap-2 text-sm leading-6 text-ink-2">
         <p>
-          <strong className="font-semibold text-ink">Şimdi güncelle:</strong> LafPOS bir dakika kadar kapanıp kendiliğinden açılır. Açık masalar, sepetler ve oturum korunur. Satış ya da ödeme sürerken kurulmaz
+          <strong className="font-semibold text-ink">Şimdi güncelle:</strong> AsilPOS bir dakika kadar kapanıp kendiliğinden açılır. Açık masalar, sepetler ve oturum korunur. Satış ya da ödeme sürerken kurulmaz
         </p>
         <p>
           <strong className="font-semibold text-ink">Gün sonunda güncelle:</strong> gün kapatılınca (Z raporundan sonra) kurulur

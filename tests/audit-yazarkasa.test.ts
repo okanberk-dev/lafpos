@@ -105,7 +105,7 @@ function deviceByRate(list: TokenBasket[]) {
   }
   return acc;
 }
-const lafposByRate = (o: OrderDTO) => Object.fromEntries(o.totals.kdv.map((k) => [String(k.rate), k.gross]));
+const asilposByRate = (o: OrderDTO) => Object.fromEntries(o.totals.kdv.map((k) => [String(k.rate), k.gross]));
 
 describe('yazarkasa denetimi', () => {
   it('gün açılır, eğitim cihazı seçilir', async () => {
@@ -156,7 +156,7 @@ describe('yazarkasa denetimi', () => {
     await h.ok('kasa', 'POST', `/orders/${b.id}/payments`, { methodId: method('Nakit').id, amount: after.total - after.paid });
   });
 
-  it('LafPOS’ta iade edilmiş ödemenin fişi cihazda iptal edilince kapalı adisyon açılmaz', async () => {
+  it('AsilPOS’ta iade edilmiş ödemenin fişi cihazda iptal edilince kapalı adisyon açılmaz', async () => {
     const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Fiş iptali deneme' });
     const o = await order([{ name: 'Türk Kahvesi' }, { name: 'Latte', size: 'M' }], { type: 'tezgah', customerId: cust.id });
     const tk = o.items.find((i) => i.name === 'Türk Kahvesi')!;
@@ -204,7 +204,7 @@ describe('yazarkasa denetimi', () => {
     expect(r.json.code).toBe('okc_unknown');
     const [rec] = await receipts(o.id);
     expect(rec.status).toBe('gonderildi');
-    // Sepet cihazda olabilir: LafPOS'ta ikinci kez tahsil edilmez
+    // Sepet cihazda olabilir: AsilPOS'ta ikinci kez tahsil edilmez
     const pay = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
     expect(pay.json.code).toBe('okc_pending');
     // Kasiyer cihazda ödemeyi aldı; sorgu sonucu işler
@@ -284,7 +284,7 @@ describe('yazarkasa denetimi', () => {
     await simPay(rest.id, [{ type: 1, amount: rest.amount }]);
     const fin = await getOrder(o.id);
     expect(fin).toMatchObject({ status: 'kapali', paid: o.total });
-    expect(deviceByRate([...sent, rest.basket])).toEqual(lafposByRate(fin));
+    expect(deviceByRate([...sent, rest.basket])).toEqual(asilposByRate(fin));
   });
 
   it('servis ücreti: sepet beklerken kalem eklenirse ikinci sepet yalnız servisin kalanını taşır, sahte indirim yok', async () => {
@@ -300,7 +300,7 @@ describe('yazarkasa denetimi', () => {
     await simPay(r2.id, [{ type: 3, amount: r2.amount }]);
     const fin = await getOrder(o.id);
     expect(fin).toMatchObject({ status: 'kapali', paid: fin.total });
-    expect(deviceByRate([r1.basket, r2.basket])).toEqual(lafposByRate(fin));
+    expect(deviceByRate([r1.basket, r2.basket])).toEqual(asilposByRate(fin));
 
     // Yeni kalem önceki servis satırından ucuzsa da kalan cihaza gider
     const o2 = await order([{ name: 'Etkinlik ücreti', qty: 4 }], { type: 'masa', tableId: tables()[4].id });
@@ -311,7 +311,7 @@ describe('yazarkasa denetimi', () => {
     await simPay(s2.id, [{ type: 1, amount: s2.amount }]);
     const fin2 = await getOrder(o2.id);
     expect(fin2.status).toBe('kapali');
-    expect(deviceByRate([s1.basket, s2.basket])).toEqual(lafposByRate(fin2));
+    expect(deviceByRate([s1.basket, s2.basket])).toEqual(asilposByRate(fin2));
     await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
   });
 
@@ -326,9 +326,9 @@ describe('yazarkasa denetimi', () => {
     await simPay(r2.id, [{ type: 3, amount: r2.amount }]);
     const fin = await getOrder(o.id);
     expect(fin.status).toBe('kapali');
-    expect(deviceByRate([r1.basket, r2.basket])).toEqual(lafposByRate(fin));
+    expect(deviceByRate([r1.basket, r2.basket])).toEqual(asilposByRate(fin));
 
-    // Yüzde indirimde de: kahve kalem kalem LafPOS'ta, kalanı cihazda; döküm kuruşu kuruşuna aynı
+    // Yüzde indirimde de: kahve kalem kalem AsilPOS'ta, kalanı cihazda; döküm kuruşu kuruşuna aynı
     let p = await order([{ name: 'Türk Kahvesi', qty: 3 }, { name: 'Latte', size: 'M' }]);
     p = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/discount`, { type: 'percent', value: 15, reason: 'Öğrenci', approverPin: MUDUR });
     const latte = p.items.find((i) => i.name === 'Latte')!;
@@ -340,9 +340,9 @@ describe('yazarkasa denetimi', () => {
     await simPay(q2.id, [{ type: 1, amount: q2.amount }]);
     const pf = await getOrder(p.id);
     expect(pf.status).toBe('kapali');
-    // Latte LafPOS'ta alındı (fişi ayrıca kesilir); cihaz fişleri ile o ödeme birlikte LafPOS dökümünü verir
+    // Latte AsilPOS'ta alındı (fişi ayrıca kesilir); cihaz fişleri ile o ödeme birlikte AsilPOS dökümünü verir
     const lattePaid = pf.payments.find((x) => x.items?.some((i) => i.itemId === latte.id))!.amount;
-    const all = lafposByRate(pf);
+    const all = asilposByRate(pf);
     expect(deviceByRate([q1.basket, q2.basket])).toEqual({ '10': all['10'] - lattePaid, '20': all['20'] });
 
     // Kuruşluk yuvarlama oranlar arasında dengelenir, fişe "İndirim farkı" satırı yazılmaz
@@ -361,7 +361,7 @@ describe('yazarkasa denetimi', () => {
     });
     expect(built.amount).toBe(1000);
     expect(built.basket.items.map((i) => i.name)).toEqual(['b']);
-    // Ödenmiş orana düşen eksi fark servis satırına yazılmaz: servis LafPOS'unkiyle aynı, fark diğer oranın indirimine
+    // Ödenmiş orana düşen eksi fark servis satırına yazılmaz: servis AsilPOS'unkiyle aynı, fark diğer oranın indirimine
     const withService = buildBasket({
       basketId: 'c',
       orderNo: 1,
@@ -396,7 +396,7 @@ describe('yazarkasa denetimi', () => {
     expect(() => onlyService(0)).toThrow(/ücretli kalem yok/);
   });
 
-  it('her cihaz sonucu denetim kaydına yazılır: cihazda vazgeçme ve LafPOS’tan sepet iptali', async () => {
+  it('her cihaz sonucu denetim kaydına yazılır: cihazda vazgeçme ve AsilPOS’tan sepet iptali', async () => {
     const o = await order([{ name: 'Türk Kahvesi' }]);
     const r1 = await send(o.id);
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${r1.id}/cancel`, {});
@@ -414,7 +414,7 @@ describe('yazarkasa denetimi', () => {
 
   // ─── İkinci tur (bağımsız inceleme, 27 Eki 2026) ───────────────────────────
 
-  it('belgesi kesilmiş eksik ödemeli (hata) sepet LafPOS’ta iptal sayılmaz; cihazda fiş iptali alınan ödemeyi geri alır', async () => {
+  it('belgesi kesilmiş eksik ödemeli (hata) sepet AsilPOS’ta iptal sayılmaz; cihazda fiş iptali alınan ödemeyi geri alır', async () => {
     await provider('tokenx');
     const o = await order([{ name: 'Türk Kahvesi', qty: 2 }]);
     const unit = o.total / 2;
@@ -439,7 +439,7 @@ describe('yazarkasa denetimi', () => {
     // Aynı kahve ikinci fişe gitmez
     const again = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: o.items[0].id, qty: 1 }] });
     expect(again.json.code).toBe('okc_unresolved');
-    // Cihazda fiş iptal edilir: kartla alınan ödeme LafPOS'ta geri alınır
+    // Cihazda fiş iptal edilir: kartla alınan ödeme AsilPOS'ta geri alınır
     await webhook({ basketID: r.id, status: 99 });
     const fin = await getOrder(o.id);
     expect(fin.payments.map((p) => [p.methodName, !!p.refundedAt])).toEqual([['Kredi kartı', true]]);
@@ -498,7 +498,7 @@ describe('yazarkasa denetimi', () => {
     await provider('simulator');
   });
 
-  it('aynı 99 ikinci kez gelince kayıt tekrarlanmaz; LafPOS’ta silinen sepet "silindi" kalır', async () => {
+  it('aynı 99 ikinci kez gelince kayıt tekrarlanmaz; AsilPOS’ta silinen sepet "silindi" kalır', async () => {
     const { applySale } = await import('../server/okc/service');
     const o = await order([{ name: 'Türk Kahvesi' }]);
     const r1 = await send(o.id);
@@ -535,7 +535,7 @@ describe('yazarkasa denetimi', () => {
     await h.ok('kasa', 'POST', `/orders/${o.id}/cancel`, { reason: 'deneme', approverPin: MUDUR });
   });
 
-  it('kalem ödemesinden sonra kalem iptali indirimi yeniden dağıtsa da cihazdaki servis LafPOS servisine eşit', async () => {
+  it('kalem ödemesinden sonra kalem iptali indirimi yeniden dağıtsa da cihazdaki servis AsilPOS servisine eşit', async () => {
     await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
     let o = await order(
       [

@@ -93,7 +93,7 @@ adminRoutes.patch('/categories/:id', async (c) => {
   const input = await body(c, patchOf(categoryShape));
   const cat = db.select().from(schema.categories).where(eq(schema.categories.id, c.req.param('id'))).get();
   if (!cat) throw notFound('Kategori');
-  // Siteden gelen kategoride ad ve sıra sitenin; LafPOS'ta yalnız renk, istasyon ve görünürlük değişir
+  // Siteden gelen kategoride ad ve sıra sitenin; AsilPOS'ta yalnız renk, istasyon ve görünürlük değişir
   const patch = cat.extSource ? { color: input.color, stationId: input.stationId, active: input.active } : input;
   db.update(schema.categories).set(patchFields(patch)).where(eq(schema.categories.id, cat.id)).run();
   changed('menu', 'category.updated', user.id);
@@ -242,7 +242,7 @@ adminRoutes.patch('/products/:id', async (c) => {
   const groupNames = groupIds ? knownIds(schema.optionGroups, groupIds, 'seçenek grubu') : null;
   const synced = p.extSource === 'laffogato';
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
-    throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
+    throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). AsilPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
   }
   // Görsel de sitenin: menü eşitlemesi siteden gelen ürünün görselini her seferinde yeniden yazar, kasada verilen görsel
   // (uzaktan `urun.gorsel`) "Uygulandı" deyip sonraki eşitlemede siliniyordu. Yönetim ekranı görsel göndermez (inceleme,
@@ -294,7 +294,7 @@ adminRoutes.delete('/products/:id', (c) => {
   requirePermission(user, 'menu.yonet');
   const p = db.select().from(schema.products).where(eq(schema.products.id, c.req.param('id'))).get();
   if (!p) throw notFound('Ürün');
-  if (p.extSource) throw conflict('Siteden gelen ürün sitede kaldırılır; LafPOS\'ta "Gizle" kullanın');
+  if (p.extSource) throw conflict('Siteden gelen ürün sitede kaldırılır; AsilPOS\'ta "Gizle" kullanın');
   const sold = db.select({ n: sql<number>`count(*)` }).from(schema.orderItems).where(eq(schema.orderItems.productId, p.id)).get();
   if ((sold?.n ?? 0) > 0) db.update(schema.products).set({ hidden: true, active: false }).where(eq(schema.products.id, p.id)).run();
   else db.delete(schema.products).where(eq(schema.products.id, p.id)).run();
@@ -710,7 +710,7 @@ adminRoutes.get('/users', (c) => {
 
 /**
  * lafmaliyet (ladmin) personel listesi (Yönetim › Personel › kişi › ladmin personeli; docs/03-ENTEGRASYON.md §4.8): yalnız
- * istenince çekilir, bellekte en çok 5 dakika. Her kaydın hangi LafPOS kullanıcısına bağlı olduğu (`linkedUserId`) ve
+ * istenince çekilir, bellekte en çok 5 dakika. Her kaydın hangi AsilPOS kullanıcısına bağlı olduğu (`linkedUserId`) ve
  * bağlı olup listede bulunmayan kullanıcılar (`missing`: ladmin'de silinmiş ya da başka şubeye taşınmış). `?yenile=1`
  * önbelleği atlar (en sık 30 saniyede bir). Bağlantı yoksa ya da ladmin'e ulaşılamazsa 503
  */
@@ -945,7 +945,7 @@ adminRoutes.patch('/users/:id', async (c) => {
     t.update(schema.users).set(fields).where(eq(schema.users.id, target.id)).run();
     // Yetki ya da PIN değişince açık oturumlar kapanır
     if (input.pin || input.role || input.permGrant || input.permRevoke || input.active === false) t.delete(schema.sessions).where(eq(schema.sessions.userId, target.id)).run();
-    // Bağlantı ayrı denetim satırı: LafPOS adı ve kimlik, ladmin'deki ad yazılmaz (KVKK; ad yalnız seçicide görünür)
+    // Bağlantı ayrı denetim satırı: AsilPOS adı ve kimlik, ladmin'deki ad yazılmaz (KVKK; ad yalnız seçicide görünür)
     if (link) {
       const message = !link.staffRef
         ? `${user.name}, ${target.name} hesabının lafmaliyet personel bağlantısını kaldırdı (${link.previous})`
@@ -1299,7 +1299,7 @@ adminRoutes.get('/guncelleme', (c) => {
 
 /**
  * "Şimdi güncelle": güncelleyiciye (bekçi) hemen denetlemesini söyler; yeni sürüm varsa indirip kurar. Gün kapalıyken
- * hemen, açıkken gün sonunda kurar; `simdi` gün açıkken de hemen kurar (yalnız patron: LafPOS bir dakika kadar kapanır,
+ * hemen, açıkken gün sonunda kurar; `simdi` gün açıkken de hemen kurar (yalnız patron: AsilPOS bir dakika kadar kapanır,
  * tabletler bekler). Otomatik güncelleme kapalı olsa da çalışır. Denetim kaydına yazılır
  */
 adminRoutes.post('/guncelleme', async (c) => {
@@ -1320,7 +1320,7 @@ adminRoutes.post('/guncelleme', async (c) => {
 
 /**
  * Kasadaki güncelleme teklifi (kabuktaki pencere; `UpdateOffer`): yeni sürüm indirilmiş ve gün açıkken bekliyorsa kasada
- * iki seçenek sorulur: "Şimdi güncelle" (satış ve ödeme yokken hemen kurulur, LafPOS kendiliğinden yeniden açılır; açık
+ * iki seçenek sorulur: "Şimdi güncelle" (satış ve ödeme yokken hemen kurulur, AsilPOS kendiliğinden yeniden açılır; açık
  * masalar veritabanında, gönderilmemiş sepet ve oturum cihazda durur) ya da "Gün sonunda güncelle" (gün kapanınca).
  * Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür ve seçer. Sahip sürümü Merkez'den gönderdiyse sorulmaz:
  * seçim kendiliğinden "gün sonunda" (`secimKaynak: 'merkez'`); kasada yine "Şimdi güncelle" seçilebilir
@@ -1365,7 +1365,7 @@ adminRoutes.post('/guncelleme/secim', async (c) => {
   fx.audit(db, {
     userId: user.id,
     action: 'guncelleme',
-    message: input.secim === 'simdi' ? `Güncelleme şimdi kurulacak (${offer.yeni.surum}): LafPOS kısa süre kapanıp kendiliğinden açılır` : `Güncelleme gün sonuna bırakıldı (${offer.yeni.surum})`,
+    message: input.secim === 'simdi' ? `Güncelleme şimdi kurulacak (${offer.yeni.surum}): AsilPOS kısa süre kapanıp kendiliğinden açılır` : `Güncelleme gün sonuna bırakıldı (${offer.yeni.surum})`,
   });
   fx.emit({ topic: 'settings', kind: 'guncelleme', message: input.secim === 'simdi' ? 'Güncelleme kuruluyor' : 'Güncelleme gün sonunda kurulacak', byUserId: user.id });
   fx.flush();
@@ -1420,7 +1420,7 @@ adminRoutes.get('/bulut-yedek', (c) => {
 /** Bulut yedekleri (dükkân verilirse onun: bilgisayar değiştiyse eski kurulumun yedekleri) */
 adminRoutes.post('/bulut-yedek/liste-dukkan', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  if (!cloudEnabled()) throw new HttpError(409, 'AsilPOS Uzaktan kurulu değil', 'not_configured');
   const input = await body(c, z.object({ dukkan: z.string().regex(/^[a-z0-9-]{1,40}$/).optional() }));
   try {
     return c.json(await listCloudBackups(input.dukkan));
@@ -1432,7 +1432,7 @@ adminRoutes.post('/bulut-yedek/liste-dukkan', async (c) => {
 /** Şimdi yedekle: günün yedeği alınır ve buluta yüklenir */
 adminRoutes.post('/bulut-yedek', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  if (!cloudEnabled()) throw new HttpError(409, 'AsilPOS Uzaktan kurulu değil', 'not_configured');
   const file = await backupNow();
   try {
     return c.json(await uploadBackup(file));
@@ -1444,7 +1444,7 @@ adminRoutes.post('/bulut-yedek', async (c) => {
 /**
  * Buluttan geri yükle: yalnız patron, kendi PIN'iyle (denetim kaydına yazılır). Açık gün varken yapılmaz (günün
  * satışları kaybolurdu). Yedek indirilip doğrulanır; sunucu kapanır, bekçi mevcut veritabanının kopyasını alıp yedeği
- * yerine koyar ve LafPOS'u yeniden açar (Windows kurulumu)
+ * yerine koyar ve AsilPOS'u yeniden açar (Windows kurulumu)
  */
 adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   const user = c.get('user');
@@ -1539,7 +1539,7 @@ adminRoutes.put('/baglanti', async (c) => {
   const said = Object.entries(edits).map(([k, v]) => (v == null ? `${k} kaldırıldı` : connField(k)!.kind === 'url' ? `${k}=${v}` : `${k} değişti`));
   const fx = new Effects();
   fx.audit(db, { userId: user.id, action: 'ayar.baglanti', message: `Bağlantı bilgileri: ${said.join(', ')}`, data: { keys: Object.keys(edits) } });
-  fx.emit({ topic: 'settings', kind: 'ayar.baglanti', message: 'Bağlantı bilgileri değişti; LafPOS yeniden başlıyor', byUserId: user.id });
+  fx.emit({ topic: 'settings', kind: 'ayar.baglanti', message: 'Bağlantı bilgileri değişti; AsilPOS yeniden başlıyor', byUserId: user.id });
   fx.flush();
   return c.json({ ...connectionView(), changed: Object.keys(edits) });
 });

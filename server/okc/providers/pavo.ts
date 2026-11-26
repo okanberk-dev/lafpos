@@ -10,7 +10,7 @@ import { PAVO_KIMLIGI, PAVO_TABAN_KASA, PAVO_UYGULAMA } from '@shared/eski-adlar
  * yanıtı satışın sonucudur. Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu) sonuç sipariş no ile sorulur.
  *
  * Belgesiz noktalarda temkinli (docs/04-YAZARKASA.md §8): tanınmayan "başarılı" yanıt ödemesiz sonuç sayılır; ödeme
- * LafPOS'a işlenmez, sepet hataya düşer ve yöneticiye alarm gider, kalan kasada alınır. Böylece cihazda kesilen
+ * AsilPOS'a işlenmez, sepet hataya düşer ve yöneticiye alarm gider, kalan kasada alınır. Böylece cihazda kesilen
  * belgenin parası hiçbir yanlış eşlemeyle ikinci kez ya da yanlış türle sayılmaz.
  */
 
@@ -54,7 +54,7 @@ export const LEGACY_FINGERPRINT = PAVO_KIMLIGI;
 /** Pavo kimliği biçimi: kısa, harf-rakam-tire (docs/04-YAZARKASA.md §8.1) */
 export const FINGERPRINT_RE = /^[A-Za-z0-9-]{1,32}$/;
 
-/** Kuruluma özel yeni kimlik: `LafPOS-` ve 6 harf-rakam (karışmasın diye 0/O, 1/I yok) */
+/** Kuruluma özel yeni kimlik: eski adlı önek (`PAVO_KIMLIGI`), tire ve 6 harf-rakam (karışmasın diye 0/O, 1/I yok) */
 export function newFingerprint(rand: (n: number) => number = (n) => Math.floor(Math.random() * n)): string {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let tail = '';
@@ -64,8 +64,8 @@ export function newFingerprint(rand: (n: number) => number = (n) => Math.floor(M
 
 /**
  * Cihaza giden Pavo kimliği (`TransactionHandle.Fingerprint`). Sıra: ayarlar dosyasındaki `PAVO_FINGERPRINT`; yoksa
- * kurulumun saklanan kimliği; o da yoksa ve cihaz daha önce eşleştirildiyse eski kimlik `LafPOS` (eşleştirme bozulmasın
- * diye saklanır, sonra hep o gider); hiç eşleştirilmemişse eşleştirmeye dek `LafPOS` (ilk eşleştirmede yenisi üretilir)
+ * kurulumun saklanan kimliği; o da yoksa ve cihaz daha önce eşleştirildiyse eski kimlik (`PAVO_KIMLIGI`, ad değişikliğinde değişmedi; eşleştirme bozulmasın
+ * diye saklanır, sonra hep o gider); hiç eşleştirilmemişse eşleştirmeye dek o (ilk eşleştirmede yenisi üretilir)
  */
 export function pavoFingerprint(): { value: string; source: 'dosya' | 'kurulum' | 'eski' | 'yok' } {
   const fromEnv = (process.env.PAVO_FINGERPRINT ?? '').trim();
@@ -82,7 +82,7 @@ export function pavoFingerprint(): { value: string; source: 'dosya' | 'kurulum' 
 
 /**
  * Eşleştirmeden hemen önce: ortamda tanımlı değilse ve kurulumun kimliği yoksa yenisi üretilir ve saklanır (bir kez;
- * yeniden eşleştirmede aynısı kalır). Eski eşleştirilmiş kurulum `pavoFingerprint`te `LafPOS`'u saklamıştır
+ * yeniden eşleştirmede aynısı kalır). Eski eşleştirilmiş kurulum `pavoFingerprint`te eski kimliği saklamıştır
  */
 function ensureFingerprint(): string {
   const now = pavoFingerprint();
@@ -128,7 +128,7 @@ export function pavoEodRunning(): boolean {
   return !!client && client.busyWith === PAVO_EOD;
 }
 
-/** LafPOS'un sepet kimliğinden cihazın sipariş no'su (16 karakter; aynı sepet hep aynı no) */
+/** AsilPOS'un sepet kimliğinden cihazın sipariş no'su (16 karakter; aynı sepet hep aynı no) */
 export function pavoOrderNo(basketId: string): string {
   return `LP${basketId.replace(/-/g, '').toUpperCase().slice(0, 14)}`;
 }
@@ -142,9 +142,9 @@ const tl = (kurus: number) => kurus / 100;
 const PAVO_TAX_GROUPS = new Set(['KDV10', 'KDV20']);
 
 /**
- * LafPOS sepetini Pavo satışına çevirir. Tutarlar TL ve KDV dahil. İndirim kaleme işlenir (ayrı indirim alanının
+ * AsilPOS sepetini Pavo satışına çevirir. Tutarlar TL ve KDV dahil. İndirim kaleme işlenir (ayrı indirim alanının
  * anlamı belgede yok): satırın ödenecek tutarı adede tam bölünmüyorsa satır iki olur (n-1 adet ve son adet),
- * fişin toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynı kalır.
+ * fişin toplamı AsilPOS'un hesabıyla kuruşu kuruşuna aynı kalır.
  */
 export function pavoSale(basket: FiscalBasket, orderNo: string, appVersion = '1'): PavoSale {
   const items: PavoSaleItem[] = [];
@@ -167,7 +167,7 @@ export function pavoSale(basket: FiscalBasket, orderNo: string, appVersion = '1'
     if (!PAVO_TAX_GROUPS.has(tax)) throw new PavoError(`%${rate} KDV'li kalem Pavo'ya gönderilemez (${it.name}); ürünün KDV oranını düzeltin ya da hesabı kasadan alın`, 'KDV_GROUP');
     total += amount;
     if (it.quantity % 1000 !== 0) {
-      // Kesirli adet (LafPOS'ta yok, temkin): tek satır, birim fiyat yuvarlanır, satır tutarı kesin
+      // Kesirli adet (AsilPOS'ta yok, temkin): tek satır, birim fiyat yuvarlanır, satır tutarı kesin
       const qty = it.quantity / 1000;
       items.push({ ...line(it.name, tax, qty, Math.round(amount / qty)), GrossPriceAmount: tl(amount), TotalPriceAmount: tl(amount) });
       continue;
@@ -334,7 +334,7 @@ export function readMediators(res: PavoResponse): { id: number | null; name: str
 
 // ─── Banka gün sonu ────────────────────────────────────────────────────────
 
-/** Gün sonunun LafPOS'ta saklanan özeti: kart no, işlem dökümü, slip görüntüsü saklanmaz */
+/** Gün sonunun AsilPOS'ta saklanan özeti: kart no, işlem dökümü, slip görüntüsü saklanmaz */
 export interface PavoEodSummary {
   batchNo: string | null;
   /** Cihazın yazdığı biçimde (`gg.aa.yyyy ss:dd`, İstanbul saati) */
@@ -409,8 +409,8 @@ export function eodTimeMs(deviceDateTime: string | null | undefined): number | n
 
 /**
  * Gün sonu denemesinin kıyas tabanı: denemeden önceki son gün sonu. `cihaz` gün sonu gönderilmeden hemen önce
- * cihazdan okundu (`/PrintEODCopy`) · `bos` cihazda kayıtlı gün sonu yoktu · `lafpos` cihaz son gün sonunu vermedi
- * (uç yanıt verdi ama özet yok), LafPOS'un bildiği son batch
+ * cihazdan okundu (`/PrintEODCopy`) · `bos` cihazda kayıtlı gün sonu yoktu · `PAVO_TABAN_KASA` (eski adla saklanır) cihaz son gün sonunu vermedi
+ * (uç yanıt verdi ama özet yok), AsilPOS'un bildiği son batch
  */
 export interface EodBaseline {
   prevBatchNo: string | null;
@@ -418,7 +418,7 @@ export interface EodBaseline {
 }
 
 /**
- * `/PrintEODCopy` yanıtından taban; cihaz son gün sonunu vermediyse null (çağıran LafPOS'un bildiğine düşer).
+ * `/PrintEODCopy` yanıtından taban; cihaz son gün sonunu vermediyse null (çağıran AsilPOS'un bildiğine düşer).
  * Eşleştirme bozulmuşsa (73, 74) hata: gün sonu da reddedilirdi, gönderilmez; kasiyer yeniden eşleştirir
  */
 export function readEodBaseline(res: PavoResponse): EodBaseline | null {
@@ -611,7 +611,7 @@ export const pavoProvider: FiscalProvider = {
     if (!c) throw new Error('Pavo bağlantısı yok');
     const orderNo = pavoOrderNo(r.id);
     // Satış ekranı cihazda açıkken cihaz başka istek almaz: vazgeçme cihazdan yapılır, sonuç kendiliğinden gelir
-    if (c.busyWith === orderNo) throw new PavoError('Satış cihazın ekranında açık; cihazda vazgeçin, LafPOS sepeti kendiliğinden kapatır');
+    if (c.busyWith === orderNo) throw new PavoError('Satış cihazın ekranında açık; cihazda vazgeçin, AsilPOS sepeti kendiliğinden kapatır');
     // Gün sonu sürerken cihaz sorgu almaz (en çok 3 dk): iptal beklemeden reddedilir; cihaza ulaşılamadı sayılmaz
     if (c.busyWith === PAVO_EOD) throw new PavoError('Cihazda gün sonu sürüyor; bitince yeniden deneyin', 'EOD_BUSY');
     if (outcomes.has(r.id)) throw new PavoError('Cihazın yanıtı geldi, işleniyor; birkaç saniye sonra yeniden deneyin');

@@ -5,12 +5,13 @@ import { addDays, businessDate } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { upstashCommand } from './fake-upstash';
 import { type Harness, PINS, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
- * "Geçişi tamamla" ve "Denemeyi bitir"in sildiği günler LafPOS Uzaktan'dan da kalkar (KALANLAR §4.5): kasa silinen
+ * "Geçişi tamamla" ve "Denemeyi bitir"in sildiği günler AsilPOS Uzaktan'dan da kalkar (KALANLAR §4.5): kasa silinen
  * tarihleri silmeyle aynı işlemde yazar (`cloud.reports.silinen`), sıradaki canlı bakışta o tarihlere boş gün (`n: 0`,
  * ek verisiz) iter; bulut eski deneme raporunun ve ek verisinin üstüne yazar, Uzaktan o günü listeye ve toplamlara
- * katmaz. API değişmez. Gerçek LafPOS günü kalan ya da geçmiş ciro (ModPOS) günü olan tarih boşaltılmaz. Gidemeyen
+ * katmaz. API değişmez. Gerçek AsilPOS günü kalan ya da geçmiş ciro (ModPOS) günü olan tarih boşaltılmaz. Gidemeyen
  * tarih listede kalır, "Raporları yeniden gönder" listeyi silmez. Daha önce gönderilmiş ama kasada artık hiçbir şeyi
  * olmayan tarih (eski sürümde yapılmış geçiş) tarama ona gelince boşaltılır.
  */
@@ -30,7 +31,7 @@ beforeAll(async () => {
   h = await startApp();
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET, merkezUrl: '', lafmaliyetUrl: '' });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   const { gunzipSync } = await import('node:zlib');
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -67,8 +68,8 @@ async function remote<T = any>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-const dayKey = (date: string) => `lafpos:rapor:default:gun:${date}`;
-const extraKey = (date: string) => `lafpos:rapor:default:ek:${date}`;
+const dayKey = (date: string) => `${REDIS_ONEKI}rapor:default:gun:${date}`;
+const extraKey = (date: string) => `${REDIS_ONEKI}rapor:default:ek:${date}`;
 const cloudDay = (date: string) => (store.has(dayKey(date)) ? (JSON.parse(store.get(dayKey(date))!) as RemoteDayReport) : null);
 
 /** Süren tur varsa (ör. "yeniden gönder"in başlattığı) bitmesini bekleyip bir tur */
@@ -147,7 +148,7 @@ describe('Geçişi tamamla: silinen deneme günleri Uzaktan\'dan da kalkar', () 
   it('geçiş silinen tarihleri aynı işlemde yazar (gerçek günü kalan tarih de: raporu deneme satışsız yenilenir)', async () => {
     const r = await h.ok<{ finalized: boolean; purged: { days: number } }>('patron', 'POST', '/admin/deneme/bitir', { pin: PINS.patron, newPin: NEW_PIN });
     expect(r).toMatchObject({ finalized: true, purged: { days: 4 } });
-    // D4'te gerçek gün kaldı (listede, yalnız gerçek günün raporu gider); D5'in geçmiş ciro günü var ama LafPOS günü
+    // D4'te gerçek gün kaldı (listede, yalnız gerçek günün raporu gider); D5'in geçmiş ciro günü var ama AsilPOS günü
     // kalmadı (listede, raporu geçmiş günüyle gider)
     expect(await removedList()).toEqual([D(5), D(4), D(3), D(2)]);
     const { db, schema } = await import('../server/db/client');

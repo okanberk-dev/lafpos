@@ -21,7 +21,7 @@ import { posEnv } from '@shared/pos-env';
 import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
- * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
+ * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: AsilPOS yalnız gösterir (bar ekranı,
  * masa planı) ve hazırlık aşamasını siteye yazar. docs/03-ENTEGRASYON.md §2.3
  */
 
@@ -156,7 +156,7 @@ export function tableForLabel(tables: TableRow[], label: string): TableRow | und
 }
 
 /**
- * Masa siparişinin masası: önce masanın QR kodu (`tableCode`, LafPOS'un ürettiği `tables.qrCode`; yazım farkları
+ * Masa siparişinin masası: önce masanın QR kodu (`tableCode`, AsilPOS'un ürettiği `tables.qrCode`; yazım farkları
  * katlanır), site kodu göndermiyorsa ya da kod tanınmıyorsa etiketle (`tableForLabel`).
  */
 export function tableForOrder(tables: TableRow[], o: Pick<PanelOrder, 'label' | 'tableCode'>): TableRow | undefined {
@@ -180,7 +180,7 @@ const lineIndex = (l: PanelOrderLine): number | null => (Number.isInteger(l.inde
 const lineKey = (menuItemId: string | null, size: string, options: string, note: string | null, qty: number) => [menuItemId ?? '', size, options, note ?? '', qty].join('|');
 const siteLineKey = (l: PanelOrderLine) => lineKey(l.menuItemId, lineSize(l.size), detailText(l.detail, l.size), l.note || null, l.qty);
 
-/** Sitede iptal edilen kalemin LafPOS'taki iptal nedeni (aynı satır sitede geri alınınca yalnız bu neden geri açılır) */
+/** Sitede iptal edilen kalemin AsilPOS'taki iptal nedeni (aynı satır sitede geri alınınca yalnız bu neden geri açılır) */
 export const SITE_LINE_VOID = 'Sitede iptal edildi';
 /** Kasada ödenen siparişin uyarısı ve denetim kaydı bir kez: görülen kimlikler bu kadar saklanır */
 const TILL_SEEN_KEY = 'laffogato.paidAtTill';
@@ -192,7 +192,7 @@ export const tillNotice = (no: number) => `Online sipariş #${no} kasada ödendi
 /**
  * Siteden gelen listeyi yerel adisyonlara işler. Tam listede (`complete`) olmayan açık online sipariş "Siteden
  * kalktı" diye kapanır (`extStage: 'gone'`): sitede tamamlandı, iptal edildi ya da süresi geçti. Hangisi olduğunu
- * sitenin `closed` alanı söyler (`extOutcome`; eski site göndermez, LafPOS bilmez); servis edildi sayılmaz. `closed`'da
+ * sitenin `closed` alanı söyler (`extOutcome`; eski site göndermez, AsilPOS bilmez); servis edildi sayılmaz. `closed`'da
  * adı geçen açık sipariş liste kesik olsa da kapanır. Site listeyi kestiyse (`complete: false`) başka hiçbiri
  * kapatılmaz. Yerelde kapanmış ama sitede hâlâ açık sipariş yeniden açılır.
  *
@@ -200,16 +200,16 @@ export const tillNotice = (no: number) => `Online sipariş #${no} kasada ödendi
  * personel adisyon olarak çalar (tek fiş, tek satış). Cihazlara bir kez uyarı ("#N kasada ödendi; adisyon olarak
  * çalın") ve denetim kaydı düşer. Önceden "sitede ödendi" diye yazılmışsa kapanır, kalemleri iptal olur.
  *
- * Kalemler her çekimde uzlaştırılır: sitede iptal edilen satır (listeden çıkar) LafPOS'ta da iptal olur, bar ekranında
+ * Kalemler her çekimde uzlaştırılır: sitede iptal edilen satır (listeden çıkar) AsilPOS'ta da iptal olur, bar ekranında
  * "iptal" görünür (servis edilmiş kalem dokunulmaz); sitede geri alınan iptal satırı geri getirir. Eşleme sitenin
  * satır konumuyla (`index`), göndermeyen eski sitede satırın içeriğiyle sayarak. Tutar değişmez (para sitede).
  *
- * Kalemin bar istasyonu ürünün ya da kategorisinin istasyonu; ürün LafPOS'ta yoksa (menü henüz eşitlenmedi) ya da
+ * Kalemin bar istasyonu ürünün ya da kategorisinin istasyonu; ürün AsilPOS'ta yoksa (menü henüz eşitlenmedi) ya da
  * kategorisinin istasyonu yoksa barın istasyonu (yoksa mutfak; menü eşitlemesinin kuralı): sitede ödenmiş sipariş bar
  * ekranından ve çağrı ekranından düşmesin. Ürünü ya da istasyonu boş kalmış kalem sonraki çekimlerde yeniden bağlanır.
  * Planlı siparişin kalemleri planlı saatine göre damgalanır (`onlineDueAt`), saat sitede değişince yeniden.
  *
- * `requestedAt`: listenin istendiği an. Liste sitenin o anki hâlidir; yanıt ağdayken LafPOS'ta değişen sipariş
+ * `requestedAt`: listenin istendiği an. Liste sitenin o anki hâlidir; yanıt ağdayken AsilPOS'ta değişen sipariş
  * (kasada "Teslim edildi", aşama yazımı, araya giren daha yeni bir çekme) bu listeyle geri alınmaz: yeniden
  * açılmaz, kapanmaz, aşaması eskiye dönmez. Sonraki çekme geçerlidir. Verilmezse liste en yeni sayılır.
  *
@@ -240,7 +240,7 @@ export function upsertOnlineOrders(
     const categories = new Map(t.select().from(schema.categories).all().map((c) => [c.id, c]));
     const stations = t.select().from(schema.stations).where(eq(schema.stations.active, true)).orderBy(asc(schema.stations.sort)).all();
     const fallbackStation = stations.find((s) => s.kind === 'bar')?.id ?? stations.find((s) => s.kind === 'mutfak')?.id ?? null;
-    /** Kalemin ürünü, KDV'si ve istasyonu: ürün LafPOS'ta yoksa ya da istasyonsuzsa barın istasyonu */
+    /** Kalemin ürünü, KDV'si ve istasyonu: ürün AsilPOS'ta yoksa ya da istasyonsuzsa barın istasyonu */
     const resolve = (menuItemId: string | null, productId: string | null = null) => {
       const p = (productId ? products.find((x) => x.id === productId) : undefined) ?? (menuItemId ? products.find((x) => x.extId === menuItemId) : undefined);
       const cat = p ? categories.get(p.categoryId) : undefined;
@@ -300,7 +300,7 @@ export function upsertOnlineOrders(
     };
     /**
      * Kalemleri sitenin satırlarıyla uzlaştırır (§2.3 "Kalem iptali"): sitede iptal edilen satırın kalemi iptal olur,
-     * geri alınan iptal kalemi geri açar, LafPOS'ta hiç olmayan satır eklenir. Değişen kalemlerin adlarını döner.
+     * geri alınan iptal kalemi geri açar, AsilPOS'ta hiç olmayan satır eklenir. Değişen kalemlerin adlarını döner.
      */
     const reconcileLines = (order: typeof schema.orders.$inferSelect, lines: PanelOrderLine[], status: 'yeni' | 'hazirlaniyor' | 'hazir', sentAt: number) => {
       const items = t.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, order.id)).orderBy(asc(schema.orderItems.id)).all();
@@ -356,7 +356,7 @@ export function upsertOnlineOrders(
             restored.push(`${i.qty}× ${i.name}`);
             need--;
           }
-          // LafPOS'ta hiç olmayan satır (ilk çekimden önce iptal edilip sonra geri alındı): eklenir. Kasada başka
+          // AsilPOS'ta hiç olmayan satır (ilk çekimden önce iptal edilip sonra geri alındı): eklenir. Kasada başka
           // nedenle iptal edilmiş kalemin satırı yeniden eklenmez
           const taken = new Set(local.map((i) => i.extLine));
           let missing = indexed ? site.length : site.length - local.length;
@@ -404,7 +404,7 @@ export function upsertOnlineOrders(
         if (!tillSeen[o.id]) {
           tillSeen[o.id] = now;
           tillChanged = true;
-          fx.audit(t, { action: 'online.paid_at_till', orderId: existing?.id ?? null, severity: 'uyari', message: `${tillNotice(o.orderNo)} (sitede elle ödendi işaretlendi; LafPOS'ta "sitede ödendi" yazılmadı)` });
+          fx.audit(t, { action: 'online.paid_at_till', orderId: existing?.id ?? null, severity: 'uyari', message: `${tillNotice(o.orderNo)} (sitede elle ödendi işaretlendi; AsilPOS'ta "sitede ödendi" yazılmadı)` });
           fx.emit({ topic: 'orders', kind: SITE_EVENT.onlineTill, message: tillNotice(o.orderNo) });
         }
         continue;
@@ -421,7 +421,7 @@ export function upsertOnlineOrders(
         // Planlı saat sitede değişti: kalemler yeni saate göre yeniden damgalanır (bar ekranı ve uyarı penceresi)
         const replan = (existing.scheduledFor ?? null) !== scheduledFor;
         let changed = false;
-        // Kalemler: sitede iptal edilen satır LafPOS'ta da iptal, geri alınan geri gelir (aşama yazılmadan önce)
+        // Kalemler: sitede iptal edilen satır AsilPOS'ta da iptal, geri alınan geri gelir (aşama yazılmadan önce)
         if (reconcileLines(existing, o.lines, status, onlineDueAt(existing.openedAt, scheduledFor))) changed = true;
         if (reopen || existing.extStage !== o.stage || existing.tableId !== tableId) {
           t.update(schema.orders)
@@ -661,12 +661,12 @@ export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'e
   // İnternet yok ya da site geçici olarak yanıt vermiyor: çağıran isterse yazım kuyruğa girer (kalıcı ret girmez)
   const offline = !res || res.status >= 500 || res.status === 429;
   if (offline && opts.queueOffline) return 'kuyrukta';
-  if (!res) throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
-  // Site kalemi menüden kaldırmış: LafPOS açamaz, yalnız sitenin paneli menüye geri koyar (laffogato docs/LAFPOS.md)
+  if (!res) throw new HttpError(502, "Siteye ulaşılamadı; AsilPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
+  // Site kalemi menüden kaldırmış: AsilPOS açamaz, yalnız sitenin paneli menüye geri koyar (laffogato docs/ASILPOS.md)
   if (res.status === 409 && (res.json as { error?: unknown } | null)?.error === 'site_closed') {
-    throw new HttpError(409, "Site bu ürünü menüden kaldırmış; LafPOS'tan açılamaz. Sitenin yönetim panelinde menüye geri koyun", 'site_closed');
+    throw new HttpError(409, "Site bu ürünü menüden kaldırmış; AsilPOS'tan açılamaz. Sitenin yönetim panelinde menüye geri koyun", 'site_closed');
   }
-  if (res.status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${res.status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
+  if (res.status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${res.status}); AsilPOS'ta da değiştirilmedi`, 'site_menu');
   return 'guncellendi';
 }
 
@@ -675,7 +675,7 @@ export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'e
  * Siteye ulaşılamazsa (internet yok: ağ hatası, zaman aşımı; ya da site 5xx/429) beklemez: yerelde hemen geçerli,
  * yazım giden kutusuna girer (`kuyrukta`, `neden`), internet gelince sırayla ve bir kez gider. Aynı ürünün bekleyen
  * yazımı varsa yenisi onun yerini alır: siteye son istenen durum gider. Site açıkça reddederse (4xx) 502, yerelde de
- * değişmez. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir. Tükendi kilidi: sitenin kapattığı ürünü
+ * değişmez. Anahtar yoksa yalnız AsilPOS'ta değişir ve bu bildirilir. Tükendi kilidi: sitenin kapattığı ürünü
  * ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer internet olsa da olmasa da açamaz; menü yetkisi olan
  * (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
  */
@@ -827,7 +827,7 @@ export function onlineOrdersTick(): Promise<void> {
     try {
       if (versionSupported) {
         // Sinyal şubenin (laffogato #298): şube adı sorguda, imzanın içinde. Söylenmezse site anahtarın ilk şubesini
-        // varsayar; sitede birden çok LafPOS şubesi olunca başka şubenin işaretini okurduk
+        // varsayar; sitede birden çok AsilPOS şubesi olunca başka şubenin işaretini okurduk
         const versionUrl = new URL(`${env.laffogatoUrl}/api/pos/orders/version`);
         versionUrl.searchParams.set('branch', siteBranch());
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', versionUrl);
@@ -865,7 +865,7 @@ export function onlineOrdersTick(): Promise<void> {
 /**
  * Gün açıldı ya da yeniden açıldı (server/routes/cash.ts): gecenin seyrek turu biter, bir tur hemen döner ve sinyal
  * değişmemiş olsa da bir kez çeker (gün yokken bekleyen siparişler, gece gelen çağrılar). Kullanıcı eylemiyle tek
- * istek; zamanlayıcı kapalıyken (`LAFPOS_NO_JOBS`, testler) hiçbir şey yapmaz.
+ * istek; zamanlayıcı kapalıyken (`ASILPOS_NO_JOBS`, testler) hiçbir şey yapmaz.
  */
 export function onlineOrdersDayOpened(): Promise<void> {
   if (posEnv(process.env, 'NO_JOBS') === '1' || !configured() || !getSettings().onlineOrdersSync) return Promise.resolve();

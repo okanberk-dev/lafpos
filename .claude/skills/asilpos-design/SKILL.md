@@ -1,9 +1,9 @@
 ---
-name: lafpos-design
-description: LafPOS tasarım sistemi (Keel dili) kontrol listesi. Bir ekran, kart, form, tablo, grafik ya da telefon görünümü eklerken ve değiştirirken kullan; "tasarım", "kart", "arayüz", "panel", "mobil", "koyu tema" işlerinde önce bunu oku.
+name: asilpos-design
+description: AsilPOS tasarım sistemi (Keel dili) kontrol listesi. Bir ekran, kart, form, tablo, grafik ya da telefon görünümü eklerken ve değiştirirken kullan; "tasarım", "kart", "arayüz", "panel", "mobil", "koyu tema" işlerinde önce bunu oku.
 ---
 
-# LafPOS tasarım kontrol listesi (Keel dili)
+# AsilPOS tasarım kontrol listesi (Keel dili)
 
 > **Kaynak:** bu repoda yazıldı (22 Kasım 2026, sahibin isteği); görsel dil Behance "Keel: Fintech SaaS Dashboard"
 > incelemesinden. Bu projede tek doğru kaynak `DESIGN.md` §0 ve `src/styles/keel.css`'tir.

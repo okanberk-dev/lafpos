@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 
 /** Sunucunun varsayılanıyla aynı (server/lib/settings.ts): ayar gelmeden ya da eski sunucuda ekran yine çizilir */
 export const DISPLAY_DEFAULTS: CustomerDisplaySettings = {
-  // Varsayılan açık tema (LafPOS Keel; sahip, 22 Kas 2026)
+  // Varsayılan açık tema (AsilPOS Keel; sahip, 22 Kas 2026)
   theme: 'porselen',
   welcomeTitle: 'Hoş geldiniz',
   welcomeSubtitle: 'Drink it. Eat the cup.',
@@ -31,7 +31,7 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   gece: {
     '--d-bg': '#050302',
     // Gece (uygulamanın koyu temasıyla aynı nötr palet): siyah zeminde krema dalgaları, ortada ev yeşili hale
-    // LafPOS Keel (22 Kas 2026): desen yok; yalnız üstte hafif nane hale
+    // AsilPOS Keel (22 Kas 2026): desen yok; yalnız üstte hafif nane hale
     '--d-glow': 'radial-gradient(55% 45% at 50% 0%, rgb(79 220 134 / 0.12), transparent 70%)',
     '--d-surface': '#1e1c1b',
     '--d-chip': '#2b2928',
@@ -54,7 +54,7 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
     '--d-qr-shadow': '0 10px 30px rgb(0 0 0 / 0.18)',
   },
   porselen: {
-    // LafPOS Keel açık: soğuk gri zemin, kenarsız beyaz kart, mürekkep yazı; tutar paneli mürekkep (ters) kart
+    // AsilPOS Keel açık: soğuk gri zemin, kenarsız beyaz kart, mürekkep yazı; tutar paneli mürekkep (ters) kart
     '--d-bg': '#eceef1',
     '--d-glow': 'radial-gradient(55% 45% at 50% 0%, rgb(79 220 134 / 0.14), transparent 70%)',
     '--d-surface': '#ffffff',
@@ -226,7 +226,7 @@ export function CustomerDisplayView({
                 <span className="rounded-full bg-[var(--d-mint)] px-2.5 py-0.5 text-sm font-medium text-[var(--d-on-mint)] @lg:text-base">{state.lines.reduce((a, l) => a + l.qty, 0)} ürün</span>
               </p>
               <p className="tabular mt-1 whitespace-nowrap font-headline font-medium leading-none tracking-[-0.045em]" style={totalSize(amount)}>
-                {/* LafPOS Keel: tutar iri, kuruş soluk */}
+                {/* AsilPOS Keel: tutar iri, kuruş soluk */}
                 {amount.slice(0, -3)}
                 <span className="opacity-50">{amount.slice(-3)}</span>
               </p>

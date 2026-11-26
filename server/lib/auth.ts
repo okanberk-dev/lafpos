@@ -233,7 +233,7 @@ export function resetFailures() {
 
 /**
  * Deneme sayacının anahtarı: bağlantının gerçek adresi. `X-Forwarded-For` istemcinin kendi yazdığı başlıktır ve
- * LafPOS'un önünde vekil sunucu yoktur; ona güvenilirse her denemede başlığı değiştirerek kilit aşılır.
+ * AsilPOS'un önünde vekil sunucu yoktur; ona güvenilirse her denemede başlığı değiştirerek kilit aşılır.
  */
 export function clientKey(c: Context): string {
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;

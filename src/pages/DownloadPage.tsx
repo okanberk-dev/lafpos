@@ -38,7 +38,7 @@ export function DownloadContent() {
           {/* Ana eylem kartın başında: önce indirilir, adımlar sonrasını anlatır */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <a href={WEB_INSTALLER_PATH} download={WEB_INSTALLER_NAME} className={buttonClass('primary', 'lg', { ring: true, className: 'max-sm:w-full max-sm:justify-between' })}>
-              LafPOS’u indir
+              AsilPOS’u indir
               <Ring />
             </a>
             {manifest.data && <VersionLine m={manifest.data} />}
@@ -77,7 +77,7 @@ export function DownloadContent() {
         </Card>
         <Card title="Kurulum dosyası (GitHub)" subtitle="Alternatif: depoya erişimi olan GitHub hesabıyla">
           <div className="p-5">
-            <p className="text-pretty text-sm text-muted">Tek dosyalık LafPOS-Kurulum.exe, internet beklemeden kurar. GitHub’a girip sayfadaki Assets altından indirin.</p>
+            <p className="text-pretty text-sm text-muted">Tek dosyalık AsilPOS-Kurulum.exe, internet beklemeden kurar. GitHub’a girip sayfadaki Assets altından indirin.</p>
             <a href={RELEASES_URL} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'md', { className: 'mt-4 max-sm:w-full' })}>
               <ExternalLink aria-hidden="true" className="size-4" />
               GitHub’da aç
@@ -89,12 +89,12 @@ export function DownloadContent() {
   );
 }
 
-/** LafPOS Uzaktan › İndir: girişten sonra; Windows programını siteden kurar (docs/07-UZAKTAN-ERISIM.md) */
+/** AsilPOS Uzaktan › İndir: girişten sonra; Windows programını siteden kurar (docs/07-UZAKTAN-ERISIM.md) */
 export default function DownloadPage() {
   return (
     <Stage leafLabel="Programı indir" float>
       <div className="lp-leaf-pad">
-        <PageHeader title="Programı indir" subtitle="LafPOS’u kafedeki Windows bilgisayara kurun; sonraki sürümler kendiliğinden gelir" />
+        <PageHeader title="Programı indir" subtitle="AsilPOS’u kafedeki Windows bilgisayara kurun; sonraki sürümler kendiliğinden gelir" />
         <DownloadContent />
       </div>
     </Stage>
@@ -124,7 +124,7 @@ export function StandaloneDownloadPage({ waiting, retrying, onRetry }: { waiting
         <header className="flex items-center gap-3 pb-6">
           <LafTile size="md" />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-muted">LafPOS Uzaktan</p>
+            <p className="text-[13px] font-medium text-muted">AsilPOS Uzaktan</p>
             <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] sm:text-[28px]">Programı indir</h1>
           </div>
           {signOut && (

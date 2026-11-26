@@ -18,7 +18,7 @@ const GETIR_RESTAURANT_KEY = 'platform.getir.restaurant';
  * Gerçek bağdaştırıcılar: anahtarları `.env`'den (server/env-config.ts) okur; Trendyol ve Yemeksepeti'nin anahtarları
  * buluttan da gelebilir (server/lib/platform-anahtar.ts, bulutta dolu olan ezer). Anahtarı olmayan platformun canlı
  * modu seçilemez; tarayıcı demosunda ortam boştur, hiçbiri yapılandırılmış değildir. Yemeksepeti ve Getir siparişi
- * iter: LafPOS Uzaktan aktarır, kasa oradan çeker (Getir'de yedek olarak doğrudan Getir'den de). Migros Yemek'in
+ * iter: AsilPOS Uzaktan aktarır, kasa oradan çeker (Getir'de yedek olarak doğrudan Getir'den de). Migros Yemek'in
  * belgesi yok (docs/PAKET-PLATFORMLARI.md).
  */
 const adapters: Partial<Record<PlatformId, PlatformAdapter>> = {

@@ -3,7 +3,7 @@
  * `https://laffogato.net/masa/<kod>`: uygulama ve web aynı adresi tanır, müşteri okutunca menüyü görür ve uygulamadan bu
  * masaya sipariş verir (docs/03-ENTEGRASYON.md §2.3 "Masa QR"). Kod gizli değildir (masada basılı) ama bir masanınkinden
  * başkası türetilemez: 10 simge = 50 bit. Alfabe Crockford base32 (I, L, O, U yok; basılı karttan yanlış okunmasın).
- * Adres apex'e sabittir: basılı kart sitenin adresi ya da `LAFFOGATO_URL` değişse de çalışır. Kodu LafPOS üretir ve
+ * Adres apex'e sabittir: basılı kart sitenin adresi ya da `LAFFOGATO_URL` değişse de çalışır. Kodu AsilPOS üretir ve
  * saklar (`tables.qrCode`); site kodu `PUT /api/panel/tables` ile alır (sözleşme), sipariş `tableCode` ile masaya düşer.
  */
 export const TABLE_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

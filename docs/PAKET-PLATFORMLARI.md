@@ -12,7 +12,7 @@ Araştırma ve platform belgeleri: `calisma/arastirma/paket-platformlari/` (cali
    Kalemler adla eşlenir; kasada karşılığı olmayan kalem gizli "Platform ürünü" satırı olur, adı notta.
    **Ret** nedeniyle; denetim kaydına yazılır.
 3. Bar ve mutfak normal fişi alır; adisyonun adı "Yemeksepeti A7KX" gibi (kurye bu kodu söyler). Gel-al siparişi
-   çağrı ekranında LafPOS numarasıyla değil bu kodla ve platformun adıyla görünür (müşteri uygulamada kodu görür);
+   çağrı ekranında AsilPOS numarasıyla değil bu kodla ve platformun adıyla görünür (müşteri uygulamada kodu görür);
    Siparişler'de teslim aşamasına geçince düşer. Bar ekranının Hazır sekmesine gelmez: teslimi platformun akışında.
 4. Tahsilat: platform tahsil ediyorsa (online ödenmiş ya da platform kuryesi kapıda alır) adisyon platform
    kuryesine verilince (Yolda) ya da teslimde (kendi kurye, gel-al) platformun **online** ödeme türüyle (kanal =
@@ -27,7 +27,7 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
 **Açık iş (lafmaliyet komisyonu):** kanal yalnız platformun online ödeme türünde var. Tahsilatı kasada olan platform
 siparişi (kendi kuryemizin kapıda aldığı ya da Yemeksepeti kuryesinin kapıda alıp kasaya `payRestaurant` bıraktığı)
 nakit ya da kart türüyle kapanır, kanalı `null` kalır: o siparişin cirosu lafmaliyet'in platform komisyonuna girmez.
-LafPOS'ta doğru rakam Raporlar › Paket platformları'ndadır (siparişin kaynağına göre, aşağıda). Öneri: gün paketine
+AsilPOS'ta doğru rakam Raporlar › Paket platformları'ndadır (siparişin kaynağına göre, aşağıda). Öneri: gün paketine
 (`day`) yalnız ekleme olarak `platforms: [{ channel, orders, revenue }]` (kapanmış POS adisyonlarından
 `orders.platform`'a göre, TL, iki ondalık; rapordaki ciroyla aynı kural). Önce `docs/03-ENTEGRASYON.md`'ye yazılır,
 lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek alan gönderilmez.
@@ -103,13 +103,13 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     gizlense de o ürün olarak açılır (ada göre eşlemede yalnız menüdeki ürünler). Uçlar `GET /api/platforms/products`,
     `PUT /api/platforms/products/:id { productId }` (menü ya da bağlantı yetkisi).
   - **Yemeksepeti** (Delivery Hero POS middleware; `server/delivery/yemeksepeti.ts`, aktarıcı `api/uzaktan.ts`):
-    platform siparişi kasaya değil herkese açık bir adrese iter. LafPOS Uzaktan (Vercel) aktarıcıdır: Delivery Hero'nun
+    platform siparişi kasaya değil herkese açık bir adrese iter. AsilPOS Uzaktan (Vercel) aktarıcıdır: Delivery Hero'nun
     JWT'sini (`service: middleware`, HS512/HS256) `YEMEKSEPETI_PLUGIN_SECRET` ile doğrular, siparişi Upstash Redis'teki
     gelen kutusuna koyar ve hemen `remoteOrderId` (sipariş belirteci) ile yanıtlar. Delivery Hero'ya verilecek adresler:
     sipariş `POST https://lafpos.vercel.app/api/yemeksepeti/order/{remoteId}`, durum bildirimi
     `PUT https://lafpos.vercel.app/api/yemeksepeti/remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`
     (iptal `ORDER_CANCELLED` gelen kutusundan kasaya gelir, adisyonu iptal eder). Kasa gelen kutusunu kafe anahtarıyla
-    (`LAFPOS_CLOUD_SECRET`) imzalı olarak 20 saniyede bir çeker (en çok 50 kayıt ya da 2 MB); kayıtlar kasada
+    (`ASILPOS_CLOUD_SECRET`) imzalı olarak 20 saniyede bir çeker (en çok 50 kayıt ya da 2 MB); kayıtlar kasada
     yazıldıktan sonra silinir (kasa düşerse yeniden gelir, tekilleştirilir). Kayda alınmayan (Kapalı), kaydı düşen ve
     iptali ertelenen kayıt kutuda kalır. Kutu en çok 500 kayıt ve 2 gün tutar; doluysa kırpılmaz, Delivery Hero 503
     alır ve yeniden dener. Yalnız `ORDER_CANCELLED` durumu saklanır (ötekiler 200 ile geçilir), siparişlerden ayrı
@@ -151,16 +151,16 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     Yemeksepeti kuryesinde kuryenin alma, kendi kuryemizde teslim saati). Canlıya geçmeden Delivery Hero'nun test
     ortamında bir tur atılmalı (alanlar belgeden yazıldı).
     Kafede `.env`: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID` ve
-    LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
+    AsilPOS Uzaktan'ın `ASILPOS_CLOUD_URL`, `ASILPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
     Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (aktarıcı bunların hepsini ve eski
     öneksiz `YEMEKSEPETI_REMOTE_ID`'yi kabul eder, her birinin kendi gelen kutusu olur, başka restoranın siparişi 400;
     hiçbiri yoksa süzgeç yok, kutu ortak). Kurulum durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false`
     (değer asla).
   - **Getir Yemek** (GetirFood API; `server/delivery/getir.ts`, aktarıcı `api/uzaktan.ts` `getir/*`): Getir siparişi
-    bizim verdiğimiz iki adrese iter; LafPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
+    bizim verdiğimiz iki adrese iter; AsilPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
     `POST https://lafpos.vercel.app/api/getir/order`, iptal `POST https://lafpos.vercel.app/api/getir/cancel`; ikisinde
     de başlıkta bizim ürettiğimiz anahtar (`x-api-key` = Vercel'deki `GETIR_WEBHOOK_SECRET`, en az 16 karakter, sabit
-    zamanlı karşılaştırılır; yoksa ya da `LAFPOS_CLOUD_SECRET`'e veya `YEMEKSEPETI_PLUGIN_SECRET`'e eşitse aktarıcı
+    zamanlı karşılaştırılır; yoksa ya da `ASILPOS_CLOUD_SECRET`'e veya `YEMEKSEPETI_PLUGIN_SECRET`'e eşitse aktarıcı
     503: üçüncü tarafa verilen değer gelen kutularını okuyan, özeti ezen anahtar olamaz; ayrı üretin, ör.
     `openssl rand -hex 24`). Kayıt Redis'teki gelen kutusuna girer (siparişler `lafpos:getir:inbox`, iptaller ayrı
     listede `lafpos:getir:status`, yalnız sipariş kimliği, nedeni ve restoran kimliğiyle, serbest metin not saklanmaz;
@@ -265,8 +265,8 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     1500 belgede yok; önce swagger'daki aşama tarihlerine bakılır). Kalıcı reddedilip park edilen aşamayı kasadan
     yeniden denetecek bir uç yok (ayrı iş): alarm personele aşamayı Getir uygulamasından işaretlemesini söyler.
     Kafede `.env`: `GETIR_APP_SECRET_KEY`, `GETIR_RESTAURANT_SECRET_KEY`, test ortamı için `GETIR_API_URL`
-    (boşsa canlı `https://food-external-api-gateway.getirapi.com`) ve LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`,
-    `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz; Getir'e adreslerle birlikte verilir),
+    (boşsa canlı `https://food-external-api-gateway.getirapi.com`) ve AsilPOS Uzaktan'ın `ASILPOS_CLOUD_URL`,
+    `ASILPOS_CLOUD_SECRET`'i. Vercel'de: `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz; Getir'e adreslerle birlikte verilir),
     isteğe bağlı her şubenin `GETIR_<ŞUBE>_RESTAURANT_ID`'si (Getir'in restoran kimliği; Marina için
     `GETIR_MARINA_RESTAURANT_ID`, eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; her birinin kendi gelen kutusu olur,
     hiçbiri yoksa kutu ortak). Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
@@ -282,7 +282,7 @@ Merkez'deki **Şube kodu** (`TZL` gibi, fişin başlığındaki) başka bir şey
 beklediğini Yönetim › Bağlantı bilgileri'nde platform kartında yazar ("Şube: TUZLA · Vercel'de TRENDYOL_TUZLA_… adıyla").
 Kasada Bağlantı bilgilerine platform anahtarı girmek gerekmez.
 
-Sahibin adımları, Tuzla LafPOS'a geçince (Marina'da Trendyol yok):
+Sahibin adımları, Tuzla AsilPOS'a geçince (Marina'da Trendyol yok):
 
 1. Tuzla kasasında Yönetim › Ayarlar ve yedek › Kasa ve gün › **Şube kimliği** = `tuzla` (yalnız patron değiştirir),
    Kaydet. Şube değişince kasa eski şubenin anahtarlarını hemen bırakır ve yenisininkileri ister.
@@ -299,12 +299,12 @@ Sahibin adımları, Tuzla LafPOS'a geçince (Marina'da Trendyol yok):
    `YEMEKSEPETI_REMOTE_ID`) şube adıyla girdikten sonra silin: #86'dan beri **hiçbir kasaya gitmezler**, bir şubenin
    anahtarı yanlışlıkla öbürüne gitmesin diye. (Aktarıcının `YEMEKSEPETI_PLUGIN_SECRET`'i şubesiz kalır.)
 5. O şubenin kasası en geç 10 dakika içinde çeker; platform kartı "Kaynak: bulut · son çekim SS:DD" der. Son çekim
-   başarılıysa ve şubede değer yoksa "Bu şubede tanımlı değil"; hiç çekilmediyse, çekim olmadıysa ya da LafPOS Uzaktan
+   başarılıysa ve şubede değer yoksa "Bu şubede tanımlı değil"; hiç çekilmediyse, çekim olmadıysa ya da AsilPOS Uzaktan
    kurulu değilse nedenini yazar. Platform Kapalı kalır: Yönetim › Paket platformları'ndan açmak sahibin kararı.
 
 Şubesini göndermeyen (eski) ya da şube kimliği geçersiz kasa hiçbir platform anahtarı almaz.
 
-Nasıl çalışır: kasa `GET /api/uzaktan/anahtarlar?sube=<Şube kimliği>`'ni kafe anahtarıyla (`LAFPOS_CLOUD_SECRET`, gelen
+Nasıl çalışır: kasa `GET /api/uzaktan/anahtarlar?sube=<Şube kimliği>`'ni kafe anahtarıyla (`ASILPOS_CLOUD_SECRET`, gelen
 kutusu uçlarıyla aynı imza; sorgu da imzanın içinde) açılışta, 10 dakikada bir ve şube kimliği değişince hemen çeker.
 Uç yalnız Vercel ortamını okur, Redis'e dokunmaz; yanlış imzada 401, her yanıtta `cache-control: no-store`. Bulutta
 dolu olan değer kasadaki yerel değeri ezer, bulutta boşsa (ya da yalnız boşluksa) yerel kalır. Değer değişince kasa veri
@@ -315,7 +315,7 @@ eskisininkiler bırakılır (şubesiz eski dosyada da), bir sonraki çekim yenis
 günlükte, denetim kaydında, veritabanında, bulut özetinde ve depoda hiç yazılmaz. İnternet yokken kasa son çekilen
 değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
 
-**Bilinen sınırlar.** Kafe anahtarı (`LAFPOS_CLOUD_SECRET`) bütün şubelerde aynı: `?sube=` imzalıdır (imzadan sonra
+**Bilinen sınırlar.** Kafe anahtarı (`ASILPOS_CLOUD_SECRET`) bütün şubelerde aynı: `?sube=` imzalıdır (imzadan sonra
 değiştirilemez) ama uç isteyen kasanın gerçekten o şube olduğunu doğrulamaz. Şube adı bir yanlışlık önlemidir (Marina
 kasası Tuzla'nın anahtarını yanlışlıkla almaz), yetki sınırı değildir: kafe anahtarını bilen her şubenin anahtarını
 isteyebilir. Şube başına ayrı anahtar ileride (`docs/KALANLAR.md`). Yemeksepeti ve Getir'in gelen kutusu restorana

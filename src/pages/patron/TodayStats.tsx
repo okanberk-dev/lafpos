@@ -163,7 +163,7 @@ function missing(c: Compare, today: string) {
     const m = Number(today.slice(5, 7));
     return `${monthName(`2000-${String(((m + 10) % 12) + 1).padStart(2, '0')}-01`)} ayında ${Number(today.slice(8))} yok`;
   }
-  return 'O gün kafe kapalıydı ya da LafPOS kullanılmıyordu';
+  return 'O gün kafe kapalıydı ya da AsilPOS kullanılmıyordu';
 }
 
 /**

@@ -21,7 +21,7 @@ export interface DayAnswer {
   staff?: { counted: string[]; unknown: string[]; otherBranch: string[] };
 }
 
-/** lafmaliyet'in saymadığı personel kimlikleri, LafPOS'taki adıyla (`lafmaliyetStatus` `staffIssues`; ad bu kasada) */
+/** lafmaliyet'in saymadığı personel kimlikleri, AsilPOS'taki adıyla (`lafmaliyetStatus` `staffIssues`; ad bu kasada) */
 export interface StaffIssues {
   unknown: { ref: string; name: string | null }[];
   otherBranch: { ref: string; name: string | null }[];
@@ -51,7 +51,7 @@ export function staffAnswerText(a: DayAnswer, issues: StaffIssues | null | undef
 /**
  * Açılış önerisi (`GET /api/cash/day` `opening`; kasa zinciri, docs/03-ENTEGRASYON.md §4.6): `source` beklenenin
  * kaynağı (lafmaliyet'in devri ya da kasanın sayımı); lafmaliyet'inse `ladminSource` onun kaynağı (`kasa_raporu`:
- * panelin Kasa raporu; `lafpos`: rapor yokken geri söylenen sayım)
+ * panelin Kasa raporu; `TEL_KAYNAK` (telde eski adla): rapor yokken geri söylenen sayım)
  */
 export interface OpeningSuggestion {
   suggested: number;
@@ -78,7 +78,7 @@ export const dayLabel = (date: string) => dayFmt.format(new Date(`${date}T12:00:
 
 /**
  * Son gönderilen günün lafmaliyet'teki durumu. `idle`: hata değil, sakin bilgi (geçiş gününden önceki günler deneme
- * olarak saklanır, hesaplara girmez; sahibin kararı). Geçiş gününün sahibi lafmaliyet'tir, LafPOS yalnız yanıtı okur.
+ * olarak saklanır, hesaplara girmez; sahibin kararı). Geçiş gününün sahibi lafmaliyet'tir, AsilPOS yalnız yanıtı okur.
  */
 export function answerText(a: DayAnswer): { tone: 'ok' | 'idle'; text: string } {
   const day = dayLabel(a.date);

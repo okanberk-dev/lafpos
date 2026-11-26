@@ -4,6 +4,7 @@ import type { RemoteDayExtra, RemoteDayReport } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Oturum denetiminin uzaktan rapor bulguları:
@@ -16,7 +17,7 @@ import { type Harness, startApp } from './harness';
 const CLOUD = 'https://denetim-rapor.test';
 const SECRET = 'z'.repeat(40);
 const store = new Map<string, string>();
-/** Dükkânların özet sürümü (Redis hash `lafpos:surum`): kasanın son itmesi, nabız dahil */
+/** Dükkânların özet sürümü (Redis hash `${REDIS_ONEKI}surum`): kasanın son itmesi, nabız dahil */
 const versions = new Map<string, string>();
 let gate: Promise<void> | null = null;
 let h: Harness;
@@ -36,9 +37,9 @@ beforeAll(async () => {
   h = await startApp();
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET, merkezUrl: '' });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
-  delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
-  delete process.env.LAFPOS_UYE_EPOSTA;
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
+  delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
+  delete process.env.ASILPOS_UYE_EPOSTA;
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -91,10 +92,10 @@ describe('uzaktaki "bugün" ve kıyas kasanın şimdiki zamanıyla', () => {
   it('sabah gün açılmadan: dünün itmesi "bugün" sayılmaz, kıyas aynı saate kadar (yanlış -%100 yok)', async () => {
     const shop = 'sabah';
     // Gün sonu 01:00'de alındı, son rapor itmesi o an; sonra değişen gün yok. Özetin nabzı 07:00'de geldi (gün kapalı)
-    store.set(`lafpos:rapor:${shop}:son`, JSON.stringify({ today: '2026-11-20', at: at('2026-11-21', '01:00') }));
+    store.set(`${REDIS_ONEKI}rapor:${shop}:son`, JSON.stringify({ today: '2026-11-20', at: at('2026-11-21', '01:00') }));
     versions.set(shop, JSON.stringify({ at: at('2026-11-21', '07:00'), o: false, d: null }));
     // Geçen haftanın aynı günü: bütün satış öğleden sonra
-    store.set(`lafpos:rapor:${shop}:gun:2026-11-14`, JSON.stringify(day('2026-11-14', [[600, 10_000]])));
+    store.set(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-14`, JSON.stringify(day('2026-11-14', [[600, 10_000]])));
     const s = await remote<{ previous: { label: string; netSales: number; change: number | null } }>('reports/summary?from=2026-11-21&to=2026-11-21', shop);
     expect(s.previous.label).toMatch(/aynı saate kadar/);
     expect(s.previous.netSales).toBe(0);
@@ -103,11 +104,11 @@ describe('uzaktaki "bugün" ve kıyas kasanın şimdiki zamanıyla', () => {
 
   it('sakin saatte: kıyas son satışın itmesine değil kasanın son nabzına kadar', async () => {
     const shop = 'aksam';
-    store.set(`lafpos:rapor:${shop}:son`, JSON.stringify({ today: '2026-11-21', at: at('2026-11-21', '09:01') }));
+    store.set(`${REDIS_ONEKI}rapor:${shop}:son`, JSON.stringify({ today: '2026-11-21', at: at('2026-11-21', '09:01') }));
     versions.set(shop, JSON.stringify({ at: at('2026-11-21', '23:45'), o: true, d: '2026-11-21' }));
     // 21'inde 09:00'da 12.000 satış; geçen hafta 09:00'da 5.000, 20:00'de 5.000 (gün 05:00'te başlar)
-    store.set(`lafpos:rapor:${shop}:gun:2026-11-21`, JSON.stringify(day('2026-11-21', [[240, 12_000]])));
-    store.set(`lafpos:rapor:${shop}:gun:2026-11-14`, JSON.stringify(day('2026-11-14', [[240, 5_000], [900, 5_000]])));
+    store.set(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-21`, JSON.stringify(day('2026-11-21', [[240, 12_000]])));
+    store.set(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-14`, JSON.stringify(day('2026-11-14', [[240, 5_000], [900, 5_000]])));
     const s = await remote<{ netSales: number; previous: { netSales: number; change: number | null } }>('reports/summary?from=2026-11-21&to=2026-11-21', shop);
     expect(s.previous.netSales).toBe(10_000);
     expect(s.previous.change).toBe(20);
@@ -168,11 +169,11 @@ describe('ek verinin sınırı', () => {
       return (await res.json()) as { skippedDates: { date: string; why: string }[] };
     };
     expect((await push(extra(3), Date.now() - 1000)).skippedDates).toEqual([]);
-    expect(store.has(`lafpos:rapor:${shop}:ek:2026-11-20`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}rapor:${shop}:ek:2026-11-20`)).toBe(true);
     const huge = { ...extra(0), checks: Array.from({ length: 4000 }, (_, i) => ({ id: `c${i}`, no: i, status: 'kapali', type: 'masa', place: 'Masa 1'.repeat(30), openedAt: 1, closedAt: 2, waiter: 'Ayşe', qty: 1, total: 100, methods: ['Nakit'] })) };
     const res = await push(huge, Date.now());
     expect(res.skippedDates).toEqual([{ date: '2026-11-20', why: 'extra' }]);
-    expect(store.has(`lafpos:rapor:${shop}:ek:2026-11-20`)).toBe(false);
+    expect(store.has(`${REDIS_ONEKI}rapor:${shop}:ek:2026-11-20`)).toBe(false);
     // Kasada kısaltılmış liste: toplam ve sayı tam, "kısaltıldı" işareti
     const cut = { ...extra(2), cut: { happy: { count: 8, value: 800 } } };
     await push(cut, Date.now() + 1000);

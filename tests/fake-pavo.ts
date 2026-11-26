@@ -55,9 +55,9 @@ export interface FakePavo {
   eodDelayMs: number;
   /** Kapanmış batch'ler (son gün sonu en sonda) */
   batches: { batchNo: number; dateTime: string; eodData: Record<string, unknown> }[];
-  /** Açık batch'e LafPOS dışından kart işlemi (TL) */
+  /** Açık batch'e AsilPOS dışından kart işlemi (TL) */
   addCardTransaction(amount: number): void;
-  /** Cihazın kendi menüsünden gün sonu (LafPOS'a istek gelmez); `agoMs` kadar önce alınmış gibi */
+  /** Cihazın kendi menüsünden gün sonu (AsilPOS'a istek gelmez); `agoMs` kadar önce alınmış gibi */
   menuEod(agoMs?: number): void;
   close(): Promise<void>;
 }
@@ -83,7 +83,7 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
   /** Açık batch'in kart işlemleri (kuruş; iptal eksi) */
   let open: { amount: number; at: number }[] = [];
 
-  /** Pavo'nun örnek yanıtındaki biçim (kart no ve işlem dökümü dahil: LafPOS bunları saklamamalı) */
+  /** Pavo'nun örnek yanıtındaki biçim (kart no ve işlem dökümü dahil: AsilPOS bunları saklamamalı) */
   const closeBatch = (now = Date.now()) => {
     const batchNo = (device.batches.at(-1)?.batchNo ?? 277) + 1;
     const total = open.reduce((a, t) => a + t.amount, 0);

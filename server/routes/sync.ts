@@ -128,8 +128,8 @@ function notifyDiff(a: NotifySettings, b: NotifySettings) {
 
 syncRoutes.post('/bildirim/dene', async (c) => {
   requirePermission(c.get('user'), 'senkron.yonet');
-  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
-  await notify({ kind: 'deneme', title: 'LafPOS deneme bildirimi', body: 'Kasadan gönderildi; bu bildirimi görüyorsanız telefon hazır' });
+  if (!cloudEnabled()) throw new HttpError(409, 'AsilPOS Uzaktan kurulu değil', 'not_configured');
+  await notify({ kind: 'deneme', title: 'AsilPOS deneme bildirimi', body: 'Kasadan gönderildi; bu bildirimi görüyorsanız telefon hazır' });
   return c.json({ ok: true, pending: pendingNotices() });
 });
 
@@ -137,7 +137,7 @@ syncRoutes.post('/bildirim/dene', async (c) => {
 syncRoutes.post('/cloud-reports/resend', (c) => {
   const user = c.get('user');
   requirePermission(user, 'senkron.yonet');
-  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  if (!cloudEnabled()) throw new HttpError(409, 'AsilPOS Uzaktan kurulu değil', 'not_configured');
   resendReports();
   const fx = new Effects();
   fx.audit(db, { userId: user.id, action: 'senkron', message: 'Uzaktan raporlar yeniden gönderiliyor' });
@@ -253,7 +253,7 @@ syncRoutes.get('/lafmaliyet/satislar.csv', (c) => {
   requirePermission(c.get('user'), 'rapor.gor');
   const q = reportRange(c);
   c.header('content-type', 'text/csv; charset=utf-8');
-  c.header('content-disposition', `attachment; filename="lafpos-satislar-${q.from}_${q.to}.csv"`);
+  c.header('content-disposition', `attachment; filename="asilpos-satislar-${q.from}_${q.to}.csv"`);
   return c.body(salesCsv(q.from, q.to));
 });
 
@@ -284,7 +284,7 @@ syncRoutes.post('/lafmaliyet/backfill', async (c) => {
 });
 
 /**
- * Yönetim › Entegrasyon › "ModPOS dönemini çek" (server/sync/modpos.ts): LafPOS öncesi günler lafmaliyet'ten; kendiliğinden
+ * Yönetim › Entegrasyon › "ModPOS dönemini çek" (server/sync/modpos.ts): AsilPOS öncesi günler lafmaliyet'ten; kendiliğinden
  * iş günü başına bir kez de çekilir. Son denemeden 5 dakika geçmediyse 429
  */
 syncRoutes.post('/lafmaliyet/modpos/pull', async (c) => {

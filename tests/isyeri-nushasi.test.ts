@@ -393,10 +393,10 @@ describe('ekranın kararı ve kâğıtları (src/lib/after-payment.tsx)', () => 
     expect(ekran.deviceCopyHere(kasaBoot(h.boot, true, true))).toBe(false);
   });
 
-  it("LafPOS'ta alınan ödemenin kâğıtları da kendi ayarıyla", async () => {
+  it("AsilPOS'ta alınan ödemenin kâğıtları da kendi ayarıyla", async () => {
     const ekran = await screenModule();
     const order = await newOrder(1);
-    const payments = [{ id: 'p-lafpos', methodName: 'Nakit', amount: order.total, tip: 0 }];
+    const payments = [{ id: 'p-asilpos', methodName: 'Nakit', amount: order.total, tip: 0 }];
     ekran.printAfterPayment({ key: 'odeme-1', boot: kasaBoot(h.boot, false, true), order, payments });
     expect(papers).toEqual(['MÜŞTERİ NÜSHASI']);
     papers.length = 0;

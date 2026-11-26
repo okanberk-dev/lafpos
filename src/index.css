@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-/* Ortak belirteçler (LafPOS Keel; DESIGN.md §0): web paneli, telefon ve kasa aynı dosyadan */
+/* Ortak belirteçler (AsilPOS Keel; DESIGN.md §0): web paneli, telefon ve kasa aynı dosyadan */
 @import './styles/keel.css';
 
 /*
@@ -69,13 +69,13 @@
 }
 
 /*
- * LafPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize
+ * AsilPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize
  * uyarla, olmayanları da bu metriklerle uyarla, branding yap", "menüsüne kadar 1:1", "yazı tipini de görseldeki gibi";
  * DESIGN.md). Panonun ölçüleri L'Affogato kimliğinde: tek açık gri zemin (üst çubuk ve içerik aynı zeminde), kartlar
  * zeminde yüzer (beyaz, köşe 18, yumuşak gölge, kenarsız), tablette ve bilgisayarda solda ev yeşilinin degradesinde
  * marka rayı (ekranlar ikon üstte kısa ad altta, seçili ekran beyaz karo), üst çubukta ortada ekranın sekmeleri, ana
  * eylem ve seçim ev yeşili dolgu (köşe 12; segment hap), rozet köşe 8, sütun grafiğinde açık nane sütunlar ve tek
- * vurgulu ev yeşili sütun; yazı Inter. Önceki LafPOS Sahne'den (17-18 Kasım 2026, gnbsite'ın Area Board kiti) kalanlar:
+ * vurgulu ev yeşili sütun; yazı Inter. Önceki AsilPOS Sahne'den (17-18 Kasım 2026, gnbsite'ın Area Board kiti) kalanlar:
  * ana eylemin ok halkası, tek açılış anı, bantta dalga çizgileri, L'Af logosu ve marka karosu. Renk anlam taşır:
  *   ev yeşili ana eylem ve seçim (panonun mavisi): ödeme, kaydet, seçili çip, sekme ve segment; olumlu, şimdi, bağlantı
  *   magenta   zamanı daralan: hesap istendi, onay bekleyen platform siparişi
@@ -141,7 +141,7 @@
    * Gölge: açılan ve yüzen parça (pencere, menü) belirgin. Renk Keel mürekkebi (#171A26; 26 Kas 2026'ya dek ev yeşilinin
    * gecesiydi, soğuk gri zeminde yeşilimsi bir hâle bırakıyordu)
    */
-  /* LafPOS Keel: kart gölgesiz ve kenarsız, zeminden ton farkıyla ayrılır (DESIGN.md §0) */
+  /* AsilPOS Keel: kart gölgesiz ve kenarsız, zeminden ton farkıyla ayrılır (DESIGN.md §0) */
   --shadow-card: none;
   --shadow-lift: 0 1px 2px rgb(23 26 38 / 0.05), 0 12px 30px -18px rgb(23 26 38 / 0.28);
   --shadow-pop: 0 40px 80px -30px rgb(23 26 38 / 0.42), 0 12px 24px -12px rgb(23 26 38 / 0.18), 0 0 0 1px rgb(23 26 38 / 0.05);
@@ -353,7 +353,7 @@ html[class~='dark'] {
 }
 
 .dark {
-  /* Seçili sekme, segment ve alt menü (LafPOS Keel): gecede açık hap, üstünde mürekkep */
+  /* Seçili sekme, segment ve alt menü (AsilPOS Keel): gecede açık hap, üstünde mürekkep */
   --menu-active-bg: #fbfaf9;
   --menu-active-ink: #171a26;
   --shadow-card: none;
@@ -980,7 +980,7 @@ html[class~='dark'] {
 }
 
 /*
- * Pano kabuğu ve sahne (20 Kasım 2026, operatör: "menüsüne kadar 1:1"; panonun yerleşimi LafPOS'a uyarlandı). Tablette ve
+ * Pano kabuğu ve sahne (20 Kasım 2026, operatör: "menüsüne kadar 1:1"; panonun yerleşimi AsilPOS'a uyarlandı). Tablette ve
  * bilgisayarda (md+) solda marka rayı (AppShell: ekranlar ikon üstte kısa ad altta, seçili ekran beyaz karo; dipte
  * Araçlar ve Kilitle), üstte çubuk (logo, ortada ekranın sekmeleri, sağda durum, arama ve kişi). Ekranın sahnesi
  * (src/components/ui/Stage.tsx) zeminin üstünde: başlık satırı (solda başlık ve tek cümle durum, sağda büyük sayılar ve
@@ -1438,7 +1438,7 @@ html[class~='dark'] {
   }
   .lp-hs > b {
     color: var(--admin-text);
-    /* LafPOS Keel: karo rakamı 500 ağırlık, sıkı aralık (patron panelinin karolarıyla aynı) */
+    /* AsilPOS Keel: karo rakamı 500 ağırlık, sıkı aralık (patron panelinin karolarıyla aynı) */
     font: 500 var(--hs-size, 1.375rem) / 1 var(--font-headline);
     letter-spacing: -0.035em;
     font-variant-numeric: tabular-nums;
@@ -1480,7 +1480,7 @@ html[class~='dark'] {
   }
 
   /*
-   * Patron paneli (PatronPage; LafPOS Keel düzeni, DESIGN.md §0). İki sütun yığını ve altında üçüncüsü: A bugünün
+   * Patron paneli (PatronPage; AsilPOS Keel düzeni, DESIGN.md §0). İki sütun yığını ve altında üçüncüsü: A bugünün
    * cirosu ve karolar, gün boyu grafiği, dönem kıyası; B mini kıyas kartı ve ödeme türleri (yan yana), Kıyas, gün içi;
    * C açık adisyonlar, en çok satanlar, dikkat isteyenler. Telefonda ve dik tablette tek sütun, sıra `--o` ile (ciro,
    * mini kartlar, kıyas, dönem, grafik, gün içi, sonra C); 1024+ A geniş, B dar; C altında iki, 1440+ üç sütun
@@ -1943,7 +1943,7 @@ html[class~='dark'] {
   /* Araçlar çekmecesi: perde gibi yukarıdan iner, çizgiler kayar; satırları sırayla gelir (ToolsDrawer.tsx) */
   /* Araçlar çekmecesi sade gece (18 Kas 2026, "daha minimalist"): kayan dalga çizgileri yok, yalnız üstte yumuşak yeşil ışık */
   /*
-   * Araçlar çekmecesi (LafPOS Keel): uygulamanın yüzeyinde (açıkta beyaz, gecede koyu gri), yazılar uygulamanın
+   * Araçlar çekmecesi (AsilPOS Keel): uygulamanın yüzeyinde (açıkta beyaz, gecede koyu gri), yazılar uygulamanın
    * mürekkebinde; çizgi ve kuyu nötr, vurgu ve odak ev yeşili. Her boyda aynı belirteçler: açık temada beyaz zeminde
    * beyaz yazı kalmaz (22 Kas 2026'da ray beyaz olunca yazılar görünmüyordu)
    */

@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Pano (DESIGN.md §4-5: Inter, zeminde
+ * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm AsilPOS Pano (DESIGN.md §4-5: Inter, zeminde
  * yüzen beyaz kartlar, saç teli çerçeve, ev yeşili seçim ve ana eylem; köşe merdiveni kart 18, karo 12, denetim 10,
  * rozet 6). Dokunmatikte her hedef 44 px, farede 36 px, "Sıkı görünüm"de 32 px. Telefonda (md altı) tablo satır kartına,
  * çekmece alt sayfaya döner.

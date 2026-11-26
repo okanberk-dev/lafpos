@@ -19,7 +19,7 @@ let seq = 0;
 
 beforeAll(async () => {
   fake = await startFakeYemeksepeti(CREDS);
-  h = await startApp({ YEMEKSEPETI_MW_URL: fake.url, YEMEKSEPETI_USERNAME: CREDS.username, YEMEKSEPETI_PASSWORD: CREDS.password, YEMEKSEPETI_REMOTE_ID: 'POS_1', LAFPOS_CLOUD_URL: fake.url, LAFPOS_CLOUD_SECRET: CLOUD_SECRET });
+  h = await startApp({ YEMEKSEPETI_MW_URL: fake.url, YEMEKSEPETI_USERNAME: CREDS.username, YEMEKSEPETI_PASSWORD: CREDS.password, YEMEKSEPETI_REMOTE_ID: 'POS_1', ASILPOS_CLOUD_URL: fake.url, ASILPOS_CLOUD_SECRET: CLOUD_SECRET });
   live = await import('../server/delivery/live');
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
 });

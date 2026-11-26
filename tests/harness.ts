@@ -7,13 +7,13 @@ import type { BootstrapDTO } from '@shared/types';
 export const PINS = { kasa: '1111', garson: '2222', mudur: '2468', patron: '1897' } as const;
 
 /**
- * Süreç içi LafPOS: geçici veritabanı, kurulum verisi ve demo personelin oturumları. Sunucu modülleri ortam
+ * Süreç içi AsilPOS: geçici veritabanı, kurulum verisi ve demo personelin oturumları. Sunucu modülleri ortam
  * değişkenleri ayarlandıktan sonra yüklenir; vitest her test dosyasını ayrı modül alanında çalıştırdığı için
  * her dosyanın kendi veritabanı olur.
  */
 export async function startApp(extraEnv: Record<string, string> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'lafpos-test-'));
-  Object.assign(process.env, { LAFPOS_DATA_DIR: dir, LAFPOS_NO_JOBS: '1', ...extraEnv });
+  const dir = mkdtempSync(join(tmpdir(), 'asilpos-test-'));
+  Object.assign(process.env, { ASILPOS_DATA_DIR: dir, ASILPOS_NO_JOBS: '1', ...extraEnv });
   const { runMigrations } = await import('../server/db/client');
   const { seedIfEmpty } = await import('../server/db/seed');
   const { createApp } = await import('../server/app');

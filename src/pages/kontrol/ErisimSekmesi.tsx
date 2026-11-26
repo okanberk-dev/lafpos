@@ -155,7 +155,7 @@ function UyeSatiri({
           )}
         </div>
         <p className="mt-0.5 text-[13px] text-muted">{durum}</p>
-        {u.sabit && <p className={cn('mt-0.5', NEDEN)}>Sahip LafPOS’un sunucu ayarında tanımlı; buradan değiştirilmez</p>}
+        {u.sabit && <p className={cn('mt-0.5', NEDEN)}>Sahip AsilPOS’un sunucu ayarında tanımlı; buradan değiştirilmez</p>}
       </div>
       {!u.sabit && (
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full">

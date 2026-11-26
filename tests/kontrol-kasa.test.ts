@@ -22,6 +22,7 @@ import {
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, ROLE_DEFAULTS } from '@shared/permissions';
 import { type Harness, startApp } from './harness';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * Uzaktan yönetim, kasa tarafı (server/sync/kontrol.ts, docs/UZAKTAN-YONETIM.md): imza, tekrar, süre, kasadaki anahtar,
@@ -319,7 +320,7 @@ describe('Uzaktan yönetim: kasa', () => {
     const secenek = db.select().from(schema.optionItems).where(eq(schema.optionItems.active, true)).get()!;
     const sonuclar = await uygula(komut('urun.satis', { id: latte.id, satista: false }), komut('secenek.satis', { id: secenek.id, satista: false }), komut('ayar.servis', { mod: 'yari_self' }));
     for (const s of sonuclar) expect(s).toMatchObject({ durum: 'uygulandi', mesaj: 'Uygulandı' });
-    expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()).toMatchObject({ active: false, soldOutBy: 'lafpos' });
+    expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()).toMatchObject({ active: false, soldOutBy: TUKENDI_KASA });
     expect(db.select().from(schema.optionItems).where(eq(schema.optionItems.id, secenek.id)).get()).toMatchObject({ soldOut: true });
     expect((await settings()).serviceMode).toBe('yari_self');
     expect((await audits('product.sold_out')).at(-1)!.message).toMatch(new RegExp(`^Uzaktan \\(${KIM}\\): Latte tükendi`));
@@ -697,9 +698,9 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
     await new Promise((r) => setTimeout(r, 5));
     const o = await h.ok<{ id: string }>('patron', 'POST', '/orders', { type: 'tezgah' });
     await h.ok('patron', 'POST', `/orders/${o.id}/items`, { items: [{ productId: h.boot.products.find((p) => p.name === 'Latte')!.id, qty: 1 }] });
-    const bekciOnce = process.env.LAFPOS_STDIN_CONTROL;
+    const bekciOnce = process.env.ASILPOS_STDIN_CONTROL;
     // Windows güncelleyicisi var: istek yazılabilir (yazılmaması kurala bağlı olsun)
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     try {
       const red = komut('gun.sonu', { not: '' });
       siradaki = [{ komutlar: [red] }];
@@ -710,7 +711,7 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
       // Güncelleme istenmedi (gün açık kaldı, kasiyere de sorulmaz), istek işlendi sayılır ve kayda düşer
       expect(existsSync(file)).toBe(false);
       expect(getSyncState<number>('merkez.istek')).toBe(red.at);
-      expect((await audits('guncelleme')).at(-1)).toMatchObject({ message: "Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi", data: { komut: red.id, gunSonu: 'reddedildi' } });
+      expect((await audits('guncelleme')).at(-1)).toMatchObject({ message: "Merkez'den (AsilPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi", data: { komut: red.id, gunSonu: 'reddedildi' } });
 
       // Adisyon kapandı, sahip yeniden istedi: gün sonu uygulanır, güncelleme aynı nabızda istenir (gün kapalı: hemen
       // kurulur)
@@ -723,8 +724,8 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
       expect(pendingUpdateRequest()).toMatchObject({ by: 'merkez', simdi: false });
       expect(getSyncState<number>('merkez.istek')).toBe(ok.at);
     } finally {
-      if (bekciOnce === undefined) delete process.env.LAFPOS_STDIN_CONTROL;
-      else process.env.LAFPOS_STDIN_CONTROL = bekciOnce;
+      if (bekciOnce === undefined) delete process.env.ASILPOS_STDIN_CONTROL;
+      else process.env.ASILPOS_STDIN_CONTROL = bekciOnce;
       ekYanit = {};
       siradaki = [];
       rmSync(file, { force: true });
@@ -741,10 +742,10 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
     expect(takeRemoteUpdate(istek, istek + GUN_SONU_OMRU_MS, gelmedi)).toBe(true);
     expect(getSyncState<number>('merkez.istek')).toBe(istek);
     // Kasa gün sonunu hiç görmedi: iptal mi edildi, ulaşmadı mı bilemez (bulut iptalde isteği geri alır, yine de)
-    expect((await audits('guncelleme')).at(-1)!.message).toBe("Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)");
+    expect((await audits('guncelleme')).at(-1)!.message).toBe("Merkez'den (AsilPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)");
     // Merkez'in kendi "Şimdi güncelle"si (bağsız) hemen işlenir
     expect(takeRemoteUpdate(istek + 1, istek + 1)).toBe(true);
-    expect((await audits('guncelleme')).at(-1)!.message).toMatch(/^Merkez'den \(LafPOS Uzaktan\) güncelleme istendi/);
+    expect((await audits('guncelleme')).at(-1)!.message).toMatch(/^Merkez'den \(AsilPOS Uzaktan\) güncelleme istendi/);
   });
 
   it('imzası tutmayan bağlı gün sonu: güncelleme isteği aynı nabızda "reddedildi" diye kapanır, 30 dakika beklemez', async () => {
@@ -756,20 +757,20 @@ describe('Uzaktan yönetim: Merkez nabzı', () => {
     const bozuk = komut('gun.sonu', { not: '' }, { secret: 'b'.repeat(40) });
     siradaki = [{ komutlar: [bozuk] }];
     ekYanit = { guncelleIstek: bozuk.at, guncelleKomut: bozuk.id };
-    const bekciOnce = process.env.LAFPOS_STDIN_CONTROL;
+    const bekciOnce = process.env.ASILPOS_STDIN_CONTROL;
     // Windows güncelleyicisi var: istek yazılabilir (yazılmaması kurala bağlı olsun)
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     try {
       expect(await merkezBeat()).toBe(true);
       expect(getSyncState<number>('merkez.istek')).toBe(bozuk.at);
       expect((await audits('guncelleme')).at(-1)).toMatchObject({
-        message: "Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi",
+        message: "Merkez'den (AsilPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu reddedildi",
         data: { komut: bozuk.id, gunSonu: 'reddedildi' },
       });
       expect(existsSync(file)).toBe(false);
     } finally {
-      if (bekciOnce === undefined) delete process.env.LAFPOS_STDIN_CONTROL;
-      else process.env.LAFPOS_STDIN_CONTROL = bekciOnce;
+      if (bekciOnce === undefined) delete process.env.ASILPOS_STDIN_CONTROL;
+      else process.env.ASILPOS_STDIN_CONTROL = bekciOnce;
       ekYanit = {};
       siradaki = [];
       rmSync(file, { force: true });

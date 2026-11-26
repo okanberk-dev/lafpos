@@ -8,6 +8,7 @@ import { PavoClient, PavoError, type PavoStore } from '../server/okc/pavo';
 import { eodAfter, eodCopyUnavailable, eodSummary, eodTimeMs, pavoOrderNo, pavoSale, pavoTiming, readEod, readEodBaseline, readSale } from '../server/okc/providers/pavo';
 import { type FakePavo, startFakePavo } from './fake-pavo';
 import { type Harness, startApp } from './harness';
+import { PAVO_KIMLIGI, PAVO_TABAN_KASA, PAVO_UYGULAMA, TEL_KART_ALANI } from '@shared/eski-adlar';
 
 /**
  * Pavo (N86) yerel ağ bağlantısı: satışın Pavo biçimine çevrilmesi, cihaz yanıtının okunması ve sahte cihazla
@@ -32,7 +33,7 @@ describe('sepet → Pavo satışı', () => {
       { Name: 'Latte', IsGeneric: false, UnitCode: 'C62', TaxGroupCode: 'KDV10', ItemQuantity: 1, UnitPriceAmount: 116.68, GrossPriceAmount: 116.68, TotalPriceAmount: 116.68 },
       { Name: 'Su', IsGeneric: false, UnitCode: 'C62', TaxGroupCode: 'KDV20', ItemQuantity: 1, UnitPriceAmount: 20, GrossPriceAmount: 20, TotalPriceAmount: 20 },
     ]);
-    expect(sale).toMatchObject({ OrderNo: 'LP0001', MainDocumentType: 1, GrossPrice: 370, TotalPrice: 370, CurrencyCode: 'TRY', RefererApp: 'LafPOS' });
+    expect(sale).toMatchObject({ OrderNo: 'LP0001', MainDocumentType: 1, GrossPrice: 370, TotalPrice: 370, CurrencyCode: 'TRY', RefererApp: PAVO_UYGULAMA });
     const lines = sale.AddedSaleItems.reduce((a, i) => a + Math.round(i.TotalPriceAmount * 100), 0);
     expect(lines).toBe(37000);
   });
@@ -148,7 +149,7 @@ describe('banka gün sonu yanıtı → özet', () => {
     expect(eodSummary(null)).toBeNull();
   });
 
-  it('taban: gün sonundan hemen önce cihazın son gün sonu; kayıtlı gün sonu yoksa boş, özetsiz yanıtta LafPOS’unkine düşülür', () => {
+  it('taban: gün sonundan hemen önce cihazın son gün sonu; kayıtlı gün sonu yoksa boş, özetsiz yanıtta AsilPOS’unkine düşülür', () => {
     expect(readEodBaseline(sample)).toEqual({ prevBatchNo: '000278', prevBatchFrom: 'cihaz' });
     expect(readEodBaseline({ HasError: true, ErrorCode: '5075', Message: 'Batch bulunamadı.' })).toEqual({ prevBatchNo: null, prevBatchFrom: 'bos' });
     expect(readEodBaseline({ HasError: true, ErrorCode: '404', Message: 'Bilinmeyen uç' })).toBeNull();
@@ -157,10 +158,10 @@ describe('banka gün sonu yanıtı → özet', () => {
 
   it('cihazdaki gün sonu bu denemenin sonucu mu: batch tabandan büyük ve cihaz saati denemeden 6 dk’dan eski değil', () => {
     const at = Date.UTC(2026, 10, 20, 20, 0); // 23:00 İstanbul
-    const attempt = { at, prevBatchNo: '000280', prevBatchFrom: 'lafpos' as const };
+    const attempt = { at, prevBatchNo: '000280', prevBatchFrom: PAVO_TABAN_KASA };
     expect(eodAfter({ batchNo: '000281', deviceDateTime: '20.11.2026 23:01' }, attempt)).toBe(true);
     expect(eodAfter({ batchNo: '000281', deviceDateTime: '20.11.2026 22:55' }, attempt)).toBe(true);
-    // Cihazın menüsünden 20 dk önce alınmış gün sonu: batch LafPOS'un bildiğinden büyük ama bu deneme değil
+    // Cihazın menüsünden 20 dk önce alınmış gün sonu: batch AsilPOS'un bildiğinden büyük ama bu deneme değil
     expect(eodAfter({ batchNo: '000281', deviceDateTime: '20.11.2026 22:40' }, attempt)).toBe(false);
     expect(eodAfter({ batchNo: '000280', deviceDateTime: '20.11.2026 23:01' }, attempt)).toBe(false);
     // Saat okunamıyorsa batch no; batch no da bilinmiyorsa karar verilemez (alınmamış sayılır)
@@ -226,7 +227,7 @@ describe('akış (sahte cihaz)', () => {
     // "Satış yok" okuması testlerde ilk okumada kesinleşir (sahada 15 sn sonraki ikinci okumayla; ayrı testi aşağıda)
     pavoTiming.failConfirmMs = 0;
     device = await startFakePavo();
-    h = await startApp({ PAVO_URL: device.url, PAVO_SERIAL: device.serial, PAVO_FINGERPRINT: 'LafPOS-test' });
+    h = await startApp({ PAVO_URL: device.url, PAVO_SERIAL: device.serial, PAVO_FINGERPRINT: 'AsilPOS-test' });
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
   });
   afterAll(async () => {
@@ -274,7 +275,7 @@ describe('akış (sahte cihaz)', () => {
     const sale = device.sales.get(orderNo)!;
     expect(sale.state).toBe('open');
     expect(Math.round(Number(sale.body.TotalPrice) * 100)).toBe(o.total);
-    // Satış cihazın ekranındayken: sepet kilitli görünür, LafPOS'tan silinemez (cihazda vazgeçilir)
+    // Satış cihazın ekranındayken: sepet kilitli görünür, AsilPOS'tan silinemez (cihazda vazgeçilir)
     expect((await refresh(r.json.receipt.id)).status).toBe('kilitli');
     const del = await h.call<{ code: string; error: string }>('kasa', 'POST', `/okc/receipts/${r.json.receipt.id}/cancel`, {});
     expect(del.status).toBe(502);
@@ -531,7 +532,7 @@ describe('akış (sahte cihaz)', () => {
     const seqs = afterPair.filter((_, i) => device.requests[device.requests.length - afterPair.length + i]!.path !== '/Ping').map((x) => x.TransactionSequence);
     for (let i = 1; i < seqs.length; i++) expect(seqs[i]!).toBeGreaterThan(seqs[i - 1]!);
     expect(new Set(handles.map((x) => x.SerialNumber))).toEqual(new Set([device.serial]));
-    expect(new Set(afterPair.map((x) => x.Fingerprint))).toEqual(new Set(['LafPOS-test']));
+    expect(new Set(afterPair.map((x) => x.Fingerprint))).toEqual(new Set(['AsilPOS-test']));
   });
 
   describe('banka gün sonu', () => {
@@ -641,7 +642,7 @@ describe('akış (sahte cihaz)', () => {
       }
     });
 
-    it('gün kapanınca cihazda gün sonu alınır: özet saklanır (kart no yok), kart toplamı LafPOS ile aynı, cihaz slibini basar (kayıt için)', async () => {
+    it('gün kapanınca cihazda gün sonu alınır: özet saklanır (kart no yok), kart toplamı AsilPOS ile aynı, cihaz slibini basar (kayıt için)', async () => {
       const before = eodRequests().length;
       const t0 = Date.now();
       const day = await closeDay();
@@ -650,7 +651,7 @@ describe('akış (sahte cihaz)', () => {
       // Cihazda henüz gün sonu yoktu (taban "boş")
       expect(eod).toMatchObject({ dayId: day.id, trigger: 'otomatik', batchNo: '000278', errorCode: null, amountsHidden: false, earlier: [], prevBatchNo: null, prevBatchFrom: 'bos' });
       expect(eod.dayCardKurus).toBeGreaterThan(0);
-      // Bu günün kart ödemelerinin hepsi cihazdan: bankanın batch'i LafPOS'un kart toplamıyla aynı
+      // Bu günün kart ödemelerinin hepsi cihazdan: bankanın batch'i AsilPOS'un kart toplamıyla aynı
       expect(eod.grandTotalKurus).toBe(eod.dayCardKurus);
       expect(eod.dayCardSinceBatch).toBeNull();
       expect(eod.acquirers).toEqual([{ name: 'Test Bankası', count: 2, totalKurus: eod.dayCardKurus }]);
@@ -682,7 +683,7 @@ describe('akış (sahte cihaz)', () => {
         z: { zNo: number; summary: { expectedCash: number; countedCash: number | null; cashDiff: number | null; byUser: unknown[] } } | null;
       };
       const first = await h.ok<{ slip: Slip | null }>('kasa', 'POST', '/okc/eod/slip', {});
-      // Kayıt kâğıdı: Pavo - LafPOS kart kıyası kör kasada da basılır. LafPOS'un Z'si (beklenen nakit, sayılan, fark,
+      // Kayıt kâğıdı: Pavo - AsilPOS kart kıyası kör kasada da basılır. AsilPOS'un Z'si (beklenen nakit, sayılan, fark,
       // personel tutarları) kör kasiyere gitmez: gün sonunu kapatınca da kasa uçlarındaki gibi, kâğıt yalnız banka kısmıyla
       expect(first.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: eod.dayCardKurus, trigger: 'otomatik', z: null });
       for (const secret of ['expectedCash', 'countedCash', 'cashDiff', 'byUser', 'odenmezPeople']) expect(JSON.stringify(first)).not.toContain(secret);
@@ -701,10 +702,10 @@ describe('akış (sahte cihaz)', () => {
       expect(full.slip).toMatchObject({ batchNo: '000278', z: { zNo: expect.any(Number), summary: { expectedCash: expect.any(Number), countedCash: null, cashDiff: null } } });
       expect(full.slip!.z!.summary.byUser.length).toBeGreaterThan(0);
 
-      // lafmaliyet'e giden gün paketinde Pavo - LafPOS kıyası (TL)
+      // lafmaliyet'e giden gün paketinde Pavo - AsilPOS kıyası (TL)
       const { buildDayPayload } = await import('../server/sync/lafmaliyet');
-      const bank = (buildDayPayload(day.id) as { bankPos?: { status: string; batchNo: string; pavoCard: number; lafposCard: number; diff: number } }).bankPos;
-      expect(bank).toMatchObject({ status: 'ok', batchNo: '000278', pavoCard: eod.grandTotalKurus! / 100, lafposCard: eod.dayCardKurus! / 100, diff: 0 });
+      const bank = (buildDayPayload(day.id) as { bankPos?: { status: string; batchNo: string; pavoCard: number; [TEL_KART_ALANI]: number; diff: number } }).bankPos;
+      expect(bank).toMatchObject({ status: 'ok', batchNo: '000278', pavoCard: eod.grandTotalKurus! / 100, [TEL_KART_ALANI]: eod.dayCardKurus! / 100, diff: 0 });
     });
 
     it('gün sonu kâğıdının Z süzgeci kasa uçlarınınki: kör kasaya hiç gitmez, maliyet yetkisi olmayana personel tutarları gizli', async () => {
@@ -755,7 +756,7 @@ describe('akış (sahte cihaz)', () => {
       expect(dayEod(dayId)).toMatchObject({ status: 'ok', batchNo: '000278', grandTotalKurus: first.grandTotalKurus });
       expect((await status()).eod).toMatchObject({ status: 'ok', batchNo: '000278' });
 
-      // Elle ikinci gün sonu: yeni batch yalnız yeniden açıldıktan sonraki kart satışını taşır ve LafPOS'ta da yalnız
+      // Elle ikinci gün sonu: yeni batch yalnız yeniden açıldıktan sonraki kart satışını taşır ve AsilPOS'ta da yalnız
       // önceki gün sonundan sonraki kart ödemeleriyle kıyaslanır (günün bütün kartıyla değil: yanlış "eksik" uyarısı yok)
       const manual = await h.ok<Eod>('patron', 'POST', '/okc/eod', {});
       expect(manual).toMatchObject({ status: 'ok', trigger: 'elle', dayId, batchNo: '000279', grandTotalKurus: o.total, dayCardKurus: o.total, dayCardSinceBatch: '000278', prevBatchNo: '000278' });
@@ -768,7 +769,7 @@ describe('akış (sahte cihaz)', () => {
       expect((await status('kasa')).eod).toMatchObject({ earlier: [{ batchNo: '000278', grandTotalKurus: null }] });
     });
 
-    it('cihaz gün sonunu alamazsa (5085) LafPOS günü yine kapanır; alarm düşer, elle yeniden denenir', async () => {
+    it('cihaz gün sonunu alamazsa (5085) AsilPOS günü yine kapanır; alarm düşer, elle yeniden denenir', async () => {
       await newDay();
       device.eodMode = 'fail';
       const t0 = Date.now();
@@ -780,8 +781,8 @@ describe('akış (sahte cihaz)', () => {
       expect(audits()[0]).toMatchObject({ severity: 'alarm' });
       expect(await dayIsClosed()).toBe(true);
 
-      // Elle yeniden deneme: yetki gün sonu yetkisi (garson alamaz). Cihazda LafPOS dışı bir kart işlemi var, bu günün
-      // LafPOS kart toplamı 0: toplam farklı, uyarı düşer
+      // Elle yeniden deneme: yetki gün sonu yetkisi (garson alamaz). Cihazda AsilPOS dışı bir kart işlemi var, bu günün
+      // AsilPOS kart toplamı 0: toplam farklı, uyarı düşer
       device.eodMode = 'ok';
       device.addCardTransaction(12.5);
       expect((await h.call('garson', 'POST', '/okc/eod', {})).status).toBe(403);
@@ -898,13 +899,13 @@ describe('akış (sahte cihaz)', () => {
     });
 
     it('cihazın menüsünden önceden alınan gün sonu bu denemenin sonucu sayılmaz: taban gönderimden hemen önce cihazdan okunur', async () => {
-      // LafPOS'un bildiği son batch 283; kasiyer cihazın menüsünden gün sonu alır (284), LafPOS'a haber gitmez
+      // AsilPOS'un bildiği son batch 283; kasiyer cihazın menüsünden gün sonu alır (284), AsilPOS'a haber gitmez
       device.menuEod();
       await newDay();
       device.eodMode = 'drop';
       const t0 = Date.now();
       const day = await closeDay();
-      // Taban LafPOS'un bildiği 283 değil, cihazın 284'ü: doğrulama 284'ü bu denemenin sonucu sanmaz
+      // Taban AsilPOS'un bildiği 283 değil, cihazın 284'ü: doğrulama 284'ü bu denemenin sonucu sanmaz
       expect(await waitEod(t0, 'unknown')).toMatchObject({ prevBatchNo: '000284', prevBatchFrom: 'cihaz' });
       device.eodMode = 'ok';
       const verified = await h.ok<{ changed: boolean; record: Eod; message: string }>('patron', 'POST', '/okc/eod/verify', {});
@@ -988,7 +989,7 @@ describe('akış (sahte cihaz)', () => {
       expect((await status()).eod).toMatchObject({ status: 'unknown', dayId: orphan.dayId });
       expect(dayEod(orphan.dayId!)).toMatchObject({ status: 'unknown' });
       expect(audits()[0]).toMatchObject({ severity: 'alarm' });
-      expect(audits()[0]!.message).toContain('LafPOS kapandı');
+      expect(audits()[0]!.message).toContain('AsilPOS kapandı');
       // İkinci açılış bir şey değiştirmez
       const n = audits().length;
       mods.recoverDeviceEod();
@@ -1003,14 +1004,14 @@ describe('akış (sahte cihaz)', () => {
     type Okc = { lastError: { message: string } | null; pavo: PavoStatus };
     const okc = () => h.ok<Okc>('patron', 'GET', '/okc/status');
 
-    it('sahada: cihaz son gün sonunun kopyasını vermezse (HTTP 404, gövdesiz) gün sonu yine alınır; taban LafPOS’un bildiği batch, eski hata silinir', async () => {
+    it('sahada: cihaz son gün sonunun kopyasını vermezse (HTTP 404, gövdesiz) gün sonu yine alınır; taban AsilPOS’un bildiği batch, eski hata silinir', async () => {
       mods.setSyncState('okc.lastError', { message: 'Cihaz gün sonu: Cihazdan tanınmayan yanıt (HTTP 404)', at: Date.now() - 60_000 });
       device.eodCopyReply = 'http404';
       try {
         const known = mods.getSyncState<string>('pavo.eod.batch');
         const before = eodRequests().length;
         const rec = await h.ok<Eod>('patron', 'POST', '/okc/eod', {});
-        expect(rec).toMatchObject({ status: 'ok', prevBatchNo: known, prevBatchFrom: 'lafpos' });
+        expect(rec).toMatchObject({ status: 'ok', prevBatchNo: known, prevBatchFrom: PAVO_TABAN_KASA });
         expect(eodRequests().length).toBe(before + 1);
         expect((await okc()).lastError).toBeNull();
         // Doğrulama kopyasız yapılamaz: okunur ret, beklenmeyen hata değil
@@ -1108,7 +1109,7 @@ describe('akış (sahte cihaz)', () => {
       const at = now - (p.minute % 30) * 60_000;
       await h.ok('patron', 'PUT', '/admin/settings', { autoDayEnd: true, autoDayEndHour: p.hour + (p.minute >= 30 ? 0.5 : 0) });
       mods.db.update(mods.schema.businessDays).set({ openedAt: at - 4 * 3600_000 }).where(mods.eq(mods.schema.businessDays.id, day.id)).run();
-      // LafPOS Uzaktan kurulu (bildirim açık) ama o an ulaşılamıyor: bildirim kuyruğa girer, internet dönünce gider
+      // AsilPOS Uzaktan kurulu (bildirim açık) ama o an ulaşılamıyor: bildirim kuyruğa girer, internet dönünce gider
       Object.assign(env, { cloudUrl: 'http://127.0.0.1:9', cloudSecret: 'b'.repeat(40) });
       device.eodMode = 'fail';
       try {
@@ -1167,7 +1168,7 @@ describe('sertifika sabitleme (HTTPS)', () => {
     try {
       const a = await startFakePavo({ tls: makeCert(dir, 'a') });
       const store = memory();
-      const client = new PavoClient({ url: a.url, serial: a.serial, fingerprint: 'LafPOS' }, store);
+      const client = new PavoClient({ url: a.url, serial: a.serial, fingerprint: PAVO_KIMLIGI }, store);
       await client.pair();
       expect(store.cert).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
       expect((await client.paymentMediators()).HasError).toBe(false);

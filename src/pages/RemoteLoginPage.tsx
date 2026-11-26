@@ -23,8 +23,8 @@ function remember(key: string, on: boolean) {
 /** Kurulum adımları: eksik olan varsa giriş yerine ne yapılacağı görünür (parolayı denemeye gerek kalmaz) */
 function SetupChecklist({ s }: { s: RemoteSetup }) {
   const steps = [
-    { ok: s.secret, label: 'Ortak anahtar (LAFPOS_CLOUD_SECRET)' },
-    { ok: s.password, label: 'Uzaktan giriş parolası (LAFPOS_UZAKTAN_PAROLA)' },
+    { ok: s.secret, label: 'Ortak anahtar (ASILPOS_CLOUD_SECRET)' },
+    { ok: s.password, label: 'Uzaktan giriş parolası (ASILPOS_UZAKTAN_PAROLA)' },
     { ok: s.redis, label: 'Upstash Redis bağlantısı' },
   ];
   return (
@@ -48,10 +48,10 @@ function SetupChecklist({ s }: { s: RemoteSetup }) {
 }
 
 /**
- * Uzaktan giriş (sitenin "Üye girişi"). Üyelik açıksa (LAFPOS_UYE_EPOSTA) e-posta ve parola: üye ilk girişte davet
+ * Uzaktan giriş (sitenin "Üye girişi"). Üyelik açıksa (ASILPOS_UYE_EPOSTA) e-posta ve parola: üye ilk girişte davet
  * koduyla parolasını kendisi belirler, sonra aynı ikiliyle girer. İlk giriş formu üyelik hiç açılmamışken kendiliğinden,
  * sonra "Davet kodum var" ile açılır (sahibin panelden davet ettiği yönetici ve izleyici). Üyelik kapalıysa eski düzen:
- * patron parolası (LAFPOS_UZAKTAN_PAROLA) ya da parolasız görünüm. PIN'ler kafedeki kasada kalır. İndirme bağlantısı
+ * patron parolası (ASILPOS_UZAKTAN_PAROLA) ya da parolasız görünüm. PIN'ler kafedeki kasada kalır. İndirme bağlantısı
  * burada yok, yalnız girişten sonra (İndir)
  */
 export function RemoteLoginPage() {
@@ -80,7 +80,7 @@ export function RemoteLoginPage() {
     try {
       const res = await post<{ token: string }>(path, body);
       const demo = !body.parola && !!setup.data?.demo;
-      remember('lafpos.demo', demo);
+      remember('asilpos.demo', demo);
       setToken(res.token);
       await init();
       // Jeton alındı ama oturum okunamadı: bekleme ekranında takılı kalınmasın
@@ -121,14 +121,14 @@ export function RemoteLoginPage() {
 
   // Kurulum sorulurken ve parolasız giriş sürerken parola formu görünmez (her açılışta bir an "Parola" yanıp sönmesin).
   // Yazı açılıştaki ve girişten sonraki bekleme ekranlarıyla aynı: art arda gelince değişmez
-  if (setup.isPending || (auto && !error)) return <PageLoading label="LafPOS açılıyor…" />;
+  if (setup.isPending || (auto && !error)) return <PageLoading label="AsilPOS açılıyor…" />;
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
       <form onSubmit={submit} noValidate className="w-full max-w-sm rounded-3xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]">
         <LafTile size="lg" />
         {/* Sitenin üye girişi: girişten sonra canlı görünüm ve İndir (Windows programı) açılır */}
-        <p className="mt-4 text-sm font-semibold text-muted">LafPOS Uzaktan</p>
+        <p className="mt-4 text-sm font-semibold text-muted">AsilPOS Uzaktan</p>
         <h1 className="mt-0.5 text-xl font-bold sm:text-[22px]">{creating ? 'Üyeliği oluştur' : 'Üye girişi'}</h1>
         <p className="mt-1 text-pretty text-sm text-muted">
           {creating

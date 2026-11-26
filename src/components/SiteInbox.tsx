@@ -58,7 +58,7 @@ function writeAcks(acks: Acks) {
 }
 
 /**
- * Diğer sistemlerden gelen sesli uyarılar (operatör, 20 Kas 2026: "siparişler, karaoke gelince LafPOS'ta da ötsün").
+ * Diğer sistemlerden gelen sesli uyarılar (operatör, 20 Kas 2026: "siparişler, karaoke gelince AsilPOS'ta da ötsün").
  * Kabukta, platform şeridinin yanında; her ekranda takılı. Yeni online sipariş (uygulama, web, masa QR) sitenin
  * panelindeki zille 3 sn'de bir çalar ve üstte şerit durur: "Gördüm" (bu cihaz), siparişi açmak, aşamanın değişmesi ya
  * da siteden kalkması susturur. Masadan çağrı (uygulamada "Garson çağır", su, peçete) aynı zille, şeridin başında:

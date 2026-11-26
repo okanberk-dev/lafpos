@@ -65,14 +65,14 @@ export function useUnsavedGuard(dirty: boolean) {
     // kal" koruyucuyu yeniden ekler. Koruyucu, yönlendiricinin durumunu (anahtar, sıra) taşır: geçiş ona görünmez
     const armed = window.location.href;
     const arm = () => {
-      if ((window.history.state as { lafposGuard?: boolean } | null)?.lafposGuard) return;
-      window.history.pushState({ ...(window.history.state as object | null), lafposGuard: true }, '', armed);
+      if ((window.history.state as { asilposGuard?: boolean } | null)?.asilposGuard) return;
+      window.history.pushState({ ...(window.history.state as object | null), asilposGuard: true }, '', armed);
     };
     arm();
     let leaving = false;
     const onPop = () => {
       if (leaving || !latest.current || window.location.href !== armed) return;
-      if ((window.history.state as { lafposGuard?: boolean } | null)?.lafposGuard) return;
+      if ((window.history.state as { asilposGuard?: boolean } | null)?.asilposGuard) return;
       void confirmLeave().then((ok) => {
         if (!ok) return arm();
         leaving = true;

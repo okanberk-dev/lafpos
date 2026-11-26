@@ -44,7 +44,7 @@ describe('ödeme cihaza gider mi (deviceRoute)', () => {
     }
   });
 
-  it('kısmi tutar, bahşiş, paylaşım, açık hesap ve LafPOS’ta alınmış ödeme LafPOS’a yazılır; nedeni söylenir', () => {
+  it('kısmi tutar, bahşiş, paylaşım, açık hesap ve AsilPOS’ta alınmış ödeme AsilPOS’a yazılır; nedeni söylenir', () => {
     const cases: Partial<DeviceRouteInput>[] = [
       { amount: 5000 },
       { payMode: 'paylas' },
@@ -59,22 +59,22 @@ describe('ödeme cihaza gider mi (deviceRoute)', () => {
       const r = deviceRoute({ ...base, ...c });
       expect(r.on).toBe(true);
       expect(r.send).toBe(false);
-      expect(r.reason).toMatch(/LafPOS’a yazılır/);
+      expect(r.reason).toMatch(/AsilPOS’a yazılır/);
     }
     // Token ve simülatörde yemek kartı cihazda alınır
     expect(deviceRoute({ ...base, methodKind: 'yemek' }).send).toBe(true);
   });
 
-  it('bahşişli nakit ya da kart sessizce LafPOS’a yazılmaz: düğme kapanır, hesap bahşişsiz cihazdan alınır', () => {
+  it('bahşişli nakit ya da kart sessizce AsilPOS’a yazılmaz: düğme kapanır, hesap bahşişsiz cihazdan alınır', () => {
     for (const methodKind of ['nakit', 'kart'] as const) {
       expect(deviceRoute({ ...base, provider: 'pavo', methodKind, tip: 500 })).toMatchObject({ on: true, send: false, block: true, reason: expect.stringMatching(/Bahşişi ayrı alın/) });
     }
   });
 
-  it('cihaza gitmeyen kart düğmede söylenir ve onay ister; nakitte "LafPOS’a yaz"; havale ve gönderim kapalıyken değişmez', () => {
+  it('cihaza gitmeyen kart düğmede söylenir ve onay ister; nakitte "AsilPOS’a yaz"; havale ve gönderim kapalıyken değişmez', () => {
     const kart = { kind: 'kart', name: 'Kart' };
     expect(offDeviceLabel({ on: true, send: false }, kart, 25000)).toEqual({ label: '₺250,00 Kart: cihazsız kaydet', confirm: true });
-    expect(offDeviceLabel({ on: true, send: false }, { kind: 'nakit', name: 'Nakit' }, 25000)).toMatchObject({ confirm: false, label: expect.stringMatching(/LafPOS’a yaz/) });
+    expect(offDeviceLabel({ on: true, send: false }, { kind: 'nakit', name: 'Nakit' }, 25000)).toMatchObject({ confirm: false, label: expect.stringMatching(/AsilPOS’a yaz/) });
     expect(offDeviceLabel({ on: true, send: true }, kart, 25000)).toBeNull();
     expect(offDeviceLabel({ on: false, send: false }, kart, 25000)).toBeNull();
     expect(offDeviceLabel({ on: true, send: false }, { kind: 'havale', name: 'Havale' }, 25000)).toBeNull();
@@ -82,7 +82,7 @@ describe('ödeme cihaza gider mi (deviceRoute)', () => {
 });
 
 describe('otomatik gönderimin ret yolları', () => {
-  it('(a) paylaşımlı hesap, hiç pay alınmamış: Yazarkasa bölümü elle gönderir, neden "LafPOS’a yazılır" demez', () => {
+  it('(a) paylaşımlı hesap, hiç pay alınmamış: Yazarkasa bölümü elle gönderir, neden "AsilPOS’a yazılır" demez', () => {
     const split = { shares: [20000, 20000] };
     expect(okcPanelAuto(true, split, 0)).toBe(false);
     expect(okcPanelAuto(true, split, 20000)).toBe(true);
@@ -91,7 +91,7 @@ describe('otomatik gönderimin ret yolları', () => {
     const r = deviceRoute({ ...base, provider: 'pavo', payMode: 'paylas', splitActive: true, amount: 20000, remaining: 40000, nothingPaid: true });
     expect(r).toMatchObject({ on: true, send: false });
     expect(r.reason).toMatch(/Yazarkasa bölümünden bütün hesabı/);
-    expect(r.reason).not.toMatch(/LafPOS’a yazılır/);
+    expect(r.reason).not.toMatch(/AsilPOS’a yazılır/);
   });
 
   it('(b) cihaz sonucu para üstünü belirler: Nakit 500 seçilip kartla ödenirse para üstü 0, bölünmüşte de 0', () => {
@@ -246,11 +246,11 @@ describe('sunucu akışı (eğitim cihazı)', () => {
       ['nakit', half],
       ['kart', o.total - half],
     ]);
-    // Kasiyer LafPOS'ta Nakit 500 seçmişti: cihazda bölünmüş ödemede para üstü yok
+    // Kasiyer AsilPOS'ta Nakit 500 seçmişti: cihazda bölünmüş ödemede para üstü yok
     expect(deviceResult({ amount: o.total, given: o.total + 50000, methodName: 'Nakit' }, paid.paid).change).toBe(0);
   });
 
-  it('kısmi ödeme: LafPOS’ta tutar alınmışsa hesabın bütünü cihaza gitmez; kalem seçilerek gider', async () => {
+  it('kısmi ödeme: AsilPOS’ta tutar alınmışsa hesabın bütünü cihaza gitmez; kalem seçilerek gider', async () => {
     const o = await newOrder(2);
     const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
     const half = await h.ok<{ order: OrderDTO }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: Math.floor(o.total / 4), tip: 0, given: null, items: null, requestId: `kismi-${o.id}` });

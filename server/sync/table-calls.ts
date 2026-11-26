@@ -38,7 +38,7 @@ interface StoredCall extends PanelCall {
 
 interface CallsState {
   calls: StoredCall[];
-  /** LafPOS'ta yanıtlanan çağrılar (kimlik → an): yanıttan önce istenmiş bir liste onları geri getirmesin */
+  /** AsilPOS'ta yanıtlanan çağrılar (kimlik → an): yanıttan önce istenmiş bir liste onları geri getirmesin */
   acked: Record<string, number>;
   /**
    * Son işlenen listenin istendiği an: ondan önce istenmiş (ağda gecikmiş) liste yenisini ezmez. İleride görünüyorsa
@@ -96,7 +96,7 @@ const toDTO = (c: StoredCall): TableCallDTO => ({ id: c.id, label: c.tableName ?
 /**
  * Çekilen listeyi işler (sipariş çekiminin işleminde, `upsertOnlineOrders`). Yeni çağrı cihazlarda çalar
  * (`tables` › `site.call.new`, "Masa 4 · Su istiyor"); listeden düşen `site.call.done`. `mapTable`: siparişlerin masa
- * kuralı (önce QR kodu, sonra etiket). LafPOS'ta yanıtlanmış çağrı, eski bir listede gelse de geri gelmez.
+ * kuralı (önce QR kodu, sonra etiket). AsilPOS'ta yanıtlanmış çağrı, eski bir listede gelse de geri gelmez.
  */
 export function applyTableCalls(
   t: Tx,
@@ -156,7 +156,7 @@ export function tableCallsView(now = Date.now(), t: Tx | DB = db): TableCallDTO[
 }
 
 /**
- * "Gördüm": çağrıyı sitede yanıtlar (`POST /api/panel/calls/ack`, gövde `{id, actor}`; site `lafpos:<ad>` yazar),
+ * "Gördüm": çağrıyı sitede yanıtlar (`POST /api/panel/calls/ack`, gövde `{id, actor}`; site adı kasanın önekiyle yazar),
  * sonra yerelde düşürür, denetim kaydına yazar ve cihazlara yayar. Site 404 derse (çağrı sitede yok) yine düşer.
  * Siteye ulaşılamazsa ya da site kabul etmezse 502: çağrı açık kalır, yeniden denenir. Aynı çağrıya ikinci "Gördüm"
  * (başka cihazdan, aynı anda) siteye gitmeden tamam döner.

@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 import { upstashFetch } from './fake-upstash';
+import { VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
- * LafPOS Uzaktan (api/uzaktan.ts): kafedeki sunucunun imzalı itmesi, patron parolasıyla giriş, salt okunur
+ * AsilPOS Uzaktan (api/uzaktan.ts): kafedeki sunucunun imzalı itmesi, patron parolasıyla giriş, salt okunur
  * uçlar. Upstash yerine bellekte sahte Redis; imza kuralı sunucununkiyle aynı olmalı.
  */
 const SECRET = 'x'.repeat(40);
@@ -17,7 +18,7 @@ let h: Harness;
 beforeAll(async () => {
   h = await startApp();
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input) !== 'https://redis.test') return realFetch(input, init);
@@ -32,16 +33,16 @@ afterAll(() => {
 async function api() {
   return import('../api/uzaktan');
 }
-const req = (path: string, init: RequestInit = {}) => new Request(`https://lafpos.vercel.app/api/uzaktan?yol=${path}`, init);
+const req = (path: string, init: RequestInit = {}) => new Request(`https://${VERCEL_ALANI}/api/uzaktan?yol=${path}`, init);
 
-describe('LafPOS Uzaktan', () => {
+describe('AsilPOS Uzaktan', () => {
   it('imza kuralı sunucununkiyle aynı; asıl yol ?yol= ile geri kurulur', async () => {
     const { signedHeaders } = await import('../server/lib/signature');
     const { verifyPush, originalUrl } = await api();
-    const url = new URL('https://lafpos.vercel.app/api/uzaktan/push');
+    const url = new URL(`https://${VERCEL_ALANI}/api/uzaktan/push`);
     const body = '{"gz":"abc"}';
     const headers = new Headers(signedHeaders(SECRET, 'POST', url, body));
-    const seen = originalUrl('https://lafpos.vercel.app/api/uzaktan?yol=uzaktan/push');
+    const seen = originalUrl(`https://${VERCEL_ALANI}/api/uzaktan?yol=uzaktan/push`);
     expect(seen.pathname).toBe('/api/uzaktan/push');
     expect(verifyPush(SECRET, { method: 'POST', headers }, seen, body)).toBe(true);
     expect(verifyPush(SECRET, { method: 'POST', headers }, seen, '{"gz":"başka"}')).toBe(false);
@@ -62,7 +63,7 @@ describe('LafPOS Uzaktan', () => {
     // Kafeden gelmeden okunamaz; imzasız itme reddedilir
     const body = JSON.stringify({ gz: gzipSync(JSON.stringify(snap)).toString('base64') });
     expect((await POST(req('uzaktan/push', { method: 'POST', body }))).status).toBe(401);
-    const signed = new Headers({ ...signedHeaders(SECRET, 'POST', new URL('https://lafpos.vercel.app/api/uzaktan/push'), body), 'content-type': 'application/json' });
+    const signed = new Headers({ ...signedHeaders(SECRET, 'POST', new URL(`https://${VERCEL_ALANI}/api/uzaktan/push`), body), 'content-type': 'application/json' });
     expect((await POST(req('uzaktan/push', { method: 'POST', body, headers: signed }))).status).toBe(200);
 
     // Parola
@@ -105,9 +106,9 @@ describe('LafPOS Uzaktan', () => {
     const { GET } = await api();
     const read = async () => (await GET(req('uzaktan/kurulum'))).json() as Promise<Record<string, unknown>>;
     expect(await read()).toMatchObject({ secret: true, password: true, redis: true });
-    const saved = { s: process.env.LAFPOS_CLOUD_SECRET, k: process.env.KV_REST_API_URL };
+    const saved = { s: process.env.ASILPOS_CLOUD_SECRET, k: process.env.KV_REST_API_URL };
     try {
-      delete process.env.LAFPOS_CLOUD_SECRET;
+      delete process.env.ASILPOS_CLOUD_SECRET;
       delete process.env.KV_REST_API_URL;
       const body = await read();
       // Yemeksepeti aktarıcısının anahtarı tanımlı mı (var/yok; değeri asla)
@@ -116,7 +117,7 @@ describe('LafPOS Uzaktan', () => {
       // Kafe bağlanmamışken anahtarsız yalnız demo açılır
       expect(await (await GET(req('health'))).json()).toMatchObject({ ok: true, demo: true });
     } finally {
-      process.env.LAFPOS_CLOUD_SECRET = saved.s;
+      process.env.ASILPOS_CLOUD_SECRET = saved.s;
       process.env.KV_REST_API_URL = saved.k;
     }
   });
@@ -124,13 +125,13 @@ describe('LafPOS Uzaktan', () => {
     const { GET, POST } = await api();
     const saved = new Map(store);
     store.clear();
-    const secretSaved = process.env.LAFPOS_CLOUD_SECRET;
+    const secretSaved = process.env.ASILPOS_CLOUD_SECRET;
     try {
       expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ demo: true });
       // Demo ortak anahtar olmadan da açılır
-      delete process.env.LAFPOS_CLOUD_SECRET;
+      delete process.env.ASILPOS_CLOUD_SECRET;
       expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(200);
-      process.env.LAFPOS_CLOUD_SECRET = secretSaved;
+      process.env.ASILPOS_CLOUD_SECRET = secretSaved;
       const login = await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }));
       const { token, demo } = (await login.json()) as { token: string; demo: boolean };
       expect(demo).toBe(true);
@@ -141,23 +142,23 @@ describe('LafPOS Uzaktan', () => {
       for (const [k, v] of saved) store.set(k, v);
       expect((await GET(req('bootstrap', { headers: { authorization: `Bearer ${token}` } }))).status).toBe(401);
       expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(401);
-      // LAFPOS_UZAKTAN_DEMO=0: özet yokken de parola gerekir
+      // ASILPOS_UZAKTAN_DEMO=0: özet yokken de parola gerekir
       store.clear();
-      process.env.LAFPOS_UZAKTAN_DEMO = '0';
+      process.env.ASILPOS_UZAKTAN_DEMO = '0';
       expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(401);
     } finally {
-      process.env.LAFPOS_CLOUD_SECRET = secretSaved;
-      delete process.env.LAFPOS_UZAKTAN_DEMO;
+      process.env.ASILPOS_CLOUD_SECRET = secretSaved;
+      delete process.env.ASILPOS_UZAKTAN_DEMO;
       store.clear();
       for (const [k, v] of saved) store.set(k, v);
     }
   });
 });
 
-describe('LafPOS Uzaktan: parolasız görünüm (varsayılan, 27 Eki 2026)', () => {
-  it('LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa kafe bağlıyken de giriş parola sormaz; görünüm yine salt okunur', async () => {
+describe('AsilPOS Uzaktan: parolasız görünüm (varsayılan, 27 Eki 2026)', () => {
+  it('ASILPOS_UZAKTAN_PAROLA_GEREKLI yoksa kafe bağlıyken de giriş parola sormaz; görünüm yine salt okunur', async () => {
     const { GET, POST } = await api();
-    delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
+    delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
     try {
       expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ open: true, password: true });
       const login = await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }));
@@ -167,7 +168,7 @@ describe('LafPOS Uzaktan: parolasız görünüm (varsayılan, 27 Eki 2026)', () 
       expect((await GET(req('bootstrap', { headers: { authorization: `Bearer ${token}` } }))).status).toBe(200);
       expect((await POST(req('orders', { method: 'POST', body: '{}', headers: { authorization: `Bearer ${token}` } }))).status).toBe(403);
     } finally {
-      process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
+      process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     }
   });
 });

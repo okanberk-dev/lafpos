@@ -82,7 +82,7 @@ function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
 /**
  * Açılış önerisi (kasa zinciri, docs/03-ENTEGRASYON.md §4.6): rakam gören kullanıcıya beklenen açılış, kaynağı ve
  * devrin günü; kör kasiyere yalnız "beklenen var, sayın" (`check`). Beklenen bilinmiyorsa null. Kaynak lafmaliyet'se
- * onun kaynağı da (`ladminSource`): `kasa_raporu` panelin Kasa raporu, `lafpos` rapor yokken geri söylenen sayım
+ * onun kaynağı da (`ladminSource`): `kasa_raporu` panelin Kasa raporu, `TEL_KAYNAK` (telde eski adla) rapor yokken geri söylenen sayım
  */
 function openingFor(user: AuthUser) {
   const exp = expectedOpening(db);
@@ -327,6 +327,6 @@ cashRoutes.get('/days/:id/lafmaliyet.json', (c) => {
   requirePermission(c.get('user'), 'rapor.gor');
   const day = getDay(db, c.req.param('id'));
   const summary = day.summary ?? computeSummary(db, day);
-  c.header('content-disposition', `attachment; filename="lafpos-z-${day.date}.json"`);
+  c.header('content-disposition', `attachment; filename="asilpos-z-${day.date}.json"`);
   return c.json(lafmaliyetZ(day, summary));
 });

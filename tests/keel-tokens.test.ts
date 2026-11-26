@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * LafPOS Keel belirteçleri (src/styles/keel.css, DESIGN.md §0): iki temada aynı adlar tanımlı, metin ve arayüz öğesi
+ * AsilPOS Keel belirteçleri (src/styles/keel.css, DESIGN.md §0): iki temada aynı adlar tanımlı, metin ve arayüz öğesi
  * kontrastı eşiğin üstünde, belge ve belirteç dosyası aynı değerleri söyler. Test düşerse değeri düzelt, eşiği gevşetme
  */
 const css = readFileSync(new URL('../src/styles/keel.css', import.meta.url), 'utf8');
@@ -23,7 +23,7 @@ const ratio = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-describe('LafPOS Keel belirteçleri', () => {
+describe('AsilPOS Keel belirteçleri', () => {
   it('gece teması açık temanın bütün renk belirteçlerini yeniden tanımlar', () => {
     const colors = Object.keys(light).filter((k) => /^#[0-9a-f]{6}$/i.test(light[k]!));
     const darkOwn = vars(block('.dark {'));
@@ -77,7 +77,7 @@ describe('LafPOS Keel belirteçleri', () => {
 
   it('belge (DESIGN.md §0) belirteç dosyasıyla aynı değerleri söyler', () => {
     const doc = readFileSync(new URL('../DESIGN.md', import.meta.url), 'utf8');
-    const section = doc.slice(doc.indexOf('## 0. LafPOS Keel'), doc.indexOf('## 1. İlkeler'));
+    const section = doc.slice(doc.indexOf('## 0. AsilPOS Keel'), doc.indexOf('## 1. İlkeler'));
     for (const k of ['k-canvas', 'k-surface', 'k-ink', 'k-mute', 'k-select', 'k-mint']) {
       expect(section, `${k} açık`).toContain(light[k]!);
       expect(section, `${k} gece`).toContain(dark[k]!);

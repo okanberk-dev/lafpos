@@ -23,13 +23,13 @@ export const DEMO_USERS = [
 ] as const;
 
 /**
- * Boş veritabanına kurulum verisini yükler. Kafe kurulumunda (`LafPOS-Kurulum.exe`, `npm start`) yalnız işletmenin
+ * Boş veritabanına kurulum verisini yükler. Kafe kurulumunda (`AsilPOS-Kurulum.exe`, `npm start`) yalnız işletmenin
  * başlamak için gerektirdiği kurulum gelir: rol hesapları (örnek PIN'li), istasyonlar, yazıcı, köşkün masa planı ve
  * karaoke odası, ödeme türleri, sitenin menüsü (anlık görüntü; site bağlantısı kurulunca güncellenir) ve kasaya özgü
  * ürünler (karaoke saati, yenilebilir bardak, şeker ve bardak seçimi). Adisyon, ödeme, gün, müşteri, rezervasyon gibi
  * hiçbir hareket yazılmaz (tests/deneme-modu.test.ts). Kurulum deneme modunda açılır (`demoMode`, eğitim yazarkasası).
  *
- * `demo: true` (tarayıcı demosu, `LAFPOS_DEMO_SEED=1`): ayrıca örnek kampanya (kapalı "Öğle kahvesi" happy hour'u).
+ * `demo: true` (tarayıcı demosu, `ASILPOS_DEMO_SEED=1`): ayrıca örnek kampanya (kapalı "Öğle kahvesi" happy hour'u).
  * Demonun ilk gününün satışları ayrıca demo/scenario.ts'ten gerçek uçlarla girilir.
  */
 export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
@@ -99,7 +99,7 @@ export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
 
     applyMenu(t, snapshot, { barStationId: bar, kitchenStationId: kitchen });
 
-    // LafPOS'a özel: karaoke saati (HİZMET, KDV %20). Oda sayacı durunca bu ürünle satır açılır.
+    // AsilPOS'a özel: karaoke saati (HİZMET, KDV %20). Oda sayacı durunca bu ürünle satır açılır.
     const serviceCat = ulid();
     t.insert(schema.categories).values({ id: serviceCat, name: 'Karaoke ve etkinlik', color: '#6b1a2b', sort: 99, customizable: false, active: true, stationId: null }).run();
     t.insert(schema.products)

@@ -4,7 +4,7 @@ import { create } from 'zustand';
  * Kabuk durumu: komut paleti, kullanıcı menüsü ve yönetim paneli tercihleri (dar menü, sıkı görünüm).
  * Tercihler bu cihazda saklanır; saklanamazsa oturum boyunca bellekte kalır.
  */
-const KEY = 'lafpos.pref.admin';
+const KEY = 'asilpos.pref.admin';
 
 interface AdminPrefs {
   rail: boolean;

@@ -1,7 +1,7 @@
-# LafPOS tasarım sistemi: LafPOS Pano
+# AsilPOS tasarım sistemi: AsilPOS Pano
 
 > Ürün bağlamı `PRODUCT.md`'de. **20 Kasım 2026** operatör kararları: _"Modern Financial Dashboard UI … bu tasarım
-> metrikleriyle uygun bizim renklerimize uygun şekilde uyarlayıp lafposa uyarlar mısın … olmayanları sen bu metriklerle
+> metrikleriyle uygun bizim renklerimize uygun şekilde uyarlayıp asilposa uyarlar mısın … olmayanları sen bu metriklerle
 > uyarla branding yap"_, _"tüm tasarımı o şekilde yaptığından menüsüne kadar 1:1 olduğundan da emin ol … kullanıcı
 > davranışı çok önemli, daha kolay olduğunu anlarsan öyle yap"_, _"yazı tipini de görseldeki gibi yapabilirsin"_ ve
 > _"menü kısımlarını da daha güzel tasarla"_. Kaynak Dribbble'daki "Modern Financial Dashboard UI" (Qubecoe, M. Zeeshan
@@ -13,17 +13,17 @@
 > (adisyon, bar, kasa, giriş, müşteri ekranı) aynı ölçülerle kuruldu; kullanıcı akışını yavaşlatacak yerde (ürün
 > yoğunluğu, 44 px hedef, telefonda alt sekme) panodan bilerek ayrılındı. Değerler `src/index.css`'te; erişilebilirlik
 > oranları `tests/design-tokens.test.ts` ve `tests/ui-kit.test.ts`'te sabit. Test düşerse değeri düzelt, eşiği gevşetme.
-> Önceki "LafPOS Sahne" (17-18 Kasım 2026, gnbsite'ın Area Board kiti: sahne, yaprak, mürekkep ana eylem, Poppins ve
+> Önceki "AsilPOS Sahne" (17-18 Kasım 2026, gnbsite'ın Area Board kiti: sahne, yaprak, mürekkep ana eylem, Poppins ve
 > Gabarito) bunun yerine geçti; ok halkası, tek açılış anı ve bantlar ondan kaldı.
 
-## 0. LafPOS Keel: güncel dil (22 Kasım 2026)
+## 0. AsilPOS Keel: güncel dil (22 Kasım 2026)
 
 > Sahibin isteği: _"sayfayı ekran ekran incele: renk, tipografi, boşluk, köşe yarıçapı, kart yapısı, grafik stili, mobil
 > yerleşim, durum renkleri … bundan sonraki her ekleme bu sisteme uysun"_. Kaynak: Behance "Keel: Fintech SaaS
 > Dashboard UX/UI Case Study" (yalnız görsel dil; marka adı, logo, illüstrasyon ve metin alınmadı). Bu bölüm
 > aşağıdaki bölümlerle çelişirse **bu bölüm geçerlidir**; ayrıntılar (kabuk, kasa ekranları, bileşen ölçüleri) aşağıda
 > durur. Belirteçler `src/styles/keel.css`'te (`--k-*`), eşikler `tests/keel-tokens.test.ts`'te. Kontrol listesi:
-> `.claude/skills/lafpos-design/SKILL.md`. Uymayan bir ihtiyaç çıkarsa önce bu bölüm ve belirteç dosyası güncellenir.
+> `.claude/skills/asilpos-design/SKILL.md`. Uymayan bir ihtiyaç çıkarsa önce bu bölüm ve belirteç dosyası güncellenir.
 
 ### İlkeler
 
@@ -171,7 +171,7 @@ Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki �
 | Bant (Araçlar, bildirim) | `#0B100E` + yeşil hâle | `#0A0A0B`, hâle kısık |
 | Marka karosu (uygulama ikonu) | `radial-gradient(#23876A → #1D6D56 → #0C3B2D)`, krem `#FBF6F1`, pirinç `#E8C877` | aynı |
 
-- **Panonun rengi ev yeşili:** panonun mavisi (ray, seçili sekme, ana düğme, segment, değer hapı, grafik) LafPOS'ta ev
+- **Panonun rengi ev yeşili:** panonun mavisi (ray, seçili sekme, ana düğme, segment, değer hapı, grafik) AsilPOS'ta ev
   yeşilidir; açık mavi tonlar açık nane. Bütün çiftler iki temada AA (`tests/design-tokens.test.ts`).
 - Değer adları `--admin-*` (`:root` açık, `.dark` koyu); ortak adlar (`--bg`, `--ink`, `--primary`, `--focus`...) onlara
   çözülür; panonun adları: `--rail*`, `--card-line`, `--card-shadow`, `--chart-soft`. Tailwind anlam
@@ -352,7 +352,7 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   pencerenin alt şeridinde, kaydırınca kaybolmaz; yanında para üstü, eksik ya da bahşiş notu. Düğmenin tutarı bahşişi
   içerir (kartta bankanın POS'una girilen tutar) ve eksik adımı söyler ("Ödenecek kalemleri seçin", "Önce hesabı
   bölün"; açık hesapta "açık hesaba yaz"). Tablet ve bilgisayarda iki sütun: solda tutar, tuş takımı, yazarkasa ve
-  alınan ödemeler; sağda ödeme türleri, Verilen, Bahşiş ve ciro dışı kapanış. Sepet yazarkasada beklerken LafPOS'ta
+  alınan ödemeler; sağda ödeme türleri, Verilen, Bahşiş ve ciro dışı kapanış. Sepet yazarkasada beklerken AsilPOS'ta
   ödeme, ciro dışı kapanış ve ödeme iptali kapalı; durum ve "Sepeti iptal et" en üstte. Sonuç ekranında para üstü en
   üstte, mürekkep kenarlı nötr kutuda.
 - **Adisyon** (4 Kasım 2026 yenilemesi): iki kart, ürünler | hesap. Ürünlerde üstte arama ("/" ile), geniş ekranda
@@ -450,7 +450,7 @@ görünüm"de 32). Kurumsal 6 px yüzey (4 Kasım 2026) kalktı: yönetim ve rap
   ve lafmaliyet, Ağ ve uzaktan erişim (yerel adres ve Tailscale karekodu), Ayarlar, Denetim kaydı (zaman çizelgesi),
   Raporlar (dönem segmenti, rapor sekmeleri, önceki dönemle KPI şeridi).
 
-### LafPOS'un eklemeleri (Innex ve Area Board kitine göre)
+### AsilPOS'un eklemeleri (Innex ve Area Board kitine göre)
 
 1. **Koyu tema:** aynı roller nötr gece değerleriyle (§2 "Koyu tema: gece"), her çift AA'da test ediliyor.
 2. **⌘K komut paleti** (Innex §1.2 önerisi): ekranlara, yönetim bölümlerine, ürünlere ve personele atlar;

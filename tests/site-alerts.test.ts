@@ -6,7 +6,7 @@ import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
 
 /**
- * Sesli uyarılar (docs/03-ENTEGRASYON.md §2.5; operatör 20 Kas 2026: "sipariş, karaoke gelince LafPOS'ta da ötsün"):
+ * Sesli uyarılar (docs/03-ENTEGRASYON.md §2.5; operatör 20 Kas 2026: "sipariş, karaoke gelince AsilPOS'ta da ötsün"):
  * var olan çekimlerin listesinden doğar, yeni istek açmaz. Online sipariş "yeni" aşamasındayken cihazlarda çalar
  * (`GET /api/sync/alerts`, yalnız yerel), siteden kalkınca numarasıyla olay; karaokede aynı günün iki listesi
  * kıyaslanır (günün ilki değil), yeni, iptal ve saati değişen rezervasyon olay olur. Ad ve not hiçbir olaya girmez.

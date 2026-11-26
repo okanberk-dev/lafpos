@@ -18,8 +18,8 @@ const dataDir = posEnvDolu(vars, 'DATA_DIR') ?? '/veri';
 export const env: typeof serverEnv = {
   ...configFrom(vars),
   dataDir,
-  dbFile: `${dataDir}/lafpos-demo.db`,
+  dbFile: `${dataDir}/asilpos-demo.db`,
   uploadsDir: `${dataDir}/uploads`,
   webDist: '/dist/web',
-  secret: posEnvDolu(vars, 'SECRET') ?? 'lafpos-tarayici-demosu',
+  secret: posEnvDolu(vars, 'SECRET') ?? 'asilpos-tarayici-demosu',
 };

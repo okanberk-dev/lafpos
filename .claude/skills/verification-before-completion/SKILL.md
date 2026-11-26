@@ -5,7 +5,7 @@ description: Use when about to claim work is complete, fixed, or passing, before
 
 > **Kaynak:** [obra/superpowers](https://github.com/obra/superpowers) `skills/verification-before-completion` @ `3be5aad` (MIT, `LICENSE`). Değişiklik: yalnız bu "Bu projede" bölümü eklendi.
 
-## Bu projede (LafPOS)
+## Bu projede (AsilPOS)
 
 "Bitti", "geçiyor", "düzeldi" demeden önce ilgili komutu **o anda** çalıştır ve çıktısını oku:
 

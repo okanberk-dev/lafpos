@@ -1,4 +1,4 @@
-/** Tarayıcı demosu (lafpos.vercel.app/demo): arayüzle demo çalışma zamanı (demo/runtime.ts) arasındaki sözleşme */
+/** Tarayıcı demosu (Uzaktan'ın `/demo` yolu): arayüzle demo çalışma zamanı (demo/runtime.ts) arasındaki sözleşme */
 
 /** Demoda girilebilen örnek personel. PIN ekranda görünmez; rol seçilince demo kendisi girer */
 export interface DemoUser {

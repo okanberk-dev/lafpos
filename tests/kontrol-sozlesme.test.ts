@@ -19,6 +19,7 @@ import {
   UYE_ROLLERI,
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, ROLES } from '@shared/permissions';
+import { KONTROL_IMZA_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Uzaktan yönetim sözleşmesi (shared/kontrol.ts): bulut, kasa ve arayüz aynı doğrulamayı, imza metnini ve parmak izini
@@ -118,7 +119,7 @@ describe('imzaMetni', () => {
     const b = ok('urun.satis', { id: 'p1', satista: false, ad: 'Latte' });
     const k = { id: 'k_abcdefghijklmnop', at: 1_795_000_000_000, kim: 'sahip@laffogato.net', kurulum: 'abcdef0123456789abcdef01', rol: 'sahip' as const };
     const m = imzaMetni({ ...k, tur: a.tur, veri: a.veri });
-    expect(m).toBe(`lafpos-kontrol:v${KONTROL_SURUM}:abcdef0123456789abcdef01:k_abcdefghijklmnop:urun.satis:1795000000000:sahip@laffogato.net:sahip:{"id":"p1","satista":false}`);
+    expect(m).toBe(`${KONTROL_IMZA_ONEKI}:v${KONTROL_SURUM}:abcdef0123456789abcdef01:k_abcdefghijklmnop:urun.satis:1795000000000:sahip@laffogato.net:sahip:{"id":"p1","satista":false}`);
     expect(imzaMetni({ ...k, tur: b.tur, veri: b.veri })).toBe(m);
     // Herhangi bir alan değişince metin değişir: başka şubeye kopyalanan ya da rolü değiştirilen komutun imzası tutmaz
     expect(imzaMetni({ ...k, kim: 'baska@laffogato.net', tur: a.tur, veri: a.veri })).not.toBe(m);

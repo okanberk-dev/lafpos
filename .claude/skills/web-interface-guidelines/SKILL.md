@@ -1,14 +1,14 @@
 ---
 name: web-interface-guidelines
-description: Review UI code for Vercel Web Interface Guidelines compliance. In LafPOS use it when building, simplifying or reviewing a screen or component (accessibility, focus, forms, touch, overflow, copy) before npm run build && npm run e2e.
+description: Review UI code for Vercel Web Interface Guidelines compliance. In AsilPOS use it when building, simplifying or reviewing a screen or component (accessibility, focus, forms, touch, overflow, copy) before npm run build && npm run e2e.
 argument-hint: <file-or-pattern>
 ---
 
-> **Kaynak:** [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines/tree/434b7f91364665f2f733b310ec54809bf8f37937) `command.md` @ `434b7f91364665f2f733b310ec54809bf8f37937` (5 Eki 2026, MIT, `LICENSE`). Vercel'in kurulum betiğinin Claude Code'a "skill" diye koyduğu dosya budur; `vercel-labs/agent-skills` içindeki `web-design-guidelines` de her seferinde bu dosyayı ağdan çeker. Değişiklik: ön bilgiye `name` ve açıklamaya LafPOS cümlesi, gövdenin başına bu "Bu projede" bölümü eklendi; kurallar olduğu gibi.
+> **Kaynak:** [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines/tree/434b7f91364665f2f733b310ec54809bf8f37937) `command.md` @ `434b7f91364665f2f733b310ec54809bf8f37937` (5 Eki 2026, MIT, `LICENSE`). Vercel'in kurulum betiğinin Claude Code'a "skill" diye koyduğu dosya budur; `vercel-labs/agent-skills` içindeki `web-design-guidelines` de her seferinde bu dosyayı ağdan çeker. Değişiklik: ön bilgiye `name` ve açıklamaya AsilPOS cümlesi, gövdenin başına bu "Bu projede" bölümü eklendi; kurallar olduğu gibi.
 
-## Bu projede (LafPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
+## Bu projede (AsilPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
 
-Bu skill LafPOS'ta arayüzü **sade ve hatasız** tutmak için bir gözden geçirme listesidir, görünümü
+Bu skill AsilPOS'ta arayüzü **sade ve hatasız** tutmak için bir gözden geçirme listesidir, görünümü
 değiştirmez. Görünüm Innex'te kalır (`DESIGN.md`, `docs/ADMIN-INNEX.md`); yeni yönetim ekranında yöntem
 `build-admin-panel`, telefona uyarlamada `impeccable` `adapt`.
 
@@ -20,9 +20,9 @@ değiştirmez. Görünüm Innex'te kalır (`DESIGN.md`, `docs/ADMIN-INNEX.md`); 
 - Kontrol: `npm run build && npm run e2e` (390 ve 768 px dokunmatik, 1280 px, koyu tema; yatay taşma, 44 px
   altı hedef, konsol ve ağ hatası hata sayılır), sonra `e2e/out/` görüntülerine gözle bakılır.
 
-**Çakışan kurallar: LafPOS'unki geçerli**
+**Çakışan kurallar: AsilPOS'unki geçerli**
 
-| Aşağıdaki kural | LafPOS'ta |
+| Aşağıdaki kural | AsilPOS'ta |
 |---|---|
 | Title Case for headings/buttons (Chicago style) | Cümle düzeni; büyük harf yalnız kenar çubuğu grup etiketlerinde; başlıkta sonda nokta yok |
 | `&` over "and" | "ve" yazılır ("Salon ve kasa") |

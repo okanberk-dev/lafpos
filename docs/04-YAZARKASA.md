@@ -1,7 +1,7 @@
 # Yazarkasa POS (ÖKC) bağlantısı
 
-Mali fiş ÖKC'den (yazarkasa POS) kesilir. LafPOS adisyonu cihaza **sepet** olarak gönderir; ödeme ve mali fiş
-cihazda alınır; sonuç (Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir.
+Mali fiş ÖKC'den (yazarkasa POS) kesilir. AsilPOS adisyonu cihaza **sepet** olarak gönderir; ödeme ve mali fiş
+cihazda alınır; sonuç (Z no, fiş no, ödeme kalemleri) AsilPOS'a döner ve adisyonun ödemesi olarak kaydedilir.
 Kod: `server/okc/` (markadan bağımsız akış `service.ts`, sepet hesabı `basket.ts`, sağlayıcılar `providers/`:
 sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, Pavo `pavo.ts` + istemci `../pavo.ts`, eğitim cihazı
 `index.ts`), uçlar
@@ -16,7 +16,7 @@ ve KDV dökümü, açılışta sorgu, denetim kaydı).
 
 | Ayar (`okcProvider`) | Ne olur |
 |---|---|
-| `kapali` | Yazarkasa düğmeleri görünmez; ödeme LafPOS'ta alınır, mali fiş ayrıca kesilir |
+| `kapali` | Yazarkasa düğmeleri görünmez; ödeme AsilPOS'ta alınır, mali fiş ayrıca kesilir |
 | `simulator` (eğitim cihazı) | Sepet `/cihaz` ekranına düşer; orada nakit/kart/yemek kartı seçilip "ödendi" denir. **Gerçek fiş kesilmez**; kurulum ve personel eğitimi içindir. İlk kurulum bununla gelir |
 | `tokenx` | TokenX Connect (Cloud) üzerinden gerçek cihaz |
 | `tokenkablo` | Token (Beko 300TR, X30TR) kasa bilgisayarına kabloyla: TokenX Connect Wire / Integration Hub; internet ve Token hesabı gerekmez, yalnız kasada ödeme (§9) |
@@ -27,7 +27,7 @@ Gerçek cihazla deneme yapılmaz: önce eğitim cihazı, sonra Token'ın test or
 ### 1.1 Yeni marka eklemek
 
 Her marka `providers/` altında bir `FiscalProvider`'dır: `send` (sepeti cihaza yolla; çekme kanalında sepet
-LafPOS'ta bekler), `cancel` (cihazdan sil), `poll` (durum sorgula), `test` (bağlantıyı dene) ve yetenekler
+AsilPOS'ta bekler), `cancel` (cihazdan sil), `poll` (durum sorgula), `test` (bağlantıyı dene) ve yetenekler
 (kasada/masada ödeme, bölünmüş ödeme, belge türleri). Cihazın cevabı markadan bağımsız `FiscalResult`'a
 çevrilir: `paid` / `cancelled` / `voided`, belge türü (`okc_fis`, `bilgi_fisi`, `e_arsiv`, `e_fatura`), Z no,
 fiş no, e-belge no ve ödemeler. Bekleyen sepet, kilit, zorla iptal, geç gelen sonuç ve ödemelerin sepet
@@ -45,16 +45,16 @@ tutarına kırpılması `service.ts`'te her marka için aynıdır; yeni marka bu
 | **Hepsi** | | | Güvenlik Taahhütnamesi (GMP-3 §5.3, §5.5: yazılım değişikliği üreticiye bildirilir); masada ödeme için GMP-3 §6.1'e uygunluğun yazılı teyidi |
 
 Kablolu (DLL) markalar için ileride kafe bilgisayarında küçük bir yardımcı program (üreticinin kütüphanesini
-yükler, LafPOS'la localhost üzerinden konuşur) gerekir; GMP-3 §3.3 tarayıcıdan çalışan satış yazılımı için bunu
+yükler, AsilPOS'la localhost üzerinden konuşur) gerekir; GMP-3 §3.3 tarayıcıdan çalışan satış yazılımı için bunu
 ister. Eşleştirme ve hash o programa bağlı olduğundan ayrı sürümlenir.
 
 ### 1.3 Mevzuat notları
 
 - **Masada ödeme (GMP-3 §6.1 madde 2-4):** hizmetten sonra ödenen masada ÖKC siparişin başında tekil bir kimlik
-  verir ve mutfağa giden her satırı (iptaller dahil) kaydeder. LafPOS sepeti ödeme anında gönderir; madde 17'deki
+  verir ve mutfağa giden her satırı (iptaller dahil) kaydeder. AsilPOS sepeti ödeme anında gönderir; madde 17'deki
   TSM yolu (Hesap Özeti Bilgi Fişi ve TSM'de saklama) bunu karşılar, bu yüzden üreticinin bulut kanalının bunu
   yaptığı yazılı teyit edilmeli. Önce ödenen tezgâh satışı bundan muaftır (madde 16).
-- **Yemek kartı:** yemek kartı ödemesinde mali fiş değil bilgi fişi kesilir (§6.1 madde 9). LafPOS sonucu
+- **Yemek kartı:** yemek kartı ödemesinde mali fiş değil bilgi fişi kesilir (§6.1 madde 9). AsilPOS sonucu
   `bilgi_fisi` olarak kaydeder (Token'da yemek kartı ödeme kalemi gelince).
 - **VUK 507 cihazları** (Pavo, Token 400TR) ÖKC fişi ve Z yerine e-Arşiv/e-Fatura keser; sonuçta e-belge no
   (`docId`) saklanır.
@@ -65,31 +65,31 @@ ister. Eşleştirme ve hash o programa bağlı olduğundan ayrı sürümlenir.
 
 | Değişken | Ne |
 |---|---|
-| `TOKENX_AUTH_URL` | Kimlik doğrulama adresi (LafPOS `POST {auth}/v1/auth/token`, Basic kimlikle erişim jetonu alır, süresi dolmadan yeniler) |
+| `TOKENX_AUTH_URL` | Kimlik doğrulama adresi (AsilPOS `POST {auth}/v1/auth/token`, Basic kimlikle erişim jetonu alır, süresi dolmadan yeniler) |
 | `TOKENX_BASKET_URL` | Sepet servisinin adresi (`/v1/basket/...`) |
 | `TOKENX_SETTINGS_URL` | Ayar servisi (kısımlar, terminaller); boşsa sepet adresi kullanılır |
 | `TOKENX_CLIENT_ID`, `TOKENX_CLIENT_SECRET` | Uygulama kimliği |
 | `TOKENX_TERMINAL_ID` | **Anlık** sepette hedef cihaz |
 | `TOKENX_BRANCH_ID` | **Liste** sepette şube |
 | `TOKENX_APP_RESOURCE` | `x-application-resource` başlığı (Token isterse) |
-| `LAFPOS_PUBLIC_URL` | Webhook için LafPOS'un internetten erişilen adresi (yoksa yoklama) |
+| `ASILPOS_PUBLIC_URL` | Webhook için AsilPOS'un internetten erişilen adresi (yoksa yoklama) |
 | `TOKENX_WEBHOOK_SECRET` | Webhook'un `Authorization: Bearer` anahtarı, en az 16 karakter |
 
 Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez. Windows kurulum dosyasıyla
 kurulan bilgisayarda bu dosya `C:\ProgramData\LafPOS\ayarlar.env` ve **Yönetim › Bağlantı bilgileri › Token
 yazarkasa**'dan yazılır (patron; gizli değer ekrana geri gelmez); kaydedince sunucu birkaç saniyede yeniden başlar
-(`docs/05-KASA-BILGISAYARI.md` §2 "Bağlantı bilgileri"). Başlat › LafPOS › LafPOS ayarları dosyayı Not Defteri'nde
+(`docs/05-KASA-BILGISAYARI.md` §2 "Bağlantı bilgileri"). Başlat › AsilPOS › AsilPOS ayarları dosyayı Not Defteri'nde
 de açar.
 
 ## 3. Kurulum adımları
 
-1. Yönetim › Bağlantı bilgileri › Token yazarkasa'yı doldurun (LafPOS kendiliğinden yeniden başlar).
+1. Yönetim › Bağlantı bilgileri › Token yazarkasa'yı doldurun (AsilPOS kendiliğinden yeniden başlar).
 2. Yönetim › Yazarkasa POS: sağlayıcı **TokenX**, mod **Anlık** ya da **Liste**.
 3. **Bağlantıyı dene**: jeton alınır, terminal ve kısımlar okunur; hata Türkçe gösterilir (`STATUS_TEXT`).
 4. **KDV → kısım eşlemesi**: cihazdaki kısımlar okunup oranına göre otomatik eşlenir (`autoSectionMap`);
    varsayılan `%1 → 3`, `%10 → 1`, `%20 → 2`. Cihazınızın kısım numaraları farklıysa buradan düzeltin.
-5. **Sonuç bildirimi**: `LAFPOS_PUBLIC_URL` ve `TOKENX_WEBHOOK_SECRET` varsa "Webhook'u kaydet"
-   (`POST /api/okc/webhook/register`); adres `…/api/public/okc/tokenx/webhook`. Yoksa LafPOS sonucu
+5. **Sonuç bildirimi**: `ASILPOS_PUBLIC_URL` ve `TOKENX_WEBHOOK_SECRET` varsa "Webhook'u kaydet"
+   (`POST /api/okc/webhook/register`); adres `…/api/public/okc/tokenx/webhook`. Yoksa AsilPOS sonucu
    kendisi sorar (anlık sepette 2,5 sn, listede 10 sn); sunucu yeniden başlarsa bekleyen sepetleri sormaya
    açılışta devam eder.
 6. Eğitim cihazıyla bir tur: tezgâh satışı → Yazarkasa → `/cihaz`'da öde → adisyon kendiliğinden kapanır.
@@ -117,7 +117,7 @@ seçilir. Cihaz ödeyince
 |---|---|
 | Tamamı nakit, kart; yemek kartı (Token ve eğitim cihazında her yemek kartı, Pavo'da cihazın ödeme aracına eşlenen; §8.6) | Sepet cihaza gider. Token kabloluda ve Pavo'da seçilen tür sepetle gider (`odeme`, `methodId`): cihaz o türle açılır |
 | Kalem seç | Seçilen kalemler cihaza gider |
-| Kısmi tutar, bahşiş, paylaşımlı hesap (pay), açık hesap, havale, LafPOS'ta alınmış ödeme varken bütün hesap | Bugünkü gibi LafPOS'a yazılır; düğmenin yanında nedeni bir cümle (`shared/odeme-fisi.ts` › `deviceRoute`) |
+| Kısmi tutar, bahşiş, paylaşımlı hesap (pay), açık hesap, havale, AsilPOS'ta alınmış ödeme varken bütün hesap | Bugünkü gibi AsilPOS'a yazılır; düğmenin yanında nedeni bir cümle (`shared/odeme-fisi.ts` › `deviceRoute`) |
 | Cihaz reddetti, cihazda vazgeçildi, cihaza ulaşılamadı | Sade neden ve **Yeniden dene**; adisyon açık kalır, ödeme yazılmaz |
 | Yanıt alınamadı (`okc_unknown`) | Sepet bekleyen kalır, sonucu sorgulanır (§7) |
 | Çift dokunuş, yeniden deneme | Tek sepet: süren istek düğmeyi kilitler; bekleyen sepet varken sunucu ikincisini yazmaz (`okc_pending`, pencere bunu hata saymaz) |
@@ -136,11 +136,11 @@ ve yedek › Fiş yazıcısı kartında, her kâğıt kendi ayarıyla: "Ödeme s
 "Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`), ikisi de varsayılan açık (`shared/odeme-fisi.ts` ›
 `afterPaymentParts`). İkram, ödenmez ve zayi kapanışında da aynı iki kâğıt (işyeri nüshasında kapanış türü). Her ödeme
 için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir fiş yazıcısı bildirdiyse
-(`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin kâğıtlarını ödemeyi alan ekran basar.
+(`integrations.receiptPrinter`); yoksa sessizce atlanır. AsilPOS'ta alınan ödemenin kâğıtlarını ödemeyi alan ekran basar.
 Her kâğıt ayrı yazdırma işi, yazıcı her birinin sonunda keser. Bütün çıktılar (nüshalar, Z, X, gün sonu kâğıdı, deneme
 fişi) tek sıradan geçer (`printQueue`, `tests/fis-sirasi.test.ts`): biri bitmeden (doğrudan basmada sunucunun yanıtı,
 tarayıcıda `afterprint`) öteki başlamaz; eskiden art arda iki ödemenin kâğıtları üst üste binince biri öbürünün fişini,
-öteki boş kâğıt basabiliyordu. Pavo'nun banka gün sonu kâğıdı (Z ve Pavo - LafPOS kıyası) bu iki ayara bağlı değil: fiş
+öteki boş kâğıt basabiliyordu. Pavo'nun banka gün sonu kâğıdı (Z ve Pavo - AsilPOS kıyası) bu iki ayara bağlı değil: fiş
 yazıcılı kasa ekranında, kendi ayarıyla (Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın";
 `shared/odeme-fisi.ts` › `bankEodSlipHere`).
 
@@ -173,20 +173,20 @@ kapalıysa, yenileniyorsa, kilitliyse ya da canlı bağlantı (SSE) kopuksa nüs
 Sahip gün içinde cihazdan geçmeyen satışı görür: satış ödemelerinden mali fişi yazarkasada kesilmeyenlerin **kart** ve
 **nakit** toplamı. Tanım tek yerde: `shared/order-calc.ts` › `offDeviceTotals` (saf işlev, kuruş).
 
-- Ödeme cihazdan geçmiştir, ancak bir yazarkasa fişinin ödemesiyse: cihaz belgeyi kesip sonucu LafPOS'a işleyince ödemenin
+- Ödeme cihazdan geçmiştir, ancak bir yazarkasa fişinin ödemesiyse: cihaz belgeyi kesip sonucu AsilPOS'a işleyince ödemenin
   kimliği fişin `paymentIds`'ine yazılır (§6; eksik ödenen `hata` fişinin işlenen ödemeleri de). Eğitim cihazının fişi de
   sayılır: eğitimde satır gerçek kullanımdaki gibi çalışır (eğitim günü lafmaliyet'e gitmez).
-- Geri kalan kart ve nakit sayılır: "LafPOS'a yaz (fiş ayrıca)", "cihazsız kaydet", cihaz reddedince "Başka yoldan aldım",
+- Geri kalan kart ve nakit sayılır: "AsilPOS'a yaz (fiş ayrıca)", "cihazsız kaydet", cihaz reddedince "Başka yoldan aldım",
   kısmi tutar, paylaşımlı hesabın payı, yazarkasa bağlantısı kapalıyken alınan. Bunların mali fişi cihazda ayrıca kesilir.
 - Tür, ödemenin Z alanından: `cash` nakit, `card` kart. Yemek kartı (mali fiş değil bilgi fişi kesilir; Pavo'da cihaza
   hiç gitmez), havale, açık hesap, online ve diğer girmez; Z'de kendi satırlarındadır.
-- Bahşiş girmez (satış değil; mali fiş satış tutarına kesilir). Kısmi ödemede her ödeme ayrı sayılır: hesabın LafPOS'ta
+- Bahşiş girmez (satış değil; mali fiş satış tutarına kesilir). Kısmi ödemede her ödeme ayrı sayılır: hesabın AsilPOS'ta
   alınan kısmı girer, aynı hesabın cihazdan geçen kısmı girmez. İptal edilen ödeme (cihazda fişi iptal edilen dahil) ve
   açık hesap tahsilatı girmez.
 - Değişmez: X ve Z'nin kart ve nakit alanı = cihazdan geçen + yazarkasadan geçmeyen.
-- Bilinen sınır: alarm düşen iki durumda (cihazda eksik ödenen fiş, `okc.underpaid`; LafPOS'ta iptal sayılıp cihazda
+- Bilinen sınır: alarm düşen iki durumda (cihazda eksik ödenen fiş, `okc.underpaid`; AsilPOS'ta iptal sayılıp cihazda
   ödenen sepet, `okc.late_paid`) kalanı kasadan alınan tutar yazarkasadan geçmeyen görünür, oysa fişi cihazda kesilmiştir.
-  LafPOS hangi kasa ödemesinin o fişe düştüğünü bilmez; alarm durumu ayrıca söyler.
+  AsilPOS hangi kasa ödemesinin o fişe düştüğünü bilmez; alarm durumu ayrıca söyler.
 
 | Nerede | Ne görünür |
 |---|---|
@@ -194,7 +194,7 @@ Sahip gün içinde cihazdan geçmeyen satışı görür: satış ödemelerinden 
 | X ve Z fişi | "Yazarkasadan geçmeyen" başlığı altında Kart ve Nakit |
 | Patron paneli › Gün içi | Bugünün toplamı, altında kart ve nakit; dokununca neyi saydığı yazar; ikisi de sıfırsa "yok" |
 | Raporlar › Ciro (kafede ve Uzaktan'da) | Ödeme türleri kartının altında dönemin kartı ve nakdi |
-| LafPOS Uzaktan › Patron paneli | Gün içi satırı; gün kapalıyken gün sonu kartında |
+| AsilPOS Uzaktan › Patron paneli | Gün içi satırı; gün kapalıyken gün sonu kartında |
 
 **Kör kasa:** `kasa.rakam` ya da `rapor.gor` yetkisi olmayan bu rakamı görmez: X ve Z özeti ona hiç gitmez, patron paneli
 verilmiş olsa da satır gelmez. Buluta yalnız patron rolü kasa rakamlarını görüyorsa gider (gün sonu kartının kasa farkıyla
@@ -216,18 +216,18 @@ gitmez (sözleşmede yok). Testler: `tests/yazarkasadan-gecmeyen.test.ts`, `test
 - Adisyon indirimi satırlara en büyük kalan yöntemiyle dağıtılır (`adjust.totalValue`). Servis ücreti ayrı
   "Servis ücreti" satırıdır ve yalnız bütün adisyon gönderilince gider; daha önce cihaza giden servis düşülür.
   Kalem kalem ödenen masada kalan servis tek satırlık sepet olur.
-- Bütün adisyon gönderilince sepet her KDV oranında LafPOS'un KDV dökümüne tamamlanır: o orandan daha önce ödenen
-  kısım (cihaz fişleri gönderilen sepetten, LafPOS'ta kalem seçerek alınan ödemeler kalemlerin payıyla) düşülür,
+- Bütün adisyon gönderilince sepet her KDV oranında AsilPOS'un KDV dökümüne tamamlanır: o orandan daha önce ödenen
+  kısım (cihaz fişleri gönderilen sepetten, AsilPOS'ta kalem seçerek alınan ödemeler kalemlerin payıyla) düşülür,
   sepetin toplamı adisyonun kalanıdır. Kalem bazlı ödemeden sonra kalem eklenip adisyon indirimi yeniden
   dağıldığında fark aynı oranın kalemlerine işlenir; o oranda ödenmemiş kalem yoksa o oranda "İndirim farkı"
   satırı olur. Kalem başına 2 kuruşa kadar yuvarlama oranlar arasında dengelenir. Ödenmiş orana düşen fark eksiyse
   (ödemeden sonra indirim artırıldı ya da ödenmemiş kalem iptal edildi) cihaz eksi satır almadığı için fark diğer
   oranların indirimine yazılır.
-- Fark hiçbir zaman servis satırına yazılmaz: cihazdaki "Servis ücreti" LafPOS'un servisinin cihaza gitmemiş
+- Fark hiçbir zaman servis satırına yazılmaz: cihazdaki "Servis ücreti" AsilPOS'un servisinin cihaza gitmemiş
   kısmıdır, müşteri iki ayrı servis tutarı görmez. Tek istisna sepette indirimi taşıyacak kalem kalmamasıdır
   (yalnız servis kaldı); o zaman sepetin toplamı adisyonun kalanından sapmasın diye fark servis satırından düşer.
 - Cihazdan gelen ödeme (bölünmüş ödemenin ikincisi, servis fişi) kalem taşımasa da "tutar olarak alınmış ödeme"
-  sayılmaz. LafPOS'ta tutar ya da pay olarak alınmış ödeme varsa bütün adisyon gitmez (`okc_partial`), kalem
+  sayılmaz. AsilPOS'ta tutar ya da pay olarak alınmış ödeme varsa bütün adisyon gitmez (`okc_partial`), kalem
   seçilerek gider.
 - Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409). Sepet cihazda beklerken adisyonun tutarı ve
   ödemeleri kilitlidir (iptal, ikram, indirim, ödeme, taşıma, birleştirme, iptal: 409 `okc_pending`); kalem
@@ -243,19 +243,19 @@ gitmez (sözleşmede yok). Testler: `tests/yazarkasadan-gecmeyen.test.ts`, `test
 
 Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` → `voided`, `-1` → `cancelled`).
 
-| Cihazdan gelen (Token) | LafPOS'ta |
+| Cihazdan gelen (Token) | AsilPOS'ta |
 |---|---|
 | `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa (oda sayacı çalışmıyorsa) adisyon kapanır |
-| `0`, ödemeler sepeti karşılamıyor | Cihaz ikram (9), ödemesiz (8) ya da LafPOS'ta karşılığı olmayan türle kapattıysa alınan ödemeler tutar olarak işlenir, kalemler ödenmiş sayılmaz; sepet `hata` olur ve yöneticiye alarm düşer (`okc.underpaid`). Bu fişin kalemleri cihaza yeniden gönderilmez, başka adisyona taşınmaz ve sepet LafPOS'ta silinemez (`okc_unresolved`): aynı kalemler ikinci fişe girerdi. Kalan kasadan (tutar ya da kalem olarak) alınır ya da fiş cihazdan iptal edilir; adisyonun fişe girmemiş kalemleri bu arada "Kalem seç" ile cihaza gönderilebilir. Bütün adisyon, fişteki kalemler LafPOS'ta ödenmedikçe gitmez. LafPOS'a işlenemeyen "ödendi" sonucu da böyle |
+| `0`, ödemeler sepeti karşılamıyor | Cihaz ikram (9), ödemesiz (8) ya da AsilPOS'ta karşılığı olmayan türle kapattıysa alınan ödemeler tutar olarak işlenir, kalemler ödenmiş sayılmaz; sepet `hata` olur ve yöneticiye alarm düşer (`okc.underpaid`). Bu fişin kalemleri cihaza yeniden gönderilmez, başka adisyona taşınmaz ve sepet AsilPOS'ta silinemez (`okc_unresolved`): aynı kalemler ikinci fişe girerdi. Kalan kasadan (tutar ya da kalem olarak) alınır ya da fiş cihazdan iptal edilir; adisyonun fişe girmemiş kalemleri bu arada "Kalem seç" ile cihaza gönderilebilir. Bütün adisyon, fişteki kalemler AsilPOS'ta ödenmedikçe gitmez. AsilPOS'a işlenemeyen "ödendi" sonucu da böyle |
 | `-1` | Kasiyer cihazda vazgeçti; sepet kapanır, adisyon açık kalır |
-| `0`, sepet LafPOS'ta iptal sayılmış | Adisyon kendiliğinden kapanmaz, yöneticiye alarm düşer (`okc.late_paid`); Z ve fiş no sepete yazılır. Aynı bildirim tekrar gelirse alarm tekrarlanmaz |
-| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır. LafPOS'a ödemesi işlenmiş her fiş (eksik ödenmiş `hata` fişi de) böyle geri alınır |
-| `99`, fiş kesilmemiş sepet | Bekleyen sepet `iptal` olur (`okc.cancelled`). LafPOS'ta silinmiş ya da cihazda vazgeçilmiş sepetin durumu değişmez; bir kez not düşülür (`okc.void`, uyarı). Geç "ödendi" bildirimi gelmiş sepette fiş kesilip iptal edilmiştir: fiş `fis_iptal` olur, alarm düşer |
+| `0`, sepet AsilPOS'ta iptal sayılmış | Adisyon kendiliğinden kapanmaz, yöneticiye alarm düşer (`okc.late_paid`); Z ve fiş no sepete yazılır. Aynı bildirim tekrar gelirse alarm tekrarlanmaz |
+| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi AsilPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır. AsilPOS'a ödemesi işlenmiş her fiş (eksik ödenmiş `hata` fişi de) böyle geri alınır |
+| `99`, fiş kesilmemiş sepet | Bekleyen sepet `iptal` olur (`okc.cancelled`). AsilPOS'ta silinmiş ya da cihazda vazgeçilmiş sepetin durumu değişmez; bir kez not düşülür (`okc.void`, uyarı). Geç "ödendi" bildirimi gelmiş sepette fiş kesilip iptal edilmiştir: fiş `fis_iptal` olur, alarm düşer |
 | `99`, fiş kapanmış güne ait | Kapanmış günün Z'si değişmez: ödeme geri alınmaz, adisyon açılmaz, fiş `fis_iptal` olur ve yöneticiye alarm düşer (`okc.void_closed_day`). Müşteriye para iade edildiyse bugünün kasasından çıkış olarak işlenir. Eğitim cihazında bu iptal hiç yapılamaz (`day_closed`) |
-| `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |
+| `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken AsilPOS'ta kilit gösterilir |
 
 Her sonuç denetim kaydına yazılır: gönderim (`okc.send`), ödendi (`okc.paid`), cihazda vazgeçme ya da cihazdan
-silinme (`okc.cancelled`), LafPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
+silinme (`okc.cancelled`), AsilPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
 ulaşmayan gönderim (`okc.not_delivered`), fiş iptali (`okc.void`, `okc.void_closed_day`) ve alarmlar
 (`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Pavo'da cihazın banka gün sonu `okc.eod` (§8.5). İşyeri
 nüshası basılınca `okc.store_copy` (§4.1). Aynı sonuç ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
@@ -267,16 +267,16 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
   `TOKENX_CLIENT_SECRET` ve moda göre terminal ya da şube kimliği gerekli.
 - **1106 terminal bulunamadı**: `TOKENX_TERMINAL_ID` yanlış ya da cihaz Token'da tanımlı değil.
 - **Toplam farkı**: kısım eşlemesindeki KDV oranı cihazdakiyle aynı olmalı.
-- **Sonuç gelmiyor**: webhook adresine dışarıdan erişilemiyorsa anahtarı kaldırın; LafPOS yoklamaya döner.
+- **Sonuç gelmiyor**: webhook adresine dışarıdan erişilemiyorsa anahtarı kaldırın; AsilPOS yoklamaya döner.
 - **Yazarkasadan yanıt alınamadı** (`okc_unknown`): gönderim zaman aşımına uğradı, bağlantı koptu (yanıtın gövdesi
   okunurken kopması da) ya da Token durum kodu olmayan bir yanıt verdi (JSON olmayan 2xx, 5xx); sepet cihaza ulaşmış
-  olabilir. Sepet bekleyen kalır (adisyon kilitli, LafPOS'ta ikinci kez tahsil edilmez) ve LafPOS durumunu sorar:
+  olabilir. Sepet bekleyen kalır (adisyon kilitli, AsilPOS'ta ikinci kez tahsil edilmez) ve AsilPOS durumunu sorar:
   cihazda ödendiyse adisyon kendiliğinden kapanır; Token sepeti hiç görmediyse (1006) sepet hataya düşer ve adisyon
   kasadan alınabilir. Token'ın kodla reddettiği, 4xx dönen ya da bağlantının hiç kurulamadığı gönderim hemen
   hataya düşer. Sonuç gönderim isteği sürerken geldiyse (webhook) işlenmiş sepet hatayla ezilmez; silme
   sürerken gelen "ödendi" de öyle.
-- **İnternet ya da Token kesik, sepet silinemiyor** (`okc_delete`): adisyondaki "İptal"e basınca LafPOS sorar;
-  onaylanırsa sepet yetkili PIN'iyle LafPOS'ta iptal sayılır, adisyon kasadan alınır ve gün kapanabilir. Denetim
+- **İnternet ya da Token kesik, sepet silinemiyor** (`okc_delete`): adisyondaki "İptal"e basınca AsilPOS sorar;
+  onaylanırsa sepet yetkili PIN'iyle AsilPOS'ta iptal sayılır, adisyon kasadan alınır ve gün kapanabilir. Denetim
   kaydına alarm düşer (`okc.force_cancel`). Cihazda yine de o sepetten ödeme alındıysa geç gelen sonuç ikinci bir
   alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir. Onay penceresi açıkken cihazda fiş kesildiyse
   (sepet ödendi ya da eksik ödenip `hata` oldu) iptal reddedilir (`okc_paid`, `okc_unresolved`): fişi kesilmiş
@@ -284,11 +284,11 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
 
 ## 8. Pavo (N86) yerel ağ bağlantısı
 
-Pavo cihazı kafenin ağında bir HTTP sunucusudur; LafPOS (kasa bilgisayarı) satışı ona gönderir, kasiyer ödemeyi
+Pavo cihazı kafenin ağında bir HTTP sunucusudur; AsilPOS (kasa bilgisayarı) satışı ona gönderir, kasiyer ödemeyi
 cihazda (nakit, kart; bölünmüş de) alır, cihaz VUK 507 belgesini keser (e-Arşiv, e-Fatura ya da bilgi fişi). Satış
 belgelerinde Z no yoktur (`z.okcZNo` boş gider); ama cihazdan istenince gün sonunda ayrıntılı bir Z fişi basılır
 (sahip, 24.11.2026). Personel lafmaliyet'e bu fişin fotoğrafını ekler; lafmaliyet fotoğraftaki banka ve Z rakamlarını
-LafPOS'un gövdesiyle karşılaştırır (lafmaliyet `docs/LAFPOS.md` "Gün sonu otomasyonu").
+AsilPOS'un gövdesiyle karşılaştırır (lafmaliyet `docs/ASILPOS.md` "Gün sonu otomasyonu").
 İnternet ya da bulut gerekmez; cihaz ile kasa bilgisayarı aynı ağda olmalı. Kod: istemci `server/okc/pavo.ts`,
 sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
 
@@ -315,20 +315,20 @@ sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
    | `PAVO_FINGERPRINT` | İsteğe bağlı; tanımlıysa her şeyden önce o gider (aşağıda "Program kimliği") |
 
    **Program kimliği** (Pavo'nun `Fingerprint` alanı, eşleştirmede cihaza kaydedilir, her istekte aynısı gider):
-   kuruluma özel ve kalıcıdır. İlk eşleştirmede üretilir ve saklanır (`sync_state` `pavo.fingerprint`): `LafPOS-` ve 6
-   harf-rakam (ör. `LafPOS-K7Q2XM`; biçim en çok 32 karakter, harf, rakam ve tire). Geriye uyum: kimlik saklanmadan
-   eşleştirilmiş eski kurulum `LafPOS` ile devam eder (ilk okunuşta saklanır; yeniden eşleştirme gerekmez).
+   kuruluma özel ve kalıcıdır. İlk eşleştirmede üretilir ve saklanır (`sync_state` `pavo.fingerprint`): `AsilPOS-` ve 6
+   harf-rakam (ör. `AsilPOS-K7Q2XM`; biçim en çok 32 karakter, harf, rakam ve tire). Geriye uyum: kimlik saklanmadan
+   eşleştirilmiş eski kurulum `AsilPOS` ile devam eder (ilk okunuşta saklanır; yeniden eşleştirme gerekmez).
    Cihaz değişince (adres ya da seri no) eşleştirme sıfırlanır ama kimlik aynı kalır. Kimlik Yönetim › Yazarkasa POS ›
    Pavo kartında salt okunur görünür. Cihaz başka programla eşleşmişse (73/74) "Son hata" kutusunda doğrudan **Yeniden
    eşleştir** düğmesi çıkar. Testler: `tests/pavo-kimlik.test.ts`, `tests/pavo-panel.test.ts`.
 
    Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Cihazı ağda
    ara" ve "Bağlantıyı dene" hangisinin açık olduğunu söyler.
-3. **Eşleştir** (cihazda onay ekranı açılır, kasiyer onaylar; LafPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz
+3. **Eşleştir** (cihazda onay ekranı açılır, kasiyer onaylar; AsilPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz
    yanıt veriyor mu, eşleştirme geçerli mi, cihazdaki ödeme araçları). Testler: `tests/pavo-panel.test.ts`.
 4. İlk satışı küçük tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. "Cihazın son yanıtları" (yönetim
    sayfasının altında) yanıtın alanlarını gösterir; tanınmayan biçim orada görünür.
-5. **Gün sonu (banka)** kartı: "Gün kapanınca cihazda gün sonu al" varsayılan açık; LafPOS gün sonundan hemen sonra
+5. **Gün sonu (banka)** kartı: "Gün kapanınca cihazda gün sonu al" varsayılan açık; AsilPOS gün sonundan hemen sonra
    cihaz bankalardaki kart işlemlerini kapatır (§8.5). Cihazın kendi menüsünden gün sonu alınıyorsa kapatın. İlk
    kurulumda "Cihazda gün sonu al" ile bir kez elle deneyin.
 
@@ -338,7 +338,7 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 
 ### 8.2 Akış
 
-- **Eşleştirme** (`/Pairing`): sıra no 1'e döner; LafPOS cihazın sertifikasının parmak izini saklar. Sonraki her
+- **Eşleştirme** (`/Pairing`): sıra no 1'e döner; AsilPOS cihazın sertifikasının parmak izini saklar. Sonraki her
   istekte gövde gönderilmeden sertifika karşılaştırılır; farklıysa istek gitmez ("Cihazın sertifikası
   eşleştirmedekinden farklı"): aynı ağdaki başka bir makine kendini cihaz gibi gösteremez. Cihaz değiştiyse ya da
   uygulaması güncellendiyse yeniden eşleştirilir. Pavo günde bir eşleştirmeyi önerir.
@@ -348,15 +348,15 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 - **Satış** (`/CompleteSale`): sepet Pavo satışına çevrilir (`pavoSale`). Tutarlar TL, KDV dahil; KDV grubu orandan
   (`KDV10`, `KDV20`); birim `C62` (adet); sipariş no sepet kimliğinden (`pavoOrderNo`, 16 karakter). İndirim ayrı
   alanla değil kalemin tutarıyla gider: tutar adede tam bölünmüyorsa satır iki olur (n-1 adet ve son adet), fiş
-  toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır. Kasada seçilen tür (nakit, kart) `PaymentInformations`
+  toplamı AsilPOS'un hesabıyla kuruşu kuruşuna aynıdır. Kasada seçilen tür (nakit, kart) `PaymentInformations`
   (`Mediator` 1 nakit, 2 kart; tutar fişin toplamı) ile gider, cihaz o türle açılır (Yönetim › Yazarkasa POS › "Ödeme türü
   cihazda hazır gelsin", varsayılan açık; alan adları entegratörlerin açık kodundan, ilk gerçek satışta doğrulanacak).
   Yemek kartı ve öteki türlerde ödeme bilgisi gönderilmez: kasiyer cihazda seçer. `KDV10` ve
   `KDV20` dışındaki oranlı kalem (%0, %1) cihaza gitmez: sepet kaydı yazılmadan "%0 KDV'li kalem Pavo'ya
   gönderilemez; ürünün KDV oranını düzeltin ya da hesabı kasadan alın" (400 `okc_basket`), adisyon kilitlenmez.
   Cihazın başka grupları bilip bilmediği belgede yok (§8.4).
-- **Bekleme**: cihaz aynı anda tek istek işler; satış ekranı açıkken (yanıt gelene dek) sepet LafPOS'ta "kilitli"
-  görünür ve LafPOS cihaza başka istek göndermez. Cihaz ilk 6 sn içinde reddederse (KDV grubu, eşleştirme) kasiyer
+- **Bekleme**: cihaz aynı anda tek istek işler; satış ekranı açıkken (yanıt gelene dek) sepet AsilPOS'ta "kilitli"
+  görünür ve AsilPOS cihaza başka istek göndermez. Cihaz ilk 6 sn içinde reddederse (KDV grubu, eşleştirme) kasiyer
   hatayı hemen görür, sepet hataya düşer, adisyon kilitli kalmaz.
 - **Sonuç**: cihazın yanıtındaki satış kaydı (`Data` ya da `Data.Sale`): `AddedPayments` (`StatusId` 2 etkin;
   `PaymentTypeId` 1 nakit, 2 kart; `PaymentAmount` TL) ve `FinancialDocuments` (`InvoiceNo` belge no, `Type.Name`
@@ -375,9 +375,9 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
   eşleştir"), eşleşince sonuç gelir (hata dönen satışın belge sorgusunda da: eşleşince sonuç sorgusu belgeyi ya da
   kesinleşen "satış yok"u okur). Kapanan sepetin sonucunda cihazın ham yanıtı saklanır: gerçek cihazın "satış yok"
   kodu oradan öğrenilir.
-- **İptal**: satış cihazın ekranındayken LafPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse LafPOS cihaza
+- **İptal**: satış cihazın ekranındayken AsilPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse AsilPOS cihaza
   sorar: ödenmişse sonuç işlenir, ödenmemişse cihazda silinecek bir şey yoktur. Cihaza ulaşılamazsa yetkili onayıyla
-  LafPOS'ta iptal sayılır (§7, `okc.force_cancel`). LafPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
+  AsilPOS'ta iptal sayılır (§7, `okc.force_cancel`). AsilPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
   anlamı belgesiz.
 
 ### 8.3 Temkin kuralları (para yolu tahminle kurulmaz)
@@ -388,7 +388,7 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
   Eşleştirme bozukken elle iptal de cihaza ulaşılamamış gibi yalnız yetkili onayıyla yapılır (`okc.force_cancel`):
   sepetin cihazda ödenip ödenmediği bilinmez.
 - Anlamı belgelenmemiş ödeme tipi (1 ve 2 dışı: yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi
-  LafPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
+  AsilPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
   yönetici doğru türle kasadan alır.
 - Belge kesilmişse (`InvoiceNo` ya da etkin ödeme var) hata dönen yanıt da ödendi sayılır (ör. yazıcı hatası).
 - Cihazın ham yanıtı sepetin sonucunda (`fiscal_receipts.result.raw`) saklanır; ilk gerçek satıştan sonra alan
@@ -403,9 +403,9 @@ Güncellemeden sonra Marina'da bir kez, gün açıkken ve tezgâhta müşteri yo
    Yönetim › Yazarkasa POS › Son hata'daki kodu not edin (cihazın "satış yok" kodu belgesiz; `failConfirmMs` 15 sn).
 2. **Vazgeçme:** gönderip cihazda iptal edin: adisyon hemen açılmalı.
 3. **Bağlantı kesintisi:** gönderip cihazın ağ kablosunu ya da Wi-Fi'sını 30 sn kesin, kartla ödeyin, bağlantıyı geri
-   verin: ödeme LafPOS'a bir kez düşmeli (ikinci tahsilat yok), adisyon kapanmalı.
+   verin: ödeme AsilPOS'a bir kez düşmeli (ikinci tahsilat yok), adisyon kapanmalı.
 4. **Gün sonu kâğıdı:** gün sonunda fiş yazıcısını kapalı tutun; açınca Yönetim › Yazarkasa POS › Gün sonu (banka) ›
-   **Kâğıdı yeniden bas** LafPOS Z'sini ve banka kıyasını basmalı.
+   **Kâğıdı yeniden bas** AsilPOS Z'sini ve banka kıyasını basmalı.
 
 Biri beklendiği gibi değilse ekranın fotoğrafını ve saati not edin; cihazın kodu Yönetim › Yazarkasa POS › Son hata'da
 ve sepetin sonucunda (ham yanıt saklanır) görünür.
@@ -422,7 +422,7 @@ entegratörün açık kodu); banka gün sonu (`/PerformEOD`, `/PrintEODCopy`) ve
 1. N86 / PavoPay (VUK 507) REST belgesine erişim (docs.pavopay.dev) ve hata kodları.
 2. `/CompleteSale` ve `/GetSaleResult` yanıtının tam biçimi; `PaymentTypeId`, `MainDocumentType`, `TaxGroupCode` ve
    belge türü değerlerinin listesi (`KDV1` ve `KDV0` grubu var mı; yoksa %1'lik ürün nasıl satılır).
-3. Kesilmiş belgenin iptali ve iadesi (e-Arşiv iptali) ve LafPOS'a nasıl bildirildiği.
+3. Kesilmiş belgenin iptali ve iadesi (e-Arşiv iptali) ve AsilPOS'a nasıl bildirildiği.
 4. Bulut kanalı için App Token (kafenin PavoPay API anahtarıyla kullanılır) ve bulutta kalemli satışın seri no ile
    cihaza gönderilmesi.
 5. Masada ödeme (cihazın açık hesap listesi) desteği.
@@ -431,8 +431,8 @@ entegratörün açık kodu); banka gün sonu (`/PerformEOD`, `/PrintEODCopy`) ve
 ### 8.5 Gün sonu (banka)
 
 Kartla alınan ödemeler bankada bir "batch"te birikir; cihazın banka gün sonu batch'i kapatır ve para hesaba geçer.
-Gün sonundan sonra o işlemler cihazda iptal edilemez, yalnız iade edilir. LafPOS bunu kendi gün sonuna bağlar ama
-**ona bağımlı kılmaz**: LafPOS günü önce kapanır (tek işlem, Z yazılır), cihaz gün sonu ardından arka planda başlar
+Gün sonundan sonra o işlemler cihazda iptal edilemez, yalnız iade edilir. AsilPOS bunu kendi gün sonuna bağlar ama
+**ona bağımlı kılmaz**: AsilPOS günü önce kapanır (tek işlem, Z yazılır), cihaz gün sonu ardından arka planda başlar
 (`deviceEndOfDay`, `server/okc/service.ts`; elle ve otomatik gün sonu ikisi de). Cihaz yanıt vermese, hata dönse ya da
 hiç bağlı olmasa da gün kapalı kalır.
 
@@ -441,7 +441,7 @@ hiç bağlı olmasa da gün kapalı kalır.
   `POST /api/okc/eod` gövdesinde `print: false` yalnız o istekte slipi kapatır (arayüzde yok). Yanıt en çok 3 dk
   beklenir; süre boyunca cihaz meşgul sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet
   sorgulanmaz (cihaz satışı hatayla bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır,
-  gün sonu bitince sorulur), iptali 409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal
+  gün sonu bitince sorulur), iptali 409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, AsilPOS'ta iptal
   say" yoluna düşmez). Kasa da meşgul sayılır (`server/lib/mesgul.ts`; `GET /api/kasa/guncelleme-durumu` ayrıca
   `eod: true` der): güncelleme gün sonu bitmeden kurulmaz, sunucu yeniden başlayıp sonucu belirsiz bırakmaz. Gün
   kapalıyken güncelleyicinin beklediği tek meşguliyet budur (`guncelle.mjs` `installDecision`; en çok 3 dk, 5 dk'da bir
@@ -449,7 +449,7 @@ hiç bağlı olmasa da gün kapalı kalır.
 - **Kâğıt**: cihazın slibi her gün sonunda (yukarıda). Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da
   çıksın" (`okcPavoEodFis`, varsayılan açık) yalnız fiş yazıcısını yönetir: açıkken fiş yazıcılı kasa ekranı (Pavo
   bağlı; ödeme sonrası nüsha ayarlarından bağımsız) `POST /api/okc/eod/slip` (`odeme.al`) ile son başarılı gün sonunun kâğıdını alır (batch başına bir kez, ilk soran
-  ekrana; 12 saatten eskisi basılmaz) ve önce kapanan günün LafPOS Z'sini, sonra bankalar, toplam ve Pavo - LafPOS
+  ekrana; 12 saatten eskisi basılmaz) ve önce kapanan günün AsilPOS Z'sini, sonra bankalar, toplam ve Pavo - AsilPOS
   kart kıyasını basar. Kıyas kayıt kâğıdı olduğundan kör kasada da basılır; Z kasa uçlarının kuralıyla gider
   (`server/lib/kor-kasa.ts`): kasa rakamlarını görmeyene hiç (`z: null`, kâğıt yalnız banka kısmıyla), maliyet yetkisi
   olmayana personel tutarları gizli.
@@ -459,7 +459,7 @@ hiç bağlı olmasa da gün kapalı kalır.
   "basılmadı" yapmaz (kasa ekranları ikinci kez basmaz).
 - **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
   okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
-  sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). "Özet vermedi" yalnız uç
+  sonu yoksa `bos`; uç yanıt verip özet vermezse AsilPOS'un bildiği son batch, `asilpos`). "Özet vermedi" yalnız uç
   yoksa (HTTP 404, 405, 501) ya da başarılı yanıtın gövdesi boşsa (2xx) sayılır (`eodCopyUnavailable`); cihazın iç
   hatası (HTTP 500, 503...) kopya yok sayılmaz. Cihaz bu soruya yanıt vermezse (bağlantı, zaman aşımı) ya da iç hata
   verirse gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden
@@ -475,14 +475,14 @@ hiç bağlı olmasa da gün kapalı kalır.
   (Pavo'suz kurulumda her gün sonunda kayıt gürültü olurdu).
 - **Sonuç** (`sync_state` `pavo.eod.<gün kimliği>` ve `pavo.eod.last`): yalnız özet. Batch no, cihaz saati
   (`gg.aa.yyyy ss:dd`), genel toplam (TL satırı, kuruş; "1.234,56 TL" `parseTL` ile), banka başına ad, işlem sayısı ve
-  toplam, LafPOS günün kart toplamı (Z'nin kart alanı ve kartla alınan bahşiş). Kart numarası, işlem dökümü, işyeri
+  toplam, AsilPOS günün kart toplamı (Z'nin kart alanı ve kartla alınan bahşiş). Kart numarası, işlem dökümü, işyeri
   ve vergi bilgisi, slip **saklanmaz**. Durum: `ok` alındı · `failed` cihaz alamadı (ör. 5085 "Günsonu alınamadı",
   bağlantı kurulamadı) · `unknown` istek gitti ama yanıt gelmedi (zaman aşımı, bağlantı koptu) ya da özetsiz yazıcı
   hatası (5066-5072): gün sonu alınmış olabilir · `running` sürüyor · `skipped` denenmedi. Özeti olan yanıt hata
   taşısa da alındı sayılır. Bir günün başarılı gün sonları ezilmez: günün kaydı öncekileri `earlier`'da (batch no,
   cihaz saati, toplam, deneme anı, gün kapalı mıydı) taşır.
-- **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı LafPOS'un kıyas tutarından farklıysa uyarı
-  (cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve belirsiz
+- **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı AsilPOS'un kıyas tutarından farklıysa uyarı
+  (cihazda AsilPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve belirsiz
   alarm. Gün kapanınca alınamayan ya da belirsiz kalan gün sonu patronun telefonuna da bildirilir (`afterDeviceEod`;
   kasadan, uzaktan ve otomatik gün sonunda). Kıyas tutarı (`dayCardKurus`) günün ilk gün sonunda kapanmış günün kart
   toplamı; aynı günün sonraki gün sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan, iade edilmemiş kart
@@ -501,7 +501,7 @@ hiç bağlı olmasa da gün kapalı kalır.
     cihazın menüsünden önceden alınmıştır; taban bilinmiyorsa cihaz saati karar verir) sonuç "alındı" olur, tutarlar
     cihazınki. Taban gönderimden hemen önce cihazdan okunduğu için menüden önceden alınmış gün sonu bu denemenin
     sonucu sanılmaz. Açılışta belirsize dönen "sürüyor" kaydı da böyle doğrulanır.
-    Cihazın menüsünden alınan gün sonu da böyle LafPOS'a işlenir. Belirsiz deneme cihazda karşılık bulamazsa
+    Cihazın menüsünden alınan gün sonu da böyle AsilPOS'a işlenir. Belirsiz deneme cihazda karşılık bulamazsa
     "alınamadı" olur ve yeniden denenebilir. 5075 "Batch bulunamadı": cihazda kayıtlı gün sonu yok (belirsiz deneme
     de alınmamış sayılır).
 - **Kör kasa**: son sonuç `GET /api/okc/status` › `pavo.eod`'da; kasa rakamlarını görmeyen (`kasa.rakam` ya da
@@ -517,14 +517,14 @@ hiç bağlı olmasa da gün kapalı kalır.
 ### 8.6 Yemek kartı (Kasım 2026)
 
 Pavo'nun belgesi yalnız nakit (1) ve kartı (2) tanımlar; yemek kartlarının ödeme aracı no'su cihazdan cihaza değişir ve
-belgesizdir. LafPOS tahmin etmez, cihazın kendi listesini (`/PaymentMediators`, "Bağlantıyı dene") okur ve yemek kartı
+belgesizdir. AsilPOS tahmin etmez, cihazın kendi listesini (`/PaymentMediators`, "Bağlantıyı dene") okur ve yemek kartı
 ödeme türlerini **adıyla** eşler (`shared/yemek-karti.ts` › `pavoMealMap`: "Multinet", "Sodexo"/"Pluxee",
 "Ticket"/"Edenred", "Setcard", "Metropol"); eşleme Yönetim › Yazarkasa POS › **Yemek kartları cihazda** kartından elle
 de değişir (`okcPavoMediatorMethods`: araç no → ödeme türü).
 
 - Kasada eşlenmiş yemek kartı seçilip "Ödemeyi al"a basılınca sepet `PaymentInformations` (`Mediator` = aracın no'su)
   ile gider, cihaz o araçla açılır ("Ödeme türü cihazda hazır gelsin" açıkken). Eşlenmemiş yemek kartı cihaza gitmez,
-  LafPOS'a yazılır (`deviceRoute`: `mealOnDevice`, `boot.integrations.okc.mealMethods`).
+  AsilPOS'a yazılır (`deviceRoute`: `mealOnDevice`, `boot.integrations.okc.mealMethods`).
 - Cihazın yanıtındaki eşlenmiş araç yemek kartı ödemesidir (`readSale`: `operatorId` = aracın no'su) ve eşlenen türe
   (Multinet...) yazılır; eşlenmemiş araç bugünkü gibi tahminle işlenmez (§8.3).
 - "Pavo'yu kur" (tek düğme) ve "Bağlantıyı dene" listeyi okur, saklar (`pavo.mediators`) ve boş eşlemeyi kendiliğinden
@@ -535,18 +535,18 @@ de değişir (`okcPavoMediatorMethods`: araç no → ödeme türü).
 Beko 300TR ve X30TR kasa bilgisayarına kabloyla bağlanır (300TR: beşikteki RS232-USB entegrasyon kablosu; X30TR: soldaki
 Type-C). Token'ın belgesi: developer.tokeninc.com › X Platform › Token X Connect Wire (Genel Tanıtım, Geliştirici
 Dokümanı, Banka / Yemek Uygulamaları, Sık Sorulan Sorular). Kod: köprü `server/okc/token-kablo-kopru.ts`, yönetici
-`token-kablo.ts`, kurulum `token-kablo-kurulum.ts`, saf kararlar `token-kablo-plan.ts`, LafPOS'a bağlanışı
+`token-kablo.ts`, kurulum `token-kablo-kurulum.ts`, saf kararlar `token-kablo-plan.ts`, AsilPOS'a bağlanışı
 `token-kablo-servis.ts`, sağlayıcı `providers/tokenkablo.ts`; ekran `src/pages/admin/OkcKurulum.tsx`. Testler
 `tests/token-kablo.test.ts` (sahte köprüyle uçtan uca), `tests/yemek-karti.test.ts`.
 
 ### 9.1 Nasıl çalışır
 
-- Token'ın kütüphanesi (IntegrationHub.dll, C#; içindeki yerel kütüphane x86) yalnız Windows'ta çalışır. LafPOS onu
+- Token'ın kütüphanesi (IntegrationHub.dll, C#; içindeki yerel kütüphane x86) yalnız Windows'ta çalışır. AsilPOS onu
   **ayrı süreçte** yükler: 32 bit Windows PowerShell, C# köprüsünü açılışta kendisi derler (Add-Type); ek program
-  kurulmaz. Köprü LafPOS'la satır satır konuşur (komut: `kimlik<TAB>komut<TAB>base64 gövde`; yanıt ve olaylar JSON
+  kurulmaz. Köprü AsilPOS'la satır satır konuşur (komut: `kimlik<TAB>komut<TAB>base64 gövde`; yanıt ve olaylar JSON
   satırı). Kütüphane çökse de kasa sunucusu düşmez; köprü 3 sn, 10 sn, 30 sn, sonra dakikada bir yeniden başlar.
   Kütüphane hiç yüklenemiyorsa (Visual C++ yok, DLL bozuk) yeniden denenmez, neden ekranda kalır.
-- **Kablo takılınca** köprü cihazı bildirir (mali no: X30TR `AV…`, 300TR `AT…`); LafPOS kısımları ve ödeme
+- **Kablo takılınca** köprü cihazı bildirir (mali no: X30TR `AV…`, 300TR `AT…`); AsilPOS kısımları ve ödeme
   uygulamalarını okur (`getFiscalInfo`; Token'a göre her bağlantıda zorunlu) ve modeli (`getActiveDeviceIndex`).
   Sonra kendiliğinden (`kabloPlan`, ayar `okcTokenKabloOto`, varsayılan açık):
   - **Bağlantı:** Kapalı'dan her zaman, eğitim cihazından gün açık değilken Token kabloluya geçer (açık eğitim gününe
@@ -566,14 +566,14 @@ Dokümanı, Banka / Yemek Uygulamaları, Sık Sorulan Sorular). Kod: köprü `se
   vazgeçildi, 99 fiş iptal; `paymentItems`, `zNo`, `receiptNo`) ve hemen adisyona işlenir (`kabloSale` → `applyResult`);
   sorgu döngüsü de aynı sonucu okur. Durum sorgusu yoktur: kablo koptuysa cihaz, bağlantı gelince sonucu yeniden yollar.
 - **İptal:** kablolu protokolde sepet cihazdan silinmez. Satış cihazın ekranındaysa kasiyer cihazda vazgeçer (sonuç
-  "vazgeçildi" gelir). Cihaz bağlı değilse sepet yalnız yetkili onayıyla LafPOS'ta iptal sayılır (`okc.force_cancel`).
+  "vazgeçildi" gelir). Cihaz bağlı değilse sepet yalnız yetkili onayıyla AsilPOS'ta iptal sayılır (`okc.force_cancel`).
 - Yalnız kasada ödeme: cihaz açık hesap listesi tutmaz (masada ödeme seçilemez, 409 `okc_mode`).
 
 ### 9.2 Kurulum (tek düğme)
 
-Kasa bilgisayarına LafPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS › Token kablolu › **Kurulumu yap** yapar
+Kasa bilgisayarına AsilPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS › Token kablolu › **Kurulumu yap** yapar
 (`POST /api/okc/token-kablo/kur`, arka planda; adımlar kartta canlı). Kasa sunucusu SYSTEM olarak çalıştığı için
-(Görev Zamanlayıcı, `lafpos.nsi`) kurulumlar onay penceresi açmadan sessiz yapılır; dosyalar
+(Görev Zamanlayıcı, `asilpos.nsi`) kurulumlar onay penceresi açmadan sessiz yapılır; dosyalar
 `C:\ProgramData\LafPOS\token-kablo`'da:
 
 1. **Visual C++ çalışma kitaplığı (x86)** yoksa Microsoft'un kalıcı adresinden (`aka.ms/vs/17/release/vc_redist.x86.exe`)
@@ -590,13 +590,13 @@ Kasa bilgisayarına LafPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS �
 
 Kurulumdan sonra köprü her açılışta kendiliğinden başlar (Token kablolu seçiliyken ya da kendiliğinden geçiş açıkken
 Kapalı ve eğitim cihazında); kablo takılınca cihaz tanınır. Windows dışında (geliştirme, tarayıcı demosu) köprü çalışmaz,
-kurulum düğmesi nedeniyle reddedilir. USB seçmeli askıya alma kurulumda kapatılır (`lafpos.nsi`), Token'ın uzun
+kurulum düğmesi nedeniyle reddedilir. USB seçmeli askıya alma kurulumda kapatılır (`asilpos.nsi`), Token'ın uzun
 beklemeden sonraki libusb hatasını önler.
 
 ### 9.3 Sahada ilk deneme
 
 Gün açıkken ve tezgâhta müşteri yokken: (1) kabloyu takın, kartta "Bağlı · 300TR · AT…" görünsün; (2) küçük tutarlı
 nakit satış: cihaz fişi kendiliğinden kesmeli, adisyon kapanmalı; (3) kart ve bir yemek kartıyla birer küçük satış:
-cihaz ilgili uygulamayı açmalı, yemek kartında bilgi fişi çıkmalı ve ödeme LafPOS'ta o yemek kartına yazılmalı; (4)
+cihaz ilgili uygulamayı açmalı, yemek kartında bilgi fişi çıkmalı ve ödeme AsilPOS'ta o yemek kartına yazılmalı; (4)
 cihazda vazgeçin: adisyon açık kalmalı. Ham yanıt sepetin sonucunda saklanır (`fiscal_receipts.result.raw`).
 

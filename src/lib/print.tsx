@@ -548,12 +548,12 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
         </>
       )}
       <Hr />
-      <div className="rc-foot">LafPOS yönetim raporudur, mali Z değildir</div>
+      <div className="rc-foot">AsilPOS yönetim raporudur, mali Z değildir</div>
     </div>
   );
 }
 
-/** Cihazda alınan banka gün sonunun kâğıdı (`POST /okc/eod/slip`): bankalar, işlem sayısı, toplam; varsa LafPOS kıyası */
+/** Cihazda alınan banka gün sonunun kâğıdı (`POST /okc/eod/slip`): bankalar, işlem sayısı, toplam; varsa AsilPOS kıyası */
 export function BankEodReceipt({ boot, slip }: { boot: BootstrapDTO; slip: BankEodSlip }) {
   const diff = slip.grandTotalKurus != null && slip.dayCardKurus != null ? slip.grandTotalKurus - slip.dayCardKurus : null;
   return (
@@ -577,10 +577,10 @@ export function BankEodReceipt({ boot, slip }: { boot: BootstrapDTO; slip: BankE
         <span className="rc-r">{slip.grandTotalKurus != null ? `${tlPlain(slip.grandTotalKurus)} TL` : '-'}</span>
       </div>
       <Hr />
-      {/* Kayıt için kıyas: Pavo'nun (bankanın) kart toplamı ile LafPOS'ta kartla alınan; fark çıkmamalı */}
-      <div className="rc-caption">PAVO - LAFPOS KARŞILAŞTIRMA</div>
+      {/* Kayıt için kıyas: Pavo'nun (bankanın) kart toplamı ile AsilPOS'ta kartla alınan; fark çıkmamalı */}
+      <div className="rc-caption">PAVO - ASILPOS KARŞILAŞTIRMA</div>
       <Row l="Pavo kart toplamı" r={slip.grandTotalKurus != null ? tlPlain(slip.grandTotalKurus) : '-'} />
-      <Row l="LafPOS kart toplamı" r={slip.dayCardKurus != null ? tlPlain(slip.dayCardKurus) : '-'} />
+      <Row l="AsilPOS kart toplamı" r={slip.dayCardKurus != null ? tlPlain(slip.dayCardKurus) : '-'} />
       {diff != null ? (
         <>
           <Row strong l="FARK" r={tlPlain(diff)} />

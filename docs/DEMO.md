@@ -1,14 +1,14 @@
 # Tarayıcı demosu (lafpos.vercel.app/demo)
 
-Kasa ekranlarını kurulum yapmadan denemek için: gerçek LafPOS sunucusu (aynı uçlar, yetkiler, hesap ve denetim
-kaydı) tarayıcının içinde çalışır. LafPOS Uzaktan'la (salt okunur patron görünümü, kafeden gelen özet) ilgisi
+Kasa ekranlarını kurulum yapmadan denemek için: gerçek AsilPOS sunucusu (aynı uçlar, yetkiler, hesap ve denetim
+kaydı) tarayıcının içinde çalışır. AsilPOS Uzaktan'la (salt okunur patron görünümü, kafeden gelen özet) ilgisi
 yoktur; ayrı adres, ayrı veri.
 
 ## Nasıl çalışır
 
 - `npm run build:demo` (`vite build --mode demo`) arayüzle birlikte sunucuyu da paketler: `dist/web/demo`. Yalnız
   Vercel derler (`vercel.json`, `/demo/*` buraya yönlenir); kasa derlemesine (`npm run build`) ve Windows paketine
-  girmez. Oturum jetonu ayrı anahtarda (`lafpos.demo.token`): aynı alan adındaki Uzaktan'ı düşürmez.
+  girmez. Oturum jetonu ayrı anahtarda (`asilpos.demo.token`): aynı alan adındaki Uzaktan'ı düşürmez.
 - Veritabanı sql.js (WASM SQLite). `demo/db.ts` `server/db/client.ts`'in yerine geçer; göçler (`drizzle/*.sql`)
   ve kurulumdaki menü pakete gömülür. Yazan istek yanıtını veritabanı IndexedDB'ye kaydedildikten sonra alır.
   Kayıt önceki bir iş gününden kaldıysa demo yeni günle açılır (dünden açık gün satışı durdururdu).

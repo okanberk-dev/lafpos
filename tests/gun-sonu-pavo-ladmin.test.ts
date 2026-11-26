@@ -41,7 +41,7 @@ beforeAll(async () => {
   h = await startApp({
     PAVO_URL: device.url,
     PAVO_SERIAL: device.serial,
-    PAVO_FINGERPRINT: 'LafPOS-test',
+    PAVO_FINGERPRINT: 'AsilPOS-test',
     LAFMALIYET_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`,
     LAFMALIYET_SYNC_SECRET: 'p'.repeat(48),
   });

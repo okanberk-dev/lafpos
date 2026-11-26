@@ -12,8 +12,8 @@ export { ALERT_PREFS_DEFAULT, type AlertPrefs, parseAlertPrefs, VOLUME_STEPS, ty
  * `sound-pref.ts`'in kuralı). Okuma kuralı (`parseAlertPrefs`) src/lib/siteAlerts.ts'te (DOM'suz, testler çağırır).
  */
 
-/** `useLocalPref` ile aynı önek (lafpos.pref.<ad>) */
-export const ALERT_PREFS_KEY = 'lafpos.pref.siteAlerts';
+/** `useLocalPref` ile aynı önek (asilpos.pref.<ad>) */
+export const ALERT_PREFS_KEY = 'asilpos.pref.siteAlerts';
 
 const listeners = new Set<() => void>();
 /** Saklanamayan tarayıcıda bu sekmenin seçimi */

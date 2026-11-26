@@ -9,15 +9,15 @@ import { TOKEN_FIRMA } from '@shared/eski-adlar';
 
 /**
  * Token kablolu bağlantı (TokenX Connect Wire / Integration Hub): Beko 300TR ve X30TR kasa bilgisayarına kabloyla
- * (300TR beşikteki RS232-USB, X30TR soldaki Type-C) bağlanır. Token'ın kütüphanesi yalnız Windows'ta çalışır; LafPOS
+ * (300TR beşikteki RS232-USB, X30TR soldaki Type-C) bağlanır. Token'ın kütüphanesi yalnız Windows'ta çalışır; AsilPOS
  * onu ayrı bir süreçte (PowerShell köprüsü, `token-kablo-kopru.ts`) yükler: kütüphane çökse de kasa sunucusu düşmez,
- * köprü kendiliğinden yeniden başlar. Kablo takılınca köprü cihazı bildirir, LafPOS kısımları ve ödeme uygulamalarını
+ * köprü kendiliğinden yeniden başlar. Kablo takılınca köprü cihazı bildirir, AsilPOS kısımları ve ödeme uygulamalarını
  * okur (Token'a göre zorunlu), sepeti gönderir; sonuç cihazdan geri çağrıyla gelir. Durum sorgusu yoktur: kablo
  * koptuysa cihaz, bağlantı geri gelince sonucu yeniden yollar. Ayrıntı: docs/04-YAZARKASA.md §9.
  */
 
 /**
- * Köprünün klasörü (betik, Token kütüphanesi): kasada C:\ProgramData\LafPOS\token-kablo. Veri klasörü servis bağlar
+ * Köprünün klasörü (betik, Token kütüphanesi): kasada veri klasöründeki token-kablo. Veri klasörü servis bağlar
  * (`useKabloDir`); bu modül ortamı yüklemez (sağlayıcı listesi testlerde ortam ayarlanmadan yüklenir)
  */
 let kabloDir: () => string = () => resolve(posEnv(process.env, 'DATA_DIR') ?? 'data', 'token-kablo');
@@ -117,7 +117,7 @@ export function parseFiscalInfo(json: string | null | undefined): { sections: To
 }
 
 /**
- * LafPOS sepetini kablolu protokolün sepetine çevirir: biçim bulutla aynı (kuruş, adet x1000, KDV x100, kısım no),
+ * AsilPOS sepetini kablolu protokolün sepetine çevirir: biçim bulutla aynı (kuruş, adet x1000, KDV x100, kısım no),
  * bulutun liste alanları (masa adı, filtre, çek no, webhook) gitmez
  */
 export function wireBasket(b: TokenxBasket): Record<string, unknown> {

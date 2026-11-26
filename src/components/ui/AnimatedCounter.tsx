@@ -5,7 +5,7 @@ import { mod, toCells } from './rollingDigits';
 
 /**
  * Kayan rakamlı sayaç (rare-ui animated-counter'dan, ladmin'deki uyarlamanın kurallarıyla): değer değişince her basamak
- * kendi çarkında yeni rakama döner; artışta yukarı, azalışta aşağı. LafPOS uyarlaması:
+ * kendi çarkında yeni rakama döner; artışta yukarı, azalışta aşağı. AsilPOS uyarlaması:
  * - Yazıyı ekranın kendi biçimleyicisi verir (`format`: `tl`, `tlShort`, sayı): sayaç biçim yazmaz, basamakları döndürür.
  *   Ekranda ve ekran okuyucuda bugünkü yazının aynısı (tests/kayan-sayac.test.ts).
  * - İlk boyamada çark dönmez (açılışta rakam hemen yerinde); hareket azaltma tercihinde hiç dönmez, rakam doğrudan

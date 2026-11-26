@@ -18,7 +18,7 @@ interface LadminStaff {
   active: boolean;
   /** Kayda bağlı lafmaliyet giriş hesabı (görünen adı) */
   account: string | null;
-  /** Bu kayda bağlı LafPOS kullanıcısı */
+  /** Bu kayda bağlı AsilPOS kullanıcısı */
   linkedUserId: string | null;
 }
 interface LadminStaffList {
@@ -216,7 +216,7 @@ export function StaffLinkSection({ user, configured, names }: { user: { id: stri
 
       {confirming && pick && list.data && (
         <ConfirmLink
-          lafpos={`${user.name} · ${ROLE_LABELS[user.role]}`}
+          asilpos={`${user.name} · ${ROLE_LABELS[user.role]}`}
           ladmin={`${pick.name} · ${accountText(pick, list.data.sube)}`}
           refText={pick.ref}
           // Ad benzemiyorsa ya da aynı ada uyan birden çok etkin kayıt varsa ayrıca "Eminim" istenir
@@ -233,7 +233,7 @@ export function StaffLinkSection({ user, configured, names }: { user: { id: stri
 }
 
 function ConfirmLink({
-  lafpos,
+  asilpos,
   ladmin,
   refText,
   needsSure,
@@ -243,7 +243,7 @@ function ConfirmLink({
   onClose,
   onConfirm,
 }: {
-  lafpos: string;
+  asilpos: string;
   ladmin: string;
   refText: string;
   needsSure: boolean;
@@ -275,8 +275,8 @@ function ConfirmLink({
       <div className="space-y-3 p-4">
         <dl className="grid gap-2 text-sm">
           <div className="rounded-[var(--r-tile)] border border-[var(--admin-border)] px-3 py-2.5">
-            <dt className="text-xs text-[var(--admin-text-mute)]">LafPOS</dt>
-            <dd className="font-medium">{lafpos}</dd>
+            <dt className="text-xs text-[var(--admin-text-mute)]">AsilPOS</dt>
+            <dd className="font-medium">{asilpos}</dd>
           </div>
           <div className="rounded-[var(--r-tile)] border border-[var(--admin-border)] px-3 py-2.5">
             <dt className="text-xs text-[var(--admin-text-mute)]">ladmin ({refText})</dt>

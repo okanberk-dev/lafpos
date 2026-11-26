@@ -19,7 +19,7 @@ const item = (p: Partial<BasketSourceItem> & { id: string }): BasketSourceItem =
 const base = { basketId: '00000000-0000-4000-8000-000000000001', orderNo: 12, title: 'S1', sectionMap: { '1': 3, '10': 1, '20': 2 }, sizeLabels: { M: 'Orta', L: 'Büyük' } };
 
 describe('TokenX sepeti', () => {
-  it('fiş toplamı LafPOS toplamıyla kuruşu kuruşuna aynı (adisyon indirimi kalemlere adjust olarak)', () => {
+  it('fiş toplamı AsilPOS toplamıyla kuruşu kuruşuna aynı (adisyon indirimi kalemlere adjust olarak)', () => {
     const items = [item({ id: 'a', qty: 3, unitPrice: 3333 }), item({ id: 'b', unitPrice: 15000, kdvRate: 20, size: 'TEK', name: 'Karaoke' }), item({ id: 'c', voided: true }), item({ id: 'd', complimentary: true })];
     const totals = calcOrder({
       lines: items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: 0, complimentary: i.complimentary, voided: i.voided })),

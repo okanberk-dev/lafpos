@@ -1,7 +1,7 @@
 import { get, post } from './api';
 
 /**
- * Patrona telefon bildirimi (LafPOS Uzaktan, Web Push; api/_bildirim.ts). Bu tarayıcının aboneliği: servis çalışanı
+ * Patrona telefon bildirimi (AsilPOS Uzaktan, Web Push; api/_bildirim.ts). Bu tarayıcının aboneliği: servis çalışanı
  * (`/sw.js`) kaydedilir, sitenin açık anahtarıyla abone olunur, abonelik gerçek oturumla siteye yazılır. iPhone'da
  * bildirim yalnız ana ekrana eklenmiş sitede çalışır (iOS 16.4+)
  */

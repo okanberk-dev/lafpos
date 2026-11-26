@@ -1,17 +1,17 @@
 /**
- * Geçmiş ciro: dükkânın LafPOS'tan önceki kasa programında (ör. ModPOS) kalan günleri. İki kaynaktan gelir:
+ * Geçmiş ciro: dükkânın AsilPOS'tan önceki kasa programında (ör. ModPOS) kalan günleri. İki kaynaktan gelir:
  * - lafmaliyet (ladmin): kasa ModPOS dönemini imzalı uçtan günde bir çeker (`GET /api/panel/pos/modpos-gunler`,
  *   server/sync/modpos.ts; `sync_state` `lafmaliyet.modpos`). Asıl kaynak budur; aynı tarihte elle yüklenenin yerine geçer.
  * - Merkez: sahibin daha önce yüklediği kayıt (`POST merkez/gecmis`; bulutta dükkân başına tek anahtar, nabızla kasaya
  *   gelir: `sync_state` `merkez.gecmis`).
  * Kasa ikisini birleştirir (`mergeHistory`, server/sync/modpos.ts `historyStore`): patron panelinin kıyasları, kasadaki
- * Raporlar (Ciro, Saatlik, Ürünler; günler kaynağın adıyla "ModPOS") ve LafPOS Uzaktan o günleri görür. Uzaktan'a kasa o
+ * Raporlar (Ciro, Saatlik, Ürünler; günler kaynağın adıyla "ModPOS") ve AsilPOS Uzaktan o günleri görür. Uzaktan'a kasa o
  * günleri (dönemin ürün listesiyle) kendi dükkân kimliğiyle gün raporu olarak iter (server/sync/cloud-reports.ts):
  * geçmiş bulutta başka anahtarda dursa ya da hiç yüklenmemiş olsa da "Geçen hafta" ModPOS günlerini gösterir. İş günü, Z
  * zinciri ve lafmaliyet giden kutusu geçmişi hiç görmez (tests/modpos-kasa.test.ts).
  *
- * Kural (bulut, `fillHistory`): bir tarih için hem geçmiş hem LafPOS'un gün raporu varsa cirosu büyük olan geçer (geçiş
- * günlerinde LafPOS'ta yalnız deneme satışı vardır; gerçek satış eski programdadır). İki kaynak toplanmaz: aynı satış iki
+ * Kural (bulut, `fillHistory`): bir tarih için hem geçmiş hem AsilPOS'un gün raporu varsa cirosu büyük olan geçer (geçiş
+ * günlerinde AsilPOS'ta yalnız deneme satışı vardır; gerçek satış eski programdadır). İki kaynak toplanmaz: aynı satış iki
  * kez sayılmasın.
  *
  * Geçmiş gün ciro, adisyon, ödeme türü, indirim, ciro dışı (ödenmez ve ikram), KDV, önceki programın Z numarası ve (varsa)
@@ -57,7 +57,7 @@ export interface HistoryDay {
   odenmez?: number;
   /** KDV: [oran, KDV dahil, matrah, KDV]; yoksa ciro %10 sayılır (`historyKdv`) */
   kdv?: [number, number, number, number][];
-  /** Önceki programın Z numarası ("Z-2026-002"); LafPOS'un Z zincirine girmez */
+  /** Önceki programın Z numarası ("Z-2026-002"); AsilPOS'un Z zincirine girmez */
   z?: string;
 }
 
@@ -195,7 +195,7 @@ export function historyKdv(d: Pick<HistoryDay, 'ciro' | 'kdv'>): [number, number
 
 /**
  * Geçmiş günün Raporlar'daki karşılığı: kapanmış tek iş günü, kaynağın adı ve önceki programın Z numarasıyla. Ciro dökümü
- * LafPOS gününün kuralıyla: brüt = ciro + indirim, ciro dışı = ödenmez, liste = brüt + ciro dışı; KDV yüklenmediyse %10.
+ * AsilPOS gününün kuralıyla: brüt = ciro + indirim, ciro dışı = ödenmez, liste = brüt + ciro dışı; KDV yüklenmediyse %10.
  * Bilinmeyen kırılımlar (ürün, personel, satış türü) boş; ürünler dönem bloğunda (`HistoryStore.urunler`)
  */
 export function historyReport(d: HistoryDay, kaynak: string = HISTORY_SOURCE): RemoteDayReport {
@@ -236,8 +236,8 @@ export function historyReport(d: HistoryDay, kaynak: string = HISTORY_SOURCE): R
 }
 
 /**
- * İstenen tarihlerde geçmişi gün raporlarına katar: LafPOS'un raporu yoksa ya da cirosu geçmişten küçükse geçmiş günü
- * geçer. `today` ve sonrası LafPOS'undur (bugünün canlı raporu ezilmez)
+ * İstenen tarihlerde geçmişi gün raporlarına katar: AsilPOS'un raporu yoksa ya da cirosu geçmişten küçükse geçmiş günü
+ * geçer. `today` ve sonrası AsilPOS'undur (bugünün canlı raporu ezilmez)
  */
 export function fillHistory<T extends { date: string; s: { rev: number } }>(dates: string[], reps: T[], history: HistoryDay[] | null, today: string, make: (d: HistoryDay) => T): T[] {
   if (!history?.length) return reps;
@@ -254,7 +254,7 @@ export function fillHistory<T extends { date: string; s: { rev: number } }>(date
 /**
  * Dönem ürün listesi raporda nasıl görünür: dönem bloğun bütün günlerini kapsıyorsa tam blok (`tam`), yalnız bir kısmını
  * kapsıyorsa not (`kismi`: blok günlere bölünemez), hiç kesişmiyorsa yok. `history` ve `used` verilirse bloğun günlerinin
- * hepsi raporda geçmiş günü olarak durmalı (kaynak adı taşıyan gün); biri LafPOS günüyle değiştiyse blok o günü de
+ * hepsi raporda geçmiş günü olarak durmalı (kaynak adı taşıyan gün); biri AsilPOS günüyle değiştiyse blok o günü de
  * sayardı: not
  */
 export function historyProductsShown(block: HistoryProducts | null | undefined, range: { from: string; to: string }, history?: Pick<HistoryDay, 'date'>[] | null, used?: { date: string; kaynak?: string }[]): 'tam' | 'kismi' | null {

@@ -4,10 +4,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { addDays, businessDate } from '@shared/time';
 import { openingSourceText } from '../src/lib/lafmaliyet';
 import { type Harness, startApp } from './harness';
+import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
  * Kasa zinciri (Faz 3, docs/03-ENTEGRASYON.md §4.6-§4.7): gün açılırken beklenen açılış önceki gerçek günün devridir
- * (lafmaliyet'in `nextOpening`'i ya da LafPOS'un sayımı), en az ₺1,00 farkta neden zorunludur (kör kasiyer tutar görmez,
+ * (lafmaliyet'in `nextOpening`'i ya da AsilPOS'un sayımı), en az ₺1,00 farkta neden zorunludur (kör kasiyer tutar görmez,
  * her ret denetime yazılır), açılışın beklenen tutarı, farkı ve nedeni günde saklanır ve gövdeyle gider. Devir lafmaliyet'ten
  * en sık 5 dakikada bir, gün kapalıyken sorulur. Kasa hareketleri gövdede satır satır gider (`cashMoves`); harcamanın
  * kategorisi lafmaliyet'in personel kategorilerinden (en sık 5 dakikada bir çekilir, internetsizken son liste kalır).
@@ -116,7 +117,7 @@ describe('açılış önerisi ve nedeni', () => {
     const { dayRow } = await mod();
     const seen = await h.ok<DayResponse>('mudur', 'GET', '/cash/day');
     expect(seen.day).toBeNull();
-    expect(seen.opening).toEqual({ suggested: 127950, source: 'lafpos', fromDate: dayRow(prev).date });
+    expect(seen.opening).toEqual({ suggested: 127950, source: ACILIS_KASA, fromDate: dayRow(prev).date });
     const blind = await h.call<DayResponse>('kasa', 'GET', '/cash/day');
     expect(blind.json.opening).toEqual({ check: true });
     expect(JSON.stringify(blind.json)).not.toMatch(/127950|1279/);
@@ -151,7 +152,7 @@ describe('açılış önerisi ve nedeni', () => {
     expect(openRow()).toMatchObject({ id: opened.id, openingCash: 120000, expectedOpening: 127950, openingDiff: -7950, openingReason: 'Sabah bozuk para için 79,50 alındı' });
     const row = (await audit()).find((a) => a.action === 'day.open')!;
     expect(row.severity).toBe('uyari');
-    expect(row.data).toMatchObject({ expected: 127950, diff: -7950, source: 'lafpos', reason: 'Sabah bozuk para için 79,50 alındı' });
+    expect(row.data).toMatchObject({ expected: 127950, diff: -7950, source: ACILIS_KASA, reason: 'Sabah bozuk para için 79,50 alındı' });
     const p = await h.ok<{ z: Record<string, unknown> }>('patron', 'GET', `/sync/lafmaliyet/gun/${opened.id}`);
     expect(p.z).toMatchObject({ openingCash: 1200, expectedOpening: 1279.5, openingDiff: -79.5, openingReason: 'Sabah bozuk para için 79,50 alındı' });
   });
@@ -206,7 +207,7 @@ describe('lafmaliyet devri (nextOpening)', () => {
     expect(await lm.devirIfStale()).toBe(false);
     expect(devirGets()).toHaveLength(before + 1);
     // Bozuk yanıt (başka gün): önceki değer kalır, hata saklanır
-    devirReply = () => ({ status: 200, body: { version: 1, date: '2020-01-01', nextOpening: { amount: 1, source: 'lafpos' } } });
+    devirReply = () => ({ status: 200, body: { version: 1, date: '2020-01-01', nextOpening: { amount: 1, source: TEL_KAYNAK } } });
     allow();
     expect(await lm.devirIfStale()).toBe(true);
     expect(devirGets()).toHaveLength(before + 2);
@@ -226,7 +227,7 @@ describe('lafmaliyet devri (nextOpening)', () => {
     dayReply = () => ({ status: 503, body: { error: 'maintenance' } });
     await h.ok('mudur', 'POST', `/cash/days/${last.id}/count`, { countedCash: 128000 });
     expect(db.select().from(schema.outbox).all().some((o) => o.dedupeKey === `gun:${last.date}` && !o.sentAt)).toBe(true);
-    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 128000, source: 'lafpos', fromDate: last.date });
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 128000, source: ACILIS_KASA, fromDate: last.date });
     // Bekleyen kayıt varken devir sorulmaz (yerel sayım kazanır)
     const before = devirGets().length;
     settings.setSyncState('lafmaliyet.devir', { ...settings.getSyncState<Record<string, unknown>>('lafmaliyet.devir')!, attemptAt: 0 });
@@ -326,12 +327,12 @@ describe('bugünün günü kapandıktan sonra', () => {
 describe('yeniden sayım lafmaliyet\'e gidince', () => {
   // lafmaliyet (§3) devri günün kayıtlı kasa raporundan hesaplar ve raporu yanıttan SONRA yazar (`after()`): gönderimin
   // yanıtı o gönderimin sayımını görmez, önceki gönderimin raporunu söyler. Bu sahte lafmaliyet ikisini de öyle yapar;
-  // LafPOS'un otomatik raporu (elle düzeltilmemiş) yeni sayımı alır
+  // AsilPOS'un otomatik raporu (elle düzeltilmemiş) yeni sayımı alır
   const reports = new Map<string, number>();
   const ladminLike = (date: string, body?: { z?: { countedCash?: number | null } } | null): Reply => {
     const stored = reports.get(date);
     const counted = body?.z?.countedCash ?? null;
-    const nextOpening = stored != null ? { amount: stored, source: 'kasa_raporu' } : counted != null ? { amount: counted, source: 'lafpos' } : null;
+    const nextOpening = stored != null ? { amount: stored, source: 'kasa_raporu' } : counted != null ? { amount: counted, source: TEL_KAYNAK } : null;
     if (counted != null) reports.set(date, counted);
     return { status: 200, body: { ok: true, date, counted: true, switchDay: '2026-11-22', nextOpening } };
   };
@@ -371,10 +372,10 @@ describe('yeniden sayım lafmaliyet\'e gidince', () => {
     await ensureOpen();
     const id = await closeBack(127950);
     const date = dayRow(id).date;
-    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1279.5, source: 'lafpos' } });
+    expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1279.5, source: TEL_KAYNAK } });
     // Rapor yokken lafmaliyet kasanın sayımını geri söyler: kaynak lafmaliyet ama kasa raporu değil
     const echoed = (await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening;
-    expect(echoed).toEqual({ suggested: 127950, source: 'lafmaliyet', ladminSource: 'lafpos', fromDate: date });
+    expect(echoed).toEqual({ suggested: 127950, source: 'lafmaliyet', ladminSource: TEL_KAYNAK, fromDate: date });
     expect(openingSourceText(echoed as Parameters<typeof openingSourceText>[0])).not.toMatch(/kasa raporu/);
     // Geç gelen masa ya da yeniden sayım: lafmaliyet'e giden yeni sayımın yanıtı eski raporu (₺1.279,50) söyler
     await h.ok('mudur', 'POST', `/cash/days/${id}/count`, { countedCash: 130000 });
@@ -384,7 +385,7 @@ describe('yeniden sayım lafmaliyet\'e gidince', () => {
     expect(reports.get(date)).toBe(1300);
     // Ertesi sabah lafmaliyet'e ulaşılamıyor: beklenen kasanın yeni sayımıdır
     await askDevir();
-    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: 'lafpos', fromDate: date });
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: ACILIS_KASA, fromDate: date });
     // Kör kasiyer çekmecedeki doğru tutarı yazar: olmayan bir fark için neden istenmez
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 130000 });
     expect(openRow()).toMatchObject({ expectedOpening: 130000, openingDiff: 0, openingReason: null });
@@ -397,7 +398,7 @@ describe('yeniden sayım lafmaliyet\'e gidince', () => {
     await ensureOpen();
     const id = await closeBack(150000);
     const date = dayRow(id).date;
-    // Sabah okunan devir: lafmaliyet'in raporu (LafPOS'un ilk sayımı)
+    // Sabah okunan devir: lafmaliyet'in raporu (AsilPOS'un ilk sayımı)
     await askDevir();
     expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 150000, source: 'lafmaliyet', ladminSource: 'kasa_raporu', fromDate: date });
     // Gün yeniden sayılır ve gider; yanıt eski raporu söyler, sonra lafmaliyet'e ulaşılamaz
@@ -406,7 +407,7 @@ describe('yeniden sayım lafmaliyet\'e gidince', () => {
     expect((await sentAnswers(date)).at(-1)).toMatchObject({ nextOpening: { amount: 1500, source: 'kasa_raporu' } });
     devirReply = devirDown;
     await askDevir();
-    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 152000, source: 'lafpos', fromDate: date });
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 152000, source: ACILIS_KASA, fromDate: date });
     // lafmaliyet geri gelince güncel rapor okunur
     devirReply = ladminDevir;
     await askDevir();
@@ -438,14 +439,14 @@ describe('yeniden sayım lafmaliyet\'e gidince', () => {
     const past = addDays(today, -2);
     move(past);
     await askDevir();
-    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: 'lafpos', fromDate: past });
+    expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 130000, source: ACILIS_KASA, fromDate: past });
     // Yeniden açılıp sayımsız kapanırsa (föy sonra) lafmaliyet raporun sayımını korur: onun yanıtı geçer
     move(today);
     await h.ok('mudur', 'POST', `/cash/days/${id}/reopen`, { reason: 'Bir masa daha' });
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
     await lm.flushOutbox();
     expect((await sentAnswers(today)).map((a) => a.nextOpening)).toEqual([
-      { amount: 1279.5, source: 'lafpos' },
+      { amount: 1279.5, source: TEL_KAYNAK },
       { amount: 1279.5, source: 'kasa_raporu' },
       { amount: 1300, source: 'kasa_raporu' },
     ]);
@@ -481,8 +482,8 @@ describe('açılış önerisinin kaynağı (Günü aç kartı)', () => {
   it('kasa raporu yalnız lafmaliyet kasa raporundan hesapladıysa anılır', () => {
     const fromDate = '2026-11-22';
     expect(openingSourceText({ source: 'lafmaliyet', ladminSource: 'kasa_raporu', fromDate })).toMatch(/^22 Kasım 2026 Pazar devri, lafmaliyet kasa raporundan$/);
-    expect(openingSourceText({ source: 'lafmaliyet', ladminSource: 'lafpos', fromDate })).toMatch(/^22 Kasım 2026 Pazar gün sonu sayımı, lafmaliyet'ten$/);
+    expect(openingSourceText({ source: 'lafmaliyet', ladminSource: TEL_KAYNAK, fromDate })).toMatch(/^22 Kasım 2026 Pazar gün sonu sayımı, lafmaliyet'ten$/);
     expect(openingSourceText({ source: 'lafmaliyet', fromDate })).toMatch(/^22 Kasım 2026 Pazar devri, lafmaliyet'ten$/);
-    expect(openingSourceText({ source: 'lafpos', fromDate })).toMatch(/^22 Kasım 2026 Pazar gün sonu sayımı$/);
+    expect(openingSourceText({ source: ACILIS_KASA, fromDate })).toMatch(/^22 Kasım 2026 Pazar gün sonu sayımı$/);
   });
 });

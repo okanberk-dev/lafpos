@@ -11,10 +11,10 @@ import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { httpErrorText, networkErrorText } from './lafmaliyet';
 
 /**
- * ModPOS dönemi lafmaliyet'ten (ladmin): LafPOS'tan önceki kasa programının günleri (ciro, ödeme türleri, indirim, ciro
+ * ModPOS dönemi lafmaliyet'ten (ladmin): AsilPOS'tan önceki kasa programının günleri (ciro, ödeme türleri, indirim, ciro
  * dışı, KDV, Z numarası) ve dönemin ürün listesi, `GET /api/panel/pos/modpos-gunler?sube=<şube>` (imzalı,
  * LAFMALIYET_SYNC_SECRET; docs/03-ENTEGRASYON.md §4.6). lafmaliyet şubenin geçiş gününden önceki günlerini kendi kasa
- * raporlarından (yoksa ModPOS föyünden) verir; LafPOS onları geçmiş ciro günü (shared/gecmis.ts `HistoryDay`, kuruş)
+ * raporlarından (yoksa ModPOS föyünden) verir; AsilPOS onları geçmiş ciro günü (shared/gecmis.ts `HistoryDay`, kuruş)
  * olarak saklar (`sync_state` `lafmaliyet.modpos`).
  *
  * Bütçe (AGENTS.md kural 6'nın ruhu): kendiliğinden iş günü başına en çok bir kez (05:00'ten sonraki ya da kasa açıldıktan
@@ -105,7 +105,7 @@ const PAY: [key: 'kart' | 'nakit' | 'yemek' | 'online' | 'diger', ad: string, al
 ];
 
 /**
- * lafmaliyet'in günleri → geçmiş ciro günleri (kuruş). Geçiş günü ve bugün ile sonrası alınmaz (LafPOS'un). Ödeme türünün
+ * lafmaliyet'in günleri → geçmiş ciro günleri (kuruş). Geçiş günü ve bugün ile sonrası alınmaz (AsilPOS'un). Ödeme türünün
  * adedi bilinmez (0). Ciro dışı = ödenmez + ikram. İndirim null (yalnız föyden gelen gün): bilinmiyor. KDV satırları
  * geldiği gibi (oran oran; ciroyu tutmuyorsa yazılmaz, rapor %10 sayar; %20 hiç varsayılmaz). Ürün listesi biçimi
  * bozuksa alınmaz

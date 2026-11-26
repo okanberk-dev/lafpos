@@ -86,7 +86,7 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     .get();
   if (closedToday) throw conflict(`Bugünün gün sonu alındı (Z ${closedToday.zNo}). Satış gerekiyorsa günü yeniden açın; yeni gün 05:00'ten sonra açılır`, 'day_closed_today');
   const openingCash = Math.max(0, Math.trunc(input.openingCash));
-  // Kasa zinciri: beklenen açılış önceki gerçek günün devri (lafmaliyet'in ya da LafPOS'un); fark en az ₺1,00 ise neden
+  // Kasa zinciri: beklenen açılış önceki gerçek günün devri (lafmaliyet'in ya da AsilPOS'un); fark en az ₺1,00 ise neden
   const expected = expectedOpening(t);
   const diff = expected ? openingCash - expected.amount : null;
   const reason = input.reason?.trim().slice(0, 200) || null;
@@ -293,7 +293,7 @@ const Z_FIELDS: ZField[] = ['cash', 'card', 'meal_card', 'online', 'other'];
 
 /**
  * Günlerin ödemelerine ait yazarkasa fişleri: "yazarkasadan geçmeyen"in girdisi (shared/order-calc.ts
- * `offDeviceTotals`). Yalnız ödemesi LafPOS'a işlenmiş (`paymentIds` dolu) fişler; fiş, ödemesinin adisyonundadır
+ * `offDeviceTotals`). Yalnız ödemesi AsilPOS'a işlenmiş (`paymentIds` dolu) fişler; fiş, ödemesinin adisyonundadır
  * (birleştirmede ikisi birlikte taşınır, gün aşırı ödemede de). Adisyonlar alt sorguyla seçilir: uzun dönemde kimlik
  * listesi SQLite'ın değişken sınırına takılmaz (günler en çok 400)
  */
@@ -393,7 +393,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   }
   // Çekmeceye giren nakit, Z'nin nakit alanıyla aynı bilgiden: ödemeye alındığı an dondurulan Z alanı. Ödeme türü
   // sonradan değişse (Nakit → Kart) de Z nakdi ve beklenen nakit aynı ödemeleri sayar; lafmaliyet'in beklenen nakit
-  // formülü (açılış + nakit + cash_in − harcama − teslim) LafPOS'unkini verir. Z'de "Diğer"e yazılan ödeme (döviz
+  // formülü (açılış + nakit + cash_in − harcama − teslim) AsilPOS'unkini verir. Z'de "Diğer"e yazılan ödeme (döviz
   // gibi çekmeceye ayrı giren) TL beklenen nakde girmez; Yönetim Z'de nakdi yalnız Nakit türüne verir
   const cashSales = salesPays.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount + p.tip, 0);
   const cashCollections = collections.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount, 0);
@@ -497,7 +497,7 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
 }
 
 /**
- * Günün kayıtlarından o gün iş yapan LafPOS kullanıcıları (kimlik, sıralı): günü açan ve kapatan, adisyonu açan, kapatan
+ * Günün kayıtlarından o gün iş yapan AsilPOS kullanıcıları (kimlik, sıralı): günü açan ve kapatan, adisyonu açan, kapatan
  * ve garsonu, kalemi yazan, ödemeyi alan, kasa hareketini yazan, vardiya sayımını yapan ve devralan. Mesai kaydı yok (4
  * Kas 2026'da kaldırıldı): ortak girişle çalışan ya da hiç giriş yapmayan (bar) görünmez, yalnız günü kapatan yönetici
  * görünür; düzeltmesi "Bugün çalışanlar" (`business_days.workedCorrection`)
@@ -702,7 +702,7 @@ export function lafmaliyetZ(day: DayRow, s: ZSummary) {
     counted_cash: s.countedCash == null ? null : toTL(s.countedCash),
     handed_over: toTL(s.handedOver),
     // Satış dışında çekmeceye giren nakit (giriş, nakit cari tahsilatı, nakit bahşiş): lafmaliyet beklenen nakdi
-    // bununla LafPOS'unkine eşitler (açılış + nakit satış + kasaya giren − harcama − teslim)
+    // bununla AsilPOS'unkine eşitler (açılış + nakit satış + kasaya giren − harcama − teslim)
     cash_in: toTL(Math.max(0, s.expectedCash - s.openingCash - s.byZField.cash + s.cashOut + s.handedOver)),
     expected_cash: toTL(s.expectedCash),
     cash_diff: s.cashDiff == null ? null : toTL(s.cashDiff),

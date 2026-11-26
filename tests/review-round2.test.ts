@@ -182,7 +182,7 @@ describe('ikinci inceleme', () => {
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: stopped.total });
   });
 
-  it('Token kesintisinde takılan sepet yetkili onayıyla LafPOS\'ta iptal sayılır, adisyon nakit alınır', async () => {
+  it('Token kesintisinde takılan sepet yetkili onayıyla AsilPOS\'ta iptal sayılır, adisyon nakit alınır', async () => {
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'tokenx', mode: 'anlik' });
     const o = await newOrder([{ name: 'Türk Kahvesi' }]);
     const sent = await h.ok<{ receipt: { id: string; status: string } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});

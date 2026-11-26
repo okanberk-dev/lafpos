@@ -3,7 +3,7 @@
  * Kaynak: developer.tokeninc.com › X Platform › Token X Connect (Cloud), Postman koleksiyonu "TokenX Documentation".
  *
  * Akış: client-id/secret ile erişim jetonu → (anlık mod) terminale sepet → kasiyer cihazda ödemeyi alır ve mali
- * fişi basar → sonuç webhook ile gelir; LafPOS ayrıca sepet detayını sorgulayarak da sonucu alır (kafedeki
+ * fişi basar → sonuç webhook ile gelir; AsilPOS ayrıca sepet detayını sorgulayarak da sonucu alır (kafedeki
  * sunucu internetten erişilemiyorsa webhook ulaşmaz).
  */
 

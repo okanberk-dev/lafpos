@@ -364,7 +364,7 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
         style={fitFigure(value)}
         className={cn('tabular mt-2 whitespace-nowrap font-headline font-medium leading-[0.9] tracking-[-0.045em]', strong ? 'text-[length:min(40px,var(--fit,17cqi))]' : 'text-[length:min(30px,var(--fit,17cqi))]')}
       >
-        {/* LafPOS Keel (DESIGN.md §0): rakam iri, kuruş soluk (tutar metinse sondaki ",00" ayrılır) */}
+        {/* AsilPOS Keel (DESIGN.md §0): rakam iri, kuruş soluk (tutar metinse sondaki ",00" ayrılır) */}
         {typeof value === 'string' && /,\d{2}$/.test(value) ? (
           <>
             {value.slice(0, -3)}

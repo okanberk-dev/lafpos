@@ -25,7 +25,7 @@ interface Backup {
 
 const mb = (b: number) => `${(b / 1048576).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MB`;
 
-/** Geri yükleme sihirbazı: yedeği seç → uyarıyı oku, PIN'i yaz → LafPOS yeniden açılır */
+/** Geri yükleme sihirbazı: yedeği seç → uyarıyı oku, PIN'i yaz → AsilPOS yeniden açılır */
 function RestoreDialog({ onClose }: { onClose: () => void }) {
   const [shop, setShop] = useState<string | undefined>(undefined);
   const list = useQuery({ queryKey: ['admin', 'bulut-yedek', 'liste', shop], queryFn: () => post<{ shop: string; dukkanlar: string[]; yedekler: Backup[] }>('/admin/bulut-yedek/liste-dukkan', shop ? { dukkan: shop } : {}) });
@@ -34,7 +34,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
   const restore = useMutation({
     mutationFn: () => post('/admin/bulut-yedek/geri-yukle', { pathname: picked!.pathname, pin }),
     onSuccess: () => {
-      toast.ok('Yedek indirildi; LafPOS yeniden açılıyor');
+      toast.ok('Yedek indirildi; AsilPOS yeniden açılıyor');
       // Sunucu kapanıp açılır: oturum ve ekran yenilenir
       setTimeout(() => window.location.reload(), 8000);
       onClose();
@@ -101,7 +101,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
       ) : (
         <div className="grid gap-4">
           <Notice tone="warn" title="Bu yedekten sonraki kayıtlar geri gelmez">
-            Şu anki veritabanının kopyası yedek klasörüne alınır, sonra seçtiğiniz yedek yerine konur ve LafPOS yeniden açılır (yaklaşık yarım dakika)
+            Şu anki veritabanının kopyası yedek klasörüne alınır, sonra seçtiğiniz yedek yerine konur ve AsilPOS yeniden açılır (yaklaşık yarım dakika)
           </Notice>
           <Field label="Kendi PIN’iniz">
             <PasswordInput inputMode="numeric" autoComplete="off" wide showLabel="PIN’i göster" hideLabel="PIN’i gizle" maxLength={12} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
@@ -114,7 +114,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Bulut yedeği (Yönetim › Ayarlar ve yedek; server/sync/yedek.ts): günlük yedek şifrelenip LafPOS Uzaktan'ın özel
+ * Bulut yedeği (Yönetim › Ayarlar ve yedek; server/sync/yedek.ts): günlük yedek şifrelenip AsilPOS Uzaktan'ın özel
  * deposuna gider. Son yüklemenin anı, şimdi yedekle, buluttan geri yükle (yalnız patron, Windows kurulumunda)
  */
 export function CloudBackupCard() {

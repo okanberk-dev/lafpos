@@ -1,4 +1,4 @@
-# Geliştirilmiş prompt: LafPOS
+# Geliştirilmiş prompt: AsilPOS
 
 > Kullanıcının ilk isteği (26 Eki 2026):
 > "downloads'a bir klasör oluştur ve buraya modpos narpos robot pos tarzı bir sistem istiyorum, sen de
@@ -16,14 +16,14 @@ giderilmiş hâlidir.
 
 Sen L'Affogato'nun (Tuzla, İstanbul; 200 yıllık köşkte kafe, bahçe ve karaoke odası) yazılım ekibisin.
 Kafede bugün kasa olarak **ModPOS** (arka ofisi "Patron") kullanılıyor. Bunun yerine kafenin kendi satış
-noktası sistemini, **LafPOS**'u yazacaksın.
+noktası sistemini, **AsilPOS**'u yazacaksın.
 
-Kafenin bugün iki sistemi var ve LafPOS bunlarla konuşmak zorunda:
+Kafenin bugün iki sistemi var ve AsilPOS bunlarla konuşmak zorunda:
 
-| Sistem | Repo | Görevi | LafPOS ile ilişkisi |
+| Sistem | Repo | Görevi | AsilPOS ile ilişkisi |
 | --- | --- | --- | --- |
-| Site + mobil uygulama API'si | `RiosenBeq/laffogato` (Next.js 16, Neon) | Menü, online sipariş (masa QR, gel-al, kurye), sadakat damgası | **Ürün, fiyat, KDV ve Satışta/Tükendi bilgisinin sahibi.** LafPOS menüyü buradan çeker, online siparişleri buradan görür |
-| Maliyet / arka ofis paneli | `RiosenBeq/lafmaliyet` (Next.js 16, Drizzle, Neon) | Reçete, maliyet, hammadde, tedarikçi, cari, kasa raporu (Z), zayi/ikram, personel onayları | **Reçete, maliyet, stok ve kasa raporunun sahibi.** LafPOS satış ve Z verisini buraya taşır, elle giriş biter |
+| Site + mobil uygulama API'si | `RiosenBeq/laffogato` (Next.js 16, Neon) | Menü, online sipariş (masa QR, gel-al, kurye), sadakat damgası | **Ürün, fiyat, KDV ve Satışta/Tükendi bilgisinin sahibi.** AsilPOS menüyü buradan çeker, online siparişleri buradan görür |
+| Maliyet / arka ofis paneli | `RiosenBeq/lafmaliyet` (Next.js 16, Drizzle, Neon) | Reçete, maliyet, hammadde, tedarikçi, cari, kasa raporu (Z), zayi/ikram, personel onayları | **Reçete, maliyet, stok ve kasa raporunun sahibi.** AsilPOS satış ve Z verisini buraya taşır, elle giriş biter |
 
 Referans ürünler: ModPOS (Patron), NarPOS, robotPOS ve kullanıcının gösterdiği Gafgidi patron/yönetim
 panelleri. Hedef, bunların kafe için anlamlı bütün özelliklerini karşılamak ve aşağıdaki "daha gelişmiş"
@@ -39,7 +39,7 @@ yapılabilecek, dokunmatik tablet, telefon ve bilgisayarda çalışan bir POS si
 2. Patron, kafede olmasa da canlı ciroyu, açık masaları, iptal/ikram/indirimleri ve kasa farkını görür.
 3. Ürünler ve fiyatlar **tek yerden** (site) gelir; ModPOS'taki üçüncü kopya ve elle fiyat güncelleme
    ortadan kalkar.
-4. Günlük satış ve Z verisi lafmaliyet'e elle yazılmaz; LafPOS üretir.
+4. Günlük satış ve Z verisi lafmaliyet'e elle yazılmaz; AsilPOS üretir.
 
 ## Kapsam (modüller)
 
@@ -87,7 +87,7 @@ yapılabilecek, dokunmatik tablet, telefon ve bilgisayarda çalışan bir POS si
   2xx gelince yerelde kaydedilir.
 - **Neon bütçesi:** hiçbir periyodik istek 5 dakikadan sık değildir, yeni cron yoktur (lafmaliyet
   `docs/planlar/senkron.md`).
-- **Online ödenmiş sipariş LafPOS'ta tekrar tahsil edilmez** ve lafmaliyet'e POS satışı olarak gitmez
+- **Online ödenmiş sipariş AsilPOS'ta tekrar tahsil edilmez** ve lafmaliyet'e POS satışı olarak gitmez
   (çift sayım).
 - **lafmaliyet'e:** bugün kod değişmeden kabul edilen biçimlerde dışa aktarım (Satışlar ürün listesi, Kasa
   raporu alanları sırasıyla Z özeti); lafmaliyet'te imzalı alım ucu yazıldığında aynı veri giden kutusundan
@@ -126,11 +126,11 @@ yapılabilecek, dokunmatik tablet, telefon ve bilgisayarda çalışan bir POS si
 ## Kapsam dışı (bilinçli)
 
 - ~~ÖKC / yazarkasa entegrasyonu~~ (ilk planda kapsam dışıydı; operatör isteğiyle yapıldı: TokenX Connect,
-  `docs/04-YAZARKASA.md`). Mali fiş yine GİB onaylı cihazdan kesilir; LafPOS'un adisyonu bilgi fişidir.
+  `docs/04-YAZARKASA.md`). Mali fiş yine GİB onaylı cihazdan kesilir; AsilPOS'un adisyonu bilgi fişidir.
 - **e-Arşiv / e-Fatura:** lafmaliyet'te ve Paraşüt tarafında kalır.
 - **Yemek platformları (Yemeksepeti, Getir, Trendyol) canlı entegrasyonu:** platform anlaşması ve anahtar
   gerektirir; adaptör arayüzü hazırlanır.
-- **Reçete, hammadde, tedarikçi, maliyet yönetimi:** lafmaliyet'in işi; LafPOS kopyalamaz.
+- **Reçete, hammadde, tedarikçi, maliyet yönetimi:** lafmaliyet'in işi; AsilPOS kopyalamaz.
 
 ---
 
@@ -145,11 +145,11 @@ dosyalarına not edip merge et."_
 
 ### Geliştirilmiş hâli
 
-Sen LafPOS'un baş geliştiricisisin. LafPOS kafedeki **kasa bilgisayarında Chrome'da** sürekli açık duracak;
+Sen AsilPOS'un baş geliştiricisisin. AsilPOS kafedeki **kasa bilgisayarında Chrome'da** sürekli açık duracak;
 tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her birini gerçek tarayıcıda doğrula:
 
 1. **Kasa bilgisayarı:** Chrome'u kiosk (tam ekran, adres çubuksuz) ve sessiz fiş yazdırma ile açan
-   başlatıcılar (Windows öncelikli, macOS da), bilgisayar açılınca LafPOS sunucusunun ve Chrome'un kendiliğinden
+   başlatıcılar (Windows öncelikli, macOS da), bilgisayar açılınca AsilPOS sunucusunun ve Chrome'un kendiliğinden
    başlaması, ekranın kararmaması (Wake Lock), yanlışlıkla geri gitme ve yakınlaştırmanın engellenmesi, fiş
    yazıcısı ve para çekmecesi notları. Kurulum belgesi: `docs/05-KASA-BILGISAYARI.md`.
 2. **Ödeme cihazı ve raporlar:** ödeme yazarkasa POS'a (TokenX Connect) sepet olarak gider, sonuç adisyona
@@ -165,7 +165,7 @@ tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her biri
    tamamla, bağımsız incelemeden geçir, CI yeşilken birleştir; değişiklikleri iki reponun md belgelerine
    yaz. Üretim yalnız ana daldan yayınlanır; birleştirme sonrası canlıda kontrol et.
 6. **Kapanış:** typecheck, birim testleri, derleme ve e2e (telefon, tablet, bilgisayar, koyu tema, akışlar)
-   yeşil; LafPOS PR'ı açılıp birleştirilir; açık kalan ve operatörün yapması gereken adımlar (Vercel ortam
+   yeşil; AsilPOS PR'ı açılıp birleştirilir; açık kalan ve operatörün yapması gereken adımlar (Vercel ortam
    değişkeni, gerçek cihaz turu) ayrıca listelenir.
 
 ### Görevler (açık işlerle birlikte)
@@ -179,5 +179,5 @@ tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her biri
 | 5 | Roller: düzenlenebilir rol yetkileri, kör kasa, X raporu, kasadan tükendi; kasiyer görünümü ve testleri | Tamam (`ca92717`; inceleme düzeltmeleri `6f3bdca`) |
 | 6 | Kasa bilgisayarı: Chrome kiosk başlatıcıları, otomatik başlatma, Wake Lock, yazdırma; belge | Tamam (`ca92717`) |
 | 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | Tamam: laffogato#263 (`d1de10f`, canlıda doğrulandı), lafmaliyet#34 (`81e79ad`) ve göç düzeltmesi lafmaliyet#36 (`df8ba6d`, canlı derleme 42 migration) |
-| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | Tamam: lafpos#1 (`e562a2a`); iki bağımsız inceleme, 13 + 8 bulgu testleriyle düzeltildi; 100 test, 117 ekran, 9 akış (GitHub Actions hesap faturası yüzünden çalışmıyor, kapılar yerelde) |
+| 8 | AsilPOS PR'ı: bütün kapılar, inceleme, birleştir | Tamam: lafpos#1 (`e562a2a`); iki bağımsız inceleme, 13 + 8 bulgu testleriyle düzeltildi; 100 test, 117 ekran, 9 akış (GitHub Actions hesap faturası yüzünden çalışmıyor, kapılar yerelde) |
 | 9 | Operatöre kalanlar: `LAFPOS_SYNC_SECRET` (laffogato Vercel ve lafmaliyet), kasa `.env`, gerçek cihaz turu | Açık |

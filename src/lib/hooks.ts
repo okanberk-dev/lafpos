@@ -67,7 +67,7 @@ export function useLocalPref<T>(key: string, initial: T): [T, (v: T) => void] {
 /** `useLocalPref`'in tercihini bileşen dışından yazar (bar ekranı teması gibi) */
 export function writeLocalPref<T>(key: string, v: T) {
   try {
-    localStorage.setItem(`lafpos.pref.${key}`, JSON.stringify(v));
+    localStorage.setItem(`asilpos.pref.${key}`, JSON.stringify(v));
   } catch {
     /* özel pencere */
   }
@@ -76,7 +76,7 @@ export function writeLocalPref<T>(key: string, v: T) {
 /** `useLocalPref`'in kaydettiği değeri bileşen dışından okur (açılışta tema gibi) */
 export function readLocalPref<T>(key: string, initial: T): T {
   try {
-    const raw = localStorage.getItem(`lafpos.pref.${key}`);
+    const raw = localStorage.getItem(`asilpos.pref.${key}`);
     return raw ? (JSON.parse(raw) as T) : initial;
   } catch {
     return initial;

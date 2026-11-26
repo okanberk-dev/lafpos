@@ -1,4 +1,4 @@
-/** Tarayıcı demosunda `node:zlib`: LafPOS Uzaktan'a özet gönderilmez */
+/** Tarayıcı demosunda `node:zlib`: AsilPOS Uzaktan'a özet gönderilmez */
 const NO_CLOUD = 'Demoda uzaktan erişime veri gönderilmez';
 
 export function gzipSync(): never {

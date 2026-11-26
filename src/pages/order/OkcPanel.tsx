@@ -30,7 +30,7 @@ export interface ReceiptDTO {
   lockedBy: string | null;
   createdAt: number;
   completedAt: number | null;
-  /** Fişin LafPOS'ta oluşturduğu ödemeler (tamamlanınca); eski sunucu göndermez */
+  /** Fişin AsilPOS'ta oluşturduğu ödemeler (tamamlanınca); eski sunucu göndermez */
   paymentIds?: string[];
 }
 
@@ -54,7 +54,7 @@ export function useOkcReceipts(order: OrderDTO, enabled = true) {
 }
 
 /**
- * Adisyonda LafPOS'ta tutar olarak alınmış (kalem taşımayan, iptal edilmemiş, tamamlanmış bir cihaz fişinden gelmeyen)
+ * Adisyonda AsilPOS'ta tutar olarak alınmış (kalem taşımayan, iptal edilmemiş, tamamlanmış bir cihaz fişinden gelmeyen)
  * ödeme var mı: hesabın bütünü cihaza gidemez (sunucunun `okc_partial` kuralı birebir)
  */
 export function amountPaidHereOf(order: OrderDTO, receipts: ReceiptDTO[] | undefined): boolean {
@@ -113,11 +113,11 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
       await post(`/okc/receipts/${id}/cancel`);
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });
     } catch (e) {
-      // İnternet ya da Token kesintisi: sepet cihazdan silinemiyor. Yetkili onayıyla LafPOS'ta iptal sayılır ki adisyon
+      // İnternet ya da Token kesintisi: sepet cihazdan silinemiyor. Yetkili onayıyla AsilPOS'ta iptal sayılır ki adisyon
       // nakit alınabilsin ve gün kapanabilsin; cihazda yine de ödeme alınırsa yönetici alarm görür
       if (e instanceof ApiError && e.code === 'okc_delete') {
         const ok = await confirmDialog({
-          title: 'Sepet LafPOS’ta iptal sayılsın mı',
+          title: 'Sepet AsilPOS’ta iptal sayılsın mı',
           body: (
             <>
               <p>{e.message}</p>
@@ -130,7 +130,7 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
         try {
           const done = await withApproval((pin) => post(`/okc/receipts/${id}/cancel`, { force: true, approverPin: pin }));
           if (done === null) return;
-          toast.warn('Sepet LafPOS’ta iptal sayıldı; adisyonu kasadan alabilirsiniz');
+          toast.warn('Sepet AsilPOS’ta iptal sayıldı; adisyonu kasadan alabilirsiniz');
           await qc.invalidateQueries({ queryKey: ['okc', order.id] });
           await qc.invalidateQueries({ queryKey: ['order', order.id] });
         } catch (err) {
@@ -164,7 +164,7 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
       : null
     : amountPaidHere
       ? splitOpen
-        ? 'Pay LafPOS’ta alındı: kalan payları da burada alın'
+        ? 'Pay AsilPOS’ta alındı: kalan payları da burada alın'
         : 'Adisyonda tutar olarak alınmış ödeme var: kalanı burada alın ya da kalemleri “Kalem seç” ile cihaza gönderin'
       : null;
 
@@ -223,7 +223,7 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
           >
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>
-          {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır. LafPOS'ta pay
+          {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır. AsilPOS'ta pay
               alındıysa hesap artık bütün olarak gitmez (sunucu okc_partial der); ipucu yalnız hiç ödeme yokken */}
           {!items?.length && order.paid === 0 && order.split && order.split.shares.length > 1 ? (
             <p className="tabular mt-1.5 text-xs text-ink-2">

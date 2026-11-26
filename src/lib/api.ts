@@ -12,7 +12,7 @@ export class ApiError extends Error {
 }
 
 // Tarayıcı demosu (/demo) aynı alan adında Uzaktan'la ya da kasayla yan yana açılır: oturumları birbirini ezmesin
-const TOKEN_KEY = import.meta.env.MODE === 'demo' ? 'lafpos.demo.token' : 'lafpos.token';
+const TOKEN_KEY = import.meta.env.MODE === 'demo' ? 'asilpos.demo.token' : 'asilpos.token';
 
 export function getToken(): string | null {
   try {
@@ -114,7 +114,7 @@ export function statusMessage(status: number): string {
   if (status === 404) return 'Kayıt bulunamadı; ekranı yenileyin';
   if (status === 409) return 'Kayıt başka bir ekranda değişti; ekranı yenileyip yeniden deneyin';
   if (status === 429) return 'Çok sık denendi. Biraz bekleyip yeniden deneyin';
-  if (status >= 500) return "Kasa sunucusunda bir sorun oldu. Biraz sonra yeniden deneyin; sürerse LafPOS'u yeniden başlatın";
+  if (status >= 500) return "Kasa sunucusunda bir sorun oldu. Biraz sonra yeniden deneyin; sürerse AsilPOS'u yeniden başlatın";
   return `İşlem tamamlanamadı (hata ${status}). Yeniden deneyin`;
 }
 

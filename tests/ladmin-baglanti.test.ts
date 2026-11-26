@@ -4,9 +4,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { branchSlug, checkConnValue, connField } from '@shared/baglanti';
 import { addDays, businessDate } from '@shared/time';
 import { type Harness, startApp } from './harness';
+import { TEL_KART_ALANI } from '@shared/eski-adlar';
+import { PANEL_ANAHTAR_METNI } from '@shared/pos-env';
 
 /**
- * LafPOS ↔ lafmaliyet (ladmin) bağlantısının kenar durumları (docs/03-ENTEGRASYON.md §4.2): adres yalnız https site
+ * AsilPOS ↔ lafmaliyet (ladmin) bağlantısının kenar durumları (docs/03-ENTEGRASYON.md §4.2): adres yalnız https site
  * kökü, yönlendirme izlenmez ve okunur hata yazar, 200 yalnız lafmaliyet'in kendi yanıtıysa "gönderildi" sayılır,
  * şube gönderirken güncel ayardan, hata metinleri Türkçe ve yerinde, geçiş günü kısa yanıtla silinmez, cihazda süren
  * banka gün sonu pakete girmez, kartla açık hesap tahsilatı banka kıyasına girer, kasanın kendi satır adları ürüne
@@ -147,10 +149,10 @@ describe('gün sonu gönderimi', () => {
     const cases: [Reply, string][] = [
       [{ status: 404, body: null }, 'adreste lafmaliyet yok'],
       [{ status: 503, body: null }, 'lafmaliyet şu an yanıt vermiyor'],
-      [{ status: 503, body: { error: 'not_configured' } }, "lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil"],
+      [{ status: 503, body: { error: 'not_configured' } }, `lafmaliyet'te ${PANEL_ANAHTAR_METNI} tanımlı değil`],
       [{ status: 401, body: { error: 'unauthorized' } }, 'kasa bilgisayarının saati doğru mu (±5 dk)'],
       [{ status: 409, body: { error: 'wrong_branch', sube: 'tuzla', expected: 'marina' } }, 'bu kasa "tuzla" şubesine ayarlı, lafmaliyet yalnız "marina" şubesini alıyor'],
-      [{ status: 400, body: { error: 'invalid', field: 'lines.0.qty' } }, "LafPOS'u ve lafmaliyet'i güncelleyip"],
+      [{ status: 400, body: { error: 'invalid', field: 'lines.0.qty' } }, "AsilPOS'u ve lafmaliyet'i güncelleyip"],
     ];
     for (const [reply, text] of cases) {
       replies.push(reply);
@@ -160,7 +162,7 @@ describe('gün sonu gönderimi', () => {
       expect(row.lastError).not.toContain('?.');
     }
     // 503 not_configured artık "anahtar yok" yalnız gövdesi öyleyse
-    expect(m.lm.pushErrorText(503, null, {})).not.toContain('LAFPOS_SYNC_SECRET');
+    expect(m.lm.pushErrorText(503, null, {})).not.toContain('SYNC_SECRET');
   });
 
   it('ağ hatası Türkçe: "fetch failed" yazılmaz', async () => {
@@ -203,12 +205,12 @@ describe('gün sonu gönderimi', () => {
     m.settings.setSyncState(`pavo.eod.${d.id}`, eod);
     expect(m.lm.buildDayPayload(d.id)).not.toHaveProperty('bankPos');
     m.settings.setSyncState(`pavo.eod.${d.id}`, { ...eod, status: 'ok', batchNo: '000300', grandTotalKurus: 1000 });
-    expect(m.lm.buildDayPayload(d.id)).toMatchObject({ bankPos: { status: 'ok', pavoCard: 10, lafposCard: 10, diff: 0 } });
+    expect(m.lm.buildDayPayload(d.id)).toMatchObject({ bankPos: { status: 'ok', pavoCard: 10, [TEL_KART_ALANI]: 10, diff: 0 } });
   });
 });
 
 describe('banka gün sonu kıyası', () => {
-  it('kartla açık hesap tahsilatı LafPOS kart tutarına girer (bankaya gider); iade edilen ve nakit tahsilat girmez', async () => {
+  it('kartla açık hesap tahsilatı AsilPOS kart tutarına girer (bankaya gider); iade edilen ve nakit tahsilat girmez', async () => {
     const m = await mod();
     const { cardBasis } = await import('../server/okc/service');
     const { ulid } = await import('../server/lib/ids');
@@ -256,7 +258,7 @@ describe('banka gün sonu kıyası', () => {
       }
     };
     // Cihazdan geçen kart ₺4.160, cihazdan geçmeyen kart ₺870 (bahşişiyle ₺20), gün kapandıktan sonra cihazda fişi
-    // iptal edilen kart ₺125 (LafPOS'ta ödeme canlı kalır, Z'nin kartında durur ama bankanın batch'inde yok)
+    // iptal edilen kart ₺125 (AsilPOS'ta ödeme canlı kalır, Z'nin kartında durur ama bankanın batch'inde yok)
     sale(300000, 'tamamlandi');
     sale(116000, 'tamamlandi');
     sale(87000, null, at, 2000);

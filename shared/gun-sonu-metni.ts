@@ -1,7 +1,7 @@
 /**
  * Gün sonu raporunun WhatsApp sürümü (sahip, 22 Kas 2026: "kolay kopyala"): Gün sonu penceresinde ve Kasa › Geçmiş
  * günler'de tek dokunuşla panoya alınan, başlıklı ve emojili düz metin. Saf işlev (ekran ve test). Mail sürümü ladmin'de
- * (lafmaliyet): LafPOS'un gün sonu ona gidince kendiliğinden gönderilir.
+ * (lafmaliyet): AsilPOS'un gün sonu ona gidince kendiliğinden gönderilir.
  */
 import { roundHalfUp, tl } from './money';
 import type { ZSummary } from './types';

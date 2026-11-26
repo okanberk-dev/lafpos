@@ -79,9 +79,9 @@ export const TOKEN_FIRMA = 'LafPOS';
 // ─── Tel (ladmin ve site) ────────────────────────────────────────────────────
 
 /** POST /api/pos/gun `source` ve devrin (`nextOpening.source`) değeri */
-export const TEL_KAYNAK = 'lafpos';
+export const TEL_KAYNAK = 'lafpos' as const;
 /** POST /api/pos/gun `bankPos` içindeki kasa kartı alanı */
-export const TEL_KART_ALANI = 'lafposCard';
+export const TEL_KART_ALANI = 'lafposCard' as const;
 /** ladmin'in kurulum kodu ucu (eski yol; yenisi /api/asilpos/kurulum) */
 export const ESKI_KURULUM_YOLU = '/api/lafpos/kurulum';
 /** Sitenin gördüğü işlem yapan (masa listesi) ve istemci adı */
@@ -91,13 +91,14 @@ export const SITE_ISTEMCI = 'LafPOS/0.1 (+kafe kasasi)';
 // ─── Veritabanında duran değerler ────────────────────────────────────────────
 
 /** products.sold_out_by: kasanın kapattığı Tükendi */
-export const TUKENDI_KASA = 'lafpos';
+export const TUKENDI_KASA = 'lafpos' as const;
 /** Pavo gün sonu kıyas tabanı: kasanın bildiği son batch (sync_state) */
-export const PAVO_TABAN_KASA = 'lafpos';
+export const PAVO_TABAN_KASA = 'lafpos' as const;
 /** Açılış beklentisinin kaynağı: kasanın kendi sayımı (denetim kaydında) */
-export const ACILIS_KASA = 'lafpos';
+export const ACILIS_KASA = 'lafpos' as const;
 
 // ─── Tarayıcı ────────────────────────────────────────────────────────────────
 
 /** localStorage ve sessionStorage anahtarlarının eski öneki (src/lib/eski-depo.ts yenisine kopyalar, eskisini silmez) */
 export const ESKI_DEPO_ONEKI = 'lafpos.';
+

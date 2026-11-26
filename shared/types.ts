@@ -246,7 +246,7 @@ export interface PublicSettings {
   /** İki ekranlı kasanın müşteriye dönük ekranı (`/musteri-ekrani`): görünüm ve metinler, Yönetim › Müşteri ekranı */
   customerDisplay: CustomerDisplaySettings;
   /**
-   * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md; varsayılan açık): LafPOS Uzaktan'dan personel, PIN, roller, Tükendi ve
+   * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md; varsayılan açık): AsilPOS Uzaktan'dan personel, PIN, roller, Tükendi ve
    * servis modu değişiklikleri. Kapalıyken kasa uzaktan gelen her işlemi reddeder. Yalnız patron değiştirir (Yönetim ›
    * Ağ ve uzaktan erişim)
    */
@@ -298,7 +298,7 @@ export interface BootstrapDTO {
   users: UserLite[];
   day: BusinessDayDTO | null;
   /**
-   * Merkez'deki dükkân adı ve şube kodu (LafPOS Uzaktan › Merkez'den; server/sync/merkez.ts). Fişin başlığında yazılır.
+   * Merkez'deki dükkân adı ve şube kodu (AsilPOS Uzaktan › Merkez'den; server/sync/merkez.ts). Fişin başlığında yazılır.
    * Merkez'e bağlı değilse ya da henüz verilmediyse null (eski sunucu göndermez)
    */
   branch?: { name: string | null; code: string | null } | null;
@@ -309,7 +309,7 @@ export interface BootstrapDTO {
       mode: 'anlik' | 'liste';
       auto: boolean;
       /**
-       * Kasada seçilince cihaza giden yemek kartı ödeme türleri (LafPOS ödeme türü kimliği). Pavo'da yalnız cihazın ödeme
+       * Kasada seçilince cihaza giden yemek kartı ödeme türleri (AsilPOS ödeme türü kimliği). Pavo'da yalnız cihazın ödeme
        * aracına eşlenenler; Token'da hepsi (cihaz operatörü sorar ya da eşlenen uygulamayı açar). Eski sunucu göndermez
        */
       mealMethods?: string[];
@@ -492,7 +492,7 @@ export interface OrderDTO {
   source: 'pos' | 'laffogato';
   extId: string | null;
   extNo: number | null;
-  /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı */
+  /** done: AsilPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı */
   extStage: 'new' | 'preparing' | 'ready' | 'done' | 'gone' | null;
   extFulfillment: 'table' | 'pickup' | 'delivery' | null;
   extLabel: string | null;
@@ -555,7 +555,7 @@ export interface SiteKaraokeBookingDTO extends SiteKaraokeBooking {
 }
 
 /**
- * Oda kutusunun gördüğü site karaokesi. `kapali`: site bağlantısı kurulmadı ya da site karaokeyi LafPOS'a açmadı;
+ * Oda kutusunun gördüğü site karaokesi. `kapali`: site bağlantısı kurulmadı ya da site karaokeyi AsilPOS'a açmadı;
  * `bekliyor`: bu iş günü için henüz alınmadı; `hata`: son çekim başarısız, eldeki liste gösterilir
  */
 export interface SiteKaraokeDTO {
@@ -643,7 +643,7 @@ export type CompPersonKind = 'user' | 'customer';
 
 /**
  * Ödenmez yazılan kişi: tür, kimlik ve yazıldığı andaki adının kopyası (kişi sonradan silinse ya da adı değişse de
- * kayıt okunur). Yalnız LafPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez. Maliyet yetkisi olmayana
+ * kayıt okunur). Yalnız AsilPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez. Maliyet yetkisi olmayana
  * başkasının adına yazılmış personel ödenmezinde kimlik boş, ad "Personel" gelir (personel tutarı)
  */
 export interface CompPersonDTO {
@@ -725,13 +725,13 @@ export interface NetAddressDTO {
 export interface NetworkInfoDTO {
   hostname: string;
   port: number;
-  /** Sunucu yalnız bu bilgisayarı dinliyor (LAFPOS_HOST): tabletler bağlanamaz */
+  /** Sunucu yalnız bu bilgisayarı dinliyor (ASILPOS_HOST): tabletler bağlanamaz */
   loopbackOnly: boolean;
   /** Kafenin ağındaki adresler; sanal ağ kartları (WSL, Hyper-V, VirtualBox) sonda */
   lan: NetAddressDTO[];
   /** Tailscale adresleri (100.64.0.0/10): telefon Tailscale açıkken her yerden */
   tailscale: NetAddressDTO[];
-  /** LafPOS Uzaktan (Vercel): canlı özetin son gönderimi */
+  /** AsilPOS Uzaktan (Vercel): canlı özetin son gönderimi */
   cloud?: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
   /** Windows kurulumu: kasa bekçisi kasa penceresini açık tutar */
   bekci?: boolean;

@@ -385,7 +385,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}
         <nav aria-label="Ekranlar" className="lp-rail">
           {/* Marka karosu rayın başında (her ekranda aynı yerde; ana ekrana götürür) */}
-          <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="lp-rail-brand">
+          <NavLink to="/" title="L'Affogato · AsilPOS" aria-label="Ana ekran" className="lp-rail-brand">
             <LafTile size="md" />
           </NavLink>
           <div className="lp-rail-list">
@@ -631,7 +631,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             </span>
           </span>
         }
-        foot={`L’Affogato · LafPOS · ${dayText}${boot.day ? ' açık' : ''} · ${fmtTime(now)}`}
+        foot={`L’Affogato · AsilPOS · ${dayText}${boot.day ? ' açık' : ''} · ${fmtTime(now)}`}
       >
         <DrawerGroup label="Ekranlar" className="max-md:hidden">
           {drawerRows}
@@ -644,7 +644,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
             <a href="/demo/" className={drawerRow}>
-              <DrawerLabel hint="Gerçek LafPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda">Kasa ekranını dene</DrawerLabel>
+              <DrawerLabel hint="Gerçek AsilPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda">Kasa ekranını dene</DrawerLabel>
               <DrawerArrow />
             </a>
           )}

@@ -95,11 +95,11 @@ describe('hiç iş günü yokken', () => {
 
 /** Zamanlayıcı açıkken (gün açma kancası yalnız o zaman çeker; testler zamanlayıcıyı kapalı başlatır) */
 async function withJobs<T>(fn: () => Promise<T>): Promise<T> {
-  delete process.env.LAFPOS_NO_JOBS;
+  delete process.env.ASILPOS_NO_JOBS;
   try {
     return await fn();
   } finally {
-    process.env.LAFPOS_NO_JOBS = '1';
+    process.env.ASILPOS_NO_JOBS = '1';
   }
 }
 

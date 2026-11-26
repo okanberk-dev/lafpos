@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
+import { SITE_SUBELER_ENV, TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
- * LafPOS ↔ laffogato (site) bağlantısının şubeli sitedeki kenarları (laffogato `src/lib/panel/branches.ts`, 21 Kas
+ * AsilPOS ↔ laffogato (site) bağlantısının şubeli sitedeki kenarları (laffogato `src/lib/panel/branches.ts`, 21 Kas
  * 2026): herkese açık menü yalnız sitenin ana şubesinin (Tuzla) Satışta'sını gösterir, ETag yine de yazılır; Tükendi
  * kilidi yalnız sitenin menüden kaldırdığı kalemde (`onMenu: false`), açma isteğinin 409 `site_closed`'u okunur;
  * masa listesi sitenin 200 sınırını aşmaz; karaokenin şube reddi saat hatası gibi okunmaz.
@@ -75,7 +76,7 @@ describe('Tükendi kilidi: sitenin menüden kaldırdığı ile şubenin Tükendi
       site.panelOnMenu.set(p.extId!, true);
       site.panelActive.set(p.extId!, false);
       await sync.runMenuSync({ apply: true, force: true });
-      expect(row()).toMatchObject({ active: false, soldOutBy: 'lafpos' });
+      expect(row()).toMatchObject({ active: false, soldOutBy: TUKENDI_KASA });
       // Kasiyer açar: site kabul eder
       const opened = await h.call('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: true });
       expect(opened.status).toBe(200);
@@ -115,7 +116,7 @@ describe('Tükendi kilidi: sitenin menüden kaldırdığı ile şubenin Tükendi
       // Denetim kaydı ürüne bağlı, açışı kimin yaptığını söyler
       const rec = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, 'product.sold_out')).all().at(-1);
       expect(rec).toMatchObject({ entity: 'product', entityId: p.id });
-      expect(rec?.message).toBe("Americano sitede menüden kaldırılmış; test kullanıcısının LafPOS'taki açışı geri alındı");
+      expect(rec?.message).toBe("Americano sitede menüden kaldırılmış; test kullanıcısının AsilPOS'taki açışı geri alındı");
     } finally {
       site.panelOnMenu.clear();
       db.update(schema.products).set({ active: true, soldOutBy: null }).where(eq(schema.products.id, p.id)).run();
@@ -134,7 +135,7 @@ describe('Tükendi kilidi: sitenin menüden kaldırdığı ile şubenin Tükendi
       site.panelActive.set(p.extId!, false);
       await sync.runMenuSync({ apply: true, force: true });
       const fresh = db.select().from(schema.products).where(eq(schema.products.extId, p.extId!)).get()!;
-      expect(fresh).toMatchObject({ active: false, soldOutBy: 'lafpos' });
+      expect(fresh).toMatchObject({ active: false, soldOutBy: TUKENDI_KASA });
     } finally {
       site.panelOnMenu.clear();
       site.panelActive.set(p.extId!, true);
@@ -182,7 +183,7 @@ describe('karaoke', () => {
     const { failureMessage } = await import('../server/sync/laffogato-karaoke');
     const branch = failureMessage(403, { error: 'forbidden', field: 'branch' });
     expect(branch).toContain('şubesine (marina)');
-    expect(branch).toContain('LAFPOS_BRANCHES');
+    expect(branch).toContain(`${SITE_SUBELER_ENV}`);
     expect(branch).not.toContain('saati');
     expect(failureMessage(403, { error: 'forbidden' })).toContain('tarihi ya da saati yanlış');
   });

@@ -128,7 +128,7 @@ export function resolveOptions(
 }
 
 /**
- * Seçeneği kasada Tükendi yapar ya da satışa açar (yulaf sütü bitti). Yalnız LafPOS'ta: siteye ve uygulamaya gitmez
+ * Seçeneği kasada Tükendi yapar ya da satışa açar (yulaf sütü bitti). Yalnız AsilPOS'ta: siteye ve uygulamaya gitmez
  * (sözleşmede böyle bir alan yok), menü senkronu ve yönetimdeki grup düzenlemesi dokunmaz; site grubunun seçeneği de
  * işaretlenir. Durumu zaten istenen gibi olan seçenekte bir şey yazılmaz (iki kasa aynı anda bastıysa)
  */

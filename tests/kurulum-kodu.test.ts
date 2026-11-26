@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Harness, startApp } from './harness';
+import { ALAN_ADI, ESKI_ENV_ONEKI, ESKI_KURULUM_YOLU } from '@shared/eski-adlar';
 
 /**
  * Şube kurulumu: ladmin'in şubeye özel kurucusu veri klasörüne tek kullanımlık kodu yazar; sunucu kodu ladmin'e verip
@@ -20,8 +21,9 @@ const answer = {
   baglanti: {
     LAFMALIYET_URL: 'https://ladmin.laffogato.net',
     LAFMALIYET_SYNC_SECRET: 's'.repeat(40),
-    LAFPOS_CLOUD_URL: 'https://lafpos.laffogato.net',
-    LAFPOS_CLOUD_SECRET: 'c'.repeat(40),
+    // ladmin Uzaktan anahtarlarını telde eski adla gönderir (shared/eski-adlar.ts): kasa yeni adla kabul eder
+    [`${ESKI_ENV_ONEKI}CLOUD_URL`]: `https://${ALAN_ADI}`,
+    [`${ESKI_ENV_ONEKI}CLOUD_SECRET`]: 'c'.repeat(40),
     // Kısa anahtar yazılmaz; listede olmayan anahtar hiç yazılmaz
     LAFFOGATO_SYNC_SECRET: 'kisa',
     TOKENX_CLIENT_SECRET: 'x'.repeat(40),
@@ -30,13 +32,13 @@ const answer = {
 
 beforeAll(async () => {
   h = await startApp();
-  dir = mkdtempSync(join(tmpdir(), 'lafpos-kurulum-'));
+  dir = mkdtempSync(join(tmpdir(), 'asilpos-kurulum-'));
   envFile = join(dir, 'ayarlar.env');
   writeFileSync(envFile, '# ayarlar\nLAFFOGATO_URL=\n');
-  process.env.LAFPOS_AYAR_DOSYASI = envFile;
+  process.env.ASILPOS_AYAR_DOSYASI = envFile;
 });
 afterAll(() => {
-  delete process.env.LAFPOS_AYAR_DOSYASI;
+  delete process.env.ASILPOS_AYAR_DOSYASI;
   h.cleanup();
 });
 
@@ -61,7 +63,10 @@ describe('kurulum kodu dosyası ve ladmin yanıtı', () => {
     const { readRedeemAnswer } = await import('../server/sync/kurulum-kodu');
     const r = readRedeemAnswer(answer)!;
     expect(r.sube).toEqual({ id: 'kadikoy', ad: 'Kadıköy' });
-    expect(Object.keys(r.edits).sort()).toEqual(['LAFMALIYET_SYNC_SECRET', 'LAFMALIYET_URL', 'LAFPOS_CLOUD_SECRET', 'LAFPOS_CLOUD_URL']);
+    expect(Object.keys(r.edits).sort()).toEqual(['ASILPOS_CLOUD_SECRET', 'ASILPOS_CLOUD_URL', 'LAFMALIYET_SYNC_SECRET', 'LAFMALIYET_URL']);
+    // Yeni panel yeni adla gönderirse de alınır; ikisi birden gelirse yenisi geçer
+    const yeni = readRedeemAnswer({ ...answer, baglanti: { ASILPOS_CLOUD_URL: 'https://uzak.example', ASILPOS_CLOUD_SECRET: 'y'.repeat(40), [`${ESKI_ENV_ONEKI}CLOUD_SECRET`]: 'e'.repeat(40) } })!;
+    expect(yeni.edits).toEqual({ ASILPOS_CLOUD_URL: 'https://uzak.example', ASILPOS_CLOUD_SECRET: 'y'.repeat(40) });
     expect(readRedeemAnswer({ ...answer, sube: { id: 'Kadıköy', ad: 'x' } })).toBeNull();
     expect(readRedeemAnswer({ ok: false })).toBeNull();
   });
@@ -81,14 +86,15 @@ describe('kodun ladmin’e verilmesi', () => {
     const { redeemInstallCode, kurulumDurumu } = await import('../server/sync/kurulum-kodu');
     const seen: { url: string; body: unknown }[] = [];
     const out = await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(200, answer, seen) });
-    expect(seen[0]).toMatchObject({ url: 'https://ladmin.laffogato.net/api/lafpos/kurulum', body: { kod: KOD } });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ url: 'https://ladmin.laffogato.net/api/asilpos/kurulum', body: { kod: KOD } });
     expect(out).toMatchObject({ ok: true, sube: { id: 'kadikoy', ad: 'Kadıköy' }, hata: null });
     expect(kurulumDurumu()).toMatchObject({ ok: true });
     const { getSettings } = await import('../server/lib/settings');
     expect(getSettings().branchId).toBe('kadikoy');
     const text = readFileSync(envFile, 'utf8');
     expect(text).toContain(`LAFMALIYET_SYNC_SECRET=${'s'.repeat(40)}`);
-    expect(text).toContain('LAFPOS_CLOUD_URL=https://lafpos.laffogato.net');
+    expect(text).toContain(`ASILPOS_CLOUD_URL=https://${ALAN_ADI}`);
     expect(text).not.toContain('TOKENX_CLIENT_SECRET');
     expect(text).toContain('# ayarlar');
     expect(existsSync(join(dir, 'kurulum-kodu.json'))).toBe(false);
@@ -98,6 +104,28 @@ describe('kodun ladmin’e verilmesi', () => {
     expect(rows.some((r) => r.action === 'settings.branchId' && r.message.includes('Kadıköy'))).toBe(true);
     // Dosya yokken bir şey yapılmaz
     expect(await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(500, {}) })).toBeNull();
+  });
+
+  it('ad değişikliğinden önceki panel yeni yolu tanımazsa (404) eski yol denenir; iki yolda da 404 kalıcı hatadır', async () => {
+    const { redeemInstallCode } = await import('../server/sync/kurulum-kodu');
+    writeCode();
+    const seen: { url: string; body: unknown }[] = [];
+    const eskiPanel = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      const eskiYol = new URL(String(url)).pathname === ESKI_KURULUM_YOLU;
+      return new Response(eskiYol ? JSON.stringify(answer) : '<!doctype html>', { status: eskiYol ? 200 : 404 });
+    }) as typeof fetch;
+    const out = await redeemInstallCode({ dataDir: dir, fetchImpl: eskiPanel });
+    expect(seen.map((s) => new URL(s.url).pathname)).toEqual(['/api/asilpos/kurulum', ESKI_KURULUM_YOLU]);
+    expect(seen[1]!.body).toEqual(seen[0]!.body);
+    expect(out).toMatchObject({ ok: true, sube: { id: 'kadikoy' } });
+    // Kod geçersiz: yeni panel iki yolda da 404 der, kod kalkar
+    writeCode();
+    seen.length = 0;
+    const out2 = await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(404, { error: 'Kurulum kodu bulunamadı' }, seen) });
+    expect(seen).toHaveLength(2);
+    expect(out2).toMatchObject({ ok: false, kalici: true, hata: expect.stringContaining('bulunamadı') });
+    expect(existsSync(join(dir, 'kurulum-kodu.json'))).toBe(false);
   });
 
   it('kullanılmış ya da süresi dolmuş kod kalıcı hatadır: dosya kalkar, yeniden denenmez', async () => {

@@ -1,10 +1,10 @@
 /**
- * Patrona telefon bildirimi (LafPOS Uzaktan, Web Push). api/uzaktan.ts yolu `uzaktan/bildirim` ile başlayan istekleri
+ * Patrona telefon bildirimi (AsilPOS Uzaktan, Web Push). api/uzaktan.ts yolu `uzaktan/bildirim` ile başlayan istekleri
  * buraya verir.
  *
  * - Abonelik: patron Uzaktan'da (telefonda, ana ekrana eklenmiş sitede) "Bildirimleri aç"a basar; tarayıcının
  *   aboneliği gerçek oturumla (üye ya da parolalı giriş) saklanır. Parolasız görünümde abonelik açılmaz.
- * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, LAFPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
+ * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, ASILPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
  *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı, kapanış saati (gün hâlâ açık; `kapanis`), gün sonu
  *   lafmaliyet'e gitmedi (gövde kurulamadı ya da kalıcı ret; `lafmaliyet`). Güncelleme
  *   hatasını Merkez nabızdan kendisi görür. Bilinmeyen tür 400 alır; kasa onu yeniden denemez (eski sitede yeni tür
@@ -163,7 +163,7 @@ export async function bildirim(req: Request, path: string, deps: BildirimDeps): 
     return json(raw ? JSON.parse(raw) : []);
   }
   if (path === 'uzaktan/bildirim/dene' && req.method === 'POST') {
-    const sent = await broadcast(deps, { kind: 'deneme', title: 'LafPOS bildirimi', body: 'Bildirimler bu telefonda açık', at: Date.now() });
+    const sent = await broadcast(deps, { kind: 'deneme', title: 'AsilPOS bildirimi', body: 'Bildirimler bu telefonda açık', at: Date.now() });
     return json({ ok: true, sent });
   }
   return fail(404, 'Bildirimde böyle bir uç yok', 'not_found');

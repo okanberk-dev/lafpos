@@ -96,7 +96,7 @@ function DemoBar() {
       {SERVICE_MODE_LABEL[m]}
     </option>
   ));
-  const where = server.persistent ? 'Gerçek LafPOS bu tarayıcıda çalışıyor; veriler yalnız burada kalır' : 'Gerçek LafPOS bu sekmede çalışıyor; sekme kapanınca veriler silinir';
+  const where = server.persistent ? 'Gerçek AsilPOS bu tarayıcıda çalışıyor; veriler yalnız burada kalır' : 'Gerçek AsilPOS bu sekmede çalışıyor; sekme kapanınca veriler silinir';
 
   return (
     // Tek satır: telefonda rozet, rol ve "Demo seçenekleri"; tablet ve bilgisayarda açıklama kısalır, araçlar satırda
@@ -188,7 +188,7 @@ export function DemoFailed({ error }: { error: unknown }) {
     setBusy(true);
     await new Promise<void>((ok) => {
       try {
-        const req = indexedDB.deleteDatabase('lafpos-demo');
+        const req = indexedDB.deleteDatabase('asilpos-demo');
         req.onsuccess = req.onerror = req.onblocked = () => ok();
       } catch {
         ok();

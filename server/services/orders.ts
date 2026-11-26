@@ -91,7 +91,7 @@ function assertOpen(o: OrderRow) {
 }
 
 export function assertPosOrder(o: OrderRow) {
-  if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı LafPOS\'ta değiştirilemez', 'online_order');
+  if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı AsilPOS\'ta değiştirilemez', 'online_order');
 }
 
 /**
@@ -121,8 +121,8 @@ export function assertNoPendingDevice(t: Tx | DB, orderId: string) {
 }
 
 /**
- * Cihazda fişi kesilmiş ama LafPOS'a tam işlenememiş (hata, sonucu "ödendi": eksik ödendi ya da işlenemedi)
- * sepetlerdeki kalemler, kalem başına adet. Bu adetler LafPOS'ta ödenmiş sayılmaz ama mali fişe girdi: cihaza
+ * Cihazda fişi kesilmiş ama AsilPOS'a tam işlenememiş (hata, sonucu "ödendi": eksik ödendi ya da işlenemedi)
+ * sepetlerdeki kalemler, kalem başına adet. Bu adetler AsilPOS'ta ödenmiş sayılmaz ama mali fişe girdi: cihaza
  * yeniden gönderilmez, başka adisyona taşınmaz (aynı kalem ikinci fişe girerdi; inceleme, 27 Eki 2026).
  */
 export function fiscalHeldQty(t: Tx | DB, orderId: string): Map<string, number> {
@@ -811,7 +811,7 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   assertNotPlatformCollected(t, o);
   // Çalışan oda sayacı kalem görünmeyen ücrettir: önce durdurulup satıra yazılır, sonra ikram edilir
   assertNoActiveRoom(t, orderId);
-  // Cihazda kesilmiş ama LafPOS'a işlenmemiş fiş: kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
+  // Cihazda kesilmiş ama AsilPOS'a işlenmemiş fiş: kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
   if (fiscalHeldQty(t, orderId).size) throw conflict('Adisyonda yazarkasada kesilmiş ama işlenmemiş bir fiş var. Kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
   const label = COMP_LABEL[input.kind];
   const approverId = need(actor, compPermission(input.kind), input.kind === 'ikram' ? 'İkram yetkili onayı gerektirir' : `${label} kapatmak yetkili onayı gerektirir`);
@@ -1278,9 +1278,9 @@ export function transferItems(
     const it = loadItem(t, orderId, sel.itemId);
     if (it.voided) continue;
     const unpaid = it.qty - it.paidQty;
-    // Cihazda fişi kesilmiş ama LafPOS'a işlenmemiş adet taşınmaz: öbür adisyondan ikinci kez fişe girerdi
+    // Cihazda fişi kesilmiş ama AsilPOS'a işlenmemiş adet taşınmaz: öbür adisyondan ikinci kez fişe girerdi
     if (held.has(it.id) && Math.trunc(sel.qty) > freeQty(it, held)) {
-      throw conflict(`${it.name} cihazda kesilmiş ama LafPOS'a tam işlenmemiş bir fişte; taşınamaz. Kalanı kasadan alın ya da fişi cihazdan iptal edin`, 'okc_unresolved');
+      throw conflict(`${it.name} cihazda kesilmiş ama AsilPOS'a tam işlenmemiş bir fişte; taşınamaz. Kalanı kasadan alın ya da fişi cihazdan iptal edin`, 'okc_unresolved');
     }
     const qty = Math.min(Math.trunc(sel.qty), unpaid);
     if (qty <= 0) throw conflict(`${it.name} ödenmiş; taşınamaz`, 'item_paid');
@@ -1518,7 +1518,7 @@ export function addPayment(
       .get();
     if (prev) {
       // İlk sonuç yalnız aynı istek için döner. Ekran yenilenip başka pay, tutar ya da kalem aynı kimlikle geldiyse ya
-      // da o ödeme iptal edildiyse "alındı" denmez: kart terminalinde çekilen para LafPOS'a hiç yazılmıyordu
+      // da o ödeme iptal edildiyse "alındı" denmez: kart terminalinde çekilen para AsilPOS'a hiç yazılmıyordu
       // (gözden geçirme, 27 Eki 2026). 409'da istemci yeni kimlik üretir, ekran yenilenir
       if (prev.refundedAt) throw conflict('Bu deneme iptal edilen ödemeye ait; ekran yenilendi, ödemeyi yeniden alın', 'request_refunded');
       if (!sameRequest(prev, input)) throw conflict('Ödeme ekranı değişti; ekran yenilendi, ödemeyi yeniden alın', 'request_reused');
@@ -1832,7 +1832,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
  * Kapanmış siparişi iptal (sahip, 22 Kas 2026: verilen sipariş bazen iptal edilir; Siparişler › kapananlarda uzun basış
  * ve dökümdeki düğme): bugünün kapanmış POS adisyonunun alınan ödemeleri iptal edilir (adisyon açılır), sonra adisyon
  * kalemleriyle iptal edilir; tek işlemde, tek nedenle. Yetkili onayı ister (ödeme iptali ve kalem iptali yetkisi).
- * Yazarkasada kesilmiş fiş LafPOS'tan iptal edilmez: ekran bunu söyler, fiş cihazdan iptal edilir
+ * Yazarkasada kesilmiş fiş AsilPOS'tan iptal edilmez: ekran bunu söyler, fiş cihazdan iptal edilir
  */
 export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, reason: string): OrderRow {
   const o = loadOrder(t, orderId);
@@ -2270,9 +2270,9 @@ export function addExternalPayments(
 }
 
 /**
- * Yazarkasada fiş iptal edilince o fişin LafPOS ödemeleri de iptal edilir. Ödeme bulunduğu adisyondan düşer
+ * Yazarkasada fiş iptal edilince o fişin AsilPOS ödemeleri de iptal edilir. Ödeme bulunduğu adisyondan düşer
  * (birleştirmeyle başka adisyona geçmiş olabilir). Kapanmış adisyon yalnız bu iptalle gerçekten ödenecek tutar
- * doğduysa yeniden açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmış adisyon kapalı kalır (inceleme,
+ * doğduysa yeniden açılır: ödemesi AsilPOS'ta zaten iptal edilip yeniden alınmış adisyon kapalı kalır (inceleme,
  * 27 Eki 2026).
  */
 export function refundExternalPayments(

@@ -5,7 +5,7 @@ import { get, getToken, post, setToken, statusMessage } from './api';
 import { useAuth } from './auth';
 
 /**
- * Tarayıcı demosu (vite build --mode demo, lafpos.vercel.app/demo): LafPOS sunucusu sayfanın içinde çalışır
+ * Tarayıcı demosu (vite build --mode demo, Uzaktan'ın `/demo` yolu): AsilPOS sunucusu sayfanın içinde çalışır
  * (demo/runtime.ts), PIN sorulmaz. Uzaktan görünümle (REMOTE) ilgisi yoktur.
  */
 export const DEMO = import.meta.env.MODE === 'demo';
@@ -15,7 +15,7 @@ export const appUrl = (path: string) => `${import.meta.env.BASE_URL.replace(/\/$
 
 export const useDemo = create<{ server: DemoServer | null }>(() => ({ server: null }));
 
-const ROLE_KEY = 'lafpos.demo.rol';
+const ROLE_KEY = 'asilpos.demo.rol';
 
 function lastRole(): string {
   try {
@@ -38,7 +38,7 @@ export async function startDemo() {
   // Sunucu kodunun okuduğu kadar `process`: ortam değişkeni yok (dış sistem bağlanmaz), komut satırı yok
   const g = globalThis as { process?: { env: Record<string, string>; argv: string[] } };
   g.process ??= { env: {}, argv: [] };
-  const { startDemoServer } = await import('virtual:lafpos-demo');
+  const { startDemoServer } = await import('virtual:asilpos-demo');
   const server = await startDemoServer();
   useDemo.setState({ server });
   const user = server.users.find((u) => u.role === lastRole()) ?? server.users[0];

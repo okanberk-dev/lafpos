@@ -252,7 +252,7 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
               {row.guncelleme.etiket}
             </Badge>
           )}
-          {/* Güncelleme kurulumun kök dosyalarını ya da kısayollarını yenileyemedi: kasada LafPOS-Kur.cmd yeniden çalıştırılır */}
+          {/* Güncelleme kurulumun kök dosyalarını ya da kısayollarını yenileyemedi: kasada AsilPOS-Kur.cmd yeniden çalıştırılır */}
           {row.guncelleme?.kurulumUyari && (
             <Badge tone="warning" title={row.guncelleme.kurulumUyari}>
               Kurulumu yenileyin
@@ -268,7 +268,7 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
 }
 
 /**
- * LafPOS Uzaktan › Merkez: dükkânlar, lisans ve seçerek güncelleme (api/_merkez.ts). Yeni kurulum internete ilk
+ * AsilPOS Uzaktan › Merkez: dükkânlar, lisans ve seçerek güncelleme (api/_merkez.ts). Yeni kurulum internete ilk
  * çıktığında "Onay bekliyor" olarak gelir; sahip ad ve lisans verir, dükkânları seçip güncelleme gönderir
  */
 export default function MerkezPage() {
@@ -349,7 +349,7 @@ export default function MerkezPage() {
             <ErrorState compact title="Dükkânlar alınamadı" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
           ) : rows.length === 0 ? (
             <EmptyState compact title="Henüz dükkân yok">
-              LafPOS kurulan bilgisayar internete bağlanınca burada "Onay bekliyor" olarak görünür
+              AsilPOS kurulan bilgisayar internete bağlanınca burada "Onay bekliyor" olarak görünür
             </EmptyState>
           ) : (
             <ul>

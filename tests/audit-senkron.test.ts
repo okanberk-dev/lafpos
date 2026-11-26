@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PanelOrder } from '../server/sync/laffogato-orders';
 import { type Harness, startApp } from './harness';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Senkron denetiminin bulguları (27 Eki 2026), her biri bir testle: online siparişlerin sürüm sinyali, bozuk
@@ -18,13 +19,13 @@ let h: Harness;
 
 type Route = (path: string, init: RequestInit) => Response | Promise<Response> | undefined;
 let site: Route = () => undefined;
-/** Sahte Upstash (LafPOS Uzaktan) */
+/** Sahte Upstash (AsilPOS Uzaktan) */
 const redis = new Map<string, string>();
 let realFetch: typeof fetch;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 beforeAll(async () => {
-  h = await startApp({ LAFFOGATO_URL: SITE, LAFFOGATO_SYNC_SECRET: KEY, LAFPOS_SESSION_HOURS: '1000000' });
+  h = await startApp({ LAFFOGATO_URL: SITE, LAFFOGATO_SYNC_SECRET: KEY, ASILPOS_SESSION_HOURS: '1000000' });
   realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -159,7 +160,7 @@ describe('online siparişler', () => {
     expect(done?.itemStatus).toEqual(['servis']);
   });
 
-  it('liste istendikten sonra LafPOS\'ta değişen sipariş gecikmiş eski listeyle geri alınmaz', async () => {
+  it('liste istendikten sonra AsilPOS\'ta değişen sipariş gecikmiş eski listeyle geri alınmaz', async () => {
     const { upsertOnlineOrders, syncOnlineOrders, setOnlineStage } = await import('../server/sync/laffogato-orders');
     const A = panelOrder('ord-teslim-55', { stage: 'ready' });
     const siteOpen = new Map<string, PanelOrder>([[A.id, A]]);
@@ -185,7 +186,7 @@ describe('online siparişler', () => {
 
     const stale = syncOnlineOrders();
     await pulled(1);
-    // Kasiyer "Teslim edildi": site siparişi bitirir, LafPOS kapatır
+    // Kasiyer "Teslim edildi": site siparişi bitirir, AsilPOS kapatır
     await setOnlineStage(local.id, 'delivered', 'Kasa');
     expect((await onlineRow(A.id))?.status).toBe('kapali');
     // Bu arada yeni sipariş gelir, daha yeni bir çekme (Yenile) önce döner
@@ -269,7 +270,7 @@ type SiteItem = { id: string; name: string; priceMinor: number; priceLargeMinor:
 type SiteMenu = { categories: { key: string; items: SiteItem[] }[] };
 const snapshot = JSON.parse(readFileSync(new URL('../server/db/menu-snapshot.json', import.meta.url), 'utf8')) as SiteMenu;
 const allItems = snapshot.categories.flatMap((c) => c.items);
-/** Sitenin Satışta bilgisi (false = Tükendi) ve LafPOS'un siteye yazdıkları */
+/** Sitenin Satışta bilgisi (false = Tükendi) ve AsilPOS'un siteye yazdıkları */
 const siteActive = new Map<string, boolean>();
 const posts: { id: string; isActive: boolean; actor: string }[] = [];
 const without = (menu: SiteMenu, ids: string[]): SiteMenu => ({ ...menu, categories: menu.categories.map((c) => ({ ...c, items: c.items.filter((i) => !ids.includes(i.id)) })) });
@@ -314,7 +315,7 @@ describe('menü senkronu', () => {
     expect((await product('mnu-0006')).active).toBe(false);
     expect(changesOf(r, 'mnu-0006')).toEqual([]);
 
-    // Tersi: site ürünü yeniden açtı ama CDN'deki menü henüz listelemiyor; LafPOS'ta açık kalır
+    // Tersi: site ürünü yeniden açtı ama CDN'deki menü henüz listelemiyor; AsilPOS'ta açık kalır
     const espresso = await product('mnu-0005');
     await h.ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: false });
     await h.ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: true });
@@ -339,7 +340,7 @@ describe('menü senkronu', () => {
       expect((await product('mnu-0023')).active).toBe(false);
       expect(changesOf(r, 'mnu-0023')).toEqual(['kalkti']);
 
-      // Site kalemi yeniden satışa koydu: LafPOS'ta da açılır; kasiyerin Tükendi'si sürer
+      // Site kalemi yeniden satışa koydu: AsilPOS'ta da açılır; kasiyerin Tükendi'si sürer
       site = menuSite(() => snapshot);
       const r2 = await applyMenu();
       expect((await product('mnu-0023')).active).toBe(true);
@@ -365,7 +366,7 @@ describe('menü senkronu', () => {
     await flushSiteOutbox();
     expect(siteActive.get('mnu-0058')).toBe(false);
 
-    // Site kabul etmezse ya da ulaşılamazsa sayaç da değişmez (önce site, sonra LafPOS)
+    // Site kabul etmezse ya da ulaşılamazsa sayaç da değişmez (önce site, sonra AsilPOS)
     rejectPost = true;
     const failed = await h.call('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
     rejectPost = false;
@@ -470,7 +471,7 @@ describe('lafmaliyet satış listesi', () => {
     expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${nakit().id}`, { kind: 'diger' })).status).toBe(400);
     await h.ok('patron', 'PATCH', `/admin/payment-methods/${nakit().id}`, { name: 'Nakit' });
 
-    // Günün paketi: lafmaliyet'in formülü (açılış + nakit + giren − harcama − teslim) LafPOS'un beklenen nakdini verir
+    // Günün paketi: lafmaliyet'in formülü (açılış + nakit + giren − harcama − teslim) AsilPOS'un beklenen nakdini verir
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 5000, description: 'Buz' });
     const { z } = await todayPayload();
     expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
@@ -539,25 +540,25 @@ describe('lafmaliyet satış listesi', () => {
   });
 });
 
-// ─── LafPOS Uzaktan ve ürün görseli (önceki düzeltmelerin denetimi) ───────────
+// ─── AsilPOS Uzaktan ve ürün görseli (önceki düzeltmelerin denetimi) ───────────
 
-describe('LafPOS Uzaktan ve ürün görseli', () => {
+describe('AsilPOS Uzaktan ve ürün görseli', () => {
   it('eski ya da yeniden gönderilen özet yenisini ezmez', async () => {
     const CLOUD = 'c'.repeat(40);
-    Object.assign(process.env, { LAFPOS_CLOUD_SECRET: CLOUD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+    Object.assign(process.env, { ASILPOS_CLOUD_SECRET: CLOUD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
     const { signedHeaders } = await import('../server/lib/signature');
     const { POST } = await import('../api/uzaktan');
     const push = (at: number) => {
       const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, at, orders: {} })).toString('base64') });
-      const url = new URL('https://lafpos.vercel.app/api/uzaktan/push');
-      return POST(new Request('https://lafpos.vercel.app/api/uzaktan?yol=uzaktan/push', { method: 'POST', body, headers: signedHeaders(CLOUD, 'POST', url, body) }));
+      const url = new URL(`https://${VERCEL_ALANI}/api/uzaktan/push`);
+      return POST(new Request(`https://${VERCEL_ALANI}/api/uzaktan?yol=uzaktan/push`, { method: 'POST', body, headers: signedHeaders(CLOUD, 'POST', url, body) }));
     };
     expect((await push(2000)).status).toBe(200);
     // Yakalanıp 300 sn içinde yeniden gönderilen eski itme
     const replay = await push(1000);
     expect(replay.status).toBe(200);
     expect(((await replay.json()) as { stale?: boolean }).stale).toBe(true);
-    expect((JSON.parse(redis.get('lafpos:snapshot')!) as { at: number }).at).toBe(2000);
+    expect((JSON.parse(redis.get(`${REDIS_ONEKI}snapshot`)!) as { at: number }).at).toBe(2000);
   });
 
   it('görsel indirme yönlendirmeyi izlemez: site başka adrese yönlendirse de istek gitmez', async () => {

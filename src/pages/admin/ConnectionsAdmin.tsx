@@ -22,7 +22,7 @@ interface ConnView {
   groups: { id: string; fields: { key: string; set: boolean; value: string | null; source?: 'bulut' | 'yerel' }[] }[];
   /**
    * Platform anahtarlarının buluttan son çekimi (#75 İş 2): bu şube için son başarılı çekim, son denemenin sonucu,
-   * kasanın şube etiketi (Vercel adındaki ŞUBE; geçersizse null) ve LafPOS Uzaktan'ın kurulu olup olmadığı
+   * kasanın şube etiketi (Vercel adındaki ŞUBE; geçersizse null) ve AsilPOS Uzaktan'ın kurulu olup olmadığı
    */
   bulut?: { at: number | null; ok: boolean | null; error: string | null; sube: string | null; uzaktan: boolean };
 }
@@ -31,7 +31,7 @@ type FieldState = ConnView['groups'][number]['fields'][number];
 const QUERY = ['admin', 'baglanti'] as const;
 
 /** Kaydedince ne olur: Windows kurulumunda bekçi yeniden başlatır, değilse elle */
-const savedText = (v: ConnView) => (v.restart === 'otomatik' ? 'Kaydedildi; LafPOS yeni bilgilerle yeniden başlıyor' : 'Kaydedildi; sunucu yeniden başlatılınca geçerli olur');
+const savedText = (v: ConnView) => (v.restart === 'otomatik' ? 'Kaydedildi; AsilPOS yeni bilgilerle yeniden başlıyor' : 'Kaydedildi; sunucu yeniden başlatılınca geçerli olur');
 
 /**
  * Bir bağlantının kartı (lafmaliyet, Uzaktan, site...): adres ve kimlik alanları değeriyle, gizli anahtarlar boş gelir
@@ -45,7 +45,7 @@ function subeLine(groupId: string, bulut: ConnView['bulut']): string {
 }
 
 /**
- * Platform kartında anahtarların kaynağı: bulut (Vercel'deki LafPOS Uzaktan, yalnız bu şubenin adıyla girilenler) ya da
+ * Platform kartında anahtarların kaynağı: bulut (Vercel'deki AsilPOS Uzaktan, yalnız bu şubenin adıyla girilenler) ya da
  * yerel, ve son çekimin saati. İkisi de yoksa "Bu şubede tanımlı değil" yalnız bu şube için son çekim başarılıysa
  * (Marina'da Trendyol yok); hiç çekilmediyse, son çekim olmadıysa, Uzaktan kurulu değilse ya da şube geçersizse nedeni yazar
  */
@@ -56,10 +56,10 @@ function cloudLine(state: FieldState[], bulut: ConnView['bulut']): string {
   const line = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ');
   if (fromCloud || fromLocal) {
     const source = fromCloud && fromLocal ? 'Kaynak: bulut ve yerel' : fromCloud ? 'Kaynak: bulut' : 'Kaynak: yerel';
-    const at = !bulut?.uzaktan ? 'LafPOS Uzaktan kurulu değil' : bulut.at ? `son çekim ${fmtTime(bulut.at)}` : 'buluttan henüz çekilmedi';
+    const at = !bulut?.uzaktan ? 'AsilPOS Uzaktan kurulu değil' : bulut.at ? `son çekim ${fmtTime(bulut.at)}` : 'buluttan henüz çekilmedi';
     return line(source, at, error);
   }
-  if (!bulut?.uzaktan) return 'Tanımlı değil · LafPOS Uzaktan kurulu değil, buluttan anahtar gelmez';
+  if (!bulut?.uzaktan) return 'Tanımlı değil · AsilPOS Uzaktan kurulu değil, buluttan anahtar gelmez';
   if (!bulut.sube) return 'Tanımlı değil · şube kimliği geçersiz';
   if (!bulut.at) return line(bulut.ok === false ? 'Buluttan çekilemedi' : 'Buluttan henüz çekilmedi', error);
   if (bulut.ok === false) return line('Son çekim olmadı', `son başarılı çekim ${fmtTime(bulut.at)}`, error);
@@ -110,7 +110,7 @@ function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGrou
     if (busy) return;
     const ok = await confirmDialog({
       title: `${group.title} bağlantısı kaldırılsın mı`,
-      body: 'Adres ve anahtarlar ayarlar dosyasından silinir; LafPOS bu sisteme bağlanmaz. Bilgileri yeniden yazarak geri açarsınız',
+      body: 'Adres ve anahtarlar ayarlar dosyasından silinir; AsilPOS bu sisteme bağlanmaz. Bilgileri yeniden yazarak geri açarsınız',
       confirmLabel: 'Bağlantıyı kaldır',
       tone: 'danger',
     });
@@ -263,8 +263,8 @@ function PasteCard({ onSaved }: { onSaved: (v: ConnView) => void }) {
 }
 
 /**
- * Yönetim › Bağlantı bilgileri: lafmaliyet, LafPOS Uzaktan, site, Token ve paket platformlarının adresleri ve anahtarları.
- * Ayarlar dosyasına yazılır (server/lib/ayar-dosyasi.ts); Windows kurulumunda bekçi LafPOS'u birkaç saniyede yeni
+ * Yönetim › Bağlantı bilgileri: lafmaliyet, AsilPOS Uzaktan, site, Token ve paket platformlarının adresleri ve anahtarları.
+ * Ayarlar dosyasına yazılır (server/lib/ayar-dosyasi.ts); Windows kurulumunda bekçi AsilPOS'u birkaç saniyede yeni
  * bilgilerle açar, ekran o sırada durumu yoklar. Görme ayar yetkisiyle, yazma yalnız patron
  */
 export default function ConnectionsAdmin() {
@@ -282,7 +282,7 @@ export default function ConnectionsAdmin() {
   useEffect(() => {
     if (waiting && d && !d.pending) {
       setWaiting(false);
-      toast.ok('LafPOS yeni bilgilerle açıldı');
+      toast.ok('AsilPOS yeni bilgilerle açıldı');
     }
   }, [waiting, d]);
 
@@ -291,7 +291,7 @@ export default function ConnectionsAdmin() {
     if (v.pending && v.restart === 'otomatik') setWaiting(true);
   };
   const patron = me?.role === 'patron';
-  const header = <PageHeader title="Bağlantı bilgileri" description="lafmaliyet, LafPOS Uzaktan, site, Token ve paket platformlarının adresleri ve anahtarları" />;
+  const header = <PageHeader title="Bağlantı bilgileri" description="lafmaliyet, AsilPOS Uzaktan, site, Token ve paket platformlarının adresleri ve anahtarları" />;
 
   if (!d)
     return (
@@ -319,7 +319,7 @@ export default function ConnectionsAdmin() {
         </Notice>
       )}
       {d.available && d.pending && (
-        <Notice tone={d.restart === 'otomatik' ? 'info' : 'warn'} role="status" title={d.restart === 'otomatik' ? 'LafPOS yeni bilgilerle yeniden başlıyor' : 'Yeni bilgiler henüz geçerli değil'}>
+        <Notice tone={d.restart === 'otomatik' ? 'info' : 'warn'} role="status" title={d.restart === 'otomatik' ? 'AsilPOS yeni bilgilerle yeniden başlıyor' : 'Yeni bilgiler henüz geçerli değil'}>
           {d.restart === 'otomatik' ? 'Birkaç saniye sürer; tabletler bu sırada bekler, siparişler kaybolmaz' : 'Sunucu yeniden başlatılınca geçerli olur'}
         </Notice>
       )}

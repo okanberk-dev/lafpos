@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { lafposDemo } from './demo/vite-plugin';
+import { asilposDemo } from './demo/vite-plugin';
 
 export default defineConfig({
   // Arayüz bileşenini (ör. fiş, src/lib/print.tsx) sunucuda çizen testler için: uygulamanın derlemesi gibi otomatik JSX
@@ -19,7 +19,7 @@ export default defineConfig({
       // Aynı sunucu testleri tarayıcı demosunun veritabanıyla (sql.js): demo kasayla aynı kuralları işletir
       {
         extends: true,
-        plugins: [lafposDemo({ server: true, builtins: false })],
+        plugins: [asilposDemo({ server: true, builtins: false })],
         test: { name: 'sqljs', environment: 'node', include: ['tests/**/*.test.ts'], setupFiles: ['demo/test-setup.ts'] },
       },
     ],

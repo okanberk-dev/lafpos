@@ -200,14 +200,14 @@ okcRoutes.post('/pavo/find', async (c) => {
   return c.json(await findPavoDevices(input.serial));
 });
 
-/** Webhook adresini Token'a kaydeder (LAFPOS_PUBLIC_URL ve TOKENX_WEBHOOK_SECRET gerekir) */
+/** Webhook adresini Token'a kaydeder (ASILPOS_PUBLIC_URL ve TOKENX_WEBHOOK_SECRET gerekir) */
 okcRoutes.post('/webhook/register', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   const url = webhookUrl();
   const secret = process.env.TOKENX_WEBHOOK_SECRET ?? '';
   const client = tokenx();
   if (!client) throw conflict('TokenX bilgileri eksik');
-  if (!url || secret.length < 16) throw conflict('LAFPOS_PUBLIC_URL ve en az 16 karakterlik TOKENX_WEBHOOK_SECRET tanımlanmalı');
+  if (!url || secret.length < 16) throw conflict('ASILPOS_PUBLIC_URL ve en az 16 karakterlik TOKENX_WEBHOOK_SECRET tanımlanmalı');
   await client.setClientSettings(url, `Bearer ${secret}`);
   return c.json({ ok: true, url });
 });

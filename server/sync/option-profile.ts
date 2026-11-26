@@ -9,7 +9,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
  * her dokunuşta pencere açardı. Kural (docs/02-PLAN.md "Seçenek profili"): yalnız hazırlığı değiştiren ve gerçekten
  * istenen seçenek bağlanır; hiçbir şey sorulmayan ürün tek dokunuşla eklenir.
  *
- * Profil yalnız LafPOS'un bağlarını belirler (sitenin menüsüne ve mobil uygulamasına dokunmaz). Site ürünü ilk kez
+ * Profil yalnız AsilPOS'un bağlarını belirler (sitenin menüsüne ve mobil uygulamasına dokunmaz). Site ürünü ilk kez
  * gelirken uygulanır; var olan kurulumda bir kez, yalnız yöneticinin hiç değiştirmediği (sitenin beş grubu birden bağlı)
  * ürünlere (`upgradeOptionProfiles`). Yönetici sonra Yönetim › Ürünler'den ürün başına grup ekler ya da çıkarır.
  */

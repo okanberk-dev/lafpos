@@ -53,7 +53,7 @@ reportRoutes.use('*', async (c, next) => {
  */
 const replacedDays = (r: { from: string; to: string }) => historyFor(r, reportToday())?.replaced ?? [];
 
-// Ciro, Ürünler ve Saatlik LafPOS öncesi geçmiş günlerini de gösterir (ModPOS; server/services/gecmis.ts): etiketli, Z yok
+// Ciro, Ürünler ve Saatlik AsilPOS öncesi geçmiş günlerini de gösterir (ModPOS; server/services/gecmis.ts): etiketli, Z yok
 reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c), Date.now(), { history: true })));
 reportRoutes.get('/products', (c) => c.json(productReport(range(c), can(c.get('user'), 'rapor.maliyet'), { history: true })));
 reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c), { history: true })));
@@ -117,7 +117,7 @@ reportRoutes.get('/export.csv', (c) => {
   const r = range(c);
   const type = query(c, z.object({ type: z.enum(CSV_TYPES) })).type;
   const withCost = can(c.get('user'), 'rapor.maliyet');
-  // Satırlar LafPOS Uzaktan'la ortak (shared/report-csv.ts); adisyonlarda dönemin hepsi (ekrandaki liste en yenilerle sınırlı).
+  // Satırlar AsilPOS Uzaktan'la ortak (shared/report-csv.ts); adisyonlarda dönemin hepsi (ekrandaki liste en yenilerle sınırlı).
   // Yerine ModPOS günü geçen deneme günü ekrandaki gibi okunmaz
   const skip = replacedDays(r);
   const rep =
@@ -132,6 +132,6 @@ reportRoutes.get('/export.csv', (c) => {
             : itemListReport(r, type, staffFor(c), skip);
   const rows = csvRows(type, rep, withCost);
   c.header('content-type', 'text/csv; charset=utf-8');
-  c.header('content-disposition', `attachment; filename="lafpos-${type}-${r.from}_${r.to}.csv"`);
+  c.header('content-disposition', `attachment; filename="asilpos-${type}-${r.from}_${r.to}.csv"`);
   return c.body(toCsv(rows));
 });

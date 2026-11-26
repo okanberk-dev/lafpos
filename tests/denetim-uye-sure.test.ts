@@ -23,12 +23,12 @@ const PASSWORD = 'sure-parola-2026';
 const INVITE = 'SURE-1234-ABCD';
 const store = new Map<string, string>();
 let gets = 0;
-const KEYS = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UYE_EPOSTA', 'LAFPOS_UYE_DAVET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO'];
+const KEYS = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UYE_EPOSTA', 'ASILPOS_UYE_DAVET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_DEMO'];
 const before: Record<string, string | undefined> = {};
 
 beforeAll(() => {
   for (const k of KEYS) before[k] = process.env[k];
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UYE_EPOSTA: `${OWNER},${OTHER}`, LAFPOS_UYE_DAVET: INVITE, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UYE_EPOSTA: `${OWNER},${OTHER}`, ASILPOS_UYE_DAVET: INVITE, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   vi.stubGlobal('fetch', async (_input: unknown, init?: RequestInit) => {
     const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
     let result: unknown = null;

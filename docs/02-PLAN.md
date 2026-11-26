@@ -17,7 +17,7 @@
 ## 2. Klasör yapısı
 
 ```
-lafpos/
+asilpos/
   shared/        para, adisyon hesabı, yetkiler, olay tipleri (sunucu + istemci ortak)
   server/
     db/          şema, bağlantı, göç (migration), örnek veri
@@ -43,7 +43,7 @@ lafpos/
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
-| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…); seçeneğin kasadaki Tükendi'si (`soldOut`, göç 0013; yalnız LafPOS'ta, `docs/03-ENTEGRASYON.md` §2.3) |
+| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…); seçeneğin kasadaki Tükendi'si (`soldOut`, göç 0013; yalnız AsilPOS'ta, `docs/03-ENTEGRASYON.md` §2.3) |
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
@@ -159,7 +159,7 @@ rezervasyonun durumu değişince kişi sayısı ve süresi sıfırlanıyordu.
 İkinci bağımsız inceleme (aynı gün, düzeltmelerin üstüne; `tests/review-round2*.test.ts`): patron olmayan yetkili
 üstündekinin PIN'ini değiştiremez, onu kapatamaz, rolünü boşaltamaz, kendi indirim sınırının üstünde sınır
 veremez; ağ geneli PIN kilidi kayan pencereyle sayar ve doğru PIN'le girmiş cihazları ve yetkili onayını durdurmaz
-(alarm yazar); Token kesintisinde takılan sepet yetkili onayıyla LafPOS'ta iptal sayılır; kör kasa süzgeci adisyon
+(alarm yazar); Token kesintisinde takılan sepet yetkili onayıyla AsilPOS'ta iptal sayılır; kör kasa süzgeci adisyon
 döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitmez; yeniden açılan gün öbür cihazlara
 yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
 gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
@@ -187,7 +187,7 @@ iptal edilen pay kalanlara dağılır (`orders.split_people`, `payments.share_no
 Simpra ve robotPOS karşılaştırmasından (26 Ekim gece, `claude/ust-duzey-kasa`): tezgâhta tek ekran (Öde gönderir
 ve ödemeyi açar, satış bitince yeni satış; boş tezgâh adisyonu yeniden kullanılır, gün sonunda boşlar kapanır), bar
 ekranında Toplam görünümü, Hazır çağrı ekranı (`/cagri`), hazırlama süresi raporu, siparişi alana hazır bildirimi,
-elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, LafPOS Uzaktan
+elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, AsilPOS Uzaktan
 (Vercel, salt okunur; `docs/07-UZAKTAN-ERISIM.md` §4). Sırada: patronun telefonuna alarm bildirimi (lafmaliyet Web
 Push), kampanya kuralları (fiyatın sahibi site; karar gerekir).
 
@@ -199,7 +199,7 @@ masaya taşınınca kalkar, "Ayrı hesap"la bölünen kalemlere geçer; kayıt s
 numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
 ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
 bir akış. **QR + self servis** (`qr_self`, `claude/qr-self-servis`): self gibi kasada sipariş ve ödeme, ama Masalar
-menüde kalır çünkü masadaki QR'ı okutan müşteri uygulamadan masaya sipariş verir ve sipariş masaya düşer. QR'ı LafPOS
+menüde kalır çünkü masadaki QR'ı okutan müşteri uygulamadan masaya sipariş verir ve sipariş masaya düşer. QR'ı AsilPOS
 üretir ve saklar (`tables.qrCode`, göç `0010_masa_qr`; sitenin 10 simgelik Crockford kuralı, içerik
 `https://laffogato.net/masa/<kod>`, `shared/table-qr.ts`); Yönetim › Masa planı'nda masa başına QR, kod yenileme ve
 A4 masa kartları (`printNow(…, { sheet: true })`). Sipariş eşlemesi önce `tableCode`, sonra etiket; sitenin kodu
@@ -221,7 +221,7 @@ varsayılanlı grubu kapatmak "grup kapatıldı; varsayılan Karton +₺5,00 →
 ücretsizden ücretsize varsayılan ya da ücretsiz varsayılanlı grubun açılıp kapanması yazılmaz), ürün ↔ grup bağı
 `menu.product_groups` (eklenen, çıkarılan);
 ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden gelir (laffogato
-`src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
+`src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); AsilPOS'ta salt okunur, panelden düzenlenmez. Testler
 `tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.
 
 **Hazır ve teslim** (28 Ekim 2026, `claude/k-hazir`): bar ekranında üç görünüm, Fişler, **Hazır** ve Geçmiş. Hazır
@@ -243,7 +243,7 @@ hazır olmuş, teslim edilmemiş bar kalemi, açık günün; açık gün yoksa h
 ödenmiş satış gün boyu ve gün sonundan sonra önceki günlerinki de görünüyor, yoğun günde gerçek açık adisyonları aşağı
 itiyor, "son 100" sınırında taze sipariş düşebiliyor, kurye düğmesiz kart görüyordu. Self modlarda kartın adı çağrı
 numarasıdır ("No 34"); paket platformunun gel-al'ında her modda platformun kısa kodu ("K9TX · Deniz Öztürk", çağrı
-ekranı gibi; müşteri LafPOS numarasını bilmez; `orderCardName`). Site ve
+ekranı gibi; müşteri AsilPOS numarasını bilmez; `orderCardName`). Site ve
 paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
 bara giden kalemlerden türetilir (`pickupStageOf`): hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa "Hazır",
 değilse "Hazırlanıyor". Kalem durumu değişince, bara kalem gidince (teslim edilmiş, kapanıp yeniden açılmış siparişe
@@ -255,7 +255,7 @@ elle aşamayı 409 `stage_from_bar` ile reddeder (`pickupFromBar`): elle "Teslim
 bar sonra Hazır deyince aşama geri döner ve teslimin geri alınışı barista adına denetime düşerdi. Teslim kalemin Teslim
 edildi düğmesiyle; bara kalem gitmeyen gel-al'da elle aşama sürer. Çağrı ekranı, Hazır sekmesi ve kasadaki
 Teslim edildi düğmesi kasanın siparişinde kalemin durumuna bakar (teslimden sonra eklenen kalem yeniden görünür),
-platform siparişini teslim aşamasında düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun
+platform siparişini teslim aşamasında düşürür; paket platformunun gel-al siparişini AsilPOS numarası yerine platformun
 kısa koduyla ve adıyla gösterir. Platform siparişinin "N ürün hazır" uyarısı paket yetkili her cihazda çalar (kabul
 eden, otomatik kabulde, kafede olmayabilir).
 Müşteri ekranının teşekkürü bara giden kalemi olan self servis satışında çağrı numarasını da söyler ("Numaranız 34",
@@ -332,7 +332,7 @@ denetim iletisi kişiyi adlandırır ("Garson adına (personel)", `data.person`)
 ödenmez kalem kalmadıysa adisyonunkini de). Raporlar: İptal ve indirim › ikram listesinde ödenmez satırı kişiyi
 gösterir, aynı yerde "Kişi bazında ödenmez" (kişi, tür, adet, tutar; `shared/comp.ts` `odenmezByPerson`); Personel
 raporunda "Adına ödenmez"; CSV'de Kişi sütunu; Z'de ödenmez satırının altında kişi kişi döküm (`odenmezPeople`). Kişi
-bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; LafPOS Uzaktan'a müşterinin yalnız ilk adı (açık
+bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; AsilPOS Uzaktan'a müşterinin yalnız ilk adı (açık
 adisyon ve patron uyarısının denetim iletisi, `data.person`'dan; personelin adı, kaydı yapan kişinin adı gibi, olduğu
 gibi). Personel adına yazılan ödenmez personel tutarıdır: maliyet yetkisi olmayana başkasınınki "Personel" diye gider
 (adisyon uçları `blindOrder`, rapor, CSV, X ve Z); denetim kaydı ve patron uyarıları ayrıcalıklı yüzeydir, kişiyi
@@ -341,7 +341,7 @@ adlandırır (denetim kaydında etiket "Ödenmez", geri almada "Ödenmezi geri a
 
 **Seçenek profili: varyant ve seçenek gerektirmeyen ürünler** (4 Kasım 2026, operatör: _"bazı ürünlere varyant vs.
 eklemeye gerek olmuyor onları da seç bul ve buna göre bir plan yap"_; araştırma `docs/08-POS-ARASTIRMA.md` §4). Bulgu:
-site seçenek gruplarını (süt, kavrum, şurup, ekstra shot, şeker) seçenek alan her kategoriye sunuyor, LafPOS da site
+site seçenek gruplarını (süt, kavrum, şurup, ekstra shot, şeker) seçenek alan her kategoriye sunuyor, AsilPOS da site
 ürünü gelince beşini birden bağlıyordu: Su ve Soda'ya süt, Çay'a kavrum, frozen'a ekstra shot soruluyor, tek boylu
 seçenekli ürün (Su, Soda, L'Af Limon, matcha'lar) her dokunuşta pencere açıyordu. Boylar (M/L) sitenin fiyatıdır,
 doğru: Espresso, Türk kahvesi ve Çay'ın L'si duble; tek boylu üründe boy düğmesi zaten yok. Kural: yalnız cevabı
@@ -446,11 +446,11 @@ kapalıdır: anahtar, `.env` ve lafmaliyet'teki geçiş günü yokken hiçbiri �
 
 | Repo | İş | Neden | Durum |
 | --- | --- | --- | --- |
-| lafmaliyet | İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales`, Kasa raporunda "LafPOS'tan doldur" | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 | Birleşti (lafmaliyet#34, #36); durum, onarım ve geçiş günü B07 (#44), günlük satışlar aylık modele B08 (#46); kasa uzlaşması, komisyon ve ikram, ModPOS metinleri B09-B11 açık |
-| lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) | Birleşti (#34); LafPOS günde bir, gün sonunda çeker (L2) |
+| lafmaliyet | İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales`, Kasa raporunda "AsilPOS'tan doldur" | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 | Birleşti (lafmaliyet#34, #36); durum, onarım ve geçiş günü B07 (#44), günlük satışlar aylık modele B08 (#46); kasa uzlaşması, komisyon ve ikram, ModPOS metinleri B09-B11 açık |
+| lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) | Birleşti (#34); AsilPOS günde bir, gün sonunda çeker (L2) |
 | laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine): RiosenBeq/laffogato#263 | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar | Birleşti (d1de10f) |
 | laffogato | Online sipariş için ucuz "değişti mi" sinyali: `GET /api/pos/orders/version` (#263) | 5 dk sorgu sınırı varken siparişi saniyesinde görmek | Birleşti (#263) |
-| laffogato | Bugünün karaoke rezervasyonları LafPOS'a (F1; LafPOS L4) | Sitede rezerve oda kasada boş görünmesin, ödenmiş saat yeniden ücretlenmesin | Birleşti (laffogato#264 cc0e40a, #265); LafPOS tarafı L4 (`docs/03-ENTEGRASYON.md` §2.4) |
+| laffogato | Bugünün karaoke rezervasyonları AsilPOS'a (F1; AsilPOS L4) | Sitede rezerve oda kasada boş görünmesin, ödenmiş saat yeniden ücretlenmesin | Birleşti (laffogato#264 cc0e40a, #265); AsilPOS tarafı L4 (`docs/03-ENTEGRASYON.md` §2.4) |
 | laffogato | Kasada damga (M2M) | Uygulama üyesine kasada damga vermek | Faz 2 |
 
 ## 6. Riskler

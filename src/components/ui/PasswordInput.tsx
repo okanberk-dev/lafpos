@@ -4,7 +4,7 @@ import { passwordStrength, STRENGTH_LABELS, type StrengthLevel } from './passwor
 
 /**
  * Şifre kutusu (rare-ui password-input'tan): gizliyken nokta, gösterilince her karakter noktasının yerinde belirir; göz
- * düğmesi açılıp kapanır; yeni şifre alanında güç çubuğu. LafPOS uyarlaması:
+ * düğmesi açılıp kapanır; yeni şifre alanında güç çubuğu. AsilPOS uyarlaması:
  * - **Gizliyken gerçek karakter DOM'a yazılmaz.** rare-ui karakterleri saydam bırakıyordu (sayfayı okuyan her betik
  *   şifreyi görür); burada gizliyken yalnız noktalar çizilir, karakterler yalnız "Şifreyi göster"den sonra. Alanın
  *   değeri de `value` özniteliğine yazılmaz (React denetimli alanda yazıyordu): değer yalnız alanın kendisinde.

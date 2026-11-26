@@ -46,7 +46,7 @@ export const PLATFORM_MODE_LABEL: Record<PlatformMode, string> = { kapali: 'Kapa
 
 /** Yönetim › Paket platformları: canlı bağlantının durumu */
 export interface PlatformLiveStatus {
-  /** LafPOS'ta bu platform için bağdaştırıcı var mı (Trendyol Go, Yemeksepeti, Getir var; Migros Yemek'in belgesi yok) */
+  /** AsilPOS'ta bu platform için bağdaştırıcı var mı (Trendyol Go, Yemeksepeti, Getir var; Migros Yemek'in belgesi yok) */
   supported: boolean;
   /** Anahtarlar .env'de tanımlı mı */
   configured: boolean;
@@ -57,7 +57,7 @@ export interface PlatformLiveStatus {
   openOrders: number;
 }
 
-/** Platform ürünü → LafPOS ürünü eşlemesi (Yönetim › Paket platformları › Ürün eşleme); boşsa ada göre eşlenir */
+/** Platform ürünü → AsilPOS ürünü eşlemesi (Yönetim › Paket platformları › Ürün eşleme); boşsa ada göre eşlenir */
 export interface PlatformProductDTO {
   id: string;
   platform: PlatformId;
@@ -187,7 +187,7 @@ export interface PlatformOrderDTO {
   orderNo: number | null;
   decidedBy: string | null;
   reason: string | null;
-  /** Kalemlerden eşleşmeyenler (LafPOS'ta karşılığı yok): kabulde "Platform ürünü" satırı olur */
+  /** Kalemlerden eşleşmeyenler (AsilPOS'ta karşılığı yok): kabulde "Platform ürünü" satırı olur */
   unmatched: string[];
   /** Kasada tükenmiş kalemler: kabul edilemez (ürünü satışa açın ya da reddedin) */
   soldOut: string[];

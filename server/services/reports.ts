@@ -20,7 +20,7 @@ import { historyStore } from '../sync/modpos';
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from './orders';
 
 /**
- * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Ciro yalnız LafPOS'ta tahsil edilen
+ * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Ciro yalnız AsilPOS'ta tahsil edilen
  * (source = 'pos') kapanmış adisyonlardandır; online (sitede ödenen) siparişler ayrı gösterilir. İptal, X/Z gibi
  * bütün POS adisyonlarından sayılır: açık, iptal edilmiş ya da kalemleri başka masaya taşınmış (birlesti) olsa da.
  */
@@ -52,7 +52,7 @@ export const reportToday = (now = Date.now()) => currentBusinessDate(getOpenDay(
 
 const EMPTY_TOTALS: OrderTotals = calcOrder({ lines: [] });
 const totalsOf = (o: OrderRow) => o.totals ?? EMPTY_TOTALS;
-/** Ciro kümesi: LafPOS'ta tahsil edilip kapanmış adisyon */
+/** Ciro kümesi: AsilPOS'ta tahsil edilip kapanmış adisyon */
 const isSale = (o: OrderRow) => o.status === 'kapali' && o.source === 'pos';
 const idsOf = (orders: OrderRow[]) => new Set(orders.map((o) => o.id));
 
@@ -131,9 +131,9 @@ export function comparison(r: Range, nowMs = Date.now(), today = businessDate(no
 // ─── Ciro ───────────────────────────────────────────────────────────────────
 
 /**
- * Raporlar › Ciro. `history`: kasanın Raporlar ekranı (server/routes/reports.ts) LafPOS öncesi geçmiş günlerini de görür
+ * Raporlar › Ciro. `history`: kasanın Raporlar ekranı (server/routes/reports.ts) AsilPOS öncesi geçmiş günlerini de görür
  * (ModPOS; ./gecmis.ts `historyFor`): günler kaynağın adıyla, ciro dökümüne indirimi, ciro dışı ve KDV'siyle girer. Gün
- * raporu (Uzaktan'a giden, server/sync/cloud-reports.ts) ve patron paneli geçmişsiz çağırır: LafPOS'un kendi günü
+ * raporu (Uzaktan'a giden, server/sync/cloud-reports.ts) ve patron paneli geçmişsiz çağırır: AsilPOS'un kendi günü
  */
 export function summaryReport(range: Range, nowMs = Date.now(), opts: { history?: boolean } = {}) {
   const today = reportToday(nowMs);
@@ -245,7 +245,7 @@ export function summaryReport(range: Range, nowMs = Date.now(), opts: { history?
     kdv: [...kdvByRate.values()].sort((a, b) => a.rate - b.rate),
     // Geçmiş gününün ödemeleri cirosuna eşittir (gün toplamı)
     reconciliation: { paidClosed: paidClosed + H.rev, difference: paidClosed - netSales, paidOpen },
-    /** Masa adisyonlarının cirosu (kişi başının payı; LafPOS Uzaktan günleri toplarken oranı yeniden kurar) */
+    /** Masa adisyonlarının cirosu (kişi başının payı; AsilPOS Uzaktan günleri toplarken oranı yeniden kurar) */
     tableSales,
     perGuest: tableGuests ? Math.round(tableSales / tableGuests) : null,
     days: ds.days.length + (hist?.days.length ?? 0),
@@ -287,7 +287,7 @@ function historySales(d: HistoryDay, cutoffMs: number | null): { netSales: numbe
 }
 
 /**
- * Geçmişin dönem ürün listesi (indirim öncesi, ürün ürün; LafPOS ürünlerine karışmaz): dönem bloğun bütün günlerini
+ * Geçmişin dönem ürün listesi (indirim öncesi, ürün ürün; AsilPOS ürünlerine karışmaz): dönem bloğun bütün günlerini
  * kapsıyor ve o günlerin hepsi raporda geçmiş günü olarak duruyorsa satırlarıyla (`covered`), yalnız bir kısmını
  * kapsıyorsa not; kesişmiyorsa yok
  */
@@ -468,7 +468,7 @@ export function hourlyReport(range: Range, opts: { rawWeek?: boolean; history?: 
     w.days += 1;
     for (const [hour, v] of historyReport(d).clock) w.hours[hour] += v;
   }
-  // `rawWeek`: ortalamaya bölünmeden toplam (LafPOS Uzaktan günlük özetleri toplayıp kendisi böler)
+  // `rawWeek`: ortalamaya bölünmeden toplam (AsilPOS Uzaktan günlük özetleri toplayıp kendisi böler)
   if (!opts.rawWeek) for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
     const hs = hours.filter((h) => (h.hour >= p.from && h.hour < p.to) || (p.to > 24 && h.hour < p.to - 24));
@@ -492,7 +492,7 @@ export function hourlyReport(range: Range, opts: { rawWeek?: boolean; history?: 
 
 /**
  * Bir iş gününün kapanmış satışları, kapandıkları dakikaya göre (gün başından, 05:00, geçen dakika): `[dakika, ciro,
- * tutarı olan adisyon]`, yalnız dolu dakikalar. LafPOS Uzaktan (server/sync/cloud-reports.ts) bugünü içeren dönemin
+ * tutarı olan adisyon]`, yalnız dolu dakikalar. AsilPOS Uzaktan (server/sync/cloud-reports.ts) bugünü içeren dönemin
  * kıyasını ("aynı saate kadar", `comparison` `cutoffMs`) günlük özetten bununla kurar; ölçüt Ciro'nunkiyle aynı
  */
 export function closingMinutes(date: string): [number, number, number][] {
@@ -523,7 +523,7 @@ export function prepReport(range: Range, skip: string[] = []) {
 }
 
 /**
- * Hazırlama raporunun ham verisi: hazırlanan kalemler ve teslim süreleri. LafPOS Uzaktan'a günlük gider; dönem
+ * Hazırlama raporunun ham verisi: hazırlanan kalemler ve teslim süreleri. AsilPOS Uzaktan'a günlük gider; dönem
  * istatistiği iki yerde de `prepFrom` (shared/remote-calc.ts) ile kurulur
  */
 export function prepRaw(range: Range, skip: string[] = []): { done: PrepDone[]; handoffs: number[] } {
@@ -545,7 +545,7 @@ export function prepRaw(range: Range, skip: string[] = []): { done: PrepDone[]; 
 
 /**
  * Dönemin, dönemde kapanmış bir adisyona ait olmayan satış ödemeleri (gün aşırı: adisyon başka günde açılmış): adisyonun
- * günü, kapanmış satış mı, tutar, platform. LafPOS Uzaktan günleri toplarken bunlardan dönemin içine düşenleri
+ * günü, kapanmış satış mı, tutar, platform. AsilPOS Uzaktan günleri toplarken bunlardan dönemin içine düşenleri
  * "kapanmış adisyonların ödemesi" sayar (`crossPayIn`); kasada dönem tek seferde okunduğu için aynı sonuç
  */
 export function crossDayPayments(range: Range): CrossPay[] {
@@ -959,7 +959,7 @@ function patronStats(today: string, top: { key: string }[], guests: number): Pat
     if (o.total > 0) row[2] += 1;
   }
   const stats: PatronStats = { v: 1, guests, days, daily: [...byDate.values()], topPrev: productCloses(addDays(today, -7), top.slice(0, 5).map((t) => t.key)) };
-  // LafPOS öncesi günler (Merkez'den, shared/gecmis.ts): kıyas günü LafPOS'ta yoksa ya da cirosu küçükse geçmiş geçer
+  // AsilPOS öncesi günler (Merkez'den, shared/gecmis.ts): kıyas günü AsilPOS'ta yoksa ya da cirosu küçükse geçmiş geçer
   // Elle yüklenen (Merkez) ve lafmaliyet'ten gelen (ModPOS) birleşik kayıt: aynı tarihte lafmaliyet'inki
   return mergeHistoryStats(stats, today, historyStore()?.gunler ?? null);
 }
@@ -1010,7 +1010,7 @@ export function patronLive(withCost: boolean, cashNumbers = false) {
 
   // Saat dizisi saat numarasıyla (0-23); gün 05:00'i geçip 24 saati aştıysa ertesi günün saatleri `…NextDay`de
   // ([0] ertesi gün 05:00). Grafik iş günü sırasıyla çizer (src/lib/period.ts hourBars): gecenin ardından ertesi gün.
-  // Eski istemci yalnız 24 saati okur, ertesi günü göstermez ama saatleri kaymaz (LafPOS Uzaktan sürüm farkı)
+  // Eski istemci yalnız 24 saati okur, ertesi günü göstermez ama saatleri kaymaz (AsilPOS Uzaktan sürüm farkı)
   const byHour = (date: string) => {
     const rows = hourlyReport({ from: date, to: date }).hours;
     const day = Array.from({ length: 24 }, () => 0);

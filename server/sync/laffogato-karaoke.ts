@@ -17,12 +17,12 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { requireSiteSigned, siteBranch, siteLinked, siteSigned } from './laffogato-link';
-import { SITE_ISTEMCI } from '@shared/eski-adlar';
+import { SITE_ISTEMCI, SITE_SUBELER_ENV } from '@shared/eski-adlar';
 
 /**
  * Sitedeki karaoke rezervasyonları (laffogato `GET /api/panel/karaoke`, F1): oda sitede rezerveyken kasada boş
  * görünmesin, sitede ödenmiş saat kasada yeniden ücretlenmesin. Yalnız okunur; rezervasyonu site yazar, değiştirir,
- * iptal eder. Pencere kasanın iş günüdür (`from = to = iş günü`; rezervasyon gece yarısını aşmaz, sitenin LafPOS
+ * iptal eder. Pencere kasanın iş günüdür (`from = to = iş günü`; rezervasyon gece yarısını aşmaz, sitenin AsilPOS
  * anahtarı yalnız dünden yarına okur). docs/03-ENTEGRASYON.md §2.4
  *
  * Ne zaman çekilir (AGENTS.md kural 6: imzalı uca 5 dakikadan sık otomatik istek yok; bu okuma sitenin veritabanına
@@ -38,7 +38,7 @@ const STATE_KEY = 'laffogato.karaoke';
 export const KARAOKE_AUTO_MIN_MS = 5 * 60_000;
 /** Elle ya da oda kutusundan çekimler arası en az süre */
 const KARAOKE_MANUAL_MIN_MS = 30_000;
-/** Site LafPOS'a karaokeyi açmamışsa (401, 403, 503 not_configured) otomatik yeniden deneme bu kadar sonra */
+/** Site AsilPOS'a karaokeyi açmamışsa (401, 403, 503 not_configured) otomatik yeniden deneme bu kadar sonra */
 const CLOSED_BACKOFF_MS = 30 * 60_000;
 /** Sürüm sinyali bu süreden yeniyse "canlı" sayılır: oda kutusu yalnız işaret değişince çeker */
 const MARKER_FRESH_MS = 2 * 60_000;
@@ -57,7 +57,7 @@ interface KaraokeState {
   lastErrorAt: number | null;
   /** Son başarısız çekimin HTTP durumu (ağ hatasında null) */
   lastStatus: number | null;
-  /** Son ret, sitenin karaokeyi LafPOS'a açmadığı anlamında (401, 403, 503 `not_configured`) */
+  /** Son ret, sitenin karaokeyi AsilPOS'a açmadığı anlamında (401, 403, 503 `not_configured`) */
   closed: boolean;
 }
 
@@ -135,16 +135,16 @@ export function parseKaraokeBody(json: unknown, day: string): { bookings: SiteKa
 
 const errorCode = (json: unknown) => (json as { error?: unknown } | null)?.error;
 
-/** Site karaokeyi LafPOS'a açmamış: anahtar ya da sürüm meselesi, kısa aralıkla yeniden denemenin anlamı yok */
+/** Site karaokeyi AsilPOS'a açmamış: anahtar ya da sürüm meselesi, kısa aralıkla yeniden denemenin anlamı yok */
 const closedAnswer = (status: number, json: unknown) => status === 401 || status === 403 || (status === 503 && errorCode(json) === 'not_configured');
 
 export function failureMessage(status: number, json: unknown): string {
   const code = errorCode(json);
-  if (status === 401) return "Site karaoke okumasını kabul etmedi (HTTP 401): site LafPOS'a karaokeyi açmamış, anahtar farklı ya da kasa saati 5 dakikadan fazla kaymış";
-  // Şube reddi: sitenin LAFPOS_BRANCHES'ında bu kasanın şubesi yok (gün ya da saat meselesi değil)
-  if (status === 403 && (json as { field?: unknown } | null)?.field === 'branch') return `Site karaokeyi bu kasanın şubesine (${siteBranch()}) açmadı (HTTP 403): sitedeki LAFPOS_BRANCHES ile Yönetim › Ayarlar ve yedek › Şube kimliği aynı olmalı`;
-  if (status === 403) return 'Site bu günü LafPOS\'a açmadı (HTTP 403): kasa bilgisayarının tarihi ya da saati yanlış olabilir';
-  if (status === 503 && code === 'not_configured') return "Sitede LafPOS anahtarı tanımlı değil (HTTP 503)";
+  if (status === 401) return "Site karaoke okumasını kabul etmedi (HTTP 401): site AsilPOS'a karaokeyi açmamış, anahtar farklı ya da kasa saati 5 dakikadan fazla kaymış";
+  // Şube reddi: sitenin şube listesinde (`SITE_SUBELER_ENV`) bu kasanın şubesi yok (gün ya da saat meselesi değil)
+  if (status === 403 && (json as { field?: unknown } | null)?.field === 'branch') return `Site karaokeyi bu kasanın şubesine (${siteBranch()}) açmadı (HTTP 403): sitedeki ${SITE_SUBELER_ENV} ile Yönetim › Ayarlar ve yedek › Şube kimliği aynı olmalı`;
+  if (status === 403) return 'Site bu günü AsilPOS\'a açmadı (HTTP 403): kasa bilgisayarının tarihi ya da saati yanlış olabilir';
+  if (status === 503 && code === 'not_configured') return "Sitede AsilPOS anahtarı tanımlı değil (HTTP 503)";
   if (status === 503) return 'Site rezervasyonları şu an okuyamıyor (HTTP 503)';
   return `Site karaoke rezervasyonları alınamadı (HTTP ${status})`;
 }

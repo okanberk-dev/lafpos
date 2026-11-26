@@ -6,14 +6,14 @@ license: Complete terms in LICENSE.txt
 
 > **Kaynak:** [anthropics/skills](https://github.com/anthropics/skills) `skills/webapp-testing` @ `b9e19e6` (Apache-2.0, `LICENSE.txt`). Değişiklik (Apache-2.0 §4b): yalnız bu "Bu projede" bölümü eklendi; Python yardımcıları (`scripts/with_server.py`, `examples/`) alınmadı, karşılıkları aşağıda.
 
-## Bu projede (LafPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
+## Bu projede (AsilPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
 
 Yöntem aynı (sunucunun yaşam döngüsünü betik yönetir; önce gözle, sonra eylem yap), araç Node:
 
-| Skill'de | LafPOS'ta |
+| Skill'de | AsilPOS'ta |
 |---|---|
 | `scripts/with_server.py --server ... -- python test.py` | `npm run e2e`: `e2e/lib.mjs` `startServer()` boş bir veri klasörüyle üretim sunucusunu açar, bitince siler |
-| Python `sync_playwright`, `chromium.launch()` | `playwright-core` ve sistemdeki Google Chrome (`channel: 'chrome'`); başka tarayıcı için `LAFPOS_E2E_CHROME=/yol` |
+| Python `sync_playwright`, `chromium.launch()` | `playwright-core` ve sistemdeki Google Chrome (`channel: 'chrome'`); başka tarayıcı için `ASILPOS_E2E_CHROME=/yol` |
 | `wait_for_load_state('networkidle')` | **Kullanma:** canlı ekranlar SSE bağlantısını açık tutar, ağ hiç susmaz. `settle()` yükleme göstergelerinin kaybolmasını bekler |
 | Keşif: ekran görüntüsü, DOM | `e2e/out/<boyut>-<rol>-<ekran>.png`, `overflowReport()`, `smallTargets()` |
 

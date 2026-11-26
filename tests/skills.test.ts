@@ -27,9 +27,9 @@ function frontmatter(text: string): Record<string, string> {
 describe('proje skill\'leri', () => {
   it('beklenen skill\'ler var', () => {
     expect(skills.sort()).toEqual([
+      'asilpos-design',
       'build-admin-panel',
       'impeccable',
-      'lafpos-design',
       'restaurant-operations',
       'restaurant-pos',
       'validate-data',
@@ -48,7 +48,7 @@ describe('proje skill\'leri', () => {
     });
     it(`${name}: kaynağı yazılı ve "Bu projede" bölümü var`, () => {
       expect(text).toMatch(/\*\*Kaynak:\*\*/);
-      expect(text).toMatch(/Bu projede|LafPOS'a uyarlandı/);
+      expect(text).toMatch(/Bu projede|AsilPOS'a uyarlandı/);
     });
   }
 

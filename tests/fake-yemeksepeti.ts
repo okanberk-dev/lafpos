@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { InboxItem } from '../server/delivery/yemeksepeti';
 
 /**
- * Testler için sahte LafPOS Uzaktan gelen kutusu (`/api/yemeksepeti/inbox`, `/inbox/ack`; imza başlığı aranır) ve
+ * Testler için sahte AsilPOS Uzaktan gelen kutusu (`/api/yemeksepeti/inbox`, `/inbox/ack`; imza başlığı aranır) ve
  * sahte Delivery Hero middleware'i (`/v2/login`, `/v2/order/status/{token}`, `/v2/orders/{token}/preparation-completed`
  * ve siparişin `callbackUrls` adresleri `/cb/{ne}/{token}`). Çağrılar ve gövdeler kaydedilir. Gelen kutusu ortak kutu
  * gibidir (restoran süzgeci yok): kasanın başka restoranın kaydını silmediği burada denetlenir.

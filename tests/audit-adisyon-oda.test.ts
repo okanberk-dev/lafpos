@@ -6,6 +6,7 @@ import type { LiveEvent } from '@shared/events';
 import { istanbulParts } from '@shared/time';
 import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
+import { SITE_AKTOR } from '@shared/eski-adlar';
 
 /**
  * Denetim bulguları (adisyon yaşam döngüsü, karaoke odası, iptal, taşıma, gün sonu), her biri bir testle. Çalışan oda
@@ -442,7 +443,7 @@ describe('porsiyon sayacı', () => {
     expect(seen.some((e) => e.topic === 'menu' && e.kind === 'product.available')).toBe(true);
     expect(seen.some((e) => e.topic === 'sync' && e.kind === 'availability.push' && e.message === cake.id)).toBe(true);
     // Porsiyonla tükenen ürün sitede de yeniden satışa açılır: bekleyen Tükendi'nin yerine Satışta gider
-    expect(bodies).toEqual([{ id: cake.extId, isActive: true, actor: 'LafPOS porsiyon', branch: 'marina' }]);
+    expect(bodies).toEqual([{ id: cake.extId, isActive: true, actor: `${SITE_AKTOR} porsiyon`, branch: 'marina' }]);
 
     // Geri dönen porsiyon satılır; bar hazırlamaya başladıktan sonraki iptal fire sayılır, porsiyon dönmez
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });
@@ -555,7 +556,7 @@ describe('otomatik gün sonu', () => {
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date'] });
     vi.setSystemTime(at);
-    delete process.env.LAFPOS_NO_JOBS;
+    delete process.env.ASILPOS_NO_JOBS;
     const { startJobs, stopJobs } = await import('../server/jobs');
     startJobs();
     try {
@@ -576,7 +577,7 @@ describe('otomatik gün sonu', () => {
       }
     } finally {
       stopJobs();
-      process.env.LAFPOS_NO_JOBS = '1';
+      process.env.ASILPOS_NO_JOBS = '1';
       vi.useRealTimers();
     }
   });

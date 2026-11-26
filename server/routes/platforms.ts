@@ -53,7 +53,7 @@ function withoutCommission({ commissionPct: _, ...rest }: PlatformSettings): Omi
   return rest;
 }
 
-/** Ürün eşleme: platform ürünü → LafPOS ürünü (menü ya da bağlantı yetkisi; görmek için paket yetkisi yeter) */
+/** Ürün eşleme: platform ürünü → AsilPOS ürünü (menü ya da bağlantı yetkisi; görmek için paket yetkisi yeter) */
 platformRoutes.get('/products', (c) => {
   const user = c.get('user');
   if (!can(user, 'paket.yonet') && !can(user, 'menu.yonet')) requirePermission(user, 'senkron.yonet');

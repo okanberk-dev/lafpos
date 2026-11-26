@@ -40,14 +40,14 @@ import { YEDEK_DOSYA_ONEKI } from '@shared/eski-adlar';
  * (docs/03-ENTEGRASYON.md §2.1). Senkron bütçesi: imzalı uçlara 5 dakikadan sık otomatik istek yok (AGENTS.md kural 6).
  */
 export const MENU_SYNC_INTERVAL_MS = 15 * 60_000;
-/** LafPOS'un siteye kendi Satışta yazımından sonra eşitleme gecikmesi: art arda yazımlar tek eşitlemede toplanır */
+/** AsilPOS'un siteye kendi Satışta yazımından sonra eşitleme gecikmesi: art arda yazımlar tek eşitlemede toplanır */
 const AFTER_WRITE_SYNC_MS = 5_000;
 /**
  * Sitenin menü işaretiyle tetiklenen ETag'siz eşitlemeler arası en az süre (imzalı panel okuması da yapar): art arda
  * düzenlemeler (lafmaliyet'ten 30 ürünün fiyatı) sonda tek eşitlemede toplanır. docs/03-ENTEGRASYON.md §2.1
  */
 export const MARKER_SYNC_MIN_MS = 60_000;
-/** LafPOS'un kendi yazımından sonraki eşitleme, bu kadar yeni bir eşitleme varsa atlanır (sinyal onu zaten izler) */
+/** AsilPOS'un kendi yazımından sonraki eşitleme, bu kadar yeni bir eşitleme varsa atlanır (sinyal onu zaten izler) */
 const RECENT_SYNC_MS = 20_000;
 /** CDN'deki herkese açık liste bayatsa (s-maxage=60 + swr=60) bir kez ETag'siz yeniden eşitleme */
 export const CDN_REFRESH_MS = 2 * 60_000;
@@ -128,7 +128,7 @@ export async function runScheduledSync() {
 
 /**
  * Otomatik menü eşitlemesi. Site bağlantısı yoksa (LAFFOGATO_URL) siteye hiçbir istek gitmez: ne menü ne görsel.
- * Açık iş günü yokken (gece) atlanır, gün açılınca bir kez çeker. `anyTime`: LafPOS'un siteye kendi Tükendi / Satışa
+ * Açık iş günü yokken (gece) atlanır, gün açılınca bir kez çeker. `anyTime`: AsilPOS'un siteye kendi Tükendi / Satışa
  * aç yazımından hemen sonra; site o an zaten uyanık, gece de çalışır.
  */
 export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}) {
@@ -282,13 +282,13 @@ export function autoDayEndTick(now = Date.now()) {
     .catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
 }
 
-/** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi (site o an uyanık; gece de) */
+/** AsilPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi (site o an uyanık; gece de) */
 export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS, opts: { force?: boolean } = {}) {
   scheduleMenuSync(Date.now() + delayMs, !!opts.force, true);
 }
 
 /**
- * LafPOS siteye Satışta yazdı: 5 sn sonra bir eşitleme. Bekleyen bir eşitleme varsa ya da son 20 sn'de eşitlendiyse
+ * AsilPOS siteye Satışta yazdı: 5 sn sonra bir eşitleme. Bekleyen bir eşitleme varsa ya da son 20 sn'de eşitlendiyse
  * atlanır (işaret eşitlemesi onu kapsar)
  */
 export function onSiteMenuWritten(now = Date.now()) {
@@ -377,7 +377,7 @@ export function startJobs() {
   } catch (e) {
     console.error('[pavo] gün sonu kaydı', e);
   }
-  // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
+  // AsilPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
   timers.push(...startMerkez());
   // Platform anahtarları buluttan: açılışta ve 10 dakikada bir (Uzaktan'ın Vercel ortamı, Redis'e dokunmaz)
@@ -388,7 +388,7 @@ export function startJobs() {
   timers.push(setInterval(() => void closingNoticeTick().catch((e) => console.error('[bildirim] kapanış', e)), 60_000));
   // İnternet dönüşü: bekleyenler beklemeden bir kez gider; internet yokken dakikada bir TCP denemesi (HTTP yok)
   timers.push(...startCatchUp());
-  // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
+  // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: veritabanı dosyasını kopyalayan son satışları da alır
   timers.push(
     setInterval(() => {
       try {
@@ -417,7 +417,7 @@ export function onJobEvent(e: LiveEvent) {
     }
   }
   if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
-  // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
+  // AsilPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
   if (e.topic === 'sync' && e.kind === 'site.menu.written') onSiteMenuWritten();
   // Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde değişti): gün açıkken ETag'siz,
   // en sık 60 sn'de bir; gece gün açılışına kalır

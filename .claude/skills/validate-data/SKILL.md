@@ -1,18 +1,18 @@
 ---
 name: validate-data
-description: QA an analysis before sharing -- methodology, accuracy, and bias checks. Use when reviewing an analysis before a stakeholder presentation, spot-checking calculations and aggregation logic, verifying a SQL query's results look right, or assessing whether conclusions are actually supported by the data. In LafPOS use it before adding or changing any report, KPI, Z figure or patron panel number (rapor, ciro, KDV, mutabakat).
+description: QA an analysis before sharing -- methodology, accuracy, and bias checks. Use when reviewing an analysis before a stakeholder presentation, spot-checking calculations and aggregation logic, verifying a SQL query's results look right, or assessing whether conclusions are actually supported by the data. In AsilPOS use it before adding or changing any report, KPI, Z figure or patron panel number (rapor, ciro, KDV, mutabakat).
 argument-hint: "<analysis to review>"
 ---
 
-> **Kaynak:** [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins/tree/33d3dea41a341b341d4f5da2e8801ae0c89be2b8/data/skills/validate-data) `data/skills/validate-data` @ `33d3dea41a341b341d4f5da2e8801ae0c89be2b8` (22 Eki 2026, Apache-2.0, `LICENSE`: eklentinin `data/LICENSE`'ı, olduğu gibi). Alınmayan: `../../CONNECTORS.md` (LafPOS'ta bağlayıcı yok; aşağıdaki bağlantı kırık kalır). Değişiklik (Apache-2.0 §4b): ön bilgide açıklamanın sonuna LafPOS cümlesi ve bu "Bu projede" bölümü eklendi; skill metni olduğu gibi.
+> **Kaynak:** [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins/tree/33d3dea41a341b341d4f5da2e8801ae0c89be2b8/data/skills/validate-data) `data/skills/validate-data` @ `33d3dea41a341b341d4f5da2e8801ae0c89be2b8` (22 Eki 2026, Apache-2.0, `LICENSE`: eklentinin `data/LICENSE`'ı, olduğu gibi). Alınmayan: `../../CONNECTORS.md` (AsilPOS'ta bağlayıcı yok; aşağıdaki bağlantı kırık kalır). Değişiklik (Apache-2.0 §4b): ön bilgide açıklamanın sonuna AsilPOS cümlesi ve bu "Bu projede" bölümü eklendi; skill metni olduğu gibi.
 
-## Bu projede (LafPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
+## Bu projede (AsilPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
 
 Rapor asla yanlış rakam göstermez. Yeni rapor, KPI ya da rapor değişikliği teslim edilmeden önce bu skill'in
 adımları aşağıdaki tanımlarla uygulanır (upstream'deki "metric definitions" ve "baseline and comparison"
-adımlarının LafPOS karşılığı):
+adımlarının AsilPOS karşılığı):
 
-| Kavram | LafPOS'ta |
+| Kavram | AsilPOS'ta |
 |---|---|
 | Para | Kuruş tam sayı (`shared/money.ts`); kayan nokta yalnız gösterimde |
 | Ciro | KDV dahil ciro: kapanmış POS adisyonlarının (`status = 'kapali'`, `source = 'pos'`) `totals.total` toplamı, servis ücreti dahil. API'deki `netSales` alanı budur |

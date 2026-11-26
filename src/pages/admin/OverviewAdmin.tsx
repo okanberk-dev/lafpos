@@ -155,7 +155,7 @@ export default function OverviewAdmin() {
   const integration = to('/yonetim/entegrasyon');
   if (s?.lafmaliyet.failing) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet’e gönderilemeyen ${s.lafmaliyet.failing} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', '), to: integration });
   if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Satışta bilgisi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek', to: integration });
-  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün LafPOS’ta açılınca ya da site aynı duruma gelince kalkar', to: integration });
+  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün AsilPOS’ta açılınca ya da site aynı duruma gelince kalkar', to: integration });
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}`, to: to('/yonetim/yazarkasa') });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı', to: can('kasa.gun') ? '/kasa' : undefined });
   // Uyarıların ilk altısı burada; fazlası denetim kaydında
@@ -216,7 +216,7 @@ export default function OverviewAdmin() {
                 key: 'uzaktan',
                 icon: <Cloud className="size-4" />,
                 to: to('/yonetim/ag'),
-                label: 'LafPOS Uzaktan',
+                label: 'AsilPOS Uzaktan',
                 tone: (s.cloud.lastError ? 'warning' : s.cloud.lastSuccessAt ? 'success' : 'neutral') as Tone,
                 state: s.cloud.lastError ? 'Gidemedi' : s.cloud.lastSuccessAt ? 'Güncel' : 'Bekliyor',
                 detail: s.cloud.lastError ? `${s.cloud.lastError} · son başarılı ${ago(s.cloud.lastSuccessAt)}` : `Son başarılı gönderim ${ago(s.cloud.lastSuccessAt)}`,

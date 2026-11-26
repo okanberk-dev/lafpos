@@ -45,7 +45,7 @@ const TYPES = [
 ];
 
 /**
- * Eğitim cihazı: Token ÖKC'nin LafPOS içindeki benzeri. Ayar "simülatör" iken kasadan gönderilen sepetler burada
+ * Eğitim cihazı: Token ÖKC'nin AsilPOS içindeki benzeri. Ayar "simülatör" iken kasadan gönderilen sepetler burada
  * belirir; ödeme alınınca sonuç gerçek cihazdaki gibi (Z no, fiş no, ödeme kalemleri) adisyona işlenir.
  */
 export default function DevicePage() {
@@ -115,7 +115,7 @@ export default function DevicePage() {
     try {
       await post(`/okc/simulator/baskets/${current.id}/pay`, { payments });
       beep('tamam');
-      toast.ok('Fiş basıldı, ödeme LafPOS’a işlendi');
+      toast.ok('Fiş basıldı, ödeme AsilPOS’a işlendi');
       setOpenId(null);
       qc.invalidateQueries({ queryKey: ['okc'] });
     } catch (e) {
@@ -131,7 +131,7 @@ export default function DevicePage() {
       // Fiş iptali ödeme iptalidir: yetkisi yoksa yetkili PIN’i istenir
       const done = await withApproval((pin) => post(`/okc/simulator/baskets/${id}/cancel`, { voidReceipt, approverPin: pin }));
       if (done === null) return;
-      toast.warn(voidReceipt ? 'Fiş iptal edildi; LafPOS ödemesi geri alındı' : 'Cihazda ödemeden vazgeçildi');
+      toast.warn(voidReceipt ? 'Fiş iptal edildi; AsilPOS ödemesi geri alındı' : 'Cihazda ödemeden vazgeçildi');
       setOpenId(null);
       qc.invalidateQueries({ queryKey: ['okc'] });
     } catch (e) {
@@ -283,8 +283,8 @@ export default function DevicePage() {
             <ol className="list-decimal space-y-1 p-4 pl-9 text-sm leading-relaxed text-ink-2">
               <li>Kasada “Hesabı yazarkasaya gönder” denir; sepet (ürünler, KDV kısımları, indirimler) cihaza gider</li>
               <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar</li>
-              <li>Sonuç (Z no, fiş no, ödeme kalemleri) LafPOS’a gelir; adisyon kendiliğinden kapanır</li>
-              <li>Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır ve patron paneline alarm düşer</li>
+              <li>Sonuç (Z no, fiş no, ödeme kalemleri) AsilPOS’a gelir; adisyon kendiliğinden kapanır</li>
+              <li>Cihazda fiş iptal edilirse AsilPOS ödemesi geri alınır ve patron paneline alarm düşer</li>
             </ol>
           </Card>
           <Card title="Son fişler">

@@ -1,5 +1,5 @@
 /**
- * Raporların CSV'si: kasa (server/routes/reports.ts) ve LafPOS Uzaktan (api/uzaktan.ts) aynı satırları buradan kurar.
+ * Raporların CSV'si: kasa (server/routes/reports.ts) ve AsilPOS Uzaktan (api/uzaktan.ts) aynı satırları buradan kurar.
  * İçe aktarma yok (Vercel işlevi bunu çalışma anında yükler); para ve tarih biçimi shared/money.ts `tlPlain` ve
  * shared/time.ts `fmtDateTime` ile aynı (tests/uzaktan-ek-raporlar.test.ts denetler).
  *

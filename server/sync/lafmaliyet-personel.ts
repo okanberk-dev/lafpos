@@ -8,7 +8,7 @@ import { signedFetch } from '../lib/signature';
 import { lafmaliyetConfigured, lazyErrorText, networkErrorText } from './lafmaliyet';
 
 /**
- * Personel bağlantısı (lafmaliyet → LafPOS; docs/03-ENTEGRASYON.md §4.8). LafPOS kullanıcısı lafmaliyet'in personel
+ * Personel bağlantısı (lafmaliyet → AsilPOS; docs/03-ENTEGRASYON.md §4.8). AsilPOS kullanıcısı lafmaliyet'in personel
  * kaydına (`s:<staff.id>`, bordro satırı) yalnız Yönetim › Personel'de, iki tarafı gösteren onayla elle bağlanır; ad
  * benzerliği yalnız ipucudur, hiçbir şey kendiliğinden bağlanmaz ya da seçilmez (sahip kararı 2, 23 Kas 2026).
  *
@@ -109,7 +109,7 @@ export async function ladminStaff(opts: { maxAgeMs?: number } = {}): Promise<Lad
   return inflight;
 }
 
-/** Bağlı LafPOS kullanıcıları: personel kimliği → kullanıcı */
+/** Bağlı AsilPOS kullanıcıları: personel kimliği → kullanıcı */
 export function linkedUsers(): Map<string, { id: string; name: string }> {
   return new Map(
     db
@@ -123,7 +123,7 @@ export function linkedUsers(): Map<string, { id: string; name: string }> {
 
 /**
  * Bağlanacak kayıt geçerli mi (PATCH /admin/users/:id): taze listede var (5 dakikadan eski liste yeniden çekilir;
- * çekilemezse 503, bağlantı kurulmaz), ladmin'de etkin ve başka LafPOS kullanıcısına bağlı değil
+ * çekilemezse 503, bağlantı kurulmaz), ladmin'de etkin ve başka AsilPOS kullanıcısına bağlı değil
  */
 export async function assertLinkable(ref: string, userId: string) {
   const list = await ladminStaff();
@@ -133,7 +133,7 @@ export async function assertLinkable(ref: string, userId: string) {
   assertRefFree(ref, userId);
 }
 
-/** Kayıt başka bir LafPOS kullanıcısına bağlıysa 409 `staff_ref_taken` (yazmadan hemen önce yeniden bakılır) */
+/** Kayıt başka bir AsilPOS kullanıcısına bağlıysa 409 `staff_ref_taken` (yazmadan hemen önce yeniden bakılır) */
 export function assertRefFree(ref: string, userId: string) {
   const other = linkedUsers().get(ref);
   if (other && other.id !== userId) throw new HttpError(409, `Bu lafmaliyet personeli zaten ${other.name} hesabına bağlı; önce oradaki bağlantıyı kaldırın`, 'staff_ref_taken');

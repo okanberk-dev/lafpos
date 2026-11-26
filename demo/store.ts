@@ -3,7 +3,7 @@
  * beklemeden başlar. Özel pencere ya da kapalı site verisinde açılamazsa demo yalnız bellekte çalışır; hiçbir yerde
  * hata vermez.
  */
-const NAME = 'lafpos-demo';
+const NAME = 'asilpos-demo';
 const STORE = 'veri';
 const KEY = 'veritabani';
 

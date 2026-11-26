@@ -225,7 +225,7 @@ describe('nextPriceAt: şubenin bir sonraki fiyat anında tek eşitleme', () => 
     const at = Date.now() + 10 * 60_000;
     site.panelTop = { now: iso(Date.now()), nextPriceAt: iso(at) };
     await sync();
-    // LafPOS'un kendi Satışta yazımından sonraki eşitleme 5 sn sonra bekliyor (ETag'li)
+    // AsilPOS'un kendi Satışta yazımından sonraki eşitleme 5 sn sonra bekliyor (ETag'li)
     jobs.menuSyncSoon();
     const soon = jobs.pendingMenuSync()!;
     expect(soon.force).toBe(false);

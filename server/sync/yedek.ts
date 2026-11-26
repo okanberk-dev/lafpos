@@ -14,13 +14,13 @@ import { YEDEK_SIFRE_BILGISI } from '@shared/eski-adlar';
 
 /**
  * Otomatik bulut yedeği (docs/05-KASA-BILGISAYARI.md §6 "Bulut yedeği"): günlük veritabanı yedeği kasada sıkıştırılıp
- * şifrelenir (AES-256-GCM; anahtar LAFPOS_CLOUD_SECRET'ten türetilir, buluta hiç gitmez) ve LafPOS Uzaktan'ın verdiği
+ * şifrelenir (AES-256-GCM; anahtar ASILPOS_CLOUD_SECRET'ten türetilir, buluta hiç gitmez) ve AsilPOS Uzaktan'ın verdiği
  * kısa süreli imzalı adrese yüklenir (Vercel Blob, özel depo; api/_yedek.ts). Blob anahtarı yalnız buluttadır.
  *
  * Geri yükleme (Yönetim › Ayarlar ve yedek › Bulut yedeği): seçilen yedek indirilir, şifresi çözülür, SQLite olduğu
  * doğrulanır ve veri klasöründe `geri-yukle/hazir.db` olarak bekler. Sunucu kapanır; bekçi (Windows kurulumu) yeniden
  * açmadan önce mevcut veritabanının kopyasını alır ve hazır yedeği yerine koyar (scripts/kasa/windows/kurulum/geri-yukle.mjs).
- * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazılınca eski yedekler
+ * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı ASILPOS_CLOUD_URL ve ASILPOS_CLOUD_SECRET yazılınca eski yedekler
  * görünür (dükkân kimliği yedeklerin klasörüdür; listede kurulumun eski kimliği de seçilebilir).
  */
 /** Dosyanın imzası; yükleme anında kurulur (tarayıcı demosunda Buffer yok, modül yine yüklenir) */
@@ -75,7 +75,7 @@ export function openBackup(buf: Buffer, secret: string): Buffer {
     decipher.setAuthTag(tag);
     db = zlib.gunzipSync(Buffer.concat([decipher.update(buf.subarray(48)), decipher.final()]));
   } catch {
-    throw new Error('Yedeğin şifresi çözülemedi: bu yedek başka bir anahtarla alınmış (LAFPOS_CLOUD_SECRET) ya da bozuk');
+    throw new Error('Yedeğin şifresi çözülemedi: bu yedek başka bir anahtarla alınmış (ASILPOS_CLOUD_SECRET) ya da bozuk');
   }
   if (!db.subarray(0, 16).equals(Buffer.from('SQLite format 3\0'))) throw new Error('Yedeğin içinden veritabanı çıkmadı');
   return db;
@@ -90,7 +90,7 @@ async function cloud<T>(path: string, body: unknown): Promise<T> {
 
 /** Yerel yedek dosyasını şifreleyip buluta yükler */
 export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
-  if (!cloudEnabled()) throw new Error('LafPOS Uzaktan kurulu değil');
+  if (!cloudEnabled()) throw new Error('AsilPOS Uzaktan kurulu değil');
   try {
     const sealed = await sealBackupAsync(readFileSync(file), env.cloudSecret);
     const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });

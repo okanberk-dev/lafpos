@@ -7,6 +7,12 @@ import { ESKI_ENV_ONEKI } from './eski-adlar.js';
  */
 export const ENV_ONEKI = 'ASILPOS_';
 
+/**
+ * Panelin (ladmin) kasa imza anahtarının adı, metinler için. Panel yeni adı okur, eski adla duran da geçerli (plan A1);
+ * sitenin anahtarı eski adla kalır (shared/eski-adlar.ts `SITE_ANAHTAR_ENV`)
+ */
+export const PANEL_ANAHTAR_METNI = `${ENV_ONEKI}SYNC_SECRET (eski adıyla ${ESKI_ENV_ONEKI}SYNC_SECRET)`;
+
 type Vars = Readonly<Record<string, string | undefined>>;
 
 /** `posEnv(vars, 'PORT')` = `ASILPOS_PORT ?? <eski önek>PORT` */
@@ -51,4 +57,18 @@ export function yazilacakEnvAdi(dosyadakiler: ReadonlySet<string>, tamAd: string
   const eski = eskiEnvAdi(tamAd);
   if (eski && !dosyadakiler.has(tamAd) && dosyadakiler.has(eski)) return eski;
   return tamAd;
+}
+
+/**
+ * Teldeki ya da yapıştırılan anahtarları yeni adlara çevirir: eski adla gelen (ladmin `baglanti{}` bugün eski adla
+ * gönderir) yeni adla döner; ikisi birden gelirse yenisi geçer
+ */
+export function yeniAdlarla<T>(raw: Readonly<Record<string, T>>): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const yeni = yeniEnvAdi(k);
+    if (yeni !== k && Object.prototype.hasOwnProperty.call(raw, yeni)) continue;
+    out[yeni] = v;
+  }
+  return out;
 }

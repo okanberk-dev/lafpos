@@ -24,7 +24,7 @@ beforeAll(async () => {
       const date = raw ? (JSON.parse(raw) as { date: string }).date : undefined;
       if (req.method === 'POST' && req.url === '/api/pos/gun') posts.push(date!);
       res.writeHead(200, { 'content-type': 'application/json' });
-      // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa LafPOS gönderildi saymaz)
+      // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa AsilPOS gönderildi saymaz)
       res.end(JSON.stringify({ ok: true, date }));
     });
   });
