@@ -2,23 +2,16 @@ import { keepPreviousData, type UseQueryResult, useIsFetching, useQuery } from '
 import {
   BadgePercent,
   Bike,
-  CalendarDays,
   Clock,
   CreditCard,
   Download,
   FileSpreadsheet,
-  Gauge,
-  HandPlatter,
-  Hourglass,
   Loader2,
   Package,
   ReceiptText,
   SearchX,
   ShoppingBag,
-  Timer,
-  TurkishLira,
   Users,
-  XCircle,
 } from 'lucide-react';
 import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -260,7 +253,7 @@ function stamper(r: Range): (ms: number) => string {
 
 /** Önceki döneme göre değişim (sunucunun `change` kuralı: önceki dönem sıfırsa yüzde hesaplanmaz) */
 const changeOf = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
-const deltaOf = (c: number | null): KpiCell['delta'] => (c == null ? null : { text: `${c >= 0 ? '▲' : '▼'} %${Math.abs(c).toLocaleString('tr-TR')}`, good: c >= 0 });
+const deltaOf = (c: number | null): KpiCell['delta'] => (c == null ? null : { text: `%${Math.abs(c).toLocaleString('tr-TR')}`, good: c >= 0 });
 
 /**
  * KPI tutarı: milyondan sonra kuruş düşer (28 px rakam hücreye sığsın); tam tutar ipucunda ve Ciro dökümünde. Dönem
@@ -534,8 +527,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
       {(s) => {
         const prev = previousShort(s.previous.label, s.previous.range);
         const compared = `Kıyas: ${s.previous.label}`;
-        // Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda. Renk anlam
-        // taşır: ciro yeşil (grafik serisi), online mor (her ekranda), kayıp pembe, durumsuz sayılar nötr
+        // Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda. Kart ikonsuz
+        // (Keel): rakam, etiket, köşede değişim hapı; ciro koyu kart
         // Yalnız föyden gelen ModPOS gününde indirim bilinmez: dönemin bütün günleri öyleyse ₺0 değil "bilinmiyor" yazılır
         const unknownDisc = s.history?.indirimBilinmiyor ?? 0;
         const discLabel = unknownDisc ? `İndirim (${fmtN(unknownDisc)} ${s.history!.kaynak} gününde bilinmiyor)` : 'İndirim';
@@ -546,8 +539,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           {
             key: 'ciro',
             label: 'Ciro (KDV dahil)',
-            icon: <TurkishLira />,
-            hue: 'green',
+            // Ekranın kahraman rakamı: şeridin tek koyu kartı (Keel'in ters kartı)
+            inverse: true,
             value: <KpiAmount value={s.netSales} />,
             delta: deltaOf(s.previous.change),
             // Kıyas döneminde satış yoksa yüzde hesaplanamaz: "veri yok" değil, o dönem satış yoktu
@@ -556,7 +549,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           {
             key: 'adisyon',
             label: 'Adisyon',
-            icon: <ReceiptText />,
             value: <KpiCount value={s.receipts} />,
             delta: deltaOf(s.previous.receipts == null ? null : changeOf(s.receipts, s.previous.receipts)),
             reference: (
@@ -573,7 +565,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           {
             key: 'urun',
             label: 'Satılan ürün',
-            icon: <Package />,
             value: <KpiCount value={s.itemsSold} />,
             reference: s.days > 1 ? `${s.days} iş günü` : s.days === 1 ? 'Tek iş günü' : 'Gün açılmadı',
             onClick: () => onOpen('urunler', { product: 'urun' }),
@@ -582,8 +573,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           {
             key: 'indirim',
             label: 'İndirim ve ikram',
-            icon: <BadgePercent />,
-            hue: 'rose',
             value: <KpiAmount value={s.discounts + s.complimentary} />,
             reference: s.discounts + s.complimentary + s.voided ? lossParts(s, tlShort) : 'İndirim ve ikram yok',
             onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }),
@@ -591,8 +580,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
           {
             key: 'online',
             label: 'Online',
-            icon: <ShoppingBag />,
-            hue: 'violet',
             value: <KpiAmount value={s.online.amount} />,
             reference: s.online.orders ? `${fmtN(s.online.orders)} sipariş sitede ödendi · ciroya dahil değil` : 'Sitede sipariş yok',
           },
@@ -1026,18 +1013,17 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
         // saatlerin cirosu eşit diye "yalnız bir saatte" denmez
         const oneHour = active === 1;
         const cells: KpiCell[] = [
-          { key: 'toplam', label: 'Toplam', icon: <TurkishLira />, hue: 'green', value: <KpiAmount value={h.total} />, reference: `${active} aktif saat` },
-          { key: 'yogun', label: 'En yoğun saat', icon: <Clock />, value: h.busiest ? hh(h.busiest.hour) : '—', reference: h.busiest ? hourRef(h.busiest) : 'Sayılmadı' },
+          { key: 'toplam', label: 'Toplam', value: <KpiAmount value={h.total} />, reference: `${active} aktif saat` },
+          { key: 'yogun', label: 'En yoğun saat', value: h.busiest ? hh(h.busiest.hour) : '—', reference: h.busiest ? hourRef(h.busiest) : 'Sayılmadı' },
           {
             key: 'sakin',
             label: 'En sakin saat',
-            icon: <Clock />,
             value: h.quietest && !oneHour ? hh(h.quietest.hour) : '—',
             reference: oneHour ? 'Satış yalnız bir saatte' : h.quietest ? hourRef(h.quietest) : 'Sayılmadı',
           },
           h.days > 1
-            ? { key: 'gunluk', label: 'Gün başına', icon: <CalendarDays />, hue: 'green', value: <KpiAmount value={Math.round(h.total / h.days)} />, reference: `${h.days} iş gününün ortalaması` }
-            : { key: 'saatbasi', label: 'Saat başına', icon: <Gauge />, hue: 'green', value: <KpiAmount value={Math.round(h.total / Math.max(1, active))} />, reference: 'Aktif saatlerin ortalaması' },
+            ? { key: 'gunluk', label: 'Gün başına', value: <KpiAmount value={Math.round(h.total / h.days)} />, reference: `${h.days} iş gününün ortalaması` }
+            : { key: 'saatbasi', label: 'Saat başına', value: <KpiAmount value={Math.round(h.total / Math.max(1, active))} />, reference: 'Aktif saatlerin ortalaması' },
         ];
         return (
           <div className="space-y-4">
@@ -1076,7 +1062,7 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
                         aria-hidden="true"
                         className={cn(
                           'tabular grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold',
-                          i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+                          i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--k-well-2)] text-[var(--k-ink-2)]',
                         )}
                       >
                         {i + 1}
@@ -1252,15 +1238,14 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
         const products = all ? p.products : p.products.slice(0, PREP_PRODUCTS);
         // Süre durum değil, nötr; amber yalnız yavaşlığı söyleyen iki hücrede (zaman uyarısı)
         const cells: KpiCell[] = [
-          { key: 'ortalama', label: 'Ortalama', icon: <Timer />, value: dur(p.overall.avg), reference: `${fmtN(p.overall.count)} kalem` },
-          { key: 'ortanca', label: 'Ortanca', icon: <Timer />, value: dur(p.overall.median), reference: 'Kalemlerin yarısı bundan kısa' },
-          { key: 'p90', label: 'En yavaş %10', icon: <Hourglass />, hue: 'amber', value: dur(p.overall.p90), reference: 'Her 10 kalemden biri daha uzun' },
-          { key: 'enuzun', label: 'En uzun', icon: <Hourglass />, hue: 'amber', value: dur(p.overall.max), reference: 'Tek kalemde' },
+          { key: 'ortalama', label: 'Ortalama', value: dur(p.overall.avg), reference: `${fmtN(p.overall.count)} kalem` },
+          { key: 'ortanca', label: 'Ortanca', value: dur(p.overall.median), reference: 'Kalemlerin yarısı bundan kısa' },
+          { key: 'p90', label: 'En yavaş %10', value: dur(p.overall.p90), reference: 'Her 10 kalemden biri daha uzun' },
+          { key: 'enuzun', label: 'En uzun', value: dur(p.overall.max), reference: 'Tek kalemde' },
           // Müşterinin hazır siparişi ne kadar sürede aldığı: bar ekranında ya da kasada "Teslim edildi"
           {
             key: 'teslim',
             label: 'Hazırdan teslime',
-            icon: <HandPlatter />,
             value: p.handoff?.count ? dur(p.handoff.median) : '—',
             reference: p.handoff?.count ? `Ortanca · ${fmtN(p.handoff.count)} teslim` : 'Sayılmadı · teslim işaretlenmedi',
           },
@@ -1515,14 +1500,14 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
           );
         const max = Math.max(1, ...d.platforms.map((p) => p.revenue));
         const showCost = withCost && d.commission != null;
-        const commission: KpiCell = { key: 'komisyon', label: 'Komisyon', icon: <BadgePercent />, value: <KpiAmount value={d.commission ?? 0} />, reference: 'Bugünkü oranla tahmin' };
+        const commission: KpiCell = { key: 'komisyon', label: 'Komisyon', value: <KpiAmount value={d.commission ?? 0} />, reference: 'Bugünkü oranla tahmin' };
         // Ciro yeşil, durumsuz sayılar nötr, bekleyen amber (zaman), kaçan pembe (kayıp)
         const cells: KpiCell[] = [
-          { key: 'ciro', label: 'Platform cirosu', icon: <Bike />, hue: 'green', value: <KpiAmount value={d.revenue} />, reference: `Toplam ciroda pay %${d.share.toLocaleString('tr-TR')}` },
-          { key: 'siparis', label: 'Sipariş', icon: <ReceiptText />, value: <KpiCount value={d.orders} />, reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
+          { key: 'ciro', label: 'Platform cirosu', value: <KpiAmount value={d.revenue} />, reference: `Toplam ciroda pay %${d.share.toLocaleString('tr-TR')}` },
+          { key: 'siparis', label: 'Sipariş', value: <KpiCount value={d.orders} />, reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
           ...(showCost ? [commission] : []),
-          { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'amber', value: <KpiCount value={d.open.orders} />, reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
-          { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: <KpiCount value={d.missed.orders} />, reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },
+          { key: 'acik', label: 'Açık sipariş', value: <KpiCount value={d.open.orders} />, reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
+          { key: 'kacan', label: 'Kaçan sipariş', value: <KpiCount value={d.missed.orders} />, reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },
         ];
         return (
           <div className="space-y-4">

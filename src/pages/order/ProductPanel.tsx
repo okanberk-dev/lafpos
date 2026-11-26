@@ -407,7 +407,7 @@ function SizeButton({ label, price, onClick, disabled, dialog }: { label: string
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
       aria-haspopup={dialog ? 'dialog' : undefined}
-      className="flex min-h-11 flex-col items-center justify-center gap-px py-1.5 leading-tight transition-colors duration-150 hover:bg-[var(--admin-primary-soft)] focus-visible:-outline-offset-2 active:bg-[var(--admin-primary-soft)] disabled:hover:bg-transparent pointer-fine:min-h-10"
+      className="flex min-h-11 flex-col items-center justify-center gap-px py-1.5 leading-tight transition-colors duration-150 hover:bg-[var(--k-well)] focus-visible:-outline-offset-2 active:bg-[var(--k-well-2)] disabled:hover:bg-transparent pointer-fine:min-h-10"
     >
       <span className="text-[11px] font-medium text-muted">{label}</span>
       <span className="tabular text-[14px] font-semibold text-ink">{tlShort(price)}</span>

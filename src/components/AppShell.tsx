@@ -1,4 +1,4 @@
-import { ChevronDown, Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, WifiOff } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
@@ -35,7 +35,7 @@ import { Avatar, Badge } from './ui/misc';
 import { useUzaktanErisim } from '@/lib/kontrol';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsClaim, TopTabsSlot } from './shellSlots';
-import { Button, IconButton } from './ui/Button';
+import { Button, IconButton, TOP_BTN } from './ui/Button';
 
 /** "Denemeyi bitir" penceresi yalnız patron basınca yüklenir (yönetim kodu kasa ekranının paketine girmez) */
 const DenemeFinish = lazy(() => import('./admin/DenemeCard').then((m) => ({ default: m.DenemeFinishLauncher })));
@@ -74,7 +74,7 @@ function useAutoLock(minutes: number) {
  * adı yeşil ve kalın (panonun seçili rayı). Dipte Araçlar (kişinin menüsü, tema, tam ekran) ve Kilitle. Sınıflar
  * index.css'te (.lp-rail, .lp-rail-item)
  */
-const AVATAR = { xs: 'size-7 text-[11px]', sm: 'size-8 text-[11px]', md: 'size-9 text-xs' } as const;
+const AVATAR = { xs: 'size-7 text-[11px]', sm: 'size-8 text-[11px]', md: 'size-9 text-xs', lg: 'size-11 text-[13px]' } as const;
 
 /**
  * Kasa ekranlarının kabuğu. `notice`: ekranın üstünde, sayfanın dışında duran şerit (uzaktan görünümün demo notu);
@@ -242,9 +242,9 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
    */
   const healthText = REMOTE ? `Uzaktan · ${fmtTime(now)}` : live === 'kopuk' ? 'Bağlantı koptu' : `${fmtTime(now)} · ${dayText}`;
   const healthCls = cn(
-    // Sakin durumda kenarsız metin (saat ve Z); kopukta kırmızı, gün kapalıyken amber hap: yalnız dikkat isteyen durum dolu
-    'hidden h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 text-[13px] font-medium pointer-coarse:h-11 lg:inline-flex',
-    live === 'kopuk' && !REMOTE ? 'bg-[var(--admin-danger)] text-white' : 'text-ink-2',
+    // Zeminde sekmeyle aynı beyaz hap (44 px; saat ve Z); kopukta kırmızı, gün kapalıyken amber
+    'hidden h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-[var(--r-segment)] px-4 text-[13px] font-medium lg:inline-flex',
+    live === 'kopuk' && !REMOTE ? 'bg-[var(--admin-danger)] text-white' : 'bg-[var(--k-tab-bg)] text-ink-2',
     !boot.day && !REMOTE && live !== 'kopuk' && 'bg-warning-soft text-warning-ink',
   );
   const healthCalm = live !== 'kopuk' && !!boot.day;
@@ -257,7 +257,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   );
   const healthPill =
     canKasa && !REMOTE ? (
-      <NavLink to="/kasa" title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`} aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`} className={cn(healthCls, 'transition-[color,background-color,filter] duration-150', healthCalm ? 'hover:bg-hover hover:text-ink' : 'hover:brightness-95')}>
+      <NavLink to="/kasa" title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`} aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`} className={cn(healthCls, 'transition-[color,background-color,filter] duration-150', healthCalm ? 'hover:bg-[color-mix(in_oklab,var(--k-tab-bg),var(--k-ink)_5%)] hover:text-ink' : 'hover:brightness-95')}>
         {healthDot}
         <span className="tabular">{healthText}</span>
       </NavLink>
@@ -269,7 +269,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       </span>
     );
   // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Ad düğmenin etiketinde
-  const avatar = (size: keyof typeof AVATAR) => <Avatar name={me.name} color={me.color} className={AVATAR[size]} />;
+  // Üst çubukta ve rayda köşeli (sahibin örneğindeki kişi karosu); çekmecenin başlığında yuvarlak
+  const avatar = (size: keyof typeof AVATAR, square?: boolean) => <Avatar name={me.name} color={me.color} className={cn(AVATAR[size], square && (size === 'lg' ? 'rounded-[var(--r-segment)]' : 'rounded-[9px]'))} />;
   // Alt sekme: ikon hapın içinde; etkin sekme yan menüyle aynı açık nane hapta yeşil ikonla ve kalın yazıyla
   // Telefonun alt menüsü (yüzen dok): her sekme 56 px yüksek, yuvarlak karo; etkin sekmenin bütün karosu açık nane, ikonu
   // ve adı yeşil (yan menünün seçimi). Dokununca hafifçe içe basar (hareket azaltmada yok)
@@ -331,7 +332,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     // Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi
     <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={{ animationDelay: `${120 + items.length * 35}ms` }}>
       <DrawerLabel hint={onBar ? 'Bu cihazda saklanır' : undefined}>{onBar ? 'Bar teması' : 'Tema'}</DrawerLabel>
-      <span className="[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--admin-surface)] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)]">
+      {/* Çekmece uygulamanın yüzeyinde (.lp-drawer): segment kartın içindeki gibi, ayrı renk ezmesi yok */}
+      <span>
         {onBar ? (
           <Segmented<KdsTheme>
             label="Bar ekranı teması"
@@ -366,15 +368,16 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       {/* Telefon: üst şerit (adisyon, bar ve yönetimde yok: onların kendi şeridi var) */}
       {!fullBleed && (
         // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
-        <header className="flex min-h-16 items-center gap-0.5 bg-bg pb-1.5 pl-3 pr-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
+        // Sahibin örneğindeki üst çubuk: solda marka karosu ve ekranın adı, sağda zeminde beyaz kare düğmeler (arama, kişi)
+        <header className="flex min-h-16 items-center gap-1.5 bg-bg pb-1.5 pl-3 pr-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
           <LafTile size="md" />
-          <span className="ml-3 min-w-0 flex-1 truncate font-headline text-[19px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
-          <IconButton label="Ara ya da git" size="lg" onClick={() => setPalette(true)} className="rounded-full pointer-coarse:size-11">
+          <span className="ml-1.5 min-w-0 flex-1 truncate font-headline text-[19px] font-bold leading-6 tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
+          {status()}
+          <IconButton label="Ara ya da git" size="lg" onClick={() => setPalette(true)} className={cn(TOP_BTN, 'size-11 pointer-coarse:size-11')}>
             <Search className="size-5" />
           </IconButton>
-          {status()}
-          <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
-            {avatar('sm')}
+          <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center rounded-[var(--r-segment)]">
+            {avatar('lg', true)}
           </button>
         </header>
       )}
@@ -446,7 +449,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               </button>
             ) : (
               <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} title={`${me.name} · ${roleLabel} · Araçlar`} className="lp-rail-item">
-                <span className="lp-rail-icon lp-rail-avatar">{avatar('xs')}</span>
+                <span className="lp-rail-icon lp-rail-avatar">{avatar('xs', true)}</span>
                 <span aria-hidden="true" className="lp-rail-label max-w-full truncate">
                   {me.name.split(' ')[0]}
                 </span>
@@ -476,17 +479,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
          */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col md:gap-[var(--shell-gap)]">
               {/*
-               * Tablet ve bilgisayar: üst çubuk (pano), rayın sağındaki sütunda: ortada ekranın sekmeleri (sayfa sahnesi
-               * buraya taşır, TopTabsSlot); sağda durum (saat ve Z), arama ve kişinin düğmesi (avatar ve ok). İskelet
-               * (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): ray, üst çubuk ve içerik zeminde
-               * --shell-gap (12 px) aralıklı çerçeveli bloklar. Çubuk rayın üstünü kaplamaz: açılıp kapanınca ray kaymaz
+               * Tablet ve bilgisayar: üst çubuk, rayın sağındaki sütunda (sahibin örneği, 26 Kas 2026): kendi yüzeyi yok,
+               * zeminde; ortada ekranın sekmeleri ayrı beyaz haplar (sayfa sahnesi buraya taşır, TopTabsSlot), sağda durum
+               * hapı (saat ve Z), arama ve kişi karosu (zeminde 44 px beyaz kareler). Ray, çubuk ve içerik --shell-gap
+               * (12 px) aralıklı. Çubuk rayın üstünü kaplamaz: açılıp kapanınca ray kaymaz
                */}
-          <header
-            className={cn(
-              'relative z-30 hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] lg:gap-4',
-              hasTabs && 'md:flex',
-            )}
-          >
+          <header className={cn('relative z-30 hidden h-11 shrink-0 items-center gap-3 lg:gap-4', hasTabs && 'md:flex')}>
             <div ref={setTabsSlot} className="lp-topnav flex min-w-0 flex-1 items-center justify-center" />
             <div className="flex shrink-0 items-center gap-1.5">
               {/* İnternet yokken bekleyen kayıtlar ve dönünce "Bekleyenler gönderildi" (her şey yolundayken boş) */}
@@ -499,26 +497,22 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
               {REMOTE && <RemoteShopPicker />}
               {healthPill}
-              <IconButton label="Ara ya da git" title="Ara ya da git (Ctrl K)" onClick={() => setPalette(true)} className="rounded-xl">
+              <IconButton label="Ara ya da git" title="Ara ya da git (Ctrl K)" size="lg" onClick={() => setPalette(true)} className={cn(TOP_BTN, 'pointer-coarse:size-11')}>
                 <Search className="size-5" />
               </IconButton>
               {/*
-               * Kişinin düğmesi (panonun avatarı ve oku): kişinin menüsünü (Araçlar çekmecesi) açar. Ana eylemle yarışmasın diye
-               * kenarsız; geniş ekranda adı ve rolü yanında
+               * Kişinin düğmesi (sahibin örneğindeki kişi karosu): köşeli avatar, kişinin menüsünü (Araçlar çekmecesi) açar; adı
+               * ve rolü ipucunda
                */}
               <button
                 type="button"
                 onClick={() => setMenuOpen(true)}
                 aria-expanded={toolsOpen}
                 aria-label={`${me.name} menüsü · Araçlar`}
-                className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl pl-1 pr-2 text-ink transition-colors duration-150 hover:bg-hover"
+                title={`${me.name} · ${roleLabel}`}
+                className="grid size-11 shrink-0 place-items-center rounded-[var(--r-segment)] transition-[filter] duration-150 hover:brightness-95"
               >
-                {avatar('md')}
-                <span className="hidden min-w-0 flex-col items-start leading-tight 2xl:flex">
-                  <span className="max-w-36 truncate text-[13.5px] font-semibold">{me.name}</span>
-                  <span className="text-xs text-muted">{roleLabel}</span>
-                </span>
-                <ChevronDown aria-hidden="true" className="size-4 text-muted" />
+                {avatar('lg', true)}
               </button>
             </div>
           </header>

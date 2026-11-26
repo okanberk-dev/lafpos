@@ -50,6 +50,31 @@ describe('LafPOS Keel belirteçleri', () => {
     });
   }
 
+  // Segment (sahibin örnekleri, 26 Kas 2026): saydam ray kartın ve zeminin üstüne biner; seçilmeyen yazı ikisinde de
+  // okunur, seçili yazı başparmakta okunur, sekme hapının yazısı hapta okunur
+  const over = (rgba: string, bg: string) => {
+    const m = rgba.match(/rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\)/);
+    if (!m) throw new Error(`saydam renk değil: ${rgba}`);
+    const a = Number(m[4]);
+    const ch = (i: number) => Math.round(Number(m[i + 1]) * a + parseInt(bg.slice(1 + i * 2, 3 + i * 2), 16) * (1 - a));
+    return `#${[0, 1, 2].map((i) => ch(i).toString(16).padStart(2, '0')).join('')}`;
+  };
+  for (const [name, t] of [
+    ['açık', light],
+    ['gece', dark],
+  ] as const) {
+    it(`${name}: segment ve sekme yazısı kendi zemininde okunur (≥ 4.5:1)`, () => {
+      for (const bg of ['k-surface', 'k-canvas', 'k-well']) {
+        const track = over(t['k-seg-track']!, t[bg]!);
+        expect(ratio(t['k-seg-ink']!, track), `seçilmeyen / ray (${bg})`).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(ratio(t['k-ink']!, t['k-seg-thumb']!), 'seçili / başparmak').toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t['k-ink-2']!, t['k-tab-bg']!), 'sekme yazısı / hap').toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t['k-ink-2']!, t['k-pop']!), 'liste satırı / açılır liste').toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t['k-ink']!, t['k-pop-hover']!), 'üstündeki satır').toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
   it('belge (DESIGN.md §0) belirteç dosyasıyla aynı değerleri söyler', () => {
     const doc = readFileSync(new URL('../DESIGN.md', import.meta.url), 'utf8');
     const section = doc.slice(doc.indexOf('## 0. LafPOS Keel'), doc.indexOf('## 1. İlkeler'));

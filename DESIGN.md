@@ -31,8 +31,9 @@
    ve 500-600 ağırlıkta, sıkı aralıklı; kuruş ve ek bilgi soluk. Etiket küçük (13 px) ve soluk.
 2. **Kart kenarsız ve gölgesizdir.** Soğuk açık gri zeminde beyaz kart, köşe 18 (operatör, 20 Kas 2026: "radiusu biraz azalt"; gecede 20); ayrım ton farkıyla. Kart içinde kart
    yok: iç gruplama kuyu (karo, köşe 14, `--k-well`). Gölge yalnız yüzen yüzeyde (menü, pencere, telefonun alt doku).
-3. **Mürekkep seçer ve yaptırır.** Seçili durum (sekme, segment, alt menü, sol menüdeki ekran) ve ana eylem (Öde,
+3. **Mürekkep seçer ve yaptırır.** Seçili durum (sekme, alt menü, sol menüdeki ekran, seçim kartı) ve ana eylem (Öde,
    Kaydet, Bara gönder) lacivert-siyah mürekkep dolgu, beyaz yazı; ana eylemin ok halkası nane (Keel'in koyu düğmesi).
+   İstisna segment (aynı görünümde seçim: dönem, Saatlik / Birikimli): gri ray, seçili beyaz başparmak (aşağıda).
    Ekranda tek ana eylem. Sol menü (ray) beyaz ve sade; marka yalnız L'Af karosunda, bağlantı ve olumlu durumda yeşil.
    Gecede dolgu tersine döner (açık dolgu, mürekkep yazı).
 4. **Renk yalnız anlam taşır.** Artış nane, düşüş kırmızı, uyarı kehribar, bilgi mavi; hepsi yumuşak zeminli hap, yanında
@@ -58,7 +59,10 @@
 | Nane `--k-mint` / `-soft` / `-ink` | `#4fdc86` / `#dbf7e5` / `#0b5a34` | `#4ade80` / `#12301c` / `#86efac` | Artış hapı, grafik vurgusu |
 | Düşüş `--k-neg-soft` / `-ink` | `#ffe2df` / `#b3261e` | `#3d1a1b` / `#ff8a80` | Düşüş ve hata hapı |
 | Uyarı, bilgi | `--k-warn-*`, `--k-info-*` | aynı adlar | Yumuşak zeminli hap |
-| Köşe | kart 18 · karo 14 · denetim 12 · hap | kart 20 | `--k-r-card/tile/control/pill` |
+| Sekme hapı `--k-tab-bg` | `#ffffff` | `#1e1c1b` | Zeminde beyaz; kart ve pencerede kuyu (`.k-on-card`, `[role=dialog]`) |
+| Segment `--k-seg-track` / `-thumb` / `-ink` | `rgb(23 26 38 / .06)` / `#ffffff` / `#535766` | `rgb(255 255 255 / .08)` / `#3d3a38` / `#a3a09d` | Saydam ray kartta ve zeminde görünür; seçilmeyen yazı rayda 4.5:1 |
+| Açılır liste `--k-pop` / `--k-pop-hover` | `#ffffff` / `#f4f5f7` | `#2c2a29` / `#383635` | Select'in açılan listesi |
+| Köşe | kart 18 · karo 14 · denetim 12 · sekme ve segment başparmağı 12 (ray 15) · hap | kart 20 | `--k-r-card/tile/control/pill`, `--r-segment` |
 | Boşluk | kart içi 20 · kartlar arası 12 | aynı | 4'ün katları |
 | Rakam | kahraman 44-72 px / 500 · KPI 28 px / 600 | aynı | `--k-num-hero`, `--k-num-kpi`; aralık −0,035 em |
 
@@ -68,14 +72,35 @@ Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki �
 
 - **Kart:** `bg-surface`, köşe `--k-r-card`, iç boşluk 20; başlık 14 px yarı kalın solda, sağda küçük meta ya da segment.
   Başlığın altında içerik; alt eylemler kartın dibinde tek satır.
-- **KPI karosu:** kuyu (`--k-well`, köşe 14); üstte 13 px etiket, altında 28 px rakam; köşesinde isteğe bağlı değişim hapı.
+- **KPI kartı (sahibin örneği, 26 Kas 2026: "34 · Days of runway"):** zeminde beyaz kart (köşe 18; kartın içindeyse kuyu
+  karo, köşe 14), ikonsuz. Üstte rakam (28-30 px / 500, sıkı aralık), değişim hapı sağ üst köşede (`KPill`: artış dolu
+  nane, düşüş yumuşak kırmızı, okla); altında 13 px soluk etiket, en altta 12 px açıklama. Şeridin kahraman rakamı tek koyu
+  kart (`inverse`, `.k-inverse`: raporların Ciro'su, Genel bakış'ın Net ciro'su). `KpiStrip` ve patronun `KpiTile`'ı.
 - **Düğme:** ana eylem ev yeşili dolgu (tek); ikincil beyaz/kuyu zeminde mürekkep yazı; yıkıcı eylem kırmızı yazı, onayla.
   Yükseklik 44 (telefon ve dokunmatik), köşe 12. Simge + kısa fiil.
-- **Sekme ve segment:** hap rayı; seçili hap mürekkep dolgu, beyaz yazı; ötekiler düz yazı. Seçili yazı kalınlaşınca
-  genişlik değişmez (`data-text`).
+- **Sekme (sahibin örneği, 26 Kas 2026: "Overview · Customer · Analytics"):** görünümler arası gezinme (üst çubuğun
+  sekmeleri, raporun Ciro · Ürünler'i, yönetimin süzgeçleri, bölümler). Her sekme kendi hapı: zeminde beyaz, kart ve
+  pencerede kuyu tonu (`--k-tab-bg`), kenarsız, köşe 12, aralarında 6 px; seçili mürekkep dolgu ve beyaz yazı. Seçili yazı
+  kalınlaşınca genişlik değişmez (`data-text`, `TabText`). Sınıf `.k-tab` (yönetimde `StatusTabs`, kasada `Tabs`,
+  üst çubukta `.lp-menu-item`).
+- **Segment (sahibin örnekleri: "Monthly · Annually", "Hiring plan A · Conservative"):** aynı görünümde seçim (dönem,
+  görünüm, tema, ödeme yolu). Saydam mürekkep ray (`--k-seg-track`, köşe 15, 3 px iç pay), seçili beyaz başparmak (köşe
+  12) ve hafif gölge, yazı mürekkep; ötekiler `--k-seg-ink`. Ağırlık değişmez. Sınıf `.k-seg` / `.k-seg-opt`.
+- **Açılır liste (select):** kapalıyken alan (44 px, köşe 12, ok sağda `--k-mute`); açılınca tablette ve bilgisayarda
+  yüzen yüzey (`--k-pop`, köşe 14, tek yumuşak gölge, ince kenar), satır 40 px (dokunmatikte 44), üstüne gelince
+  `--k-pop-hover`, seçili satır mürekkep ve kalın, tik sağda. Tarayıcının özelleştirilebilir select'i (`appearance:
+  base-select`, Chrome ve Edge 135+, Safari 27); telefonda ve desteklemeyen tarayıcıda işletim sisteminin listesi kalır.
+  Sınıf `.k-select` (`Select` bileşeni verir; yerel `<select>` yazılmaz).
+- **Seçim kartı ve çipi (servis modu, ödeme türü, seçenek, rol):** dinlenmede ince kenar; seçili mürekkep kenar (2 px
+  görünür), kart zemini, mürekkep yazı (`.k-picked`; seçim dairesi `.k-picked-dot`). Açık nane seçim kullanılmaz.
+- **Anahtar (toggle):** açıkken nane ray ve beyaz topta koyu yeşil tik, kapalıyken alan kenarı grisi (3:1).
+- **Üst çubuk (sahibin örneği):** zeminde, kendi yüzeyi yok: ortada sekmeler (44 px beyaz haplar), sağda durum hapı,
+  arama ve kişi (zeminde 44 px beyaz kare düğmeler, `TOP_BTN`; kişi köşeli avatar). Telefonun üst şeridi aynı düğmelerle.
+  Hâlâ yalnız ekranın sekmeleri varken görünür (21 Kas 2026 kararı).
 - **Alan (input):** etiket üstte, 44 px, köşe 12, kenar `--k-line-strong`; odakta halka; hata alanın altında kısa metin.
 - **Tablo ve liste:** satır ≥ 52 px, ince ayraç, sayılar sağda ve `tabular`; telefonda sütunlar satır kartına iner.
-- **Hap ve rozet:** tam yuvarlak, 24 px, 13 px yazı; yumuşak zemin + koyu yazı; yönü ok ya da işaret söyler.
+- **Hap ve rozet:** tam yuvarlak, 22-24 px, 12-13 px orta kalın yazı; yumuşak zemin + koyu yazı, kenarsız; yönü ok ya da
+  işaret söyler. İkon karosu (boş durum, komut paleti, liste satırı): kuyu tonunda yumuşak kare (köşe 10-14), mürekkep ikon.
 - **Grafik:** yığılmış ya da ince çubuk; gri bağlam, nane vurgu; değer hapı; ızgara yok. Dağılım için yatay yığılmış çubuk
   ve altında tutar + yüzde satırları (patron panelinin Ödeme türleri kartı).
 - **Boş durum:** tek cümle ve sıradaki adım; sıfır yerine "veri yok" / "satış yok".
@@ -181,7 +206,7 @@ Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki �
 - **Köşeler** (panonun merdiveni, 20 Kasım 2026'da bir boy sıkı; operatör: "radiusu biraz azalt"): ray ve pencere 22
   (`--r-stage`), yaprak, kart, üst çubuk ve cam çubuk 18 (`--r-leaf`, `--r-card`, `--r-glass`), kart içindeki karo ve ürün
   karosu 12 (`--r-tile`), alan ve düğme 10 (`--r-control`, `--r-btn`), rozet ve süzgeç çipi 6 (`--r-chip`); Tailwind'in
-  `rounded-lg/xl/2xl/3xl`'i 8/10/14/18. Segment, adet seçici ve iz hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
+  `rounded-lg/xl/2xl/3xl`'i 8/10/14/18. Sekme ve segment başparmağı 12, segment rayı 15 (§0, 26 Kas 2026); adet seçici ve iz hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
   `.surface-soft` müşteri ekranının yönetimdeki önizlemesinde aynı merdiveni çizer. Patron panelinin gruplanmış liste
   kartı rayın köşesinde (`--r-group` 22): geniş köşe, ferah iç boşluk.
 - **Gölge** ev yeşilinin gecesi (`#0F231C`): zeminde yüzen kart `--shadow-card` (1 px ve 28 px yumuşak), yaprak
@@ -232,9 +257,9 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   yönetim, raporlar). Telefonda başlığı üst şerit yazar (sahnedeki yalnız ekran okuyucuda), durum cümlesi, sayılar ve
   eylemler alt alta, sekmeler başlığın altında yatay hap şeridi. Sayfanın `PageHeader`'ı başlık satırına, eylemleri
   eylemlerin yerine taşınır (portal). Yönetimde (`headerInLeaf`) başlık yaprağın başında, solda beyaz **alt menü kartı**.
-- **Sekmeler** (`.lp-menu`, `.lp-menu-item`): satır ikon, ad ve sağda soluk sayı; köşe 10; üstüne gelince çok açık gri,
-  seçili açık nane zeminde yeşil yazı, ikon ve sayı (5.4:1), kalın; kenar, gölge, renk geçişi yok. Üst çubukta 40 px
-  (dokunmatikte 44), alt menü kartında (`.lp-subnav`) alt alta (satır 38 px, grup başlığı 12 px soluk). Üst çubuğun
+- **Sekmeler** (`.lp-menu`, `.lp-menu-item`): ikon, ad ve sağda soluk sayı. Yatayda her sekme zeminde kendi beyaz hapı
+  (köşe 12; §0 "Sekme"), seçili mürekkep dolgu, beyaz yazı, kalın; kenar, gölge yok. Üst çubukta 44 px, alt menü kartında
+  (`.lp-subnav`, kenarsız beyaz kart) alt alta zeminsiz satır (38 px, grup başlığı 12 px soluk). Üst çubuğun
   sekmesi, telefonun sekme şeridi, yönetimin alt menüsü ve adisyonun kategorileri aynı bileşendir (§5 "Yerleşim ve
   ızgara").
 - **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu L'Affogato yeşilinin degradesinde beyaz yazılı kart (iki

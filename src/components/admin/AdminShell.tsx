@@ -5,6 +5,7 @@ import { Link, NavLink, useLocation } from 'react-router';
 import { InternetBadge } from '@/components/InternetBadge';
 import { LafTile } from '@/components/LafMark';
 import { Avatar, RAIL_FADE, useRail } from '@/components/ui/misc';
+import { TOP_BTN } from '@/components/ui/Button';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
@@ -119,11 +120,10 @@ export function AdminShell({ title, children }: { title: string; children: React
       </div>
     </nav>
   );
-  // Tablet: bütün bölümler yatay kayan şeritte (seçili olan görünür kalır). Şerit geniş ekrandaki alt menü kartının
-  // aynısı bir kartta (beyaz, saç teli, köşe 18, zeminde hafif gölge; iç boşluk 6 + rayın 2'si: 10 px satırla eş merkezli),
-  // kenarı alttaki kartlarla aynı hizada; zeminde çerçevesiz yüzmez
+  // Tablet: bütün bölümler yatay kayan şeritte (seçili olan görünür kalır). Her bölüm zeminde kendi beyaz hapı (Keel
+  // sekmesi; üst çubuğun sekmeleriyle aynı), seçili mürekkep; kenarı alttaki kartlarla aynı hizada
   const stripMenu = (
-    <nav aria-label="Yönetim" className="mx-1 rounded-[var(--r-card)] border border-[var(--admin-border)] bg-[var(--admin-surface)] p-1.5 shadow-[var(--shadow-card)] max-md:hidden lg:hidden dark:shadow-none">
+    <nav aria-label="Yönetim" className="mx-1 max-md:hidden lg:hidden">
       <div ref={strip} className={cn('lp-menu', RAIL_FADE)}>
         {sections.map((x) => sectionLink(x, false))}
       </div>
@@ -156,17 +156,17 @@ export function AdminShell({ title, children }: { title: string; children: React
   return (
     <div className="flex h-full min-h-0 flex-col text-[var(--admin-text)]">
       {/* Telefonda (ana ekrandan açılınca) çentik ve saat başlığın üstünde kalır */}
-      <header className="flex min-h-14 shrink-0 items-center gap-2 bg-[var(--admin-bg)] px-2 pt-[env(safe-area-inset-top)] md:hidden">
+      <header className="flex min-h-16 shrink-0 items-center gap-1.5 bg-[var(--admin-bg)] px-2.5 pt-[env(safe-area-inset-top)] md:hidden">
         {back ? (
-          <Link to="/yonetim" aria-label="Yönetim listesi" className={ROW_ICON}>
+          <Link to="/yonetim" aria-label="Yönetim listesi" className={cn(TOP_BTN, 'grid size-11 shrink-0 place-items-center')}>
             <ChevronLeft className="size-5" />
           </Link>
         ) : (
           <LafTile size="sm" className="ml-1.5" />
         )}
         <p className={cn('min-w-0 flex-1 truncate font-headline text-[17px] font-bold tracking-[-0.025em]', !back && 'pl-1')}>{current?.label ?? title}</p>
-        <button type="button" onClick={() => setPalette(true)} className={ROW_ICON} aria-label="Ara ya da git">
-          <Search className="size-[18px] shrink-0" aria-hidden="true" />
+        <button type="button" onClick={() => setPalette(true)} className={cn(TOP_BTN, 'grid size-11 shrink-0 place-items-center')} aria-label="Ara ya da git">
+          <Search className="size-5 shrink-0" aria-hidden="true" />
         </button>
         {/* İnternet yokken bekleyen kayıtlar (kabuğun telefon şeridindeki rozet; her şey yolundayken boş) */}
         <InternetBadge compact />
@@ -181,8 +181,9 @@ export function AdminShell({ title, children }: { title: string; children: React
             <span className="sr-only">{live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'}</span>
           )}
         </span>
-        <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center">
-          <Avatar name={me.name} color={me.color} />
+        {/* Kişi karosu: köşeli avatar (kabuğun üst çubuğuyla aynı) */}
+        <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center rounded-[var(--r-segment)]">
+          <Avatar name={me.name} color={me.color} className="size-11 rounded-[var(--r-segment)] text-[13px]" />
         </button>
       </header>
       <Stage

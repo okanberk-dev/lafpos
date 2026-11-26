@@ -228,7 +228,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
   })();
 
-  it('panonun merdiveni bir boy sıkı (operatör 20 Kas 2026: "radiusu biraz azalt"): ray 22, yaprak, kart ve cam 18, karo 12, alan ve düğme 10, rozet 6; segment hap, sütun 6', () => {
+  it('panonun merdiveni bir boy sıkı (operatör 20 Kas 2026: "radiusu biraz azalt"): ray 22, yaprak, kart ve cam 18, karo 12, alan ve düğme 10, rozet 6; sekme ve segment başparmağı 12 (sahibin örnekleri, 26 Kas 2026), sütun 6', () => {
     expect(tokens).toMatchObject({
       'r-stage': '1.375rem',
       'r-leaf': '1.125rem',
@@ -237,7 +237,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
       'r-control': '0.625rem',
       'r-btn': '0.625rem',
       'r-chip': '0.375rem',
-      'r-segment': '9999px',
+      'r-segment': '0.75rem',
       'r-bar': '6px',
       'r-track': '9999px',
       'r-tile': '0.75rem',
@@ -265,7 +265,8 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     expect(field).toContain('rounded-[var(--r-btn)] border px-3.5');
     expect(field).toContain("'rounded-[var(--r-segment)]'");
     const misc = src('components/ui/misc.tsx');
-    expect(misc).toMatch(/whitespace-nowrap rounded-\[var\(--r-chip\)\] px-2 py-0\.5/);
+    // Rozet Keel hapı: tam yuvarlak, kenarsız (sahibin örneğindeki "↓ 3")
+    expect(misc).toMatch(/whitespace-nowrap rounded-\[var\(--k-r-pill\)\] px-2\.5 py-0\.5/);
     const admin = src('components/admin/ui.tsx');
     expect(admin).toContain('justify-center rounded-[var(--r-btn)] ');
     expect(admin).toContain('bg-[var(--table-head-bg)]');

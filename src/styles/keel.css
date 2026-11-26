@@ -44,6 +44,20 @@
   /* Grafik: bağlam çubuğu (gri), vurgulu aralık (nane), değer hapı */
   --k-chart-bar: #c9ccd4;
   --k-chart-hi: #17a35c;
+  /*
+   * Sekme ve segment (sahibin örnekleri, 26 Kas 2026). Sekme (görünümler arası: üst çubuk, raporun Ciro / Ürünler'i)
+   * zeminde ayrı beyaz hap, seçili mürekkep dolgu. Segment (aynı görünümde seçim: dönem, Saatlik / Birikimli) yumuşak
+   * gri ray, seçili beyaz başparmak ve hafif gölge; ray saydam mürekkep: kartta da zeminde de bir ton koyu görünür.
+   * Seçilmeyen yazı --k-seg-ink (ray zeminde de 4.5:1), seçili --k-ink
+   */
+  --k-tab-bg: #ffffff;
+  --k-seg-track: rgb(23 26 38 / 0.06);
+  --k-seg-thumb: #ffffff;
+  --k-seg-ink: #535766;
+  --k-seg-shadow: 0 1px 2px rgb(23 26 38 / 0.1), 0 0 0 0.5px rgb(23 26 38 / 0.05);
+  /* Açılır liste (select ve menü): yüzen yüzey, satır üstünde kuyu, seçili satır mürekkep yazı ve tik */
+  --k-pop: #ffffff;
+  --k-pop-hover: #f4f5f7;
   /* Köşeler: kart 18 (operatör, 20 Kas 2026: "radiusu biraz azalt"; gecede 20), karo 14, denetim 12, hap */
   --k-r-card: 1.125rem;
   --k-r-tile: 0.875rem;
@@ -90,6 +104,13 @@
   --k-pay-diger: #8e8a86;
   --k-chart-bar: #44413f;
   --k-chart-hi: #bce1ff;
+  --k-tab-bg: #1e1c1b;
+  --k-seg-track: rgb(255 255 255 / 0.08);
+  --k-seg-thumb: #3d3a38;
+  --k-seg-ink: #a3a09d;
+  --k-seg-shadow: none;
+  --k-pop: #2c2a29;
+  --k-pop-hover: #383635;
   --k-r-card: 1.25rem;
   --k-shadow-float: 0 16px 40px -18px rgb(0 0 0 / 0.7);
 }
@@ -133,6 +154,196 @@
     color: var(--k-inv-mute);
   }
   /* Panodaki düğmeler ortak Button/IconButton'dan gelir (components/ui/Button.tsx); burada ayrı düğme sınıfı yok */
+  /*
+   * Sekme (sahibin örneği: "Overview · Customer · Analytics"): görünümler arası gezinme. Her sekme kendi hapı (zeminde
+   * beyaz, kart ve pencere içinde kuyu tonu: --k-tab-bg), seçili mürekkep dolgu ve beyaz yazı. Ağırlık değişmez:
+   * seçilince genişlik oynamaz. Yükseklik ve iç pay bileşende (dokunmatikte 44 px)
+   */
+  .k-tab {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding-inline: 16px;
+    border: 0;
+    border-radius: var(--r-segment);
+    background: var(--k-tab-bg);
+    color: var(--k-ink-2);
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+    transition:
+      color 150ms var(--ease-out),
+      background-color 150ms var(--ease-out);
+  }
+  .k-tab:hover {
+    background: color-mix(in oklab, var(--k-tab-bg), var(--k-ink) 5%);
+    color: var(--k-ink);
+  }
+  .k-tab:active {
+    background: color-mix(in oklab, var(--k-tab-bg), var(--k-ink) 9%);
+  }
+  .k-tab:is([aria-selected='true'], [aria-current='page'], [aria-pressed='true'], [data-on]) {
+    background: var(--k-select);
+    color: var(--k-on-select);
+    font-weight: 600;
+  }
+  /* Seçili yazı kalınlaşır (500 → 600): adın görünmez kalın kopyası (TabText) genişliği baştan ayırır, sekmeler kaymaz */
+  .k-tab > [data-text]::after {
+    content: attr(data-text) / '';
+    display: block;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    font-weight: 600;
+    user-select: none;
+    pointer-events: none;
+  }
+  /* Pencere, cam çubuk (bar ekranı) ve kart içindeki sekme: beyaz yüzeyde beyaz hap seçilmez, kuyu tonuna iner */
+  [role='dialog'],
+  .lp-glass,
+  .k-on-card {
+    --k-tab-bg: var(--k-well);
+  }
+  /*
+   * Seçim kartı ve çipi (servis modu, ödeme türü, seçenek, rol): seçili olan mürekkep kenarda (kenar + 1 px iç gölge:
+   * 2 px görünür), kart zemininde, mürekkep yazı. Keel'de seçim mürekkeptir; 26 Kas 2026'ya dek açık nane ve yeşil
+   * kenardı. Seçim dairesi ve tik `.k-picked-dot`
+   */
+  .k-picked {
+    border-color: var(--k-select);
+    background: var(--k-surface);
+    color: var(--k-ink);
+    box-shadow: inset 0 0 0 1px var(--k-select);
+  }
+  .k-picked-dot {
+    border-color: var(--k-select);
+    background: var(--k-select);
+    color: var(--k-on-select);
+  }
+  /*
+   * Segment (sahibin örnekleri: "Monthly · Annually", "Hiring plan A · Conservative"): aynı görünümde seçim (dönem,
+   * görünüm). Saydam mürekkep ray (kartta ve zeminde bir ton koyu), seçili beyaz başparmak ve hafif gölge; ray köşesi
+   * başparmağın köşesinden 3 px geniş (eş merkezli). Seçili yazı mürekkep, ötekiler --k-seg-ink; ağırlık aynı
+   */
+  .k-seg {
+    gap: 2px;
+    padding: 3px;
+    border-radius: calc(var(--r-segment) + 3px);
+    background: var(--k-seg-track);
+  }
+  .k-seg-opt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 14px;
+    border: 0;
+    border-radius: var(--r-segment);
+    background: transparent;
+    color: var(--k-seg-ink);
+    font-weight: 500;
+    white-space: nowrap;
+    transition:
+      color 150ms var(--ease-out),
+      background-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
+  }
+  .k-seg-opt:hover,
+  button:hover > .k-seg-opt {
+    color: var(--k-ink);
+  }
+  .k-seg-opt:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true'], [data-on]) {
+    background: var(--k-seg-thumb);
+    color: var(--k-ink);
+    box-shadow: var(--k-seg-shadow);
+  }
+  .k-seg-opt:focus-visible {
+    outline-offset: -2px;
+  }
+  /*
+   * Açılır liste (select): kapalıyken alan (ok sağda), açılınca Keel'in yüzen yüzeyi: köşe 14, tek yumuşak gölge, satır
+   * 40 px (dokunmatikte 44), üstüne gelince kuyu, seçili satır mürekkep ve kalın, tik sağda. Tablette ve bilgisayarda
+   * tarayıcının özelleştirilebilir select'i (appearance: base-select; Chrome ve Edge 135+, Safari 27); telefonda ve
+   * desteklemeyen tarayıcıda işletim sisteminin kendi listesi kalır (iOS'un çarkı, Firefox)
+   */
+  .k-select {
+    appearance: none;
+  }
+  @supports (appearance: base-select) {
+    @media (min-width: 48rem) {
+      .k-select,
+      .k-select::picker(select) {
+        appearance: base-select;
+      }
+      .k-select {
+        align-items: center;
+      }
+      /* Ok alanın arka planında (kapalı listeyle aynı); tarayıcının oku çizilmez */
+      .k-select::picker-icon {
+        display: none;
+      }
+      .k-select::picker(select) {
+        margin-block: 6px;
+        padding: 6px;
+        border: 1px solid var(--k-line);
+        border-radius: var(--k-r-tile);
+        background: var(--k-pop);
+        color: var(--k-ink);
+        box-shadow: var(--k-shadow-float);
+        font: 400 0.875rem/1.25rem var(--font-sans);
+        scrollbar-width: thin;
+        scrollbar-color: var(--k-line-strong) transparent;
+      }
+      .k-select option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 2.5rem;
+        padding: 0 12px;
+        border-radius: 10px;
+        color: var(--k-ink-2);
+        cursor: pointer;
+        transition: background-color 120ms var(--ease-out);
+      }
+      .k-select option:is(:hover, :focus-visible) {
+        background: var(--k-pop-hover);
+        color: var(--k-ink);
+        outline: none;
+      }
+      .k-select option:checked {
+        background: transparent;
+        color: var(--k-ink);
+        font-weight: 600;
+      }
+      .k-select option:checked:is(:hover, :focus-visible) {
+        background: var(--k-pop-hover);
+      }
+      .k-select option::checkmark {
+        order: 1;
+        margin-inline-start: auto;
+        color: var(--k-ink);
+      }
+      .k-select option:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+      .k-select optgroup {
+        padding-top: 6px;
+        color: var(--k-mute);
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+      .k-select optgroup option {
+        font-size: 0.875rem;
+      }
+      @media (pointer: coarse) {
+        .k-select option {
+          min-height: 2.75rem;
+        }
+      }
+    }
+  }
   /*
    * Ciro bloğu: bilgisayarda zeminde kartsız (Keel'in "Projected Cash"i); telefonda ve tablette beyaz kart, sağ altta
    * nane ışığı (Keel'in mobil kartı), karolar kuyu tonunda

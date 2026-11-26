@@ -172,7 +172,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                   onClick={() => void pick(c.id)}
                   disabled={!!busy}
                   aria-current={current?.id === c.id || undefined}
-                  className={cn('flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-progress', current?.id === c.id && 'bg-primary-soft')}
+                  className={cn('flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-progress', current?.id === c.id && 'bg-[var(--k-well)]')}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{c.name}</span>
