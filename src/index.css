@@ -138,13 +138,13 @@
   --radius-2xl: 0.875rem;
   --radius-3xl: 1.125rem;
   /*
-   * Gölge (pano): zeminde yüzen kart çok yumuşak bir gölgeyle ayrılır (kenarsız), açılan ve yüzen parça (pencere, menü)
-   * belirgin. Renk ev yeşilinin gecesi (#0F231C): soğuk gri zeminde sıcak toprak çamurlaşır
+   * Gölge: açılan ve yüzen parça (pencere, menü) belirgin. Renk Keel mürekkebi (#171A26; 26 Kas 2026'ya dek ev yeşilinin
+   * gecesiydi, soğuk gri zeminde yeşilimsi bir hâle bırakıyordu)
    */
   /* LafPOS Keel: kart gölgesiz ve kenarsız, zeminden ton farkıyla ayrılır (DESIGN.md §0) */
   --shadow-card: none;
-  --shadow-lift: 0 1px 2px rgb(15 35 28 / 0.05), 0 12px 30px -18px rgb(15 35 28 / 0.28);
-  --shadow-pop: 0 40px 80px -30px rgb(15 35 28 / 0.45), 0 12px 24px -12px rgb(15 35 28 / 0.2), 0 0 0 1px rgb(15 35 28 / 0.05);
+  --shadow-lift: 0 1px 2px rgb(23 26 38 / 0.05), 0 12px 30px -18px rgb(23 26 38 / 0.28);
+  --shadow-pop: 0 40px 80px -30px rgb(23 26 38 / 0.42), 0 12px 24px -12px rgb(23 26 38 / 0.18), 0 0 0 1px rgb(23 26 38 / 0.05);
   /* Hareket (kit): üzerine gelme 160 ms, durum 280 ms, açılış 620-1000 ms; hep yavaşlayarak biter */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
@@ -267,10 +267,10 @@
   /* Denetimin kenarı: kitte cam dudak yok, düz yüzey (eski --rim adı kalır, boş) */
   --rim: 0 0 0 0 transparent;
   /* Yaprak (zemindeki büyük beyaz kart) ve cam çubuk: panonun yumuşak gölgesi, buzlu cam */
-  --shadow-leaf: 0 1px 2px rgb(15 35 28 / 0.04), 0 14px 36px -18px rgb(15 35 28 / 0.16);
-  /* Denetimin gölgesi (alan, ikincil düğme, çip): çok hafif derinlik; ana eylemin yeşil yumuşak gölgesi */
-  --shadow-control: 0 1px 2px rgb(15 35 28 / 0.05);
-  --shadow-action: 0 6px 16px -8px rgb(10 110 82 / 0.55);
+  --shadow-leaf: 0 1px 2px rgb(23 26 38 / 0.04), 0 14px 36px -18px rgb(23 26 38 / 0.16);
+  /* Denetimin gölgesi (alan, ikincil düğme, çip): çok hafif derinlik; ana eylemin (mürekkep dolgu) yumuşak mürekkep gölgesi */
+  --shadow-control: 0 1px 2px rgb(23 26 38 / 0.05);
+  --shadow-action: 0 6px 16px -8px rgb(23 26 38 / 0.45);
   --glass: rgb(255 255 255 / 0.78);
   --glass-line: rgb(255 255 255 / 0.7);
   --frost: rgb(241 244 242 / 0.82);
@@ -485,14 +485,15 @@ html[class~='dark'] {
  * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim"). Ortak kit (src/components/ui/*, src/components/admin/ui.tsx) ve
  * sahne (src/components/ui/Stage.tsx) bunları okur. Kasa ve yönetim aynı merdivende. Pano ölçüleri, bir boy sıkı
  * (operatör 20 Kasım 2026: "radiusu biraz azalt"): ray 22, yaprak, kart ve cam çubuk 18, kart içindeki karo 12, alan
- * ve düğme 10, rozet ve süzgeç çipi 6; segment hap; sütun grafiğinin üst köşesi 6, yatay çubuk hap
+ * ve düğme 10, rozet ve süzgeç çipi 6; sekme ve segment başparmağı 12 (sahibin örnekleri, 26 Kas 2026: hap değil yumuşak
+ * dikdörtgen; segment rayı 15); sütun grafiğinin üst köşesi 6, yatay çubuk hap
  */
 :root {
   --r-card: 1.125rem;
   --r-control: 0.625rem;
   --r-btn: 0.625rem;
   --r-chip: 0.375rem;
-  --r-segment: 9999px;
+  --r-segment: 0.75rem;
   --r-bar: 6px;
   --r-track: 9999px;
   --r-stage: 1.375rem;
@@ -535,7 +536,7 @@ html[class~='dark'] {
   --r-control: 0.625rem;
   --r-btn: 0.625rem;
   --r-chip: 0.375rem;
-  --r-segment: 9999px;
+  --r-segment: 0.75rem;
   --r-bar: 6px;
   --r-track: 9999px;
 }
@@ -726,12 +727,12 @@ html[class~='dark'] {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  /* Yerel select oku: paletten (açıkta --admin-text-mute #675e56, koyuda #a39f96; değişirse burası da); çizgi 1.75 */
+  /* Select oku: Keel paletinden (açıkta --k-mute #666a78, gecede #a3a09d; değişirse burası da); çizgi 1.75 */
   .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23675e56' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666a78' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .dark .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239e9ea4' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a09d' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   /* Yükleme iskeleti: içeriğin yerini tutan soluk blok (spinner yerine, Operate) */
   .skeleton {
@@ -1173,22 +1174,21 @@ html[class~='dark'] {
     }
   }
 
-  /* Üst çubuğun ortası: ekranın sekmeleri (Stage taşır); sığmazsa yatay kayar */
+  /*
+   * Üst çubuğun ortası: ekranın sekmeleri (Stage taşır); sığmazsa yatay kayar. Sahibin örneğindeki gibi her sekme zeminde
+   * 44 px beyaz hap, aralarında 6 px; yanındaki durum, arama ve kişi düğmeleriyle aynı boy
+   */
   .lp-topnav > .lp-side-menu {
     min-width: 0;
     max-width: 100%;
   }
   .lp-topnav .lp-menu {
-    gap: 4px;
+    gap: 6px;
+    padding: 0;
   }
   .lp-topnav .lp-menu-item {
-    min-height: 2.5rem;
-    padding: 0 16px;
-  }
-  @media (pointer: coarse) {
-    .lp-topnav .lp-menu-item {
-      min-height: 2.75rem;
-    }
+    min-height: 2.75rem;
+    padding: 0 18px;
   }
 
   .lp-stage {
@@ -1330,7 +1330,7 @@ html[class~='dark'] {
 
   /*
    * Alt menü kartı (tek bileşen, geniş ekran): yönetimin bölümleri (Stage headerInLeaf) ve adisyonun kategorileri
-   * (ProductPanel) aynı kartta, hep solda, genişlik --side-w. Beyaz kart, köşe 18, saç teli çerçeve, iç boşluk 14/10/10;
+   * (ProductPanel) aynı kartta, hep solda, genişlik --side-w. Beyaz kart, köşe 18, kenarsız ve gölgesiz (Keel), iç boşluk 14/10/10;
    * içinde `.lp-menu.lp-menu-col` (grup başlığı küçük ve soluk; satır ikon, ad, sağda sayı; seçili açık nane). Sığmazsa
    * kart kendi içinde kayar. `.lp-side`'tan sonra gelir: iç boşluğu o ezmesin
    */
@@ -1340,14 +1340,9 @@ html[class~='dark'] {
       overflow-y: auto;
       overscroll-behavior: contain;
       padding: 14px 10px 10px;
-      border: 1px solid var(--admin-border);
       border-radius: var(--r-card);
       background: var(--admin-surface);
-      box-shadow: var(--shadow-card);
       scrollbar-width: none;
-    }
-    .dark .lp-subnav {
-      box-shadow: none;
     }
     .lp-subnav::-webkit-scrollbar {
       display: none;
@@ -1677,9 +1672,10 @@ html[class~='dark'] {
   }
 
   /*
-   * Sekmeler (ekranın bölümleri, görünümleri; yönetimin bölümleri): satır ikon, ad ve sağda soluk sayı. Üstüne gelince
-   * çok açık gri, seçili açık nane zeminde yeşil yazı ve ikon, kalın (panonun seçili sekmesi); köşe 12. Üst çubukta ve
-   * telefonda yatay; yönetimin alt menü kartında (geniş ekran) alt alta, grup başlığı küçük ve soluk
+   * Sekmeler (ekranın bölümleri, görünümleri; yönetimin bölümleri): ikon, ad ve sağda soluk sayı. Yatayda (üst çubuk,
+   * telefonun şeridi, tabletteki yönetim şeridi) her sekme zeminde kendi beyaz hapı (Keel `.k-tab`; sahibin örneği,
+   * 26 Kas 2026: "Overview · Customer · Analytics"), seçili mürekkep dolgu ve beyaz yazı; köşe 12. Yönetimin ve
+   * adisyonun alt menü kartında (geniş ekran) alt alta, zeminsiz satır, grup başlığı küçük ve soluk
    */
   .lp-menu {
     display: flex;
@@ -1703,11 +1699,11 @@ html[class~='dark'] {
     align-items: center;
     gap: 8px;
     min-height: 2.75rem;
-    padding: 0 14px;
+    padding: 0 16px;
     border: 0;
-    border-radius: var(--r-btn);
-    background: transparent;
-    color: var(--admin-text-soft);
+    border-radius: var(--r-segment);
+    background: var(--k-tab-bg);
+    color: var(--k-ink-2);
     font: 500 0.875rem/1.2 var(--font-sans);
     white-space: nowrap;
     text-decoration: none;
@@ -1729,7 +1725,7 @@ html[class~='dark'] {
     font-variant-numeric: tabular-nums;
   }
   .lp-menu-item:hover {
-    background: var(--menu-hover);
+    background: color-mix(in oklab, var(--k-tab-bg), var(--k-ink) 5%);
     color: var(--admin-text);
   }
   .lp-menu-item:hover > svg {
@@ -1774,7 +1770,11 @@ html[class~='dark'] {
       min-height: 2.375rem;
       padding: 0 10px;
       border-radius: var(--r-btn);
+      background: transparent;
       text-align: left;
+    }
+    :where(.lp-menu-col) .lp-menu-item:hover {
+      background: var(--menu-hover);
     }
     :where(.lp-menu-col) .lp-menu-item > span:not(.n) {
       min-width: 0;

@@ -16,7 +16,7 @@ export function RemoteShopPicker() {
   if (shops.length < 2) return null;
   const current = shops.some((s) => s.id === value) ? value : '';
   return (
-    <label className="relative inline-flex min-h-11 items-center pointer-fine:min-h-9">
+    <label className="relative inline-flex min-h-11 items-center">
       <span className="sr-only">Dükkân</span>
       <Store aria-hidden="true" className="pointer-events-none absolute left-2.5 size-4 text-muted" />
       <select
@@ -27,7 +27,8 @@ export function RemoteShopPicker() {
           chooseShop(id);
           void qc.invalidateQueries({ predicate: (x) => x.queryKey[0] !== 'uzaktan' || x.queryKey[1] !== 'dukkanlar' });
         }}
-        className="h-11 max-w-[11rem] appearance-none truncate rounded-[var(--r-control)] border border-line bg-surface pl-8 pr-3 text-sm font-medium text-ink pointer-fine:h-9"
+        // Üst çubuğun öteki düğmeleri gibi zeminde beyaz hap (44 px); açılan liste Keel'in yüzen yüzeyi (.k-select)
+        className="k-select select-arrow h-11 max-w-[12rem] truncate rounded-[var(--r-segment)] border-0 bg-[var(--k-tab-bg)] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pl-8 pr-8 text-sm font-medium text-ink"
       >
         <option value="">Son veri gelen</option>
         {shops.map((s) => (

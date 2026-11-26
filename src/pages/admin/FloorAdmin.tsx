@@ -434,7 +434,7 @@ export default function FloorAdmin() {
                 'group absolute flex cursor-grab flex-col items-center justify-center gap-0.5 border px-1 text-center [container:tile/size] text-sm font-semibold leading-tight tracking-[-0.01em] text-[var(--admin-text)] transition-[border-color,background-color,box-shadow] duration-150 active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]',
                 t.shape === 'round' ? 'rounded-full' : 'rounded-[var(--r-tile)]',
                 selected === t.id
-                  ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] ring-2 ring-[var(--admin-primary)]/30'
+                  ? 'k-picked'
                   : 'border-[var(--admin-border-field)]/60 bg-[var(--admin-surface)] shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)]',
               )}
             >

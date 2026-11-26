@@ -105,7 +105,7 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
               key={m}
               className={cn(
                 'flex min-h-11 items-start gap-3 rounded-[var(--r-tile)] border px-4 py-3 transition-colors duration-150',
-                on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)]' : 'border-[var(--admin-border)] bg-surface',
+                on ? 'k-picked' : 'border-[var(--admin-border)] bg-surface',
                 kapali ? 'cursor-default' : 'cursor-pointer hover:border-[var(--admin-border-strong)]',
               )}
             >

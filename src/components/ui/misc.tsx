@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
 import { ApiError, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -51,14 +51,14 @@ const dots: Record<Tone, string> = {
 };
 
 /**
- * Durum rozeti (kasa ve yönetimde tek; panonun "+12,8%" rozeti): 22 px, köşe 8, 12 px yarı kalın yazı, açık tonlu
- * zemin ve aynı tonda çok ince iç kenar; `dot` renkli nokta (renk yazının yanında)
+ * Durum rozeti (kasa ve yönetimde tek; Keel hapı, sahibin örneğindeki "↓ 3"): 22 px, tam yuvarlak, 12 px orta kalın
+ * yazı, yumuşak tonlu zemin, kenarsız; `dot` renkli nokta (renk yazının yanında)
  */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
     <span
       title={title}
-      className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[var(--r-chip)] px-2 py-0.5 text-xs font-semibold leading-4 ring-1 ring-inset ring-[color-mix(in_oklab,currentColor_14%,transparent)]', tones[tone], className)}
+      className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[var(--k-r-pill)] px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}
     >
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
       {children}
@@ -89,6 +89,27 @@ export function Avatar({ name, color, className, children }: { name: string; col
     >
       {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
       {children}
+    </span>
+  );
+}
+
+/**
+ * Değişim hapı (Keel; patron panelinin karoları, raporların ve Genel bakış'ın KPI kartları): artış dolu nane, düşüş
+ * yumuşak kırmızı, değişmeyen kuyu; yön okla ve ekran okuyucuya yazıyla (renk tek başına değil)
+ */
+export function KPill({ dir, children, className }: { dir: 'up' | 'down' | 'flat'; children: ReactNode; className?: string }) {
+  const Arrow = dir === 'down' ? ArrowDown : ArrowUp;
+  return (
+    <span
+      className={cn(
+        'tabular inline-flex h-[22px] shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-2 text-[11.5px] font-medium leading-none',
+        dir === 'up' ? 'bg-[var(--k-mint)] text-[#0b3d22]' : dir === 'down' ? 'bg-[var(--k-neg-soft)] text-[var(--k-neg-ink)]' : 'bg-[var(--k-well-2)] text-[var(--k-ink-2)]',
+        className,
+      )}
+    >
+      {dir !== 'flat' && <Arrow aria-hidden="true" className="size-3 stroke-[2.25]" />}
+      {children}
+      <span className="sr-only">{dir === 'up' ? ' arttı' : dir === 'down' ? ' azaldı' : ' değişmedi'}</span>
     </span>
   );
 }
@@ -175,8 +196,8 @@ export function EmptyState({
         <span
           aria-hidden="true"
           className={cn(
-            // Panonun ikon dairesi: açık nane zeminde yeşil ikon, çevresinde daha açık bir hâle
-            'grid place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] shadow-[0_0_0_6px_color-mix(in_oklab,var(--admin-primary-soft)_45%,transparent)]',
+            // Keel ikon karosu (sahibin örneğindeki uyarı listesi): kuyu tonunda yumuşak kare, mürekkep ikon
+            'grid place-items-center rounded-[var(--k-r-tile)] bg-[var(--k-well)] text-[var(--k-ink)]',
             compact ? 'mb-3 size-10 [&>svg]:size-[18px]' : large ? 'mb-5 size-16 [&>svg]:size-7' : 'mb-4 size-12 [&>svg]:size-5',
           )}
         >
@@ -443,8 +464,16 @@ export const RAIL_FADE =
   'data-[fade-end]:[mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] data-[fade-start]:[mask-image:linear-gradient(to_left,#000_calc(100%_-_24px),transparent)] data-[fade-start]:data-[fade-end]:[mask-image:linear-gradient(to_right,transparent,#000_24px,#000_calc(100%_-_24px),transparent)]';
 
 /**
- * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri; kitin .tab'ı): hap biçimi, etkin olan mürekkep hapta ve kalın;
- * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; seçili sekme rayın içinde
+ * Sekmenin adı: seçilince kalınlaşan yazının genişliği baştan ayrılır (`data-text`, keel.css `.k-tab`): yanındaki sekmeler
+ * seçimle kaymaz. Yazı olmayan ad (ikonlu düğüm) olduğu gibi çizilir
+ */
+export function TabText({ children }: { children: ReactNode }) {
+  return typeof children === 'string' ? <span data-text={children}>{children}</span> : <>{children}</>;
+}
+
+/**
+ * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri; Keel `.k-tab`, sahibin örneği 26 Kas 2026): her sekme kendi
+ * hapı (zeminde beyaz, pencerede kuyu tonu), etkin olan mürekkep dolgu ve beyaz yazı; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; seçili sekme rayın içinde
  * görünür kalır, içeriğin gizlendiği kenar solar (useRail); odak halkası çipin içinde. Sayılı filtre çipi (koyu
  * kenarlı seçili) yönetimdeki StatusTabs'tır.
  */
@@ -465,7 +494,7 @@ export function Tabs<T extends string>({
 }) {
   const rail = useRail<HTMLDivElement>(value);
   return (
-    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1 overflow-x-auto', RAIL_FADE, className)}>
+    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1.5 overflow-x-auto', RAIL_FADE, className)}>
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -476,13 +505,12 @@ export function Tabs<T extends string>({
             aria-selected={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--r-segment)] px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
-              size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-9',
-              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)]' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
+              'k-tab rounded-[var(--r-segment)] px-3.5 text-sm focus-visible:-outline-offset-2 [[data-area=admin]_&]:text-[13px]',
+              size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-10',
             )}
           >
             {o.icon}
-            {o.label}
+            <TabText>{o.label}</TabText>
             {!!o.count && (
               // Etkin sekmenin sayısı beyaz hap (gri zeminde); yeşil dolu hap "N hazır"ın, sayı onunla karışmasın
               <span className={cn('tabular min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium', on ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] text-[var(--admin-on-ink)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { Badge, Card, DefRow } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
+import { Field, Select } from '@/components/ui/Field';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
@@ -73,13 +73,13 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
           <div className="grid gap-3">
             {d && d.dukkanlar.length > 1 && (
               <Field label="Kurulum" hint="Bilgisayar değiştiyse eski kurulumun yedekleri">
-                <select value={d.shop} onChange={(e) => setShop(e.target.value)} className="h-11 w-full rounded-[var(--r-control)] border border-line bg-surface px-3 text-sm pointer-fine:h-10">
+                <Select value={d.shop} onChange={(e) => setShop(e.target.value)}>
                   {d.dukkanlar.map((x) => (
                     <option key={x} value={x}>
                       {x === d.shop ? `${x.slice(0, 8)} (bu liste)` : x.slice(0, 8)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
             )}
             {!d?.yedekler.length ? (

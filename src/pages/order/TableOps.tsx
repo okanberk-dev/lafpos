@@ -183,7 +183,7 @@ export function TransferModal({
               key={i.id}
               className={cn(
                 'flex items-center gap-3 rounded-xl border py-1.5 pl-3 pr-1.5 transition-colors duration-150',
-                q ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line hover:border-[var(--admin-border-field)] active:bg-press',
+                q ? 'k-picked' : 'border-line hover:border-[var(--admin-border-field)] active:bg-press',
               )}
             >
               <button aria-pressed={q > 0} className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setSel({ ...sel, [i.id]: q ? 0 : left })}>

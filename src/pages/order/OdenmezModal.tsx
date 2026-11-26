@@ -125,7 +125,7 @@ export function OdenmezModal({
   const row = (on: boolean) =>
     cn(
       'flex min-h-14 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors duration-150',
-      on ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press',
+      on ? 'k-picked' : 'border-line bg-surface hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press',
     );
   const groupLabel = 'px-1 pb-1.5 pt-1 text-xs font-medium text-muted';
   const list = customers.data ?? [];
@@ -179,7 +179,7 @@ export function OdenmezModal({
                             <span className="block truncate text-sm font-medium text-ink">{u.name}</span>
                             <span className="block truncate text-xs text-muted">{ROLE_LABELS[u.role as Role] ?? u.role}</span>
                           </span>
-                          {on && <Check aria-hidden="true" className="size-5 shrink-0 text-primary" />}
+                          {on && <Check aria-hidden="true" className="size-5 shrink-0 text-ink" />}
                         </button>
                       </li>
                     );
@@ -208,7 +208,7 @@ export function OdenmezModal({
                             <span className="block truncate text-sm font-medium text-ink">{cst.name}</span>
                             <span className="tabular block truncate text-xs text-muted">{tail ? `Telefon •• ${tail}` : 'Telefon kayıtlı değil'}</span>
                           </span>
-                          {on && <Check aria-hidden="true" className="size-5 shrink-0 text-primary" />}
+                          {on && <Check aria-hidden="true" className="size-5 shrink-0 text-ink" />}
                         </button>
                       </li>
                     );

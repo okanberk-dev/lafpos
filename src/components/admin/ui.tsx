@@ -3,7 +3,7 @@ import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type Mous
 import { createPortal } from 'react-dom';
 import { buttonClass, CloseButton } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
-import { fitFigure, Badge as KitBadge, EmptyState as KitEmptyState, RAIL_FADE, Skeleton, useRail } from '@/components/ui/misc';
+import { fitFigure, KPill, Badge as KitBadge, EmptyState as KitEmptyState, RAIL_FADE, Skeleton, TabText, useRail } from '@/components/ui/misc';
 import type { IllustrationName } from '@/components/Illustration';
 import { useStageHeader } from '@/components/ui/Stage';
 import { cn } from '@/lib/cn';
@@ -178,27 +178,24 @@ export function Card({
 export interface KpiCell {
   key: string;
   label: string;
-  icon: ReactNode;
-  /**
-   * İkon kutusunun tonu, verilmezse nötr. Renk yalnız anlam taşıyınca: mor online, mavi açık / dolu, yeşil ciro ve
-   * olumlu, pembe kayıp / iptal, amber gecikme ve bekleyen; durumsuz sayı ve süre nötr
-   */
-  hue?: Hue;
   value: ReactNode;
-  /** Değişim hapı: iyi haber yeşil, kötü haber kırmızı */
+  /** Değişim hapı (Keel KPill): artış dolu nane, düşüş yumuşak kırmızı; `text` yalnız tutar ("%12"), yön `good`dan */
   delta?: { text: string; good: boolean } | null;
   /** Hiçbir rakam tek başına durmaz: dün, geçen hafta, toplam... */
   reference?: ReactNode;
   onClick?: () => void;
   active?: boolean;
+  /** Şeridin öne çıkan tek kartı koyu (Keel'in ters kartı, örnekteki "Cash ratio"): ekranın kahraman rakamı */
+  inverse?: boolean;
 }
 
 /**
- * KPI şeridi (pano): her hücre kendi kartı (köşe 18, zeminde yüzer), aralarında 12 px. İkon yumuşak tonlu dairede,
- * değişim rozeti rakamın sağında (panonun "+12,8%" rozeti). Beş hücre
- * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz. Etiket satırı 32 px'tir
- * ve etiket en çok iki satıra kırılır (kesilmez): hücreler arasında rakamlar aynı hizada kalır. Rakam tek satır, dar
- * hücrede küçülür (`fitFigure`). Tıklanan hücre etiketinin yanında › taşır: dokunmatikte üzerine gelme yok.
+ * KPI şeridi (Keel; sahibin örneği 26 Kas 2026: "34 · Days of runway"): her hücre kendi kartı (köşe 18, kenarsız,
+ * gölgesiz, zeminde beyaz), aralarında 12 px. Üstte rakam (500, sıkı aralık), değişim hapı sağ üst köşede; altında 13 px
+ * soluk etiket ve en altta küçük açıklama. İkon yok. Öne çıkan tek hücre (`inverse`) koyu kart. Beş hücre tablette
+ * 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz. Rakam tek satır, dar hücrede küçülür
+ * (`fitFigure`); etiket en çok iki satıra kırılır (kesilmez). Tıklanan hücre etiketinin yanında › taşır: dokunmatikte
+ * üzerine gelme yok.
  */
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
@@ -207,24 +204,29 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
       {cells.map((c, i) => {
         const body = (
           <>
-            <span className="flex min-h-8 w-full items-center gap-2">
-              <IconBox hue={c.hue}>{c.icon}</IconBox>
-              <span className="line-clamp-2 min-w-0 text-[13px] font-medium leading-4 text-[var(--admin-text-mute)]">{c.label}</span>
-              {c.onClick && <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-[var(--admin-text-mute)]" />}
-            </span>
-            <span className="mt-3 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(30px,var(--fit,17cqi))] font-bold leading-[0.9] tracking-[-0.04em] text-[var(--admin-text)]', NUM)}>
+            {/* Rakam asla kısalmaz: hap yanına sığmazsa rakamın altına iner */}
+            <span className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(30px,var(--fit,17cqi))] font-medium leading-9 tracking-[-0.035em]', NUM, !c.inverse && 'text-[var(--admin-text)]')}>
                 {c.value}
               </span>
-              {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
+              {c.delta && <KPill dir={c.delta.good ? 'up' : 'down'}>{c.delta.text}</KPill>}
             </span>
-            {c.reference && <span className="mt-1 block w-full text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
+            <span className="k-cap mt-1 flex min-w-0 items-center gap-1 text-[13px] leading-5">
+              <span className="line-clamp-2 min-w-0">{c.label}</span>
+              {c.onClick && <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />}
+            </span>
+            {c.reference && <span className="k-cap mt-auto block w-full pt-3 text-xs leading-4">{c.reference}</span>}
           </>
         );
         const span = kpiCellSpan(n, i);
-        const cls = cn(CARD, '@container flex min-w-0 flex-col items-stretch justify-start p-4 text-left sm:p-5', span, c.active && 'border-[var(--admin-ink-fill)] shadow-[inset_0_0_0_1px_var(--admin-ink-fill)]');
+        const cls = cn(
+          '@container flex min-w-0 flex-col items-stretch justify-start rounded-[var(--r-card)] p-4 text-left sm:min-h-[8.5rem] sm:p-5',
+          c.inverse ? 'k-inverse' : 'bg-[var(--admin-surface)]',
+          span,
+          c.active && 'shadow-[inset_0_0_0_2px_var(--k-select)]',
+        );
         return c.onClick ? (
-          <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
+          <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && !c.inverse && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
             {body}
           </button>
         ) : (
@@ -244,8 +246,10 @@ export interface TabOption<T extends string> {
 }
 
 /**
- * Durum sekmeleri (kitin süzgeç çipi): beyaz çipler (köşe 10), etkin olan ev yeşili dolgu, sayaç soluk. Telefonda ray ekran
- * kenarına uzanır (yönetim kabının telefondaki 8 px payı kadar; fazlası taşar) ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
+ * Durum sekmeleri (raporun Ciro · Ürünler'i, yönetimin süzgeçleri; Keel `.k-tab`, sahibin örneği 26 Kas 2026): her sekme
+ * zeminde kendi beyaz hapı (köşe 12, kenarsız), etkin olan mürekkep dolgu ve beyaz yazı, sayaç soluk. Telefonda ray ekran
+ * kenarına uzanır (yönetim kabının telefondaki 8 px payı kadar; fazlası taşar) ve yatay kayar: seçili sekme rayın içinde
+ * görünür kalır, içeriğin gizlendiği kenar solar (useRail)
  */
 export function StatusTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (v: T) => void; tabs: TabOption<T>[]; label: string }) {
   const rail = useRail<HTMLDivElement>(value);
@@ -261,17 +265,9 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
               role="tab"
               aria-selected={on}
               onClick={() => onChange(t.value)}
-              className={cn(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-[var(--r-btn)] border bg-[var(--admin-surface)] px-3.5 text-[13px] whitespace-nowrap transition-[color,border-color,background-color,box-shadow] pointer-coarse:min-h-11',
-                COMPACT_H,
-                FOCUS,
-                'focus-visible:-outline-offset-2',
-                on
-                  ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)]'
-                  : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)]',
-              )}
+              className={cn('k-tab min-h-9 rounded-[var(--r-segment)] text-[13px] pointer-coarse:min-h-11', COMPACT_H, FOCUS, 'focus-visible:-outline-offset-2')}
             >
-              {t.label}
+              <TabText>{t.label}</TabText>
               {t.count !== undefined && (
                 <span className={cn('min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium leading-4', NUM, on ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]')}>{t.count}</span>
               )}
@@ -284,9 +280,10 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
 }
 
 /**
- * Segment denetimi (kitin .seg'i): açık gri hap ray, ince kenar, seçili ev yeşili hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
- * (yedi dönem iki satır; hiçbir seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli
- * (hap 22 + ray boşluğu 3). Daha geniş ekranda sığmayan ray kayar: seçili seçenek görünür kalır, gizli kenar solar
+ * Segment denetimi (Keel `.k-seg`, sahibin örnekleri 26 Kas 2026): saydam mürekkep ray, seçili beyaz başparmak ve hafif
+ * gölge, yazı mürekkep (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır (yedi dönem iki satır; hiçbir
+ * seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli (başparmak 12 + ray boşluğu 3).
+ * Daha geniş ekranda sığmayan ray kayar: seçili seçenek görünür kalır, gizli kenar solar
  * (useRail). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler arasında gezer,
  * Enter ya da boşluk seçer (seçim kendiliğinden değişmez: dönem ya da mod istemeden kaydedilmesin).
  */
@@ -309,7 +306,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
       role="radiogroup"
       aria-label={label}
       onKeyDown={move}
-      className={cn('no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)] border border-[var(--admin-border)] bg-[var(--admin-surface-2)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(26px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(22px,var(--r-segment))]', RAIL_FADE, className)}
+      className={cn('k-seg no-scrollbar inline-flex max-w-full overflow-x-auto max-sm:flex max-sm:w-full max-sm:flex-wrap', RAIL_FADE, className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;
@@ -322,11 +319,10 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
             tabIndex={i === tabStop ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex min-h-9 shrink-0 items-center justify-center rounded-[var(--r-segment)] px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11 max-sm:grow',
-              COMPACT_H,
+              // Başparmak fareyle 30 px (ray 36: yanındaki yönetim düğmesiyle aynı boy), sıkı görünümde 26, dokunmatikte 44
+              'k-seg-opt min-h-[1.875rem] shrink-0 rounded-[var(--r-segment)] text-[13px] pointer-coarse:min-h-11 max-sm:grow pointer-fine:[[data-density=compact]_&]:min-h-[1.625rem]',
               FOCUS,
               'focus-visible:-outline-offset-2',
-              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'text-[var(--admin-text-soft)] hover:bg-[var(--hover)] hover:text-[var(--admin-text)]',
             )}
           >
             {o.label}
@@ -814,13 +810,11 @@ export function KpiStripSkeleton({ count = 5, className }: { count?: number; cla
   return (
     <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-[var(--tile-gap)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={cn(CARD, 'p-4 sm:p-5', kpiCellSpan(count, i))}>
-          <span className="flex min-h-8 items-center gap-2">
-            <Skeleton className="size-7 rounded-lg" />
-            <Skeleton className="h-3.5 w-20" />
-          </span>
-          <Skeleton className="mt-3 h-7 w-28 max-w-full" />
-          <Skeleton className="mt-2 h-3 w-32 max-w-full" />
+        // KpiStrip'in kartıyla aynı boy ve düzen: rakam, etiket, en altta açıklama
+        <div key={i} className={cn('flex flex-col rounded-[var(--r-card)] bg-[var(--admin-surface)] p-4 sm:min-h-[8.5rem] sm:p-5', kpiCellSpan(count, i))}>
+          <Skeleton className="my-1 h-7 w-28 max-w-full" />
+          <Skeleton className="mt-2 h-3.5 w-20" />
+          <Skeleton className="mt-auto h-3 w-32 max-w-full" />
         </div>
       ))}
     </div>

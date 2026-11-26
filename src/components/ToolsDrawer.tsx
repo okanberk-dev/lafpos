@@ -120,10 +120,6 @@ export function DrawerArrow() {
   );
 }
 
-/** Çekmecedeki kit denetimi (Segmented) bantta: zemin yarı saydam, seçili açık yazı (Tema satırıyla aynı) */
-const BAND_CONTROLS =
-  '[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--admin-surface)] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)]';
-
 /**
  * Çekmecenin anahtar satırı: bütün satır dokunulur (`role="switch"`), sağda bantın renginde anahtar (açıkken açık nane
  * ray ve koyu yeşil top, kapalıyken yarı saydam ray)
@@ -157,7 +153,7 @@ export function AlertSoundGroup({ online, karaoke, delay = 0 }: { online: boolea
       <DrawerSwitch on={prefs.sound} onChange={(v) => writeAlertPrefs({ sound: v })} label="Uyarı sesi" hint="Sitenin ve uygulamanın siparişleri ve karaokesi; kapalıyken şerit ve bildirim kalır. Bu cihazda saklanır" style={at(0)} />
       <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={at(1)}>
         <DrawerLabel hint="Masa siparişi her düzeyde biraz daha yüksek">Ses düzeyi</DrawerLabel>
-        <span className={BAND_CONTROLS}>
+        <span>
           <Segmented<VolumeStep>
             label="Ses düzeyi"
             value={volumeStep(prefs.volume)}
