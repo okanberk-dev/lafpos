@@ -1,6 +1,6 @@
 /**
- * Upstash Redis REST'in bellekteki karşılığı: api/uzaktan.ts'in özet, sürüm, rapor ve üyelik için, api/_merkez.ts ve
- * api/_kontrol.ts'in Merkez ve uzaktan yönetim için kullandığı komutlar. İstek gövdesi tek komut dizisidir
+ * Upstash Redis REST'in bellekteki karşılığı: api/uzaktan.ts'in özet, sürüm, rapor, üyelik ve platform gelen kutusu için,
+ * api/_merkez.ts ve api/_kontrol.ts'in Merkez ve uzaktan yönetim için kullandığı komutlar. İstek gövdesi tek komut dizisidir
  * (`["GET","k"]`); yanıt `{ result }`. Hash'ler JSON nesne, liste ve kümeler JSON dizi olarak aynı Map'te durur:
  * `store.clear()` hepsini siler, kopyası hepsini taşır. Süreler (EX, EXPIRE) uygulanmaz. `log` verilirse her komut
  * sırasıyla yazılır (komut sayısı ve Redis'ten okunan bayt: tests/uzaktan-kota.test.ts)
@@ -76,6 +76,20 @@ export function upstashCommand(store: Map<string, string>, [cmd, key = '', ...re
     const list = [...[...rest].reverse().map(String), ...listOf(store, key)];
     putList(store, key, list);
     result = list.length;
+  } else if (name === 'RPUSH') {
+    const list = [...listOf(store, key), ...rest.map(String)];
+    putList(store, key, list);
+    result = list.length;
+  } else if (name === 'LLEN') result = listOf(store, key).length;
+  else if (name === 'LREM') {
+    // LREM anahtar sayı değer: sayı > 0 baştan, < 0 sondan o kadar, 0 hepsi
+    const list = listOf(store, key);
+    const count = Number(rest[0]);
+    const value = String(rest[1]);
+    const order = count < 0 ? [...list.keys()].reverse() : [...list.keys()];
+    const drop = new Set(order.filter((i) => list[i] === value).slice(0, count === 0 ? undefined : Math.abs(count)));
+    putList(store, key, list.filter((_, i) => !drop.has(i)));
+    result = drop.size;
   } else if (name === 'LRANGE') {
     const list = listOf(store, key);
     const [a, b] = range(list.length, rest[0], rest[1]);

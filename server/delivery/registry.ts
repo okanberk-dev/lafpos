@@ -2,10 +2,17 @@ import type { PlatformId } from '@shared/platforms';
 import { env } from '../env';
 import { configFrom } from '../env-config';
 import { platformVars } from '../lib/platform-anahtar';
+import { getSyncState, setSyncState } from '../lib/settings';
 import type { PlatformAdapter } from './adapter';
 import { getirAdapter } from './getir';
 import { trendyolAdapter } from './trendyol';
 import { yemeksepetiAdapter } from './yemeksepeti';
+
+/**
+ * Getir'in son girişte verdiği restoran kimliği (sync_state): kasa yeniden başlayıp Getir'e giremese de aktarıcıdan
+ * yalnız kendi gelen kutusunu ister (docs/PAKET-PLATFORMLARI.md). Eski kimlik zararsızdır: girişe dek sipariş alınmaz
+ */
+const GETIR_RESTAURANT_KEY = 'platform.getir.restaurant';
 
 /**
  * Gerçek bağdaştırıcılar: anahtarları `.env`'den (server/env-config.ts) okur; Trendyol ve Yemeksepeti'nin anahtarları
@@ -15,7 +22,18 @@ import { yemeksepetiAdapter } from './yemeksepeti';
  * belgesi yok (docs/PAKET-PLATFORMLARI.md).
  */
 const adapters: Partial<Record<PlatformId, PlatformAdapter>> = {
-  getir: getirAdapter({ ...env.getir, cloudUrl: env.cloudUrl, cloudSecret: env.cloudSecret }),
+  getir: getirAdapter({
+    ...env.getir,
+    cloudUrl: env.cloudUrl,
+    cloudSecret: env.cloudSecret,
+    restaurantMemory: {
+      load: () => {
+        const id = getSyncState<unknown>(GETIR_RESTAURANT_KEY);
+        return typeof id === 'string' && id ? id : null;
+      },
+      save: (id) => setSyncState(GETIR_RESTAURANT_KEY, id),
+    },
+  }),
 };
 
 /**

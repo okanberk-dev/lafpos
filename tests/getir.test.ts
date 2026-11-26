@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlatformLiveStatus, PlatformOrderDTO, PlatformProductDTO } from '@shared/platforms';
 import type { OrderDTO } from '@shared/types';
-import type { GetirOrder, InboxItem } from '../server/delivery/getir';
+import type { GetirConfig, GetirOrder, InboxItem } from '../server/delivery/getir';
 import { type FakeGetir, startFakeGetir } from './fake-getir';
 import { startApp, type Harness } from './harness';
 
@@ -280,7 +280,7 @@ describe('canlı bağlantı', () => {
     await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(both.id)).id}/reject`, { reason: 'Çok yoğunuz' });
   });
 
-  it('platformun iptali aktarıcıdan (cancelOrder): kabul edilmiş adisyon iptal olur, platform ödemesi geri; başka restoranın siparişi atlanır, bir kez alarm', async () => {
+  it('platformun iptali aktarıcıdan (cancelOrder): kabul edilmiş adisyon iptal olur, platform ödemesi geri; başka restoranın siparişi atlanır ve silinmez, bir kez alarm', async () => {
     const o = gOrder();
     const row = await arrive(o);
     const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
@@ -294,9 +294,13 @@ describe('canlı bağlantı', () => {
     const cancelled = await h.ok<OrderDTO>('patron', 'GET', `/orders/${orderId}`);
     expect(cancelled.status).toBe('iptal');
     expect(cancelled.payments[0]?.refundedAt).not.toBeNull();
-    expect(fake.inbox).toHaveLength(0);
+    // Başka restoranın siparişi kutuda kalır (ortak kutuda o restoranın kasası alır); çekim ve silme restoranın kimliğiyle
+    expect(fake.inbox.map((i) => i.id)).toEqual([`in-${other.id}`]);
+    expect(fake.restoran.slice(-2)).toEqual(['rest-1', 'rest-1']);
     await live.pollPlatform('getir');
     expect((await audit()).filter((a) => a.action === 'platform.package_invalid' && a.message.includes('BASKA_RESTORAN'))).toHaveLength(1);
+    expect(fake.inbox.map((i) => i.id)).toEqual([`in-${other.id}`]);
+    fake.inbox = [];
   });
 
   it('kasada iptal edilen kabul edilmiş sipariş Getir\'e cancel ile gider; Getir iptal seçeneği vermiyorsa alarm, uygulamadan iptal', async () => {
@@ -435,7 +439,7 @@ async function acceptNow(o: GetirOrder) {
 const delivery = (orderId: string, deliveryStatus: string) => h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus });
 
 /** Bağdaştırıcıyı bir süreliğine değiştirir (yeniden başlatma, farklı ayar) */
-async function withAdapter<T>(over: Partial<ReturnType<typeof cfg>>, fn: () => Promise<T>): Promise<T> {
+async function withAdapter<T>(over: Partial<GetirConfig>, fn: () => Promise<T>): Promise<T> {
   const { setAdapter, adapterFor } = await import('../server/delivery/registry');
   const { getirAdapter } = await import('../server/delivery/getir');
   const real = adapterFor('getir')!;
@@ -736,7 +740,7 @@ describe('akış ve dayanıklılık (gözden geçirme)', () => {
     reset();
   });
 
-  it('restoran kimliği bilinmeden aktarıcı kaydı alınmaz (gelen kutusunda kalır); giriş olunca başka restoranın siparişi ilk turda ayıklanır', async () => {
+  it('restoran kimliği bilinmeden aktarıcı kaydı alınmaz (gelen kutusunda kalır); giriş olunca başka restoranın siparişi ilk turda ayıklanır ve kutuda kalır', async () => {
     reset();
     await withAdapter({}, async () => {
       const other = gOrder({ restaurant: { id: 'BASKA_ILK_TUR' } });
@@ -756,11 +760,70 @@ describe('akış ve dayanıklılık (gözden geçirme)', () => {
       expect(first.length - before).toBe(1);
       expect(first[0]).toMatchObject({ severity: 'uyari' });
       expect(first[0]!.message).toMatch(/Getir uygulamasından/);
+      const asked = fake.restoran.length;
       expect(await live.pollPlatform('getir')).toEqual({ created: 1, cancelled: 0 });
       expect((await blockedAudits()).length - before).toBe(1);
-      expect(fake.inbox).toHaveLength(0);
+      // Girişten sonra restoranın kendi kutusu istenir; başka restoranın siparişi silinmez
+      expect(fake.restoran.slice(asked)).toEqual(['rest-1', 'rest-1']);
+      expect(fake.inbox.map((i) => i.id)).toEqual([`in-${other.id}`]);
       expect(await byExt(other.id)).toBeUndefined();
       expect((await audit()).filter((a) => a.action === 'platform.package_invalid' && a.message.includes('BASKA_ILK_TUR'))).toHaveLength(1);
+      fake.inbox = [];
+      await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(mine.id)).id}/reject`, { reason: 'Çok yoğunuz' });
+    });
+  });
+
+  it('ortak kutuda başka restoranın iptali uygulanmaz ve silinmez; giriş olmadan (restoran bilinmeden) iptal uygulanır ama kutuda kalır, sorgusuz istenir', async () => {
+    reset();
+    const mine = gOrder();
+    await arrive(mine);
+    await withAdapter({}, async () => {
+      fake.statusFor.login = [{ status: 400, code: 73 }];
+      const otherCancel = { ...inboxCancel('ord-baska-restoran'), restaurantId: 'BASKA_IPTAL' } as InboxItem;
+      const ownCancel = { ...inboxCancel(mine.id), restaurantId: 'rest-1' } as InboxItem;
+      fake.inbox.push(otherCancel, ownCancel);
+      const asked = fake.restoran.length;
+      expect(await live.pollPlatform('getir')).toEqual({ created: 0, cancelled: 1 });
+      expect((await byExt(mine.id)).status).toBe('iptal');
+      // Giriş yok: kutu sorgusuz istenir (eski kasa gibi), sahibi belli iptallerin ikisi de kutuda kalır
+      expect(fake.restoran.slice(asked)).toEqual([null]);
+      expect(fake.inbox.map((i) => i.id)).toEqual([otherCancel.id, ownCancel.id]);
+      // Giriş olunca kendi iptali silinir, başka restoranınki kalır (o restoranın kasası alır)
+      expect(await live.pollPlatform('getir')).toEqual({ created: 0, cancelled: 0 });
+      expect(fake.inbox.map((i) => i.id)).toEqual([otherCancel.id]);
+      expect(fake.acked).not.toContain(otherCancel.id);
+      fake.inbox = [];
+    });
+  });
+
+  it('girişte öğrenilen restoran kimliği kalıcı kayda yazılır; yeniden başlayıp giremeyen kasa yalnız kendi kutusunu ister (bütün kutuları okumaz), yine de sipariş almaz', async () => {
+    reset();
+    // Önceki süreç: giriş olur, kimlik kayda yazılır
+    const saved: string[] = [];
+    await withAdapter({ restaurantMemory: { load: () => null, save: (id) => saved.push(id) } }, async () => {
+      expect(await live.pollPlatform('getir')).toEqual({ created: 0, cancelled: 0 });
+      expect(await live.pollPlatform('getir')).toEqual({ created: 0, cancelled: 0 });
+    });
+    // Bir kez yazılır (kimlik değişmedikçe her turda değil)
+    expect(saved).toEqual(['rest-1']);
+    // Yeniden başlatma: Getir'e giriş olmuyor, kayıttaki kimlikle kendi kutusu istenir
+    const mine = gOrder();
+    const cancelled = gOrder();
+    await arrive(cancelled);
+    await withAdapter({ restaurantMemory: { load: () => saved[0] ?? null, save: (id) => saved.push(id) } }, async () => {
+      fake.statusFor.login = [{ status: 400, code: 73 }];
+      fake.inbox.push(inboxOrder(mine), { ...inboxCancel(cancelled.id), restaurantId: 'rest-1' } as InboxItem);
+      const asked = fake.restoran.length;
+      expect(await live.pollPlatform('getir')).toEqual({ created: 0, cancelled: 1 });
+      expect(fake.restoran.slice(asked)).toEqual(['rest-1']);
+      // Sipariş girişe dek bekler, iptal uygulanır ama ikisi de kutuda kalır
+      expect(await byExt(mine.id)).toBeUndefined();
+      expect(fake.inbox.map((i) => i.id)).toEqual([`in-${mine.id}`, `cn-${cancelled.id}`]);
+      // Giriş olunca sipariş alınır, ikisi de silinir
+      expect(await live.pollPlatform('getir')).toEqual({ created: 1, cancelled: 0 });
+      expect(fake.restoran.slice(asked)).toEqual(['rest-1', 'rest-1', 'rest-1']);
+      expect(fake.inbox).toHaveLength(0);
+      expect(saved).toEqual(['rest-1']);
       await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(mine.id)).id}/reject`, { reason: 'Çok yoğunuz' });
     });
   });
