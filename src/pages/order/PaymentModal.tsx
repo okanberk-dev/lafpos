@@ -253,6 +253,7 @@ export function PaymentModal({
     pickedCount: picked.length,
     amountPaidHere: amountPaidHereOf(order, okc.data),
     nothingPaid: order.paid === 0,
+    mealOnDevice: method?.kind === 'yemek' && boot.integrations.okc.mealMethods ? boot.integrations.okc.mealMethods.includes(method.id) : undefined,
   });
   const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty) && !route.block;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
@@ -336,8 +337,8 @@ export function PaymentModal({
     autoSent.current = { amount, given: method.kind === 'nakit' && given != null ? given : null, methodName: method.name };
     try {
       // Nüsha basan kasa ekranıysa cihaz ödeyince nüsha sunucuda bekler (useDeviceCopies müşteri ve işyeri nüshasını kendi ayarıyla basar)
-      // Seçilen tür (nakit, kart) Pavo'da cihazda hazır gelir: kasiyer cihazda yeniden seçmez
-      await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null, storeCopy: deviceCopyHere(boot), ...(method.kind === 'nakit' || method.kind === 'kart' ? { odeme: method.kind } : {}) });
+      // Seçilen tür (nakit, kart, yemek kartı) cihazda hazır gelir (Pavo, Token kablolu): kasiyer cihazda yeniden seçmez
+      await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null, storeCopy: deviceCopyHere(boot), ...(method.kind === 'nakit' || method.kind === 'kart' || method.kind === 'yemek' ? { odeme: method.kind, methodId: method.id } : {}) });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : null;
       if (code !== 'okc_pending' && code !== 'okc_unknown') {

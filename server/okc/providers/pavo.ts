@@ -193,7 +193,11 @@ export function pavoSale(basket: FiscalBasket, orderNo: string, appVersion = '1'
     AddedSaleItems: items,
     // Kasada seçilen ödeme türü cihazda hazır gelir (Mediator 1 nakit, 2 kart; yanıttaki PaymentTypeId ile aynı); yoksa
     // kasiyer cihazda seçer. Tutar fişin toplamı: bölünmüş ödeme cihazda yapılmaz
-    ...(basket.odemeTuru ? { PaymentInformations: [{ Mediator: basket.odemeTuru === 'kart' ? 2 : 1, Amount: tl(total), CurrencyCode: 'TRY', ExchangeRate: 1 }] } : {}),
+    // Yemek kartında cihazın ödeme aracı no'su (Yönetim › Yazarkasa POS › yemek kartı eşlemesi); eşlenmemiş yemek kartı
+    // ödeme bilgisiyle gitmez, kasiyer cihazda seçer
+    ...(basket.odemeTuru && (basket.odemeTuru !== 'yemek' || basket.odemeAraci != null)
+      ? { PaymentInformations: [{ Mediator: basket.odemeTuru === 'yemek' ? basket.odemeAraci! : basket.odemeTuru === 'kart' ? 2 : 1, Amount: tl(total), CurrencyCode: 'TRY', ExchangeRate: 1 }] }
+      : {}),
   };
 }
 
@@ -213,11 +217,21 @@ function saleOf(res: PavoResponse): Obj | null {
 }
 
 /**
- * Pavo'nun ödeme tipi: 1 nakit, 2 kredi kartı (satış kaydında). Anlamı belgelenmemiş tip (yemek kartı, havale...)
- * tahminle bir türe yazılmaz: ödemesi işlenmez, sepet eksik ödenmiş sayılır, yönetici kalanı doğru türle alır
+ * Yemek kartına eşlenmiş ödeme araçları (Yönetim › Yazarkasa POS; servis ayarlardan verir). Eşleme yönetici seçimidir,
+ * tahmin değil: cihazın listesinde o no'nun adı görülerek yapılır
  */
-function kindOf(type: number | null): MethodKind | null {
-  return type === 1 ? 'nakit' : type === 2 ? 'kart' : null;
+let mealMediators: () => ReadonlySet<number> = () => new Set();
+export function usePavoMealMediators(fn: () => ReadonlySet<number>) {
+  mealMediators = fn;
+}
+
+/**
+ * Pavo'nun ödeme tipi: 1 nakit, 2 kredi kartı (satış kaydında); yemek kartına eşlenmiş araç yemek kartı. Anlamı
+ * bilinmeyen tip (eşlenmemiş yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi işlenmez, sepet eksik ödenmiş
+ * sayılır, yönetici kalanı doğru türle alır
+ */
+function kindOf(type: number | null, meal: ReadonlySet<number>): MethodKind | null {
+  return type === 1 ? 'nakit' : type === 2 ? 'kart' : type != null && meal.has(type) ? 'yemek' : null;
 }
 
 function docKindOf(name: string | null): DocKind {
@@ -239,7 +253,7 @@ export type SaleReading =
  * vazgeçti (`HasAbondon`) · başarısız: hata, belge ve ödeme yok · açık: hatasız ama satış kaydı yok (sürüyor ya da
  * yanıt biçimi tanınmadı; sonuç sorulur).
  */
-export function readSale(res: PavoResponse): SaleReading {
+export function readSale(res: PavoResponse, meal: ReadonlySet<number> = mealMediators()): SaleReading {
   const sale = saleOf(res);
   const payments: FiscalPayment[] = [];
   let taken = 0;
@@ -253,8 +267,9 @@ export function readSale(res: PavoResponse): SaleReading {
     if (amount == null || amount <= 0) continue;
     taken++;
     const type = num(o.PaymentTypeId ?? o.Mediator ?? o.PaymentMediatorId);
-    const kind = kindOf(type);
-    if (kind) payments.push({ kind, amount: Math.round(amount * 100), operatorId: null, description: `Pavo ödeme tipi ${type}` });
+    const kind = kindOf(type, meal);
+    // Yemek kartında aracın no'su operatör gibi taşınır: servis onu eşlenen ödeme türüne (Multinet...) yazar
+    if (kind) payments.push({ kind, amount: Math.round(amount * 100), operatorId: kind === 'yemek' ? type : null, description: `Pavo ödeme tipi ${type}` });
   }
   const doc = obj(((sale?.FinancialDocuments as unknown[] | undefined) ?? [])[0]);
   const docId = doc ? (str(doc.InvoiceNo) ?? str(doc.DocumentNo)) : null;

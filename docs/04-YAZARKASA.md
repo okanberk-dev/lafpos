@@ -19,6 +19,7 @@ ve KDV dökümü, açılışta sorgu, denetim kaydı).
 | `kapali` | Yazarkasa düğmeleri görünmez; ödeme LafPOS'ta alınır, mali fiş ayrıca kesilir |
 | `simulator` (eğitim cihazı) | Sepet `/cihaz` ekranına düşer; orada nakit/kart/yemek kartı seçilip "ödendi" denir. **Gerçek fiş kesilmez**; kurulum ve personel eğitimi içindir. İlk kurulum bununla gelir |
 | `tokenx` | TokenX Connect (Cloud) üzerinden gerçek cihaz |
+| `tokenkablo` | Token (Beko 300TR, X30TR) kasa bilgisayarına kabloyla: TokenX Connect Wire / Integration Hub; internet ve Token hesabı gerekmez, yalnız kasada ödeme (§9) |
 | `pavo` | Pavo (N86 ve diğer PavoPay cihazları) kafenin yerel ağında REST ile; yalnız kasada ödeme (§8) |
 
 Gerçek cihazla deneme yapılmaz: önce eğitim cihazı, sonra Token'ın test ortamı, en son canlı cihaz.
@@ -36,7 +37,7 @@ tutarına kırpılması `service.ts`'te her marka için aynıdır; yeni marka bu
 
 | Marka | Kanal | Durum | Üreticiden istenecek |
 |---|---|---|---|
-| **Token · Beko** (300TR, X30TR; 400TR e-belge) | TokenX Connect Cloud | **Bağlı** | Canlı ve test client-id/secret; 300TR ve 400TR'nin Cloud desteği; Cloud'dan iade ve `documentType` değerleri; terminal başına TokenX Connect üyelik ücreti; webhook'ların geldiği IP listesi |
+| **Token · Beko** (300TR, X30TR; 400TR e-belge) | TokenX Connect Cloud; kablolu (TokenX Connect Wire, §9) | **Bağlı** (bulut); **kablolu Kasım 2026**, gerçek cihazda ilk satışla doğrulanacak | Canlı ve test client-id/secret; 300TR ve 400TR'nin Cloud desteği; Cloud'dan iade ve `documentType` değerleri; terminal başına TokenX Connect üyelik ücreti; webhook'ların geldiği IP listesi |
 | **Hugin** (Tiger T300, S1...) | Cloud Link: Hugin TSM bizim HTTPS adresimizi çağırır (`GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/result`, `POST /sales`, `X-ApiKey`) | Belge eksik; para yolu tahminle kurulmaz | Postman koleksiyonu ya da OpenAPI; `/sales` gövdesinin tamamı (ödeme kalemleri ve türleri, Z no, fiş no, cihaz seri no, siparişle bağı); iptal/iade bildirimi; tekrar gönderim ve idempotency; satıştan sonra siparişin listeden düşme kuralı, iki cihaz aynı masayı açarsa kilit; `documentType` değerleri; ödeme kodlarının anlamı (`CHECK`); desteklenen modeller, lisans ve kayıt |
 | **Pavo** (N86, N96, UN20, N6, CT20) | Yerel ağda REST (cihazda "Eşleştir"); Intent, Cloud, UniCloud da var | **Bağlı (yerel ağ, Kasım 2026)**; gerçek cihazda ilk satışla doğrulanacak (§8). VUK 507 cihazları e-Arşiv keser, kafenin e-Arşiv hesabı gerekir | §8.4'teki liste: PavoPay REST belgesi, ödeme tipi ve belge türü kodları, `GetSaleResult` yanıtı, iptal ve iade |
 | **Ingenico** (Move5000F, iDE280, A910SF) | GMP-3, Windows DLL (USB/TCP) | Geliştirici ücreti ve her sürümün hash kaydı gerekir | Geliştirici programı, GMPSmartDLL ve belgesi, test cihazı, sürüm başına hash kaydı, bulut/TSM kanalı var mı |
@@ -107,13 +108,14 @@ Yönetim › Yazarkasa POS › **Ödemeyi alınca cihaza gönder** (`okcAuto`; y
 gerçek cihazda (Pavo, Token) açık, eğitim cihazında kapalı: deneme modunda nakit satış eğitim cihazını beklemez;
 elle açılır ya da kapatılır, seçilen değer bağlantı değişse de kalır (`okcAutoOn`). Açıkken ödeme penceresinde ayrı "Yazarkasaya gönder" düğmesi yoktur: kasiyer türü seçip **Ödemeyi al**'a
 basınca hesap (ya da seçilen kalemler) aynı uçla (`POST /api/okc/orders/:id/send`) cihaza gider, pencere "Cihazda ödeme
-bekleniyor" der. Ödeme türü cihazda seçilir: Pavo'ya ödeme bilgisi gönderilmez (§8.2, belgede yok), Token sepetinin
-ödeme alanı (`paymentItems`) da sahada denenmediği için kullanılmaz. Cihaz ödeyince
+bekleniyor" der. Kasada seçilen tür Pavo'da `PaymentInformations` (§8.2, §8.6), Token kabloluda sepetin `paymentItems`'ı
+(§9.1) ile gider, cihaz o türle açılır; Token bulutta `paymentItems` sahada denenmediği için kullanılmaz, tür cihazda
+seçilir. Cihaz ödeyince
 ödeme bugünkü sonuç yoluyla (`applyResult`, `okc.paid`) yazılır, pencere sonuç ekranını (nakitte para üstü) gösterir.
 
 | Durum | Ne olur |
 |---|---|
-| Tamamı nakit, kart (Token ve eğitim cihazında yemek kartı da) | Sepet cihaza gider |
+| Tamamı nakit, kart; yemek kartı (Token ve eğitim cihazında her yemek kartı, Pavo'da cihazın ödeme aracına eşlenen; §8.6) | Sepet cihaza gider. Token kabloluda ve Pavo'da seçilen tür sepetle gider (`odeme`, `methodId`): cihaz o türle açılır |
 | Kalem seç | Seçilen kalemler cihaza gider |
 | Kısmi tutar, bahşiş, paylaşımlı hesap (pay), açık hesap, havale, LafPOS'ta alınmış ödeme varken bütün hesap | Bugünkü gibi LafPOS'a yazılır; düğmenin yanında nedeni bir cümle (`shared/odeme-fisi.ts` › `deviceRoute`) |
 | Cihaz reddetti, cihazda vazgeçildi, cihaza ulaşılamadı | Sade neden ve **Yeniden dene**; adisyon açık kalır, ödeme yazılmaz |
@@ -511,4 +513,90 @@ hiç bağlı olmasa da gün kapalı kalır.
   reddiyle yanıtlar, ör. 73). Bekleme süreleri `pavoTiming.eodMs` ve `eodCopyMs` (taban ve doğrulama) ile kısalır;
   testler "satış yok" okumasını `failConfirmMs: 0` ile ilk okumada kesinleştirir (süreli hâlinin ayrı testi var).
   Testler yeni gün için bugün kapanan günleri geçmiş tarihe alır (bir iş gününe tek Z).
+
+### 8.6 Yemek kartı (Kasım 2026)
+
+Pavo'nun belgesi yalnız nakit (1) ve kartı (2) tanımlar; yemek kartlarının ödeme aracı no'su cihazdan cihaza değişir ve
+belgesizdir. LafPOS tahmin etmez, cihazın kendi listesini (`/PaymentMediators`, "Bağlantıyı dene") okur ve yemek kartı
+ödeme türlerini **adıyla** eşler (`shared/yemek-karti.ts` › `pavoMealMap`: "Multinet", "Sodexo"/"Pluxee",
+"Ticket"/"Edenred", "Setcard", "Metropol"); eşleme Yönetim › Yazarkasa POS › **Yemek kartları cihazda** kartından elle
+de değişir (`okcPavoMediatorMethods`: araç no → ödeme türü).
+
+- Kasada eşlenmiş yemek kartı seçilip "Ödemeyi al"a basılınca sepet `PaymentInformations` (`Mediator` = aracın no'su)
+  ile gider, cihaz o araçla açılır ("Ödeme türü cihazda hazır gelsin" açıkken). Eşlenmemiş yemek kartı cihaza gitmez,
+  LafPOS'a yazılır (`deviceRoute`: `mealOnDevice`, `boot.integrations.okc.mealMethods`).
+- Cihazın yanıtındaki eşlenmiş araç yemek kartı ödemesidir (`readSale`: `operatorId` = aracın no'su) ve eşlenen türe
+  (Multinet...) yazılır; eşlenmemiş araç bugünkü gibi tahminle işlenmez (§8.3).
+- "Pavo'yu kur" (tek düğme) ve "Bağlantıyı dene" listeyi okur, saklar (`pavo.mediators`) ve boş eşlemeyi kendiliğinden
+  doldurur.
+
+## 9. Token kablolu (TokenX Connect Wire, Kasım 2026)
+
+Beko 300TR ve X30TR kasa bilgisayarına kabloyla bağlanır (300TR: beşikteki RS232-USB entegrasyon kablosu; X30TR: soldaki
+Type-C). Token'ın belgesi: developer.tokeninc.com › X Platform › Token X Connect Wire (Genel Tanıtım, Geliştirici
+Dokümanı, Banka / Yemek Uygulamaları, Sık Sorulan Sorular). Kod: köprü `server/okc/token-kablo-kopru.ts`, yönetici
+`token-kablo.ts`, kurulum `token-kablo-kurulum.ts`, saf kararlar `token-kablo-plan.ts`, LafPOS'a bağlanışı
+`token-kablo-servis.ts`, sağlayıcı `providers/tokenkablo.ts`; ekran `src/pages/admin/OkcKurulum.tsx`. Testler
+`tests/token-kablo.test.ts` (sahte köprüyle uçtan uca), `tests/yemek-karti.test.ts`.
+
+### 9.1 Nasıl çalışır
+
+- Token'ın kütüphanesi (IntegrationHub.dll, C#; içindeki yerel kütüphane x86) yalnız Windows'ta çalışır. LafPOS onu
+  **ayrı süreçte** yükler: 32 bit Windows PowerShell, C# köprüsünü açılışta kendisi derler (Add-Type); ek program
+  kurulmaz. Köprü LafPOS'la satır satır konuşur (komut: `kimlik<TAB>komut<TAB>base64 gövde`; yanıt ve olaylar JSON
+  satırı). Kütüphane çökse de kasa sunucusu düşmez; köprü 3 sn, 10 sn, 30 sn, sonra dakikada bir yeniden başlar.
+  Kütüphane hiç yüklenemiyorsa (Visual C++ yok, DLL bozuk) yeniden denenmez, neden ekranda kalır.
+- **Kablo takılınca** köprü cihazı bildirir (mali no: X30TR `AV…`, 300TR `AT…`); LafPOS kısımları ve ödeme
+  uygulamalarını okur (`getFiscalInfo`; Token'a göre her bağlantıda zorunlu) ve modeli (`getActiveDeviceIndex`).
+  Sonra kendiliğinden (`kabloPlan`, ayar `okcTokenKabloOto`, varsayılan açık):
+  - **Bağlantı:** Kapalı'dan her zaman, eğitim cihazından gün açık değilken Token kabloluya geçer (açık eğitim gününe
+    gerçek fiş karışmaz; neden kartta görünür). Pavo ya da Token bulut seçiliyse dokunulmaz.
+  - **KDV → kısım:** cihazda olmayan ya da oranı tutmayan kısım cihazdakiyle değişir, tutan kalır.
+  - **Yemek kartı:** kanalı bilinen ödeme türleri cihazdaki uygulamasına eşlenir (Token'ın belgeli operatör no'ları:
+    Edenred 1001, Multinet 1002, Setcard 1003, Pluxee/Sodexo 1004, TokenFlex 1005, Metropol 1006); elle eşleme korunur.
+  - Değişen her şey denetim kaydına (`okc.settings`) yazılır.
+- **Satış:** sepet bulutla aynı biçimde (kuruş, adet x1000, KDV x100, kısım no) `sendBasket` ile gider; bulutun liste
+  alanları (masa adı, filtre, webhook) gitmez (`wireBasket`). Kasada seçilen tür sepetle gider ("Ödeme türü cihazda
+  hazır gelsin", `okcTokenOdemeSecili`, varsayılan açık): nakit `type 1` (cihaz fişi hemen keser), kart `type 3`, yemek
+  kartı `type 7` ve kartın `operatorId`'si (cihaz o yemek kartı uygulamasını açar, bilgi fişi keser). Tutar sepetin
+  toplamı; bölünmüş ödeme cihazda yapılır.
+- Kütüphane `0` dönerse ya da cihaz 9 tipli paket yollarsa (300TR satış ekranında değil, X30TR'de kablolu uygulama açık
+  değil) sepet hataya düşer, adisyon kilitlenmez, kasiyer nedeni görür. Yanıt gelmezse sepet bekleyen kalır.
+- **Sonuç** cihazdan geri çağrıyla gelir (3 tipli paket; biçim bulutun satış sonucuyla aynı: `status` 0 ödendi, -1
+  vazgeçildi, 99 fiş iptal; `paymentItems`, `zNo`, `receiptNo`) ve hemen adisyona işlenir (`kabloSale` → `applyResult`);
+  sorgu döngüsü de aynı sonucu okur. Durum sorgusu yoktur: kablo koptuysa cihaz, bağlantı gelince sonucu yeniden yollar.
+- **İptal:** kablolu protokolde sepet cihazdan silinmez. Satış cihazın ekranındaysa kasiyer cihazda vazgeçer (sonuç
+  "vazgeçildi" gelir). Cihaz bağlı değilse sepet yalnız yetkili onayıyla LafPOS'ta iptal sayılır (`okc.force_cancel`).
+- Yalnız kasada ödeme: cihaz açık hesap listesi tutmaz (masada ödeme seçilemez, 409 `okc_mode`).
+
+### 9.2 Kurulum (tek düğme)
+
+Kasa bilgisayarına LafPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS › Token kablolu › **Kurulumu yap** yapar
+(`POST /api/okc/token-kablo/kur`, arka planda; adımlar kartta canlı). Kasa sunucusu SYSTEM olarak çalıştığı için
+(Görev Zamanlayıcı, `lafpos.nsi`) kurulumlar onay penceresi açmadan sessiz yapılır; dosyalar
+`C:\ProgramData\LafPOS\token-kablo`'da:
+
+1. **Visual C++ çalışma kitaplığı (x86)** yoksa Microsoft'un kalıcı adresinden (`aka.ms/vs/17/release/vc_redist.x86.exe`)
+   indirilir; Microsoft imzası geçerliyse `/install /quiet /norestart` ile kurulur.
+2. **Token kütüphanesi** (IntegrationHub.dll v2.5.5) Token'ın açık örnek projesinden sabit commit ve SHA-256 ile
+   indirilir (`HUB_DLL`); özet tutmazsa yazılmaz.
+3. **Köprü** başlar.
+4. **Cihaz** 20 sn beklenir. Görünmezse Token'ın sürücü kurulum aracı (v2.9.3; 300TR FTDI, X30TR libusbK) sabit SHA-256
+   ile indirilip sessiz kurulur (bir kez), köprü yeniden başlar, 45 sn daha beklenir. Yine görünmezse cihazdaki ayar
+   söylenir: 300TR'de Menü › Ayarlar › Harici Cihaz Modu › GMP3 › TOKENX CONNECT, kablo beşikte RS232'de, cihaz satış
+   ekranında; X30TR'de Satış Uygulamaları › "TokenX Connect Uygulaması (Kablolu)" açık ("Sepet bekleniyor"), ADB kapalı,
+   cihazdaki izin sorusu onaylı.
+5. **Kısımlar, yemek kartları ve bağlantı** (§9.1); patron bastıysa bağlantı her durumda Token kabloluya geçer.
+
+Kurulumdan sonra köprü her açılışta kendiliğinden başlar (Token kablolu seçiliyken ya da kendiliğinden geçiş açıkken
+Kapalı ve eğitim cihazında); kablo takılınca cihaz tanınır. Windows dışında (geliştirme, tarayıcı demosu) köprü çalışmaz,
+kurulum düğmesi nedeniyle reddedilir. USB seçmeli askıya alma kurulumda kapatılır (`lafpos.nsi`), Token'ın uzun
+beklemeden sonraki libusb hatasını önler.
+
+### 9.3 Sahada ilk deneme
+
+Gün açıkken ve tezgâhta müşteri yokken: (1) kabloyu takın, kartta "Bağlı · 300TR · AT…" görünsün; (2) küçük tutarlı
+nakit satış: cihaz fişi kendiliğinden kesmeli, adisyon kapanmalı; (3) kart ve bir yemek kartıyla birer küçük satış:
+cihaz ilgili uygulamayı açmalı, yemek kartında bilgi fişi çıkmalı ve ödeme LafPOS'ta o yemek kartına yazılmalı; (4)
+cihazda vazgeçin: adisyon açık kalmalı. Ham yanıt sepetin sonucunda saklanır (`fiscal_receipts.result.raw`).
 

@@ -33,8 +33,12 @@ import {
   readEodBaseline,
   reconfigurePavo,
   usePavoConfig,
+  usePavoMealMediators,
   usePavoStore,
 } from './providers/pavo';
+import { tokenKabloProvider } from './providers/tokenkablo';
+import { KabloError } from './token-kablo';
+import { pavoMediatorFor, TOKEN_MEAL_OPERATORS, tokenOperatorFor } from '@shared/yemek-karti';
 import { findPavo } from './pavo-bul';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
 import { describe as describePavo, PAIRING_LOST_MESSAGE, pairingLost, pavoAddress, PavoError, pavoSerial } from './pavo';
@@ -63,6 +67,8 @@ usePavoStore({
 });
 // Cihazın adresi ve seri no'su yönetimden girildiyse o, yoksa ayarlar dosyası (PAVO_URL, PAVO_SERIAL)
 usePavoConfig(() => getSettings().pavoDevice);
+// Pavo'da yemek kartına eşlenmiş ödeme araçları: cihazın yanıtındaki bu no'lar yemek kartı ödemesidir
+usePavoMealMediators(() => new Set(Object.keys(getSettings().okcPavoMediatorMethods).map(Number)));
 
 /**
  * Yazarkasa durumu. Pavo'nun son banka gün sonu (`pavo.eod`) tutarları yalnız kasa rakamlarını görene (kör kasa:
@@ -77,13 +83,17 @@ export function okcStatus(user?: AuthUser) {
     mode: s.okcMode,
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
+    pavoMediatorMethods: s.okcPavoMediatorMethods,
+    tokenOdemeSecili: s.okcTokenOdemeSecili,
+    tokenKabloOto: s.okcTokenKabloOto,
     pavoAutoEod: s.okcPavoAutoEod,
     pavoOdemeSecili: s.okcPavoOdemeSecili,
     pavoEodFis: s.okcPavoEodFis,
     auto: okcAutoOn(s),
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
-    pavo: { ...pavoProvider.status(), eod: eod ? eodFor(user ?? null, eod) : null },
+    pavo: { ...pavoProvider.status(), eod: eod ? eodFor(user ?? null, eod) : null, mediators: getSyncState<{ id: number | null; name: string | null }[]>('pavo.mediators') ?? [] },
+    tokenKablo: { ...tokenKabloProvider.status(), setup: getSyncState<unknown>('tokenkablo.kurulum'), held: s.okcProvider === 'tokenkablo' ? null : getSyncState<string>('tokenkablo.held') },
     lastError: getSyncState<{ message: string; at: number }>('okc.lastError'),
     /** Son hata cihazın başka programla eşleştiği (73/74): ekranda doğrudan "Yeniden eşleştir" */
     pairingLost: !!getSyncState<{ message: string }>('okc.lastError')?.message?.includes(PAIRING_LOST_MESSAGE),
@@ -152,7 +162,7 @@ function publish(orderId: string, kind: string, message?: string, byUserId?: str
  * ekranı (fiş yazıcısı var, müşteri ve işyeri nüshasından en az birinin ayarı açık; her kâğıt kendi ayarıyla basılır);
  * cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar (`store-copy.ts`)
  */
-export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean; odeme?: 'nakit' | 'kart' } = {}): Promise<ReceiptDTO> {
+export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean; odeme?: 'nakit' | 'kart' | 'yemek'; methodId?: string } = {}): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
   const s = getSettings();
   if (s.okcProvider === 'kapali') throw conflict('Yazarkasa POS bağlantısı kapalı (Yönetim › Yazarkasa POS)', 'okc_off');
@@ -230,8 +240,19 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
     });
-    // Pavo: kasada seçilen ödeme türü (nakit, kart) cihazda önceden seçili gelir; ayar kapalıysa kasiyer cihazda seçer
-    if (s.okcProvider === 'pavo' && s.okcPavoOdemeSecili && opts.odeme) built = { ...built, basket: { ...built.basket, odemeTuru: opts.odeme } };
+    // Pavo: kasada seçilen ödeme türü (nakit, kart, eşlenmiş yemek kartı) cihazda önceden seçili gelir; ayar kapalıysa
+    // kasiyer cihazda seçer
+    if (s.okcProvider === 'pavo' && s.okcPavoOdemeSecili && opts.odeme) {
+      const araci = opts.odeme === 'yemek' && opts.methodId ? pavoMediatorFor(opts.methodId, s.okcPavoMediatorMethods) : null;
+      built = { ...built, basket: { ...built.basket, odemeTuru: opts.odeme, ...(araci != null ? { odemeAraci: araci } : {}) } };
+    }
+    // Token kablolu: ödeme sepetle gider (nakit 1, kart 3, yemek kartı 7 ve uygulaması): nakitte cihaz fişi hemen keser
+    if (s.okcProvider === 'tokenkablo' && s.okcTokenOdemeSecili && opts.odeme) {
+      const method = opts.methodId ? db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, opts.methodId)).get() : null;
+      const operatorId = opts.odeme === 'yemek' && method ? tokenOperatorFor(method.id, method.channel, s.okcOperatorMethods) : null;
+      const type = opts.odeme === 'nakit' ? 1 : opts.odeme === 'kart' ? 3 : 7;
+      built = { ...built, basket: { ...built.basket, paymentItems: [{ amount: built.amount, type, ...(operatorId != null ? { operatorId } : {}) }] } };
+    }
     // Cihazın kabul etmeyeceği sepet (Pavo'da %0 KDV'li kalem gibi) kayıt yazılmadan reddedilir
     provider.validate?.(built.basket);
   } catch (e) {
@@ -279,7 +300,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
         recordError(message);
         if (!uncertain) {
           publish(orderId, 'okc.error', message, actor.user.id);
-          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : e instanceof PavoError ? 'pavo_send' : 'okc_send');
+          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : e instanceof PavoError ? 'pavo_send' : e instanceof KabloError ? 'tokenkablo_send' : 'okc_send');
         }
         unknown = message;
       }
@@ -428,11 +449,18 @@ function priorOf(orderId: string, items: { id: string; qty: number; kdvRate: num
   return { byRate, service };
 }
 
-function methodFor(kind: MethodKind, operatorId: number | null): string | null {
+function methodFor(kind: MethodKind, operatorId: number | null, provider?: string): string | null {
   const methods = db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.active, true)).all();
   if (kind === 'yemek' && operatorId != null) {
-    const mapped = getSettings().okcOperatorMethods[String(operatorId)];
+    // Pavo'da no cihazın ödeme aracıdır (kendi eşlemesi), Token'da yemek kartı operatörü
+    const s = getSettings();
+    const mapped = (provider === 'pavo' ? s.okcPavoMediatorMethods : s.okcOperatorMethods)[String(operatorId)];
     if (mapped && methods.some((m) => m.id === mapped)) return mapped;
+    // Token: elle eşlenmemişse kanalından (Multinet 1002, Pluxee 1004...)
+    if (provider !== 'pavo') {
+      const byChannel = methods.find((m) => m.kind === 'yemek' && m.channel != null && TOKEN_MEAL_OPERATORS[m.channel] === operatorId);
+      if (byChannel) return byChannel.id;
+    }
   }
   const byKind = methods.filter((m) => m.kind === kind).sort((a, b) => a.sort - b.sort)[0];
   if (byKind) return byKind.id;
@@ -489,7 +517,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
     const sender = r.sentBy ? db.select().from(schema.users).where(eq(schema.users.id, r.sentBy)).get() : null;
     const userId = sender?.id ?? 'sistem';
     const payments = clampPayments(result.payments, r.amount)
-      .map((p) => ({ methodId: methodFor(p.kind, p.operatorId), amount: p.amount, note: `Yazarkasa${doc ? ` ${doc}` : ''}` }))
+      .map((p) => ({ methodId: methodFor(p.kind, p.operatorId, r.provider), amount: p.amount, note: `Yazarkasa${doc ? ` ${doc}` : ''}` }))
       .filter((p): p is { methodId: string; amount: number; note: string } => !!p.methodId);
     const gap = r.amount - payments.reduce((a, p) => a + p.amount, 0);
     if (gap > 0) {
@@ -772,7 +800,7 @@ export async function refreshReceipt(receiptId: string) {
 }
 
 /** Durumu sorgulanabilen sağlayıcılar (sorgu döngüsü yalnız bunların sepetlerine bakar) */
-const POLLED = ['tokenx', 'pavo'] as const;
+const POLLED = ['tokenx', 'tokenkablo', 'pavo'] as const;
 
 // ─── Sorgulama döngüsü ──────────────────────────────────────────────────────
 
@@ -903,9 +931,15 @@ export async function testProvider() {
   if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
   const out = await provider.test().catch(deviceError);
   // Pavo: cihaz yanıt verdi ve eşleştirme tutuyor; Token: deneme hatasız bitti
-  const pavoOut = out as { ping?: { ok?: boolean }; paired?: boolean } | null;
-  if (provider.id !== 'pavo' || (pavoOut?.ping?.ok && pavoOut.paired)) clearError();
+  const pavoOut = out as { ping?: { ok?: boolean }; paired?: boolean; mediators?: { id: number | null; name: string | null }[] } | null;
+  // Pavo'nun ödeme araçları saklanır: yemek kartı eşlemesi ekranı listeyi buradan gösterir
+  if (provider.id === 'pavo' && pavoOut?.mediators?.length) rememberPavoMediators(pavoOut.mediators);
+  if (provider.id === 'tokenkablo' ? tokenKabloProvider.configured() : provider.id !== 'pavo' || (pavoOut?.ping?.ok && pavoOut.paired)) clearError();
   return out;
+}
+
+export function rememberPavoMediators(list: { id: number | null; name: string | null }[]) {
+  setSyncState('pavo.mediators', list.slice(0, 50));
 }
 
 /** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca LafPOS cihaza satış gönderebilir */

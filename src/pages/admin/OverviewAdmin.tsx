@@ -34,7 +34,7 @@ interface SyncStatus {
     sent: { at: number; count: number } | null;
   };
   cloud: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
-  okc: { provider: 'kapali' | 'simulator' | 'tokenx' | 'pavo'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
+  okc: { provider: 'kapali' | 'simulator' | 'tokenx' | 'tokenkablo' | 'pavo'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
 
 /**
@@ -230,7 +230,7 @@ export default function OverviewAdmin() {
           label: 'Yazarkasa',
           tone: s.okc.provider === 'kapali' ? 'neutral' : s.okc.lastError ? 'warning' : s.okc.provider === 'simulator' ? 'info' : 'success',
           state: s.okc.provider === 'kapali' ? 'Kapalı' : s.okc.provider === 'simulator' ? 'Eğitim cihazı' : s.okc.provider === 'pavo' ? 'Pavo' : 'TokenX',
-          detail: s.okc.lastError ? s.okc.lastError.message : s.okc.provider === 'tokenx' ? `${s.okc.mode === 'liste' ? 'Liste' : 'Anlık'} sepet` : s.okc.provider === 'pavo' ? 'Yerel ağ, kasada ödeme' : 'Fişler gerçek cihaza gitmiyor',
+          detail: s.okc.lastError ? s.okc.lastError.message : s.okc.provider === 'tokenx' ? `${s.okc.mode === 'liste' ? 'Liste' : 'Anlık'} sepet` : s.okc.provider === 'pavo' ? 'Yerel ağ, kasada ödeme' : s.okc.provider === 'tokenkablo' ? 'Kablolu, kasada ödeme' : 'Fişler gerçek cihaza gitmiyor',
         },
         ...(can('ayar.yonet')
           ? [

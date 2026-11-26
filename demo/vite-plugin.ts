@@ -13,6 +13,7 @@ const SWAP = new Map([
 
 /** Node modülleri: sunucunun kullandığı kadar tarayıcı karşılığı (demo/shims) */
 const BUILTINS: Record<string, string> = {
+  'node:child_process': at('demo/shims/child_process.ts'),
   'node:crypto': at('demo/shims/crypto.ts'),
   'node:events': at('demo/shims/events.ts'),
   'node:fs': at('demo/shims/fs.ts'),

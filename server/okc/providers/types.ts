@@ -7,14 +7,17 @@ import type { TokenxBasket } from '../tokenx';
  * cihazla konuşur. Sonuç markadan bağımsız `FiscalResult`'tır: mali fiş, bilgi fişi ya da e-belge (VUK 507 cihazları).
  */
 
-export type ProviderId = 'tokenx' | 'pavo' | 'hugin' | 'simulator';
+export type ProviderId = 'tokenx' | 'tokenkablo' | 'pavo' | 'hugin' | 'simulator';
 
 /**
  * LafPOS'un cihaz sepeti. Biçim TokenX sepetiyle aynıdır: birim fiyat kuruş, adet x1000, KDV oranı x100, kısım no,
  * kalemin indirim payı `adjust.totalValue`. Diğer sağlayıcılar bu biçimden kendi biçimlerine çevirir.
  */
-/** `odemeTuru`: yalnız Pavo; kasada seçilen ödeme türü cihazda önceden seçili gelir (providers/pavo.ts `pavoSale`) */
-export type FiscalBasket = TokenxBasket & { odemeTuru?: 'nakit' | 'kart' };
+/**
+ * `odemeTuru`: yalnız Pavo; kasada seçilen ödeme türü cihazda önceden seçili gelir (providers/pavo.ts `pavoSale`).
+ * `odemeAraci`: yemek kartında cihazın ödeme aracı no'su (Yönetim › Yazarkasa POS › yemek kartı eşlemesi)
+ */
+export type FiscalBasket = TokenxBasket & { odemeTuru?: 'nakit' | 'kart' | 'yemek'; odemeAraci?: number };
 
 /** Cihazın kestiği belge: ÖKC mali fişi, bilgi fişi (yemek kartı, fatura), e-Arşiv ya da e-Fatura (VUK 507 cihazları) */
 export type DocKind = 'okc_fis' | 'bilgi_fisi' | 'e_arsiv' | 'e_fatura';
