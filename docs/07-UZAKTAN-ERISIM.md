@@ -281,7 +281,9 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   kasa önemli olayı imzalı iter (`POST /api/uzaktan/bildirim`), site abonelere bildirim atar. Olaylar: tek seferde
   eşik üstü iptal ya da ikram (varsayılan ₺500), gün sonunda kasa farkı (₺100), uzun internet kesintisi (15 dakika;
   dönünce süresiyle), Pavo gün sonu alınamadı, **kapanış saati** (`kapanis`; kapanışa 30 dakika kala gün hâlâ açıksa;
-  yalnız Ayarlar › Gün sonu ve Z'de kapanış saati girilince, kural kasadaki kartla ortak `shared/closing.ts`); güncelleme
+  yalnız Ayarlar › Gün sonu ve Z'de kapanış saati girilince, kural kasadaki kartla ortak `shared/closing.ts`), **gün sonu
+  lafmaliyet'e gitmedi** (`lafmaliyet`; kapanışta gövde kurulamadı ya da lafmaliyet kalıcı reddetti, gün ve neden için bir
+  kez, yeniden gönderme yolu "Kasa › Geçmiş günler › Z › Gönder"; ayrı anahtarı yok, `docs/03-ENTEGRASYON.md` §4.11); güncelleme
   sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür. Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim
   › Telefon bildirimleri (kapatmak ya da eşiği yükseltmek yalnız patron); internet yokken olay kuyrukta bekler (en çok
   20, 24 saat). Kapanış bildirimi kuyruğa girmez: gün başına bir kez (yeniden açılan günde bir kez daha), metni gittiği

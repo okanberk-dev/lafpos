@@ -16,7 +16,8 @@ import { cloudEnabled } from './cloud';
  * Patrona telefon bildirimi (docs/07-UZAKTAN-ERISIM.md §4 "Bildirimler"): kasa önemli olayı LafPOS Uzaktan'a imzalı
  * iter, site patronun telefonuna Web Push atar (api/_bildirim.ts). Olaylar: büyük iptal ya da ikram (eşik üstü), gün
  * sonunda kasa farkı (eşik üstü), uzun internet kesintisi (dönünce, süresiyle), Pavo gün sonu alınamadı, kapanış
- * saatine 30 dakika kala gün hâlâ açık (`closingNoticeTick`). Güncelleme sorununu Merkez nabızdan kendisi görür. Ayar
+ * saatine 30 dakika kala gün hâlâ açık (`closingNoticeTick`), gün sonu lafmaliyet'e gitmedi (`lafmaliyet`: gövde
+ * kurulamadı ya da kalıcı ret; ayrı anahtarı yok, sync/lafmaliyet.ts). Güncelleme sorununu Merkez nabızdan kendisi görür. Ayar
  * Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri; LafPOS Uzaktan kurulu değilse hiçbir şey gitmez. İnternet
  * yokken olay kuyrukta bekler (en çok 20, bir günden eskisi düşer) ve internet dönünce gider (kapanış bildirimi
  * kuyruğa girmez, bkz. `closingNoticeTick`). Bildirimde müşteri adı ve telefonu, maliyet yok; tutar ve personel adı var (patronun telefonu).
@@ -53,7 +54,7 @@ export function setNotifySettings(patch: Partial<NotifySettings>) {
 export interface Notice {
   /** Kuyruktaki kaydın kimliği (eski kayıtta yok: an, tür ve başlıkla eşlenir) */
   id?: string;
-  kind: 'iptal' | 'ikram' | 'kasa-farki' | 'internet' | 'pavo' | 'kapanis' | 'deneme';
+  kind: 'iptal' | 'ikram' | 'kasa-farki' | 'internet' | 'pavo' | 'kapanis' | 'lafmaliyet' | 'deneme';
   title: string;
   body: string;
   at: number;

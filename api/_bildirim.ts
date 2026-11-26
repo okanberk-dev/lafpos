@@ -5,7 +5,8 @@
  * - Abonelik: patron Uzaktan'da (telefonda, ana ekrana eklenmiş sitede) "Bildirimleri aç"a basar; tarayıcının
  *   aboneliği gerçek oturumla (üye ya da parolalı giriş) saklanır. Parolasız görünümde abonelik açılmaz.
  * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, LAFPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
- *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı, kapanış saati (gün hâlâ açık; `kapanis`). Güncelleme
+ *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı, kapanış saati (gün hâlâ açık; `kapanis`), gün sonu
+ *   lafmaliyet'e gitmedi (gövde kurulamadı ya da kalıcı ret; `lafmaliyet`). Güncelleme
  *   hatasını Merkez nabızdan kendisi görür. Bilinmeyen tür 400 alır; kasa onu yeniden denemez (eski sitede yeni tür
  *   kuyruğu tıkamaz).
  * - Anahtarlar: VAPID_PUBLIC_KEY ve VAPID_PRIVATE_KEY (Vercel). Yoksa bildirim kapalıdır, hiçbir şey kırılmaz.
@@ -107,7 +108,7 @@ export async function broadcast(deps: BildirimDeps, n: Notice): Promise<number> 
   return sent;
 }
 
-const KINDS = new Set(['iptal', 'ikram', 'kasa-farki', 'internet', 'guncelleme', 'pavo', 'kapanis', 'deneme']);
+const KINDS = new Set(['iptal', 'ikram', 'kasa-farki', 'internet', 'guncelleme', 'pavo', 'kapanis', 'lafmaliyet', 'deneme']);
 
 export async function bildirim(req: Request, path: string, deps: BildirimDeps): Promise<Response> {
   // Sayfanın sorusu: bildirim kurulu mu, açık anahtar (gizli değil)

@@ -169,7 +169,7 @@ function EditDialog({ row, enYeni, onClose }: { row: Row; enYeni: Data['enYeni']
 }
 
 const PUSH_TEXT: Record<PushState, string> = {
-  acik: 'Bu telefon bildirim alıyor: büyük iptal ve ikram, kasa farkı, uzun internet kesintisi, güncelleme ve Pavo gün sonu sorunları',
+  acik: "Bu telefon bildirim alıyor: büyük iptal ve ikram, kasa farkı, uzun internet kesintisi, kapanış saati, güncelleme, Pavo gün sonu sorunları ve lafmaliyet'e gitmeyen gün sonu",
   kapali: 'Önemli olaylar bu telefona bildirim olarak gelsin. Eşikler kasada: Yönetim › Ağ ve uzaktan erişim',
   'ana-ekran': 'iPhone’da önce Paylaş › Ana Ekrana Ekle ile siteyi ana ekrana ekleyin, oradan açıp bildirimleri açın',
   engelli: 'Bu tarayıcıda bildirim izni kapalı; telefonun ayarlarından açın',

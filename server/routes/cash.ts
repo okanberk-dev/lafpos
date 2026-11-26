@@ -177,7 +177,8 @@ cashRoutes.post('/day/close', async (c) => {
   const remote = actor.user.id === 'uzaktan';
   const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input, remote ? { userId: actor.user.id, name: actor.user.name } : undefined));
   // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir. Pavo'nun otomatik gün sonu
-  // başlayacaksa gövde onun sonucunu bekler (tek gövde, lafmaliyet'te tek e-posta)
+  // başlayacaksa gövde onun sonucunu bekler (tek gövde, lafmaliyet'te tek e-posta). Atmaz: gövde kurulamazsa denetim
+  // kaydına alarm ve patrona bildirim; gün kapandı, yanıt 200 ve aşağıdakiler yine çalışır
   afterDayClosed(day.id, { eodExpected: autoEodExpected(day.id) });
   // Kasa farkı eşiği geçtiyse patronun telefonuna
   afterDayClose(day.summary, day.zNo);
