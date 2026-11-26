@@ -247,6 +247,39 @@ describe('lafmaliyet kalıcı reddederse', () => {
     }
   });
 
+  it('yanıtı beklenirken yerine yenisi giren kayıt reddedilirse bildirilmez (bayat); yenisi gidince alarm yok', async () => {
+    const m = await mods();
+    m.settings.updateSettings({ okcProvider: 'kapali' });
+    try {
+      const dayId = await openWithSale();
+      const rejectedBefore = (await audits('sync.lafmaliyet_rejected')).length;
+      let replaced = false;
+      // İlk gövde yoldayken gün yeniden kuyruğa girer (sayım düzeltmesi gibi): yoldaki kayıt bayatlar, reddedilince atılır
+      reply = (body) => {
+        if (!replaced) {
+          replaced = true;
+          m.lm.enqueueDay(dayId);
+        }
+        return { status: 409, json: { error: 'z_conflict', date: body.date, zNo: 7 } };
+      };
+      const day = (await h.ok<{ day: Day }>('kasa', 'POST', '/cash/day/close', { countedCash: null })).day;
+      await until(() => replaced, 'ilk gövde');
+      reply = (body) => ({ status: 200, json: { ok: true, date: body.date } });
+      // Süren tur (409, bayat kayıt atılır) bitince yenisi gider
+      await m.lm.flushOutbox();
+      const rows = m.db.select().from(m.schema.outbox).where(m.eq(m.schema.outbox.dedupeKey, `gun:${day.date}`)).all();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.sentAt).not.toBeNull();
+      expect(posts.filter((p) => p.date === day.date)).toHaveLength(2);
+      await settle();
+      expect(notices.filter((n) => n.kind === 'lafmaliyet')).toEqual([]);
+      expect((await audits('sync.lafmaliyet_rejected')).slice(rejectedBefore)).toEqual([]);
+    } finally {
+      reply = (body) => ({ status: 200, json: { ok: true, date: body.date, lines: 0, matched: 0, unmatched: [], counted: true } });
+      m.settings.updateSettings({ okcProvider: 'pavo' });
+    }
+  });
+
   it('bildirim metni kısa kalır (site 240 karakterde keser): yol sonda kesilmez', async () => {
     const { pushRejectNotice } = (await mods()).lm;
     const payload = { date: '2026-11-25', z: { zNo: 1234 } };
