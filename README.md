@@ -1,3 +1,5 @@
+AsilPOS (26 Kasım 2026'ya kadar adı LafPOS)
+
 # AsilPOS
 
 L'Affogato'nun kendi satış noktası sistemi: masa planı, adisyon, bar/mutfak ekranı, ödeme, kasa ve gün
@@ -134,6 +136,8 @@ yok). Kasadaki güncelleyici `scripts/kasa/windows/kurulum/guncelle.mjs`; ayrın
 
 `.env.example` dosyasını `.env` olarak kopyalayın. Hepsi isteğe bağlıdır; boş bırakılan entegrasyon kapalı kalır.
 Açma sırası (anahtarlar → deneme gönderimi → geçiş günü): `docs/03-ENTEGRASYON.md` §8.
+Kasanın değişkenleri `ASILPOS_*`; ad değişikliğinden önce yazılmış `LAFPOS_*` adları da okunur (aynı ayar iki adla
+yazılırsa `ASILPOS_*` geçer), kurulu kasanın `ayarlar.env`'i yeniden yazılmaz (`docs/05-KASA-BILGISAYARI.md` §8).
 
 **İki ayrı imza anahtarı:** sitede (laffogato) `LAFPOS_SYNC_SECRET`, panelde (lafmaliyet) `ASILPOS_SYNC_SECRET` (eski adıyla `LAFPOS_SYNC_SECRET`); değerleri
 **ayrıdır** (`scripts/vercel/baglanti-kur.sh` ikisini ayrı üretir, iki adla yazar). AsilPOS'ta sitenin değeri `LAFFOGATO_SYNC_SECRET`'a,

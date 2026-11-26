@@ -102,3 +102,83 @@ export const ACILIS_KASA = 'lafpos' as const;
 /** localStorage ve sessionStorage anahtarlarının eski öneki (src/lib/eski-depo.ts yenisine kopyalar, eskisini silmez) */
 export const ESKI_DEPO_ONEKI = 'lafpos.';
 
+// ─── macOS (git ile kurulan geliştirici kasası) ──────────────────────────────
+
+/** launchd etiketlerinin kökü: kurulu ajanlar bu adla (kur.sh); kısayol dosyası `<KURULUM_KLASORU>-Kasa.command` */
+export const MAC_ETIKETI = 'net.laffogato.lafpos';
+
+// ─── Denetim (tests/asilpos-adi.test.ts) ─────────────────────────────────────
+
+/** Windows yolu: düz metinde tek, JavaScript dizesinde çift ters bölüyle yazılır; ikisi de */
+const yol = (...p: string[]) => [p.join('\\'), p.join('\\\\')];
+const ESKI_DOSYA_ADI = KURULUM_KLASORU.toLowerCase();
+
+/**
+ * TypeScript dışındaki dosyalarda (betikler, yapılandırma, belgeler) eski adın geçebildiği metinler. Satırdan bunlar
+ * çıkarılınca eski ad kalmamalı. Betikte bunlara uymayan küçük kopya (ör. `'LafPOS'` klasör adı) satır sonundaki
+ * `eski-ad` notuyla işaretlenir; TypeScript dosyası eski adı yalnız bu modülden alır
+ */
+export const ESKI_AD_METINLERI: readonly string[] = [
+  ESKI_ENV_ONEKI,
+  ALAN_ADI,
+  VERCEL_ALANI,
+  GITHUB_DEPOSU,
+  UYGULAMA_ZIP_ONEKI,
+  ESKI_WEB_KURUCU,
+  SUNUCU_GOREVI,
+  VERITABANI_DOSYASI,
+  `${YEDEK_DOSYA_ONEKI}guncelleme-`,
+  `${YEDEK_DOSYA_ONEKI}geri-yukleme-oncesi-`,
+  `${YEDEK_DOSYA_ONEKI}deneme-oncesi-`,
+  ...yol('backups', YEDEK_DOSYA_ONEKI),
+  `backups/${YEDEK_DOSYA_ONEKI}`,
+  ...yol('ProgramData', KURULUM_KLASORU),
+  ...yol('Program Files', KURULUM_KLASORU),
+  `PROGRAMFILES64\\${KURULUM_KLASORU}`,
+  `APPDATA\\${KURULUM_KLASORU}`,
+  ...yol('Uninstall', KURULUM_KLASORU),
+  `${KURULUM_KLASORU}-Kaldir.ps1`,
+  `${KURULUM_KLASORU}-Kasa.bat`,
+  `${ESKI_DOSYA_ADI}.ico`,
+  `${KURULUM_KLASORU}-KasaBekci`,
+  `${KURULUM_KLASORU}-KasaPencere`,
+  `${KURULUM_KLASORU}-MusteriPencere`,
+  `${KURULUM_KLASORU}-MusteriEkrani`,
+  `${KURULUM_KLASORU}-KasaKontrol`,
+  `${KURULUM_KLASORU} Musteri Ekrani`,
+  `${KURULUM_KLASORU} Kasa Kontrol`,
+  ...yol(KURULUM_KLASORU, 'chrome'),
+  ...yol(KURULUM_KLASORU, 'edge'),
+  ...yol(KURULUM_KLASORU, 'modpos-uyari.txt'),
+  `${KURULUM_KLASORU}\\\\(chrome|edge)`,
+  `${KURULUM_KLASORU}-Kasa.command`,
+  `Application Support/${KURULUM_KLASORU}`,
+  MAC_ETIKETI,
+  KONTROL_IMZA_ONEKI,
+  PIN_IMZA_ONEKI,
+  YEDEK_SIFRE_BILGISI,
+  BLOB_DEPOSU,
+  REDIS_ONEKI,
+  TEL_KART_ALANI,
+  ESKI_KURULUM_YOLU,
+  SITE_ISTEMCI.split(' ')[0]!,
+];
+
+/**
+ * Yalnız belgelerde (.md, .txt): tırnak içinde telde ve veritabanında duran değer, depo adıyla anılan eski PR'lar ve
+ * klasörler, sahibe verilmiş eski dosya, ad değişikliği notu
+ */
+export const BELGE_ALINTILARI: readonly string[] = [
+  `\`${TEL_KAYNAK}\``,
+  `"${TEL_KAYNAK}"`,
+  `\`${ESKI_DEPO_ONEKI}*\``,
+  `${VERCEL_PROJESI}#`,
+  `RiosenBeq/${VERCEL_PROJESI}`,
+  `Downloads/${VERCEL_PROJESI}`,
+  `cd ${VERCEL_PROJESI}`,
+  `${VERCEL_PROJESI}-kasa-ayarlari.env`,
+  `26 Kasım 2026'ya kadar adı ${ESKI_URUN_ADI}`,
+];
+
+/** Betik satırında küçük kopyanın notu (satır sonundaki yorum) */
+export const ESKI_AD_NOTU = 'eski-ad';
