@@ -511,7 +511,8 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   üstünde tam genişlik (yazı üstte, düğmeler altta). Beyaz kart (saç teli kenar, hafif gölge), solda kehribar ikon karosu
   (çalar saat), başlık "Kapanışa N dk kaldı" ya da "Kapanış saati geçti", altında saat ve tek cümle; düğmeler sağda:
   "Sonra" (kenarsız) ve ana eylem "Gün sonu al" (Kasa'da gün sonu penceresini açar). Boyu html'de `--closing-card-h`:
-  telefonda geçici bildirim kartın üstünde çıkar. Bar ekranında ve yönetimde çıkmaz.
+  telefonda geçici bildirim kartın üstünde çıkar. Bar ekranında ve yönetimde çıkmaz. İlk göründüğünde cihazda bir kez
+  tek sakin nota (`beep('tek')`, Araçlar › Sesli uyarılar'ın düzeyiyle; kapalıysa sessiz).
 - **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`
   `px-3`'ü ezer). Yalnız aynı varyanttaki sınıflar birleşir: sayfanın `max-md:hidden` sınıfı kitin `max-sm:flex`
   sınıfını ezmez, ikisi de kalır ve derlenmiş CSS'te sonra gelen kazanır; kit bileşenini bir kırılımda gizlemek için ona

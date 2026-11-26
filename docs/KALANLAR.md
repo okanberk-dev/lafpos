@@ -44,6 +44,10 @@ Son güncelleme: 25 Kasım 2026.
   sağ altta "Gün sonu al", kabuğun akışında, hiçbir şeyi örtmez), teslimde zorunlu **Kime** (Z, fiş, WhatsApp, gün sonu
   penceresi kişi kişi; lafmaliyet'e `cashMoves[].recipient`, orada satırın "Kime"si), **Ayrıntılı gün sonu** penceresi
   ("Kayda geçecekler", sonuçta özet), oturum kapanınca önbellek boşalır (sonra giren öncekinin verisini görmez).
+- **26 Kasım 2026:** kapanış hatırlatması patronun telefonuna da gider (Web Push, tür `kapanis`; Yönetim › Ağ ve uzaktan
+  erişim › Telefon bildirimleri › "Kapanış saati yaklaşınca", varsayılan açık; gün başına bir kez, yeniden açılan günde
+  bir kez daha, bayat gitmez) ve kart ilk göründüğünde kasada bir kez kısa ses çalar; sitenin kabul etmediği bildirim
+  (400) kuyruğu tıkamaz; kartın "Gün sonu al"ı önbellek tazeyken de pencereyi hemen açar.
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -93,7 +97,8 @@ PAVO_SERIAL=<cihazın seri numarası>
 ```
 
 - **Kapanış saati (25 Kasım 2026):** yeni sürüm Marina'ya kurulunca Yönetim › Ayarlar ve yedek › Gün sonu ve Z ›
-  "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Merkez'de Marina "Ben gönderince"yse yeni sürüm
+  "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Saat girilince patronun telefonuna da
+  bildirim gider (Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri › "Kapanış saati yaklaşınca", varsayılan açık). Merkez'de Marina "Ben gönderince"yse yeni sürüm
   için Merkez › Marina › "Güncellemeyi şimdi gönder".
 
 ## 2. Sahibin kararını bekleyenler (sormadan yapılmaz)
@@ -144,8 +149,6 @@ PAVO_SERIAL=<cihazın seri numarası>
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planLafposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
-7. **Kapanış hatırlatmasının sesi ve telefon bildirimi:** bugün yalnız ekranda kart. İstenirse kapanışa 30 dk kala
-   patrona Web Push (`server/sync/bildirim.ts`, yeni tür) ve kasada tek seferlik uyarı sesi eklenir.
 
 ## Çalışma kuralları (kısa)
 

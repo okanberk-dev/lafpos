@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dayText } from '@shared/gun-sonu-metni';
 import { cleanRecipientName, handoverByRecipient, UNSPECIFIED_RECIPIENT } from '@shared/teslim';
 import { CLOSING_REMINDER_MS, closingAtMs } from '@shared/time';
 import type { ZSummary } from '@shared/types';
-import { CLOSING_SNOOZE_AFTER_MS, closingPhase, snoozeUntil } from '../src/lib/closingReminder';
+import { closingPhase as sharedClosingPhase } from '@shared/closing';
+import { CLOSING_SNOOZE_AFTER_MS, closingKey, closingPhase, closingSoundDue, snoozeUntil } from '../src/lib/closingReminder';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -121,6 +123,45 @@ describe('Kapanış saati: hatırlatma kuralları', () => {
     expect(until2).toBe(closeAt + CLOSING_SNOOZE_AFTER_MS);
     expect(closingPhase(day, '23:00', closeAt + 60_000, { dayId: 'g1', until: until2 })).toBeNull();
     expect(closingPhase(day, '23:00', closeAt + 60_000, { dayId: 'eski', until: until2 })).toEqual({ kind: 'gecti', closeAt });
+  });
+
+  it('kural ortak: kasadaki kart ve patronun telefonu (server/sync/bildirim.ts) shared/closing.ts\'i okur', () => {
+    expect(closingPhase).toBe(sharedClosingPhase);
+    const server = readFileSync(new URL('../server/sync/bildirim.ts', import.meta.url), 'utf8');
+    expect(server).toMatch(/from '@shared\/closing'/);
+  });
+
+  it('hatırlatmanın kimliği gün, kapanış anı ve yeniden açılış: yeniden açılan gün ya da değişen saat yeni hatırlatma', () => {
+    expect(closingKey(day, closeAt)).toBe(closingKey({ ...day }, closeAt));
+    expect(closingKey({ ...day, reopenedAt: closeAt + 60_000 }, closeAt)).not.toBe(closingKey(day, closeAt));
+    expect(closingKey(day, closeAt + 30 * 60_000)).not.toBe(closingKey(day, closeAt));
+    expect(closingKey({ ...day, id: 'g2' }, closeAt)).not.toBe(closingKey(day, closeAt));
+  });
+
+  it('uyarı sesi: bu hatırlatma için cihazda bir kez; sesli uyarı kapalı, düzey 0 ya da ses kilitliyken çalmaz', () => {
+    const key = closingKey(day, closeAt);
+    const on = { sound: true, volume: 0.8 };
+    expect(closingSoundDue(key, null, on, true)).toBe(true);
+    // Çaldıktan sonra ("Sonra"dan dönen kart, yenilenen sayfa, ikinci sekme): yeniden çalmaz
+    expect(closingSoundDue(key, key, on, true)).toBe(false);
+    // Yeniden açılan günün kartı bir kez daha
+    expect(closingSoundDue(closingKey({ ...day, reopenedAt: closeAt + 60_000 }, closeAt), key, on, true)).toBe(true);
+    expect(closingSoundDue(key, null, { sound: true, volume: 0 }, true)).toBe(false);
+    expect(closingSoundDue(key, null, { sound: false, volume: 0.8 }, true)).toBe(false);
+    // Tarayıcı sesi açmadı (dokunuş yok): kayıt düşmez, ses açılınca kart hâlâ görünüyorsa çalar
+    expect(closingSoundDue(key, null, on, false)).toBe(false);
+    const card = readFileSync(new URL('../src/components/ClosingReminder.tsx', import.meta.url), 'utf8');
+    expect(card).toMatch(/closingSoundDue\(/);
+    expect(card).toMatch(/beep\('tek', prefs\.volume\)/);
+  });
+
+  it('"Gün sonu al" (/kasa?gunsonu=1) Kasa\'nın günü önbellekte tazeyken de pencereyi hemen açar: gün yeniden çekilir', () => {
+    // İnceleme (26 Kasım 2026): yalnız `isFetchedAfterMount`'a bakılınca önbellek 15 sn'den tazeyse sayfa çekmiyor, pencere
+    // 60 sn'lik yoklamaya dek açılmıyordu. Davranışı e2e/flows.mjs (sekmeyle gidip "Gün sonu al", 5 sn) denetler
+    const page = readFileSync(new URL('../src/pages/cash/CashPage.tsx', import.meta.url), 'utf8');
+    expect(page).not.toMatch(/isFetchedAfterMount/);
+    expect(page).toMatch(/if \(!askClose\) return;\s*setAskedAt\(Date\.now\(\)\);\s*void refetchDay\(/);
+    expect(page).toMatch(/current\.dataUpdatedAt >= askedAt/);
   });
 });
 

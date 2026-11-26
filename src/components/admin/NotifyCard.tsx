@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, NumberInput, Toggle } from '@/components/ui/Field';
 import { ErrorState, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post, put } from '@/lib/api';
+import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
 
 interface NotifySettings {
@@ -13,16 +14,19 @@ interface NotifySettings {
   cashDiffMin: number;
   internetMin: number;
   pavo: boolean;
+  kapanis: boolean;
 }
 
 const KEY = ['sync', 'bildirim'];
 
 /**
  * Telefon bildirimleri (Yönetim › Ağ ve uzaktan erişim): hangi olayın patronun telefonuna gideceği ve eşikleri
- * (server/sync/bildirim.ts). Telefonda bildirimi patron LafPOS Uzaktan › Merkez'de açar
+ * (server/sync/bildirim.ts). Telefonda bildirimi patron LafPOS Uzaktan › Merkez'de açar. Kapanış saati bildirimi
+ * Ayarlar'daki kapanış saatine bağlı: saat girilmemişse anahtar açık olsa da bir şey gitmez, altında nereden girileceği
  */
 export function NotifyCard() {
   const qc = useQueryClient();
+  const closingTime = useBoot().settings.closingTime ?? null;
   const q = useQuery({ queryKey: KEY, queryFn: () => get<{ ready: boolean; settings: NotifySettings; pending: number }>('/sync/bildirim') });
   const save = useMutation({
     mutationFn: (patch: Partial<NotifySettings>) => put('/sync/bildirim', patch),
@@ -65,6 +69,13 @@ export function NotifyCard() {
             </Field>
           </div>
           <Toggle checked={s.pavo} onChange={(v) => save.mutate({ pavo: v })} label="Pavo gün sonu alınamazsa" disabled={!s.enabled} />
+          <Toggle
+            checked={s.kapanis}
+            onChange={(v) => save.mutate({ kapanis: v })}
+            label="Kapanış saati yaklaşınca"
+            hint={closingTime ? `kapanışa 30 dakika kala gün hâlâ açıksa (kapanış ${closingTime}); gün başına bir kez` : "Ayarlar ve yedek › Gün sonu ve Z'de kapanış saati girilince çalışır"}
+            disabled={!s.enabled}
+          />
           <div>
             <Button variant="secondary" loading={test.isPending} disabled={!d?.ready || !s.enabled} onClick={() => test.mutate()}>
               Deneme bildirimi gönder

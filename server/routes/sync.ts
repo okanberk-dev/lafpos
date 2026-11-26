@@ -84,7 +84,7 @@ syncRoutes.put('/bildirim', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'senkron.yonet');
   const tlMax = z.number().int().min(0).max(100_000_000);
-  const input = await body(c, patchOf(z.object({ enabled: z.boolean(), voidMin: tlMax, compMin: tlMax, cashDiffMin: tlMax, internetMin: z.number().int().min(1).max(24 * 60), pavo: z.boolean() })));
+  const input = await body(c, patchOf(z.object({ enabled: z.boolean(), voidMin: tlMax, compMin: tlMax, cashDiffMin: tlMax, internetMin: z.number().int().min(1).max(24 * 60), pavo: z.boolean(), kapanis: z.boolean() })));
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) as Partial<NotifySettings>;
   const old = notifySettings();
   const next = { ...old, ...patch };
@@ -98,9 +98,17 @@ syncRoutes.put('/bildirim', async (c) => {
   return c.json({ ok: true, settings: notifySettings() });
 });
 
-/** Ayar bildirimi azaltıyor mu: kapanıyor, bir eşik yükseliyor ya da Pavo bildirimi kapanıyor */
+/** Ayar bildirimi azaltıyor mu: kapanıyor, bir eşik yükseliyor, Pavo ya da kapanış saati bildirimi kapanıyor */
 function weakens(a: NotifySettings, b: NotifySettings) {
-  return (a.enabled && !b.enabled) || b.voidMin > a.voidMin || b.compMin > a.compMin || b.cashDiffMin > a.cashDiffMin || b.internetMin > a.internetMin || (a.pavo && !b.pavo);
+  return (
+    (a.enabled && !b.enabled) ||
+    b.voidMin > a.voidMin ||
+    b.compMin > a.compMin ||
+    b.cashDiffMin > a.cashDiffMin ||
+    b.internetMin > a.internetMin ||
+    (a.pavo && !b.pavo) ||
+    (a.kapanis && !b.kapanis)
+  );
 }
 
 /** Denetim kaydı için değişenler, eskisi → yenisi */
@@ -113,6 +121,7 @@ function notifyDiff(a: NotifySettings, b: NotifySettings) {
     a.cashDiffMin !== b.cashDiffMin && `kasa farkı eşiği ${tl(a.cashDiffMin)} → ${tl(b.cashDiffMin)}`,
     a.internetMin !== b.internetMin && `internet ${a.internetMin} → ${b.internetMin} dk`,
     a.pavo !== b.pavo && `Pavo ${onOff(a.pavo)} → ${onOff(b.pavo)}`,
+    a.kapanis !== b.kapanis && `kapanış saati ${onOff(a.kapanis)} → ${onOff(b.kapanis)}`,
   ].filter(Boolean);
   return parts.length ? parts.join(', ') : 'değişiklik yok';
 }

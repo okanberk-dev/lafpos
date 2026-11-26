@@ -1,12 +1,14 @@
 import { AlarmClock } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { useAlertPrefs } from '@/lib/alertPrefs';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { CLOSING_SNOOZE_KEY, type ClosingSnooze, closingPhase, snoozeUntil } from '@/lib/closingReminder';
-import { useLocalPref, useTick } from '@/lib/hooks';
+import { CLOSING_SNOOZE_KEY, CLOSING_SOUND_KEY, type ClosingSnooze, closingKey, closingPhase, closingSoundDue, snoozeUntil } from '@/lib/closingReminder';
+import { readLocalPref, useLocalPref, useTick, writeLocalPref } from '@/lib/hooks';
 import { isAdminArea } from '@/lib/nav';
+import { audioUnlocked, beep, onAudioChange } from '@/lib/sound';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { Button } from './ui/Button';
 
@@ -23,6 +25,11 @@ import { Button } from './ui/Button';
  * Bar ekranında (tam ekran) ve yönetimde (yapışkan Kaydet şeridi) çıkmaz. Alçak ekranda (yatay telefon, en çok 34 rem: kabuğun alçak ekran eşiği)
  * tek satır. Adisyonda da durur: hesap yaprağı en az 12 rem, yer yetmezse kayar (toplamlar Gönder / Öde'nin üstüne
  * binmez; CartPanel, OrderPage `right`).
+ *
+ * İlk göründüğünde bu cihazda bir kez kısa uyarı sesi (Araçlar › Sesli uyarılar'ın düzeyiyle; kapalıysa ya da düzey
+ * 0'sa sessiz). "Sonra"dan dönen kart, yenilenen sayfa ve ikinci sekme yeniden çalmaz; yeniden açılan günün kartı bir
+ * kez daha. Tarayıcı sesi ilk dokunuştan sonra açar: o ana dek kart hâlâ görünüyorsa ses açılınca çalar.
+ * Patronun telefonuna giden bildirim aynı kuralla çıkar (shared/closing.ts; server/sync/bildirim.ts `closingNoticeTick`).
  */
 export function ClosingReminder({ dock = true }: { /** Telefonda alt sekme çubuğu var mı (yoksa ev çubuğu payını kart bırakır) */ dock?: boolean }) {
   const boot = useBoot();
@@ -37,6 +44,16 @@ export function ClosingReminder({ dock = true }: { /** Telefonda alt sekme çubu
   const phase = closingPhase(day, closingTime, now, snooze);
   const shown =
     !!phase && !!day && !!closingTime && can('kasa.gun') && !pathname.startsWith('/mutfak') && !isAdminArea(pathname);
+  const prefs = useAlertPrefs();
+  const unlocked = useSyncExternalStore(onAudioChange, audioUnlocked, () => false);
+  const soundKey = shown && phase && day ? closingKey(day, phase.closeAt) : null;
+
+  // Uyarı sesi: bu hatırlatma için bu cihazda bir kez (kayıt tarayıcıda, sekmeler ortak; anahtar src/lib/closingReminder.ts)
+  useEffect(() => {
+    if (!soundKey || !closingSoundDue(soundKey, readLocalPref<string | null>(CLOSING_SOUND_KEY, null), prefs, unlocked)) return;
+    writeLocalPref(CLOSING_SOUND_KEY, soundKey);
+    beep('tek', prefs.volume);
+  }, [soundKey, prefs, unlocked]);
 
   // Kartın boyu (üst payıyla) html'de: telefonda geçici bildirim kartın üstünde durur. Kart kalkınca silinir
   useEffect(() => {
