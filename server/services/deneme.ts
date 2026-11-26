@@ -7,6 +7,7 @@ import { type AuthUser, hashPin } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { conflict, HttpError } from '../lib/http';
 import { getSettings, trainingMode, updateSettings } from '../lib/settings';
+import { markRemovedDays } from '../sync/cloud-reports';
 import { getOpenDay } from './orders';
 
 /**
@@ -18,6 +19,8 @@ import { getOpenDay } from './orders';
  * siparişi, müşteri, denetim kaydı) silinir; kurulum (menü, personel, masalar, ödeme türleri, istasyonlar, yazıcılar,
  * ayarlar) kalır. Örnek PIN'ler kapanır: patron yeni PIN'ini aynı pencerede verir, örnek PIN'iyle kalan öbür hesaplar
  * kapatılır. `liveSince` yazılır; bir daha hiçbir şey silinmez (işlem tekrarlanırsa yalnız "zaten başladı" döner).
+ * Silinen günlerin tarihleri aynı işlemde LafPOS Uzaktan'da boşaltılmak üzere yazılır (server/sync/cloud-reports.ts
+ * `markRemovedDays`): bulutta eski deneme raporları kalmaz.
  */
 
 /** Örnek PIN'lerin özetleri (anahtar `env.secret`'a bağlı olduğundan çalışma anında hesaplanır) */
@@ -213,6 +216,8 @@ export function finishDeneme(user: AuthUser, input: FinishInput, backup: string)
     const { finalize } = assertCanFinish(t, user);
     if (finalize) return finalizeLive(t, user, input, backup, fx);
     const deleted = countRows(t);
+    // Uzaktan'da boşaltılacak tarihler: silinen bütün günlerin
+    const removedDates = [...new Set(t.select({ date: schema.businessDays.date }).from(schema.businessDays).all().map((d) => d.date))];
 
     // Hareketler: önce bağlı kayıtlar, sonra adisyon ve gün (yabancı anahtar sırası)
     t.delete(schema.fiscalReceipts).run();
@@ -229,6 +234,7 @@ export function finishDeneme(user: AuthUser, input: FinishInput, backup: string)
     t.delete(schema.shiftCounts).run();
     t.delete(schema.businessDays).run();
     t.delete(schema.auditLog).run();
+    markRemovedDays(t, removedDates);
     // lafmaliyet'e bekleyen (eğitim) kayıtlar; siteye giden kurulum yazımları (masa kodları, Tükendi) kalır
     t.delete(schema.outbox).where(eq(schema.outbox.target, 'lafmaliyet')).run();
     // Deneme döneminin cihaz ve gönderim durumu: simülatörün fiş sayacı, Pavo gün sonları, lafmaliyet gönderim özeti
@@ -260,7 +266,7 @@ export function finishDeneme(user: AuthUser, input: FinishInput, backup: string)
       action: 'deneme.bitir',
       severity: 'uyari',
       message: `${user.name} denemeyi bitirdi, gerçek kullanım başladı: ${deleted.orders} deneme adisyonu, ${deleted.days} gün, ${deleted.payments} ödeme silindi; yedek ${backup}${closedUsers.length ? `. Örnek PIN'iyle kalan hesaplar kapatıldı: ${closedUsers.join(', ')}` : ''}`,
-      data: { deleted, backup, closedUsers, okcProvider: s.okcProvider === 'simulator' ? 'kapali' : s.okcProvider },
+      data: { deleted, backup, closedUsers, okcProvider: s.okcProvider === 'simulator' ? 'kapali' : s.okcProvider, remoteDays: removedDates.length },
     });
     return { already: false, backup, deleted, closedUsers };
   });
@@ -295,12 +301,14 @@ export interface PurgeCounts {
  * Verilen günlerin bütün hareketleri, deneme silmesindeki sırayla (yabancı anahtar sırası): fiş, platform siparişi,
  * oda, ödeme, kalem, açık hesap satırı, adisyon, kasa hareketi, vardiya sayımı, gün. Açık hesap satırı silinince
  * müşterinin bakiyesi o kadar geri alınır. O günlerin lafmaliyet giden kutusu kayıtları (`gun:<tarih>`) da silinir;
- * kalan bir günle aynı tarihi taşıyan kayda dokunulmaz. Başka güne bağlı hiçbir kayda dokunulmaz
+ * kalan bir günle aynı tarihi taşıyan kayda dokunulmaz. Başka güne bağlı hiçbir kayda dokunulmaz. Silinen günlerin
+ * tarihleri LafPOS Uzaktan'da yenilenmek üzere yazılır (`markRemovedDays`): kalan günü olmayan tarih boşaltılır, kalan
+ * günü olan tarihe yalnız o günün raporu gider. `removedDates`: kalan günü olmayan tarihler
  */
-function purgeDays(t: Tx, days: DayRow[], realDays: number): PurgeCounts {
+function purgeDays(t: Tx, days: DayRow[], realDays: number): { counts: PurgeCounts; removedDates: string[] } {
   const range = rangeOf(days);
   const zero: PurgeCounts = { ...range, realDays, orders: 0, items: 0, payments: 0, cashMovements: 0, shiftCounts: 0, fiscalReceipts: 0, platformOrders: 0, roomSessions: 0, customerLedger: 0, outbox: 0 };
-  if (!days.length) return zero;
+  if (!days.length) return { counts: zero, removedDates: [] };
   const dayIds = days.map((d) => d.id);
   const O = schema.orders;
   // Alt sorgular: çok adisyonda SQLite değişken sınırına takılmaz
@@ -332,11 +340,16 @@ function purgeDays(t: Tx, days: DayRow[], realDays: number): PurgeCounts {
   c.shiftCounts = t.delete(schema.shiftCounts).where(inArray(schema.shiftCounts.dayId, dayIds)).run().changes;
   t.delete(schema.businessDays).where(inArray(schema.businessDays.id, dayIds)).run();
 
+  const dates = [...new Set(days.map((d) => d.date))];
   const kept = new Set(closedDays(t).map((d) => d.date));
-  const keys = [...new Set(days.map((d) => d.date))].filter((date) => !kept.has(date)).map((date) => `gun:${date}`);
+  const removedDates = dates.filter((date) => !kept.has(date));
+  const keys = removedDates.map((date) => `gun:${date}`);
   // Gönderilmiş kayıt iz olarak kalır (lafmaliyet o günü almıştır; LafPOS'tan silmek orada silmez)
   if (keys.length) c.outbox = t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys), isNull(schema.outbox.sentAt))).run().changes;
-  return c;
+  // Uzaktan'da bütün tarihler yenilenir: kalan günü olan tarihin raporu deneme satışı çıkmış hâliyle hemen gider
+  // (beklerse bulutta günlük taramaya dek deneme satışıyla kalır), kalmayan tarih boşaltılır
+  markRemovedDays(t, dates);
+  return { counts: c, removedDates };
 }
 
 const dateTr = (d: string | null) => (d ? d.split('-').reverse().join('.') : '');
@@ -346,13 +359,13 @@ const dateTr = (d: string | null) => (d ? d.split('-').reverse().join('.') : '')
  * hareketleri silinir; `purgeReal` işaretliyse bugünden önceki, gerçek olduğu kanıtlanmamış (Pavo fişi yok, lafmaliyet'e
  * gönderilmemiş) gerçek görünen günler de. Gerçek kalan günlere ve onlara bağlı kayıtlara dokunulmaz. Patronun yeni PIN'i, örnek PIN'iyle kalan öbür
  * hesapların kapanması, `liveSince` ve denetim kaydı; deneme ayarları (eğitim yazarkasası, platformların Deneme modu)
- * gerçeğe döner. Yedek çağıran tarafından önce alınmıştır
+ * gerçeğe döner. Silinen günler Uzaktan'da da boşaltılır (`purgeDays`). Yedek çağıran tarafından önce alınmıştır
  */
 function finalizeLive(t: Tx, user: AuthUser, input: FinishInput, backup: string, fx: Effects): FinishResult {
   const fd = finalizeDays(t);
   if (input.purgeReal && !fd.earlyReal) throw purgeNotAllowed();
   const realGone = input.purgeReal && fd.earlyReal ? fd.earlyReal : [];
-  const purged = purgeDays(t, [...fd.trial, ...realGone], realGone.length);
+  const { counts: purged, removedDates } = purgeDays(t, [...fd.trial, ...realGone], realGone.length);
   if (input.newPin) t.update(schema.users).set({ pinHash: hashPin(input.newPin) }).where(eq(schema.users.id, user.id)).run();
   const others = samplePinUsers(t).filter((u) => u.id !== user.id);
   if (others.length) {
@@ -373,7 +386,7 @@ function finalizeLive(t: Tx, user: AuthUser, input: FinishInput, backup: string,
     action: 'deneme.bitir',
     severity: 'uyari',
     message: `${user.name} gerçek kullanıma geçişi tamamladı: ${what}; ${days} gerçek gün kaldı, yedek ${backup}${closedUsers.length ? `. Örnek PIN'iyle kalan hesaplar kapatıldı: ${closedUsers.join(', ')}` : ''}`,
-    data: { finalize: true, purged, realDaysLeft: days, backup, closedUsers },
+    data: { finalize: true, purged, realDaysLeft: days, backup, closedUsers, remoteDays: removedDates.length },
   });
   return { already: false, finalized: true, purged, backup, deleted: null, closedUsers };
 }

@@ -47,6 +47,8 @@ Son güncelleme: 25 Kasım 2026.
 - **Paket gelen kutusu şubeye ayrıldı:** Yemeksepeti ve Getir kaydı Vercel'de tanımlı restoranın kendi listesine girer
   (Getir'de de `GETIR_<ŞUBE>_RESTAURANT_ID`), kasa imzalı `?restoran=` ile yalnız kendininkini çeker ve siler; ortak
   kutuda başka restoranın siparişini silmez. Komut sayısı aynı (`docs/PAKET-PLATFORMLARI.md`).
+- **Silinen deneme günleri Uzaktan'dan da kalkar:** "Denemeyi bitir" ve "Geçişi tamamla"nın sildiği tarihlere en geç
+  5 dk'da boş gün raporu gider; gerçek günü ya da ModPOS günü olan tarih boşalmaz (`docs/07-UZAKTAN-ERISIM.md` §4).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -64,6 +66,7 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
 - **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin
   `C:\ProgramData\LafPOS\backups`'a yazıldığı ve kapanan hesapların Personel'den yeni PIN'le açıldığı görülür.
+  Silinen deneme günleri LafPOS Uzaktan › Raporlar'dan da birkaç dakikada kalkmalı.
 - **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
   "Bekleyenler gönderildi" ve lafmaliyet'te gün bir kez.
 - **Uzaktan raporlar:** kafe bağlanınca tarama yaklaşık bir saatte 400 günü iter; Raporlar › Ciro "Geçen ay"
@@ -139,8 +142,6 @@ PAVO_SERIAL=<cihazın seri numarası>
    başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
 
 4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
-5. **Geçişi tamamla ile silinen deneme günleri Uzaktan'da kalıyor:** kasa silinenleri bildirsin, bulut raporlarını
-   kaldırsın (geriye uyumlu).
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planLafposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
