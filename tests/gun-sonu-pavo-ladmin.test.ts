@@ -59,7 +59,7 @@ afterAll(async () => {
   h.cleanup();
 });
 
-type Day = { id: string; date: string; closedAt: number | null };
+type Day = { id: string; date: string; closedAt: number | null; zNo: number };
 type Outbox = { dedupeKey: string; nextAttemptAt: number; sentAt: number | null; payload: Record<string, unknown> };
 
 async function mods() {
@@ -74,8 +74,31 @@ const product = (name: string) => h.boot.products.find((p) => p.name === name)!;
 const cash = () => h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
 let past = 0;
 
+/**
+ * Önceki testin arka plan işleri (Pavo gün sonu, onun yeniden kuyruğa koyduğu gün, yoldaki gönderim) bitene dek beklenir:
+ * her gün bugünün tarihiyle açıldığı için geç gelen bir gövde sonraki testin gövdesine karışırdı
+ */
+async function settle(): Promise<void> {
+  const m = await mods();
+  await until(async () => {
+    const busy = m.db
+      .select()
+      .from(m.schema.outbox)
+      .all()
+      .filter((r) => r.target === 'lafmaliyet' && r.sentAt === null && r.nextAttemptAt <= Date.now() + 1_000);
+    const running = m.db
+      .select()
+      .from(m.schema.syncState)
+      .all()
+      .some((r) => r.key.startsWith('pavo.eod.') && JSON.stringify(r.value).includes('"running"'));
+    return !busy.length && !running;
+  }, 'önceki testin arka plan işleri', 10_000);
+  await new Promise((r) => setTimeout(r, 100));
+}
+
 /** Yeni iş günü (bir tarihe tek Z: kapanmış günler ve giden kutusu geçmiş tarihe alınır), bir nakit satış */
 async function openWithSale(): Promise<void> {
+  await settle();
   const m = await mods();
   for (const d of m.db.select().from(m.schema.businessDays).all()) {
     if (!d.closedAt || d.date.startsWith('2020-')) continue;
@@ -106,7 +129,8 @@ async function until<T>(read: () => Promise<T | null | undefined | false>, what:
   }
 }
 
-const postsFor = (date: string) => posts.filter((p) => p.date === date);
+/** Bu günün gövdeleri: aynı tarihli önceki günlerinkinden Z no'suyla ayrılır */
+const postsFor = (day: Pick<Day, 'date' | 'zNo'>) => posts.filter((p) => p.date === day.date && (p.z as { zNo?: number } | undefined)?.zNo === day.zNo);
 
 describe('gün sonu: Pavo beklenirken lafmaliyet gövdesi', () => {
   it('otomatik banka gün sonu başlayacaksa ilk gövde tutulur (bankPosPending: true); gün sonu bitince sonuçla hemen gider, tek gövde', async () => {
@@ -121,13 +145,13 @@ describe('gün sonu: Pavo beklenirken lafmaliyet gövdesi', () => {
       expect(held!.nextAttemptAt).toBeGreaterThanOrEqual(t0 + (await mods()).lm.EOD_FIRST_PUSH_HOLD_MS - 1_000);
       expect(held!.payload).toMatchObject({ bankPosPending: true });
       expect(held!.payload.bankPos).toBeUndefined();
-      expect(postsFor(day.date)).toEqual([]);
+      expect(postsFor(day)).toEqual([]);
       // Gün sonu bitince: sonuçla hemen gider (dakikalık iş beklenmez), tek gövde
-      const sent = await until(async () => postsFor(day.date)[0], 'sonuçlu gövde');
+      const sent = await until(async () => postsFor(day)[0], 'sonuçlu gövde');
       expect(sent.bankPos).toMatchObject({ status: 'ok' });
       expect(sent.bankPosPending).toBeUndefined();
       await new Promise((r) => setTimeout(r, 100));
-      expect(postsFor(day.date)).toHaveLength(1);
+      expect(postsFor(day)).toHaveLength(1);
       const rows = await outboxOf(day.date);
       expect(rows.filter((r) => r.sentAt === null)).toEqual([]);
     } finally {
@@ -142,17 +166,20 @@ describe('gün sonu: Pavo beklenirken lafmaliyet gövdesi', () => {
     m.settings.updateSettings({ okcPavoAutoEod: false });
     try {
       const day = (await h.ok<{ day: Day }>('kasa', 'POST', '/cash/day/close', { countedCash: null })).day;
-      await until(async () => postsFor(day.date)[0], 'kapanış gövdesi');
+      await until(async () => postsFor(day)[0], 'kapanış gövdesi');
       // Kapanışın kendi denemesi (ayar kapalı: atlandı) kaydedilip gönderilene dek beklenir
-      await until(async () => m.settings.getSyncState(`pavo.eod.${day.id}`) && postsFor(day.date).length >= 2, 'kapanışın atlanan denemesi');
+      await until(async () => m.settings.getSyncState(`pavo.eod.${day.id}`) && postsFor(day).length >= 2, 'kapanışın atlanan denemesi');
+      await settle();
       posts.length = 0;
       // Kapanışta Pavo bekleniyordu (gövde tutuldu), sonra otomatik deneme atlandı (ör. cihaz meşgul ya da ayar kapandı)
       m.db.delete(m.schema.syncState).where(m.eq(m.schema.syncState.key, `pavo.eod.${day.id}`)).run();
       m.lm.enqueueDay(day.id, { eodAtClose: true, holdMs: m.lm.EOD_FIRST_PUSH_HOLD_MS });
-      expect((await outboxOf(day.date)).find((r) => r.sentAt === null)!.payload).toMatchObject({ bankPosPending: true });
+      // Tutulan kayıt: ileri tarihli (yoldaki ya da az önce gönderilen kayıtla karışmaz)
+      const held = (await outboxOf(day.date)).find((r) => r.sentAt === null && r.nextAttemptAt > Date.now() + 60_000);
+      expect(held?.payload).toMatchObject({ bankPosPending: true });
       const rec = await deviceEndOfDay(day.id, null);
       expect(rec).toMatchObject({ status: 'skipped', errorCode: 'okc_eod_off' });
-      const sent = await until(async () => postsFor(day.date)[0], 'atlanınca gövde');
+      const sent = await until(async () => postsFor(day)[0], 'atlanınca gövde');
       expect(sent.bankPosPending).toBe(false);
       expect(sent.bankPos).toBeUndefined();
       expect((await outboxOf(day.date)).filter((r) => r.sentAt === null)).toEqual([]);
@@ -167,7 +194,7 @@ describe('gün sonu: Pavo beklenirken lafmaliyet gövdesi', () => {
     m.settings.updateSettings({ okcPavoAutoEod: false });
     try {
       const day = (await h.ok<{ day: Day }>('kasa', 'POST', '/cash/day/close', { countedCash: null })).day;
-      const sent = await until(async () => postsFor(day.date)[0], 'gövde');
+      const sent = await until(async () => postsFor(day)[0], 'gövde');
       expect(sent.bankPosPending).toBe(false);
     } finally {
       m.settings.updateSettings({ okcPavoAutoEod: true });
@@ -180,7 +207,7 @@ describe('gün sonu: Pavo beklenirken lafmaliyet gövdesi', () => {
     try {
       await openWithSale();
       const day = (await h.ok<{ day: Day }>('kasa', 'POST', '/cash/day/close', { countedCash: null })).day;
-      const sent = await until(async () => postsFor(day.date)[0], 'gövde');
+      const sent = await until(async () => postsFor(day)[0], 'gövde');
       expect('bankPosPending' in sent).toBe(false);
     } finally {
       m.settings.updateSettings({ okcProvider: 'pavo' });
