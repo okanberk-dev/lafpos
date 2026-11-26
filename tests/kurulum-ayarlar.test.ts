@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { KURULUM_KLASORU } from '@shared/eski-adlar';
 
 /**
  * Windows kurulumunun ayar kuralları (scripts/kasa/windows/kurulum/ayarlar.mjs): bekçinin sunucuya verdiği bellek
@@ -32,7 +33,7 @@ describe('bekçinin bellek sınırı', () => {
     expect(heapLimitMb('', 1 * GB)).toBeGreaterThanOrEqual(1024);
   });
 
-  it('LAFPOS_MAX_HEAP_MB 256-4096 arası tam sayıysa o; değilse yok sayılır', async () => {
+  it('ASILPOS_MAX_HEAP_MB 256-4096 arası tam sayıysa o; değilse yok sayılır', async () => {
     const { heapLimitMb, validHeapSetting, HEAP_MIN_MB, HEAP_MAX_MB } = await load();
     expect([HEAP_MIN_MB, HEAP_MAX_MB]).toEqual([256, 4096]);
     expect(heapLimitMb('768', 8 * GB)).toBe(768);
@@ -47,12 +48,12 @@ describe('bekçinin bellek sınırı', () => {
   it('bekçi kuralı ayarlar.mjs\'ten alır; derleme onu pakete koyar', () => {
     const bekci = read('scripts/kasa/windows/kurulum/bekci.mjs');
     expect(bekci).toContain("from './ayarlar.mjs'");
-    expect(bekci).toMatch(/heapLimitMb\(env\.LAFPOS_MAX_HEAP_MB, totalmem\(\)\)/);
+    expect(bekci).toMatch(/heapLimitMb\(env\.ASILPOS_MAX_HEAP_MB, totalmem\(\)\)/);
     expect(bekci).not.toMatch(/\b512\b/);
     const derle = read('scripts/kasa/windows/kurulum/derle.mjs');
     expect(read('scripts/kasa/windows/kurulum/paket.mjs')).toMatch(/KASA_SCRIPTS = \['bekci\.mjs', 'ayarlar\.mjs', 'guncelle\.mjs', 'arsiv\.mjs', 'geri-yukle\.mjs', 'kurulum-yenile\.mjs'\]/);
     // Paketin denemesi ayarsız varsayılanı ve ayar dosyasından gelen sınırı günlükte arar
-    expect(derle).toContain('LAFPOS_MAX_HEAP_MB=768');
+    expect(derle).toContain('ASILPOS_MAX_HEAP_MB=768');
   });
 });
 
@@ -62,11 +63,11 @@ describe('ayarlar.env.ornek', () => {
     const sample = envSample(read('.env.example'));
     const lines = sample.split('\n');
     expect(lines[0]).toMatch(/Windows kurulumu/);
-    expect(sample).not.toMatch(/^#?\s*LAFPOS_(PORT|HOST|DATA_DIR)=/m);
+    expect(sample).not.toMatch(/^#?\s*ASILPOS_(PORT|HOST|DATA_DIR)=/m);
     // Yorumlu: ilk kurulumda sınır bilgisayarın belleğinden gelir
-    const at = lines.indexOf('# LAFPOS_MAX_HEAP_MB=2048');
+    const at = lines.indexOf('# ASILPOS_MAX_HEAP_MB=2048');
     expect(at).toBeGreaterThan(0);
-    expect(sample).not.toMatch(/^LAFPOS_MAX_HEAP_MB=/m);
+    expect(sample).not.toMatch(/^ASILPOS_MAX_HEAP_MB=/m);
     // Hemen üstünde açıklaması: aralık, varsayılan, ne zaman artırılır
     const note = lines.slice(at - 3, at).join(' ');
     expect(note).toContain('256-4096');
@@ -74,13 +75,13 @@ describe('ayarlar.env.ornek', () => {
     expect(note).toContain('1024');
     expect(note).toContain('heap out of memory');
     // Sunucu satırlarının ardında, site ayarlarından önce
-    expect(at).toBeGreaterThan(lines.findIndex((l) => l.includes('LAFPOS_SECRET=')));
+    expect(at).toBeGreaterThan(lines.findIndex((l) => l.includes('ASILPOS_SECRET=')));
     expect(at).toBeLessThan(lines.findIndex((l) => l.includes('LAFFOGATO_URL=')));
-    expect(sample).toContain('C:\\ProgramData\\LafPOS\\secret.key');
+    expect(sample).toContain(`C:\\ProgramData\\${KURULUM_KLASORU}\\secret.key`);
   });
 
-  it('.env.example LAFPOS_SECRET satırını yitirirse derleme durur', async () => {
+  it('.env.example ASILPOS_SECRET satırını yitirirse derleme durur', async () => {
     const { envSample } = await load();
-    expect(() => envSample('# başlık\nLAFPOS_PORT=4000\n')).toThrow(/LAFPOS_SECRET/);
+    expect(() => envSample('# başlık\nASILPOS_PORT=4000\n')).toThrow(/ASILPOS_SECRET/);
   });
 });

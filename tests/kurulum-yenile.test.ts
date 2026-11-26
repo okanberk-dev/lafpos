@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ESKI_BEKCI_STDIN_ENV, ESKI_GUNCELLEME_DENEME_ENV, ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
 
 /**
  * Güncellemenin kurulumu da yenilemesi (scripts/kasa/windows/kurulum/kurulum-yenile.mjs): kök dosyalar (baslat.cmd
@@ -21,7 +22,7 @@ const ASCII = /^[\x00-\x7f]*$/;
 
 const dirs: string[] = [];
 function tmp() {
-  const d = mkdtempSync(join(tmpdir(), 'lafpos-kurulum-'));
+  const d = mkdtempSync(join(tmpdir(), 'asilpos-kurulum-'));
   dirs.push(d);
   return d;
 }
@@ -35,8 +36,8 @@ function install() {
   const app = join(dir, 'app');
   mkdirSync(join(app, 'kok'), { recursive: true });
   writeFileSync(join(app, 'package.json'), JSON.stringify({ build: 1_795_100_000 }));
-  for (const [n, v] of Object.entries({ 'LafPOS-Kasa.bat': 'yeni bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'yeni baslat', 'BENIOKU.txt': 'yeni not' })) writeFileSync(join(app, 'kok', n), v);
-  for (const [n, v] of Object.entries({ 'LafPOS-Kasa.bat': 'eski bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'eski baslat' })) writeFileSync(join(dir, n), v);
+  for (const [n, v] of Object.entries({ 'AsilPOS-Kasa.bat': 'yeni bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'yeni baslat', 'BENIOKU.txt': 'yeni not' })) writeFileSync(join(app, 'kok', n), v);
+  for (const [n, v] of Object.entries({ 'AsilPOS-Kasa.bat': 'eski bat', 'yonet.ps1': 'ayni', 'baslat.cmd': 'eski baslat' })) writeFileSync(join(dir, n), v);
   return { dir, app, home: join(dir, 'veri') };
 }
 
@@ -51,14 +52,14 @@ async function runWatchdog(extra: Record<string, string>) {
   }
   mkdirSync(join(t.app, 'server'));
   // Bekçinin "kapat"ı gelince (ya da bekçi kapanıp standart girdi bitince) çıkar
-  writeFileSync(join(t.app, 'server', 'index.mjs'), "console.log('LafPOS sunucusu hazır');\nfor (const e of ['data', 'end']) process.stdin.on(e, () => process.exit(0));\n");
+  writeFileSync(join(t.app, 'server', 'index.mjs'), "console.log('AsilPOS sunucusu hazır');\nfor (const e of ['data', 'end']) process.stdin.on(e, () => process.exit(0));\n");
   const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const k of ['LAFPOS_GUNCELLEME_DENEME', 'LAFPOS_PAKET_DENEME', 'LAFPOS_BEKCI_STDIN', 'LAFPOS_MAX_HEAP_MB']) delete env[k];
-  const child = spawn(process.execPath, [join(t.app, 'bekci.mjs')], { env: { ...env, LAFPOS_HOME: t.home, ...extra }, stdio: 'ignore' });
+  for (const k of [`${ESKI_GUNCELLEME_DENEME_ENV}`, 'ASILPOS_PAKET_DENEME', `${ESKI_BEKCI_STDIN_ENV}`, 'ASILPOS_MAX_HEAP_MB']) delete env[k];
+  const child = spawn(process.execPath, [join(t.app, 'bekci.mjs')], { env: { ...env, ASILPOS_HOME: t.home, ...extra }, stdio: 'ignore' });
   const logFile = join(t.home, 'logs', 'sunucu.log');
   const log = () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
   try {
-    for (let i = 0; !log().includes('LafPOS sunucusu hazır'); i++) {
+    for (let i = 0; !log().includes('AsilPOS sunucusu hazır'); i++) {
       if (i > 200 || child.exitCode != null) throw new Error(`bekçi sunucuyu açmadı:\n${log()}`);
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -77,29 +78,49 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     const { syncRootFiles } = await load('kurulum-yenile.mjs');
     const { dir, app } = install();
     const r = syncRootFiles({ appDir: app, installDir: dir });
-    expect(r.copied).toEqual(['BENIOKU.txt', 'LafPOS-Kasa.bat']);
+    expect(r.copied).toEqual(['AsilPOS-Kasa.bat', 'BENIOKU.txt']);
     expect(r.stale).toEqual(['baslat.cmd']);
     expect(r.failed).toEqual([]);
-    expect(readFileSync(join(dir, 'LafPOS-Kasa.bat'), 'utf8')).toBe('yeni bat');
+    expect(readFileSync(join(dir, 'AsilPOS-Kasa.bat'), 'utf8')).toBe('yeni bat');
     expect(readFileSync(join(dir, 'baslat.cmd'), 'utf8')).toBe('eski baslat');
     // İkinci kez: konacak bir şey kalmaz
     expect(syncRootFiles({ appDir: app, installDir: dir }).copied).toEqual([]);
   });
 
+  it('siteden kurulumun kaldırıcısı yalnız kurulumda varsa yenilenir (kurulum dosyasıyla kurulanda Kaldir.exe var)', async () => {
+    const { syncRootFiles, IF_PRESENT_ROOT_FILES } = await load('kurulum-yenile.mjs');
+    const kaldirici = `${ESKI_URUN_ADI}-Kaldir.ps1`;
+    expect(IF_PRESENT_ROOT_FILES).toEqual([kaldirici]);
+    const { dir, app } = install();
+    writeFileSync(join(app, 'kok', kaldirici), 'yeni kaldirici');
+    expect(syncRootFiles({ appDir: app, installDir: dir }).copied).not.toContain(kaldirici);
+    expect(existsSync(join(dir, kaldirici))).toBe(false);
+    writeFileSync(join(dir, kaldirici), 'eski kaldirici');
+    expect(syncRootFiles({ appDir: app, installDir: dir }).copied).toEqual([kaldirici]);
+    expect(readFileSync(join(dir, kaldirici), 'utf8')).toBe('yeni kaldirici');
+  });
+
   it('kısayollar kurulumdakiyle aynı adda; masaüstü ve Başlangıç yalnız varsa; bekçi Başlangıç\'ta kasa varsa', async () => {
     const { shortcutSpec, WATCHER_LINK, WATCHER_VERSION } = await load('kurulum-yenile.mjs');
-    const spec = shortcutSpec('C:\\Program Files\\LafPOS', 'C:\\Windows');
-    const nsi = read('scripts/kasa/windows/kurulum/lafpos.nsi');
+    const kur = `C:\\Program Files\\${KURULUM_KLASORU}`;
+    const spec = shortcutSpec(kur, 'C:\\Windows');
+    const nsi = read('scripts/kasa/windows/kurulum/asilpos.nsi');
     const web = read('scripts/kasa/windows/kurulum/web-kurucu.ps1');
     for (const k of spec) {
       const name = k.ad.split('\\').pop();
       expect(nsi, name).toContain(name);
       expect(web, name).toContain(name);
     }
-    expect(spec.filter((k: any) => k.klasor !== 'CommonPrograms').every((k: any) => k.kosul === 'LafPOS Kasa.lnk')).toBe(true);
+    // Masaüstü ve Başlangıç: eski adlı kasa kısayolu da koşulu sağlar; yenisi yazılınca eskisi silinir (ad değişikliği)
+    const eskiKasa = `${ESKI_URUN_ADI} Kasa.lnk`;
+    for (const k of spec.filter((x: any) => x.klasor !== 'CommonPrograms')) {
+      expect(k.kosul, k.ad).toEqual(['AsilPOS Kasa.lnk', eskiKasa]);
+      expect(k.eski, k.ad).toEqual([k.ad === WATCHER_LINK ? `${ESKI_URUN_ADI} Kasa Bekcisi.lnk` : eskiKasa]);
+    }
+    expect(spec.filter((x: any) => x.klasor === 'CommonPrograms').every((x: any) => x.ad.startsWith('AsilPOS\\'))).toBe(true);
     const watcher = spec.find((k: any) => k.ad === WATCHER_LINK);
-    expect(watcher).toMatchObject({ klasor: 'CommonStartup', hedef: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', calismaKlasoru: 'C:\\Program Files\\LafPOS' });
-    expect(watcher.arguman).toBe(`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\\Program Files\\LafPOS\\app\\kasa-yazici.ps1" -Bekci -BekciSurum ${WATCHER_VERSION}`);
+    expect(watcher).toMatchObject({ klasor: 'CommonStartup', hedef: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', calismaKlasoru: kur });
+    expect(watcher.arguman).toBe(`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${kur}\\app\\kasa-yazici.ps1" -Bekci -BekciSurum ${WATCHER_VERSION}`);
     // Kurulum dosyası ve siteden kurulum bekçiyi aynı argümanla koyar; betik aynı sürümü tanır
     expect(nsi).toContain(`kasa-yazici.ps1" -Bekci -BekciSurum ${WATCHER_VERSION}'`);
     expect(web).toContain(`" -Bekci -BekciSurum ${WATCHER_VERSION}'`);
@@ -130,7 +151,7 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     };
     await refreshInstall(deps);
     expect(calls).toHaveLength(1);
-    expect(calls[0][0]).toMatchObject({ klasor: 'CommonPrograms', ad: 'LafPOS\\LafPOS Kasa.lnk' });
+    expect(calls[0][0]).toMatchObject({ klasor: 'CommonPrograms', ad: 'AsilPOS\\AsilPOS Kasa.lnk' });
     expect(warnings.at(-1)).toMatch(/^Kurulumu yenileyin/);
     expect(warnings.at(-1)).toContain('baslat.cmd eski kaldı');
     expect(warnings.at(-1)).toContain('kısayollar yenilenemedi (HATA 3: Erişim engellendi)');
@@ -180,7 +201,7 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     const at = paket.indexOf('KASA_LAUNCHER = [');
     const launcher = paket.slice(at, paket.indexOf('];', at));
     expect(launcher).toContain("['kasa-yazici.ps1', 'kasa-yazici.ps1']");
-    expect(launcher).not.toContain('LafPOS-Kasa.bat');
+    expect(launcher).not.toContain('AsilPOS-Kasa.bat');
     for (const f of ['kisayollar.ps1', 'kasa-yazici.ps1']) expect(ASCII.test(read(`scripts/kasa/windows/kurulum/${f}`, 'latin1')), f).toBe(true);
     const bekci = read('scripts/kasa/windows/kurulum/bekci.mjs');
     expect(bekci).toContain('refreshInstall(');
@@ -191,47 +212,48 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
 describe('kurulumu yalnız kurulu bekçi yeniler (paket denemesi dokunmaz)', () => {
   it('kurulu bekçi açılışta kök dosyaları yeniler', async () => {
     const r = await runWatchdog({});
-    expect(readFileSync(join(r.dir, 'LafPOS-Kasa.bat'), 'utf8')).toBe('yeni bat');
-    expect(r.log).toContain('[kurulum] kök dosyalar yenilendi: BENIOKU.txt, LafPOS-Kasa.bat');
+    expect(readFileSync(join(r.dir, 'AsilPOS-Kasa.bat'), 'utf8')).toBe('yeni bat');
+    expect(r.log).toContain('[kurulum] kök dosyalar yenilendi: AsilPOS-Kasa.bat, BENIOKU.txt');
   });
 
-  it('paket denemesi (derle.mjs, LAFPOS_PAKET_DENEME=1) kök dosyalara ve kısayollara dokunmaz; güncelleyici yine durumu yazar', async () => {
-    // Yenilese yönetici kabuğunda bu bilgisayardaki LafPOS'un ortak kısayolları silinecek deneme klasörüne dönerdi
-    const r = await runWatchdog({ LAFPOS_PAKET_DENEME: '1' });
-    expect(readFileSync(join(r.dir, 'LafPOS-Kasa.bat'), 'utf8')).toBe('eski bat');
+  it('paket denemesi (derle.mjs, ASILPOS_PAKET_DENEME=1) kök dosyalara ve kısayollara dokunmaz; güncelleyici yine durumu yazar', async () => {
+    // Yenilese yönetici kabuğunda bu bilgisayardaki AsilPOS'un ortak kısayolları silinecek deneme klasörüne dönerdi
+    const r = await runWatchdog({ ASILPOS_PAKET_DENEME: '1' });
+    expect(readFileSync(join(r.dir, 'AsilPOS-Kasa.bat'), 'utf8')).toBe('eski bat');
     expect(existsSync(join(r.dir, 'BENIOKU.txt'))).toBe(false);
     expect(r.log).not.toContain('[kurulum]');
     // Deneme güncelleyicinin durum dosyasına bakar (derle.mjs): güncelleyici kapanmaz
     expect(JSON.parse(readFileSync(join(r.home, 'guncelleme', 'durum.json'), 'utf8')).kurulu.build).toBe(1_795_100_000);
     // Kurulum derlemesinin denemesi bekçiyi bu bayrakla açar ve yenilenmediğini kendisi de denetler
     const derle = read('scripts/kasa/windows/kurulum/derle.mjs');
-    expect(derle).toContain("LAFPOS_NO_JOBS: '1', LAFPOS_PAKET_DENEME: '1'");
-    expect(derle).toContain("existsSync(join(tmp, 'LafPOS-Kasa.bat'))");
+    expect(derle).toContain("ASILPOS_NO_JOBS: '1', ASILPOS_PAKET_DENEME: '1'");
+    expect(derle).toContain("existsSync(join(tmp, 'AsilPOS-Kasa.bat'))");
   });
 });
 
 describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
   const ps1 = read('scripts/kasa/windows/kurulum/kasa-yazici.ps1');
-  const bat = read('scripts/kasa/windows/LafPOS-Kasa.bat');
+  const bat = read('scripts/kasa/windows/AsilPOS-Kasa.bat');
 
   it('bekçi kasa penceresini de açık tutar; tek bekçi; kasa penceresi kilit altında açılır (iki pencere olmaz)', () => {
     const loop = ps1.slice(ps1.indexOf('if ($Bekci) {'));
-    expect(loop).toContain("Mutex($false, 'Local\\LafPOS-KasaBekci')");
+    expect(loop).toContain(`Mutex($false, 'Local\\${ESKI_URUN_ADI}-KasaBekci')`);
     expect(loop).toContain('Open-KasaWindow $true');
     expect(loop).toContain('Start-Sleep -Seconds 15');
-    expect(ps1).toContain("Mutex($false, 'Local\\LafPOS-KasaPencere')");
+    expect(ps1).toContain(`Mutex($false, 'Local\\${ESKI_URUN_ADI}-KasaPencere')`);
     // Kasa profili; müşteri ekranının profili (chrome-musteri) ve alt süreçler sayılmaz
-    expect(ps1).toContain("'\\\\LafPOS\\\\(chrome|edge)(?![\\w-])'");
+    expect(ps1).toContain(`'\\\\${ESKI_URUN_ADI}\\\\(chrome|edge)(?![\\w-])'`);
     expect(ps1).toContain("-notmatch '--type='");
-    const re = /\\LafPOS\\(chrome|edge)(?![\w-])/;
-    expect(re.test('--user-data-dir="C:\\Users\\k\\AppData\\Local\\LafPOS\\chrome" --app=http://localhost:4000/')).toBe(true);
-    expect(re.test('--user-data-dir="C:\\Users\\k\\AppData\\Local\\LafPOS\\edge" --kiosk')).toBe(true);
-    expect(re.test('--user-data-dir="C:\\Users\\k\\AppData\\Local\\LafPOS\\chrome-musteri" --kiosk')).toBe(false);
+    const re = new RegExp(`\\\\${ESKI_URUN_ADI}\\\\(chrome|edge)(?![\\w-])`);
+    const profil = `C:\\Users\\k\\AppData\\Local\\${ESKI_URUN_ADI}`;
+    expect(re.test(`--user-data-dir="${profil}\\chrome" --app=http://localhost:4000/`)).toBe(true);
+    expect(re.test(`--user-data-dir="${profil}\\edge" --kiosk`)).toBe(true);
+    expect(re.test(`--user-data-dir="${profil}\\chrome-musteri" --kiosk`)).toBe(false);
   });
 
   it('kasa penceresi bat\'in argümanlarıyla açılır (aynı profil, sessiz yazdırma)', () => {
-    for (const a of ['--kiosk-printing', "'LafPOS\\chrome'", "'LafPOS\\edge'", '--edge-kiosk-type=fullscreen', '--disable-session-crashed-bubble', '--noerrdialogs']) expect(ps1, a).toContain(a);
-    for (const a of ['--kiosk-printing', 'LafPOS\\chrome"', 'LafPOS\\edge"', '--edge-kiosk-type=fullscreen']) expect(bat, a).toContain(a);
+    for (const a of ['--kiosk-printing', `'${ESKI_URUN_ADI}\\chrome'`, `'${ESKI_URUN_ADI}\\edge'`, '--edge-kiosk-type=fullscreen', '--disable-session-crashed-bubble', '--noerrdialogs']) expect(ps1, a).toContain(a);
+    for (const a of ['--kiosk-printing', `${ESKI_URUN_ADI}\\chrome"`, `${ESKI_URUN_ADI}\\edge"`, '--edge-kiosk-type=fullscreen']) expect(bat, a).toContain(a);
   });
 
   it('bat kasa penceresini betikle açar (bekçiyle çakışmaz); betik yoksa eski yol', () => {
@@ -239,7 +261,7 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     expect(ac).toBeGreaterThan(bat.indexOf('kasa-yazici.ps1"'));
     expect(ac).toBeLessThan(bat.indexOf(':chrome'));
     expect(bat).toContain('if not errorlevel 1 exit /b 0');
-    expect(ASCII.test(read('scripts/kasa/windows/LafPOS-Kasa.bat', 'latin1'))).toBe(true);
+    expect(ASCII.test(read('scripts/kasa/windows/AsilPOS-Kasa.bat', 'latin1'))).toBe(true);
   });
 
   it('müşteri ekranı sunucu cevap vermeden açılmaz (hata sayfası açık kalıp bekçiyi durdurmasın); eski bekçi değişir', async () => {
@@ -259,7 +281,7 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
   it('müşteri ekranı kilit altında açılır: oturum açılınca bat ile bekçi aynı anda iki pencere açmaz', () => {
     const fn = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
     // Kasa penceresinden ayrı kilit: biri açılırken öteki beklemesin
-    expect(fn).toContain("Mutex($false, 'Local\\LafPOS-MusteriPencere')");
+    expect(fn).toContain(`Mutex($false, 'Local\\${ESKI_URUN_ADI}-MusteriPencere')`);
     expect(fn).toContain('catch [System.Threading.AbandonedMutexException] { $own = $true }');
     // Açık mı, sunucu var mı ve açma aynı kilidin içinde; açtıktan sonra süreç görünene dek beklenir
     const lock = fn.indexOf('WaitOne(');
@@ -289,8 +311,8 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     const fn = ps1.slice(ps1.indexOf('function Remove-TemporaryKasaWatcher'), ps1.indexOf('$displayBase = $Url'));
     const removed = [...fn.matchAll(/Remove-Item -LiteralPath \$(\w+)/g)].map((m) => m[1]);
     expect(removed).toEqual(['lnk', 'dir']);
-    expect(fn).toContain("'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\LafPOS Kasa Kontrol.lnk'");
-    expect(fn).toContain("Join-Path $env:LOCALAPPDATA 'LafPOS-KasaKontrol'");
+    expect(fn).toContain(`'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\${ESKI_URUN_ADI} Kasa Kontrol.lnk'`);
+    expect(fn).toContain(`Join-Path $env:LOCALAPPDATA '${ESKI_URUN_ADI}-KasaKontrol'`);
     // Bekçi kalıcı kurulunca (kendi kilidini aldıktan sonra) çağrılır
     const loop = ps1.slice(ps1.indexOf('if ($Bekci) {'));
     expect(loop.indexOf('Remove-TemporaryKasaWatcher')).toBeGreaterThan(loop.indexOf('WaitOne(0)'));

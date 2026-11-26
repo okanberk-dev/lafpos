@@ -1,5 +1,5 @@
 /**
- * LafPOS uçtan uca denetimi. Önce `npm run build`, sonra `npm run e2e`.
+ * AsilPOS uçtan uca denetimi. Önce `npm run build`, sonra `npm run e2e`.
  *
  * 1. Tarama: her rol, izinli her ekranı telefon (390 ve 320 px, dokunmatik), tablet (768 px dikey, 1024 px yatay,
  *    dokunmatik), bilgisayar (1280 px), dokunmatik kasa bilgisayarı (1366 × 768; Windows ölçeği %125 iken 1093 × 614)
@@ -9,7 +9,7 @@
  * 2. Akışlar: e2e/flows.mjs (telefonda sipariş, ödeme, yönetimde düzenleme).
  * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
  * 4. İnternet kesintisi: e2e/internet.mjs (sahte lafmaliyet ucu kapalıyken satış ve gün sonu, rozet, dönüşte tam bir kez).
- * 5. LafPOS Uzaktan: e2e/uzaktan.mjs (Vercel derlemesi; patron paneli, raporlar ve İndir, girişten önce ve sonra).
+ * 5. AsilPOS Uzaktan: e2e/uzaktan.mjs (Vercel derlemesi; patron paneli, raporlar ve İndir, girişten önce ve sonra).
  * 6. Personel bağlantısı: e2e/personel.mjs (sahte lafmaliyet personel listesi; önceden seçili aday yok, "Eminim", gün
  *    sonunda workedStaffRefs, Entegrasyon'da personel yanıtı, Kasa › Geçmiş günler › Bugün çalışanlar).
  *
@@ -122,7 +122,7 @@ const checkDialogs = [
  * satırlar). Tercih tarayıcı bağlamında kalır: listede /mutfak'ın son durumu
  */
 const barLight = state('/mutfak', 'acik-tema', async (page) => {
-  await page.evaluate(() => localStorage.setItem('lafpos.pref.kds.tema', JSON.stringify('acik')));
+  await page.evaluate(() => localStorage.setItem('asilpos.pref.kds.tema', JSON.stringify('acik')));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await settle(page);
   const more = page.getByRole('button', { name: 'Diğer', exact: true });
@@ -164,7 +164,7 @@ const ROUTES = {
     state('/siparisler', 'kapanan-iade', async (page) => {
       const id = await page.evaluate(async () => {
         const call = async (method, path, body) => {
-          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('asilpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
           if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
           return res.json();
         };
@@ -212,7 +212,7 @@ const ROUTES = {
       await page.evaluate(async () => {
         const res = await fetch('/api/display/e2e-uzun', {
           method: 'PUT',
-          headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' },
+          headers: { authorization: `Bearer ${localStorage.getItem('asilpos.token')}`, 'content-type': 'application/json' },
           body: JSON.stringify({ kind: 'thanks', total: 12345, call: 'Masa WWWWWW' }),
         });
         if (!res.ok) throw new Error(`PUT /display → ${res.status}`);
@@ -231,7 +231,7 @@ const ROUTES = {
       // Rapor boş görünmesin: sunucu başına bir kez deneme modunda bir Getir siparişi teslim edilir, biri reddedilir
       await page.evaluate(async () => {
         const call = async (method, path, body) => {
-          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('asilpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
           if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
           return res.json();
         };

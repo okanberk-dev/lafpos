@@ -74,12 +74,12 @@ export async function freePort() {
  */
 export async function startServer({ jobs = false, env: extra = {} } = {}) {
   if (!existsSync(join(ROOT, 'dist/web/index.html'))) throw new Error('Önce arayüzü derleyin: npm run build');
-  const dataDir = mkdtempSync(join(tmpdir(), 'lafpos-e2e-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'asilpos-e2e-'));
   const port = await freePort();
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
     cwd: ROOT,
     // Ayarlar dosyası veri klasöründe (Windows kurulumundaki ayarlar.env gibi): Yönetim › Bağlantı bilgileri yazabilsin
-    env: { ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: dataDir, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_AYAR_DOSYASI: join(dataDir, 'ayarlar.env'), ...(jobs ? {} : { LAFPOS_NO_JOBS: '1' }), ...extra },
+    env: { ...process.env, NODE_ENV: 'production', ASILPOS_DATA_DIR: dataDir, ASILPOS_PORT: String(port), ASILPOS_HOST: '127.0.0.1', ASILPOS_AYAR_DOSYASI: join(dataDir, 'ayarlar.env'), ...(jobs ? {} : { ASILPOS_NO_JOBS: '1' }), ...extra },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -159,14 +159,14 @@ export async function seedFloor(api) {
 }
 
 export async function launchBrowser() {
-  const executablePath = process.env.LAFPOS_E2E_CHROME || undefined;
-  return chromium.launch({ headless: process.env.LAFPOS_E2E_HEADED !== '1', ...(executablePath ? { executablePath } : { channel: 'chrome' }) });
+  const executablePath = process.env.ASILPOS_E2E_CHROME || undefined;
+  return chromium.launch({ headless: process.env.ASILPOS_E2E_HEADED !== '1', ...(executablePath ? { executablePath } : { channel: 'chrome' }) });
 }
 
 /** Rolün oturum jetonunu sayfa açılmadan yerleştirir; konsol ve ağ hatalarını toplar */
 export async function openContext(browser, viewport, token) {
   const context = await browser.newContext({ ...SWEEP_VIEWPORTS[viewport], locale: 'tr-TR', timezoneId: 'Europe/Istanbul', reducedMotion: 'reduce' });
-  if (token) await context.addInitScript((t) => localStorage.setItem('lafpos.token', t), token);
+  if (token) await context.addInitScript((t) => localStorage.setItem('asilpos.token', t), token);
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => {
@@ -187,7 +187,7 @@ export async function settle(page) {
       const main = document.querySelector('main') ?? document.querySelector('#root > *');
       if (!main) return false;
       const text = document.body.innerText;
-      return !/LafPOS (açılıyor|hazırlanıyor)/.test(text) && !document.querySelector('main .animate-spin');
+      return !/AsilPOS (açılıyor|hazırlanıyor)/.test(text) && !document.querySelector('main .animate-spin');
     }, null, { timeout: 8000 })
     .catch(() => null);
   await page.waitForTimeout(250);

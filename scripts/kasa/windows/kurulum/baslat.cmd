@@ -1,5 +1,5 @@
 @echo off
-rem LafPOS baslaticisi: "LafPOS Sunucu" gorevi bunu acilista SYSTEM olarak calistirir (lafpos.nsi). Bekci 75 koduyla
+rem AsilPOS baslaticisi: "LafPOS Sunucu" gorevi bunu acilista SYSTEM olarak calistirir (asilpos.nsi). Bekci 75 koduyla
 rem cikarsa (otomatik guncelleme yeni surumu kurdu, guncelle.mjs) yeniden acilir; guncelleme Node'u da degistirdiyse
 rem once node.yeni klasoru node'un yerine gecer (calisan node.exe kendi dosyasinin uzerine yazamaz). Bekci yeni cikmis
 rem oldugundan Windows eski node.exe'yi bir an kilitli tutabilir: tasima 20 saniyeye kadar yeniden denenir.

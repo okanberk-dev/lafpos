@@ -1,9 +1,9 @@
 /**
- * LafPOS Uzaktan (Vercel'deki salt okunur görünüm): VITE_LAFPOS_UZAKTAN=1 ile ayrı derlenir, api/uzaktan.ts'in kendi
+ * AsilPOS Uzaktan (Vercel'deki salt okunur görünüm): VITE_ASILPOS_UZAKTAN=1 ile ayrı derlenir, api/uzaktan.ts'in kendi
  * işleyicisiyle (kafe bağlı değil: örnek gün, parolasız) Vercel'in yönlendirmeleriyle aynı statik sunucudan açılır.
  * Tarama (telefon, tablet, bilgisayar, koyu): ROUTES; giriş yokken İndir giriş ekranına döner, girişten sonra
  * menüde ve açılıyor; kafeden veri gelmemişken de (kabuksuz) açılıyor.
- * Üyelik (LAFPOS_UYE_EPOSTA, bellekte sahte Redis): ilk girişte parola belirlenir, yanlış parola girmez, doğrusu girer;
+ * Üyelik (ASILPOS_UYE_EPOSTA, bellekte sahte Redis): ilk girişte parola belirlenir, yanlış parola girmez, doğrusu girer;
  * kafe bağlanmadan da İndir'e ulaşılır.
  */
 import { execFileSync } from 'node:child_process';
@@ -63,7 +63,7 @@ function fakeRedis() {
 
 /** Üyeliği açar ya da kapatır: işleyici ortamı her istekte okur */
 function memberMode(on) {
-  const vars = { LAFPOS_UYE_EPOSTA: MEMBER.email, LAFPOS_UYE_DAVET: MEMBER.invite, LAFPOS_CLOUD_SECRET: 'e'.repeat(40), KV_REST_API_URL: REDIS_URL, KV_REST_API_TOKEN: 't' };
+  const vars = { ASILPOS_UYE_EPOSTA: MEMBER.email, ASILPOS_UYE_DAVET: MEMBER.invite, ASILPOS_CLOUD_SECRET: 'e'.repeat(40), KV_REST_API_URL: REDIS_URL, KV_REST_API_TOKEN: 't' };
   for (const [k, v] of Object.entries(vars)) on ? (process.env[k] = v) : delete process.env[k];
 }
 
@@ -74,10 +74,10 @@ async function startRemote() {
   execFileSync(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'build', '--outDir', OUT, '--emptyOutDir', '--logLevel', 'warn'], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, VITE_LAFPOS_UZAKTAN: '1' },
+    env: { ...process.env, VITE_ASILPOS_UZAKTAN: '1' },
   });
   // Kafe bağlı değil: Redis ve anahtar yok, işleyici örnek günü açar
-  for (const k of ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA']) delete process.env[k];
+  for (const k of ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA']) delete process.env[k];
   const restoreFetch = fakeRedis();
   const handler = await tsImport(join(ROOT, 'api/uzaktan.ts'), import.meta.url);
   const server = createServer(async (req, res) => {
@@ -149,7 +149,7 @@ async function check(page, viewport, problems) {
   }
 }
 
-const installerLink = (page) => page.locator('a[href="/guncelleme/LafPOS-Kur.cmd"]').waitFor({ timeout: 20_000 });
+const installerLink = (page) => page.locator('a[href="/guncelleme/AsilPOS-Kur.cmd"]').waitFor({ timeout: 20_000 });
 
 /**
  * Örnek günde parolasız giriş kendiliğinden olur; giriş ekranından çıkana dek bekler. ?uzaktan=1: kafe bağlı değilken
@@ -252,7 +252,7 @@ export async function runRemote(browser) {
         await page.goto(`${server.base}/indir`, { waitUntil: 'domcontentloaded' });
         await page.getByRole('heading', { name: 'Üye girişi' }).waitFor({ timeout: 15_000 });
         if (new URL(page.url()).pathname !== '/giris') failures.push(`${where('/indir')}: oturumsuz giriş ekranına dönmedi (${new URL(page.url()).pathname})`);
-        if ((await page.locator('a[href$="LafPOS-Kur.cmd"], a[href="/indir"]').count()) > 0) failures.push(`${where('/indir')}: oturumsuz indirme bağlantısı göründü`);
+        if ((await page.locator('a[href$="AsilPOS-Kur.cmd"], a[href="/indir"]').count()) > 0) failures.push(`${where('/indir')}: oturumsuz indirme bağlantısı göründü`);
         await check(page, viewport, problems);
         await page.screenshot({ path: join(ROOT, 'e2e/out', `uzaktan-${viewport}-giris.png`) });
         pages++;
@@ -277,7 +277,7 @@ export async function runRemote(browser) {
             if ((await page.locator('a[href="/uzaktan-yonetim"]').count()) === 0) problems.push('menüde Uzaktan yönetim yok');
           }
           if (route === '/indir') {
-            const link = page.locator('a[href="/guncelleme/LafPOS-Kur.cmd"]');
+            const link = page.locator('a[href="/guncelleme/AsilPOS-Kur.cmd"]');
             if ((await link.count()) !== 1) problems.push('İndir bağlantısı yok');
             if ((await page.getByText('Son sürüm 0.2.0').count()) === 0) problems.push('sürüm satırı yok');
             // Menüde İndir (telefonda alt sekmede ya da Daha'da)

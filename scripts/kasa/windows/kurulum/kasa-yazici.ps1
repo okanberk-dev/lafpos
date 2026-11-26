@@ -1,9 +1,11 @@
-# LafPOS kasa ekrani acilmadan once (LafPOS-Kasa.bat, oturumdaki kullanici): bilgisayardaki yazicilari LafPOS'a bildirir
-# ve LafPOS'un sectigi fis yazicisini bu kullanicinin varsayilan yazicisi yapar. Chrome kiosk sessiz yazdirma
+# AsilPOS kasa ekrani acilmadan once (AsilPOS-Kasa.bat, oturumdaki kullanici): bilgisayardaki yazicilari AsilPOS'a bildirir
+# ve AsilPOS'un sectigi fis yazicisini bu kullanicinin varsayilan yazicisi yapar. Chrome kiosk sessiz yazdirma
 # (--kiosk-printing) varsayilan yaziciya basar: kablolu (USB) fis yazicisi kurulup tek basina takiliysa hic secim
 # gerekmez. Yazici Yonetim > Ayarlar ve yedek > Fis yazicisi'ndan da secilir. Hata olursa sessizce cikar: kasa ekrani
 # yine acilir. Ayrinti: docs/05-KASA-BILGISAYARI.md. Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
-param([string]$Url = $env:LAFPOS_URL, [switch]$Bekci, [int]$BekciSurum = 0, [switch]$KasaAc)
+# Ad degisikligi (26 Kas 2026): ASILPOS_URL yoksa eski adi; tarayici profilleri, mutex adlari ve eski kisayollar eski adla
+# (shared/eski-adlar.ts). Eski adli kisayollar yeni adla es sayilir
+param([string]$Url = $(if ($env:ASILPOS_URL) { $env:ASILPOS_URL } else { $env:LAFPOS_URL }), [switch]$Bekci, [int]$BekciSurum = 0, [switch]$KasaAc)
 $ErrorActionPreference = 'Stop'
 
 # Musteri ekrani (22 Kas 2026): bilgisayara ikinci ekran takiliysa musteri ekrani orada tam ekran acilir (ayri Chrome
@@ -11,19 +13,19 @@ $ErrorActionPreference = 'Stop'
 # pencere kapandiysa ya da ikinci ekran sonradan takildiysa yeniden acar (tek bekci). Ekran olcegi (%125) pencereyi
 # birinci ekrana dusurmesin diye surec DPI'ya duyarli yapilir (Screen.Bounds gercek piksel). Sahadaki gecici bekci
 # (%LocalAppData%\LafPOS-MusteriEkrani, Baslangic'ta "LafPOS Musteri Ekrani") kapatilir: iki pencere acilmaz.
-# Betik guncellemeyle gelir (app\); LafPOS-Kasa.bat her acilista calistirir. Hata kasayi durdurmaz. Yalniz ASCII.
+# Betik guncellemeyle gelir (app\); AsilPOS-Kasa.bat her acilista calistirir. Hata kasayi durdurmaz. Yalniz ASCII.
 #
-# Kasa ekrani bekcisi (22 Kas 2026): ayni bekci kasa penceresini de acik tutar. Kasa penceresi (LafPOS-Kasa.bat'in
+# Kasa ekrani bekcisi (22 Kas 2026): ayni bekci kasa penceresini de acik tutar. Kasa penceresi (AsilPOS-Kasa.bat'in
 # actigi kiosk Chrome/Edge, %LocalAppData%\LafPOS\chrome ya da \edge profili) yoksa ve sunucu aciksa acar; kapanirsa en
-# gec 15 sn'de yeniden acar. Bekci iki yoldan baslar: LafPOS-Kasa.bat (bu betik) ve ortak Baslangic'taki "LafPOS Kasa
+# gec 15 sn'de yeniden acar. Bekci iki yoldan baslar: AsilPOS-Kasa.bat (bu betik) ve ortak Baslangic'taki "AsilPOS Kasa
 # Bekcisi" kisayolu (guncelleme yazar, kurulum-yenile.mjs; o yoksa kullanici Baslangic'ina burada konur). Tek bekci
 # calisir (ad verilmis mutex); eski surum bekci (-BekciSurum eksik) kapatilip yenisi acilir. Kasa penceresini acmak da
 # mutex altinda: bat ile bekci ayni anda iki pencere acmaz (-KasaAc: bat'in kasa penceresini acma yolu). Bekci kalici
 # kurulunca sahadaki gecici kasa denetcisi (kullanici Baslangic'inda "LafPOS Kasa Kontrol" ve
 # %LocalAppData%\LafPOS-KasaKontrol) kaldirilir; baska bir seye dokunulmaz.
 try {
-  Add-Type -Namespace LafPos -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();' -ErrorAction SilentlyContinue
-  [LafPos.Dpi]::SetProcessDPIAware() | Out-Null
+  Add-Type -Namespace AsilPos -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();' -ErrorAction SilentlyContinue
+  [AsilPos.Dpi]::SetProcessDPIAware() | Out-Null
 } catch { }
 
 function Get-DisplayExe {
@@ -95,7 +97,9 @@ function Stop-TemporaryDisplayWatcher {
 # Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni). 3: musteri ekrani sunucu cevap verince acilir;
 # 4: bakim arasinda (Yonetim > Ag > Bu bilgisayar) kasa penceresi yeniden acilmaz
 $BekciSurumu = 4
-$BekciKisayolu = 'LafPOS Kasa Bekcisi.lnk'
+$BekciKisayolu = 'AsilPOS Kasa Bekcisi.lnk'
+$EskiAd = 'LafPOS' # eski-ad: ad degisikliginden onceki kisayol ve menu adi
+$EskiBekciKisayolu = $EskiAd + ' Kasa Bekcisi.lnk'
 
 function Get-KasaUrl {
   if ($Url) { return $Url }
@@ -120,7 +124,7 @@ function Test-Server([string]$base) {
   try { return (Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri ($base + '/api/health')).StatusCode -eq 200 } catch { return $false }
 }
 
-# Kasa penceresini acar (yoksa). LafPOS-Kasa.bat'in Chrome/Edge argumanlarinin aynisi. $SunucuGerek: sunucu kapaliysa
+# Kasa penceresini acar (yoksa). AsilPOS-Kasa.bat'in Chrome/Edge argumanlarinin aynisi. $SunucuGerek: sunucu kapaliysa
 # acmaz (bekci; hata sayfasi acilmasin). Dondurdugu: $false yalniz tarayici bulunamazsa
 function Open-KasaWindow([bool]$SunucuGerek) {
   $mx = New-Object System.Threading.Mutex($false, 'Local\LafPOS-KasaPencere')
@@ -169,7 +173,7 @@ if (-not $displayBase) { $displayBase = 'http://localhost:4000/' }
 $displayBase = ($displayBase -replace '//localhost', '//127.0.0.1').TrimEnd('/')
 
 if ($KasaAc) {
-  # LafPOS-Kasa.bat: kasa penceresini ac (zaten aciksa bir sey yapma); tarayici yoksa 1 (bat uyarir)
+  # AsilPOS-Kasa.bat: kasa penceresini ac (zaten aciksa bir sey yapma); tarayici yoksa 1 (bat uyarir)
   if (Open-KasaWindow $false) { exit 0 }
   exit 1
 }
@@ -191,12 +195,19 @@ if ($Bekci) {
   }
 }
 
-# Kasa hazirligi kisayolu (Baslat > LafPOS > Kasa hazirligi) ve eski kasa programi uyarisi (haftada en cok bir kez)
+# Kasa hazirligi kisayolu (Baslat > AsilPOS > Kasa hazirligi) ve eski kasa programi uyarisi (haftada en cok bir kez)
 try {
   $hazirla = Join-Path $PSScriptRoot 'kasa-hazirla.ps1'
   if (Test-Path $hazirla) {
-    $menu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\LafPOS'
+    $menu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\AsilPOS'
     $lnk = Join-Path $menu 'Kasa hazirligi.lnk'
+    # Eski adli menu klasorundeki kopya (ad degisikligi): yenisi yazilacagi icin silinir, klasor bosalirsa o da
+    $eskiMenu = Join-Path $env:APPDATA ('Microsoft\Windows\Start Menu\Programs\' + $EskiAd)
+    $eskiLnk = Join-Path $eskiMenu 'Kasa hazirligi.lnk'
+    if (Test-Path -LiteralPath $eskiLnk) {
+      Remove-Item -LiteralPath $eskiLnk -Force
+      if (-not @(Get-ChildItem -LiteralPath $eskiMenu -Force).Count) { Remove-Item -LiteralPath $eskiMenu -Force }
+    }
     if (-not (Test-Path $lnk)) {
       if (-not (Test-Path $menu)) { New-Item -ItemType Directory -Path $menu -Force | Out-Null }
       $sh = New-Object -ComObject WScript.Shell
@@ -231,15 +242,20 @@ try {
   # kullanici Baslangic'ina konur. Yonetici izni gerekmez
   $ortak = [Environment]::GetFolderPath('CommonStartup')
   $kendi = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
-  $kasaAcilista = (Test-Path -LiteralPath (Join-Path $ortak 'LafPOS Kasa.lnk')) -or (Test-Path -LiteralPath (Join-Path $kendi 'LafPOS Kasa.lnk'))
-  if ($me -and $kasaAcilista -and -not (Test-Path -LiteralPath (Join-Path $ortak $BekciKisayolu)) -and -not (Test-Path -LiteralPath (Join-Path $kendi $BekciKisayolu))) {
+  $kasaAcilista = $false
+  $bekciVar = $false
+  foreach ($d in @($ortak, $kendi)) {
+    foreach ($ad in @('AsilPOS Kasa.lnk', ($EskiAd + ' Kasa.lnk'))) { if (Test-Path -LiteralPath (Join-Path $d $ad)) { $kasaAcilista = $true } }
+    foreach ($ad in @($BekciKisayolu, $EskiBekciKisayolu)) { if (Test-Path -LiteralPath (Join-Path $d $ad)) { $bekciVar = $true } }
+  }
+  if ($me -and $kasaAcilista -and -not $bekciVar) {
     $kur = Split-Path -Parent $PSScriptRoot
     $sh = New-Object -ComObject WScript.Shell
     $k = $sh.CreateShortcut((Join-Path $kendi $BekciKisayolu))
     $k.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $k.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $me + '" -Bekci -BekciSurum ' + $BekciSurumu
     $k.WorkingDirectory = $kur
-    $k.IconLocation = (Join-Path $kur 'lafpos.ico') + ',0'
+    $k.IconLocation = (Join-Path $kur 'asilpos.ico') + ',0'
     $k.WindowStyle = 7
     $k.Description = 'Kasa ve musteri ekrani acik kalsin (kapanirsa yeniden acar)'
     $k.Save()

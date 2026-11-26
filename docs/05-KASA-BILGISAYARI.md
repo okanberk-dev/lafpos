@@ -451,3 +451,27 @@ Kasa bilgisayarı gün boyu açık; AsilPOS boşta işlemci ve bellek yemesin di
   platform listesi yalnız bir platform açıkken (deneme ya da canlı) ya da bekleyen sipariş varken 30 sn'de bir
   yoklanır, yeni sipariş canlı akışla zaten gelir. "Hazır" nabzı (salon kartı, teslim ekranı) yalnız transform
   ve opacity canlandırır: ekran kartında döner, kare kare yeniden boyanmaz; hareket azaltmada durur.
+
+## 8. Ad değişikliği (26 Kasım 2026)
+
+Ürünün adı AsilPOS oldu; kurulu kasa olduğu gibi çalışmaya devam eder, yeniden kurmak gerekmez. Değişmeyenler (kurulu
+kasada, eski güncelleyicide ve öbür sistemlerde yazılı; liste `shared/eski-adlar.ts`):
+
+- Klasörler: `C:\Program Files\LafPOS`, `C:\ProgramData\LafPOS` (veritabanı `lafpos.db`, yedekler `backups\lafpos-*`),
+  kasa ekranının tarayıcı profilleri (`%LocalAppData%\LafPOS\chrome`, `…\LafPOS\edge`, `…\LafPOS\chrome-musteri`).
+- Görev Zamanlayıcı ve güvenlik duvarı: `LafPOS Sunucu`; Uygulamalar kaydının anahtarı `Uninstall\LafPOS` (görünen adı
+  AsilPOS), siteden kurulumun kaldırıcısı `LafPOS-Kaldir.ps1`.
+- Güncelleme kanalı `https://lafpos.laffogato.net/guncelleme/` ve `https://lafpos.vercel.app/guncelleme/`, yükün adı
+  `lafpos-app-<build>.zip`. Siteden kurulum iki adla yayımlanır: `AsilPOS-Kur.cmd` ve eski bağlantılar için
+  `LafPOS-Kur.cmd` (aynı dosya).
+- Ayarlar: `ayarlar.env`'deki `LAFPOS_*` satırları yeniden yazılmaz, sunucu ve bekçi önce `ASILPOS_*`'u, yoksa eski adı
+  okur. Yönetim › Bağlantı bilgileri ve ladmin'in anahtar dağıtımı dosyada duran adı değiştirir; dosyada yoksa
+  `ASILPOS_*` ekler. Bekçi sunucuya iki adı da verir: eski sürüme dönülürse eski sunucu ayarlarını yine bulur.
+
+Değişenler ilk güncellemede kendiliğinden yenilenir: Başlat menüsü `AsilPOS` klasörüne taşınır, masaüstü ve Başlangıç'taki
+kasa kısayolu `AsilPOS Kasa` olur (eskisi silinir; kaldırma ve tarayıcı kısayolu yeni klasöre taşınır). Kurulum
+klasörüne `AsilPOS-Kasa.bat` ve `asilpos.ico` gelir; eski kısayollar için `LafPOS-Kasa.bat` yenisine yönlendirir,
+`lafpos.ico` aynı simgenin kopyasıdır. Tarayıcıdaki oturum, sepet ve tercihler (`lafpos.*` anahtarları) ilk açılışta
+`asilpos.*`'a kopyalanır; eskiler silinmez. Kurulum dosyasıyla kurulup sonra kendiliğinden güncellenen kasada
+Uygulamalar listesinden kaldırma eski kaldırıcıyı çalıştırır: yeni adlı kısayollar kalırsa elle silinir (ya da önce
+güncel kurulum dosyası çalıştırılır, kaldırıcıyı yeniler).

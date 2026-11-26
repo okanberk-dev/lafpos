@@ -1,4 +1,4 @@
-# LafPOS yonetim kisayollari (Baslat > LafPOS). Veri klasoru yalniz yoneticilere acik, bu yuzden izin ister.
+# AsilPOS yonetim kisayollari (Baslat > AsilPOS). Veri klasoru yalniz yoneticilere acik, bu yuzden izin ister.
 #   ayarlar          ayarlar.env Not Defteri'nde acilir; kaydedince (Ctrl+S) bekci sunucuyu yeni ayarlarla baslatir
 #   yeniden-baslat   sunucuyu yeniden baslatir
 #   gunluk           sunucu gunlugunu acar
@@ -11,10 +11,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
   exit
 }
 
-$data = Join-Path $env:ProgramData 'LafPOS'
+$data = Join-Path $env:ProgramData 'LafPOS' # eski-ad: kurulu kasanin veri klasoru
 $task = 'LafPOS Sunucu'
 
-function Restart-LafPOS {
+function Restart-AsilPOS {
   schtasks.exe /End /TN $task 2>&1 | Out-Null
   Start-Sleep -Seconds 2
   schtasks.exe /Run /TN $task 2>&1 | Out-Null
@@ -23,6 +23,6 @@ function Restart-LafPOS {
 switch ($Islem) {
   # Yeniden baslatmayi bekci yapar (dosyayi izler): Windows 11 Not Defteri sekmeyle acildiginda -Wait beklemez
   'ayarlar' { Start-Process notepad.exe -ArgumentList "`"$data\ayarlar.env`"" }
-  'yeniden-baslat' { Restart-LafPOS }
+  'yeniden-baslat' { Restart-AsilPOS }
   'gunluk' { Start-Process notepad.exe -ArgumentList "`"$data\logs\sunucu.log`"" }
 }

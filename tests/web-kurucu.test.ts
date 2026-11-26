@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ALAN_ADI, ESKI_URUN_ADI, ESKI_WEB_KURUCU, KURULUM_KLASORU, SUNUCU_GOREVI, UYGULAMA_ZIP_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Siteden kurulum (scripts/kasa/windows/kurulum/web-kurucu.mjs, web-kurucu.ps1, web-kaldir.ps1): kanal derlemesinin
- * yazdığı LafPOS-Kur.cmd surum.json'daki adres ve özetleri taşır, gizli bir şey taşımaz, Windows PowerShell 5.1'de
- * çalışır (7'ye özgü işleç yok), cmd başlığı ASCII ve CRLF'dir. İndirme bağlantısı yalnız LafPOS Uzaktan'da ve
+ * yazdığı AsilPOS-Kur.cmd surum.json'daki adres ve özetleri taşır, gizli bir şey taşımaz, Windows PowerShell 5.1'de
+ * çalışır (7'ye özgü işleç yok), cmd başlığı ASCII ve CRLF'dir. İndirme bağlantısı yalnız AsilPOS Uzaktan'da ve
  * girişten sonra görünür.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -18,7 +19,7 @@ async function build() {
   const { webInstaller } = await load('web-kurucu.mjs');
   const { NODE_VERSION, NODE_ABI, NODE_SHA256, SQLITE_SHA256 } = await load('surumler.mjs');
   const sqlite = Object.keys(SQLITE_SHA256)[0]!;
-  const manifest = manifestFor({ build: 1_795_100_000, commit: 'abc', version: '0.2.0', zip: Buffer.from('lafpos-app-deneme'), sqlite });
+  const manifest = manifestFor({ build: 1_795_100_000, commit: 'abc', version: '0.2.0', zip: Buffer.from(`${UYGULAMA_ZIP_ONEKI}deneme`), sqlite });
   return { manifest, text: webInstaller({ manifest }) as string, NODE_VERSION, NODE_ABI, NODE_SHA256, sqlite, sqliteSha: SQLITE_SHA256[sqlite] as string };
 }
 
@@ -107,7 +108,7 @@ function concat(expr: string, values: Record<string, string>): string {
     .join('');
 }
 
-describe('siteden kurulum: LafPOS-Kur.cmd', () => {
+describe('siteden kurulum: AsilPOS-Kur.cmd', () => {
   const saved = { ...process.env };
   afterEach(() => {
     process.env = { ...saved };
@@ -117,7 +118,7 @@ describe('siteden kurulum: LafPOS-Kur.cmd', () => {
     const { manifest, text, NODE_VERSION, NODE_ABI, NODE_SHA256, sqlite, sqliteSha } = await build();
     const body = psBody(text);
     expect(body).toContain(`build = '${manifest.build}'; version = '0.2.0'`);
-    expect(body).toContain(`appFile = 'lafpos-app-${manifest.build}.zip'; appSha = '${manifest.app.sha256}'; appSize = [long]${manifest.app.size}`);
+    expect(body).toContain(`appFile = '${UYGULAMA_ZIP_ONEKI}${manifest.build}.zip'; appSha = '${manifest.app.sha256}'; appSize = [long]${manifest.app.size}`);
     expect(body).toContain(`nodeVersion = '${NODE_VERSION}'; nodeAbi = '${NODE_ABI}'; nodeSha = '${NODE_SHA256}'`);
     expect(body).toContain(`sqliteVersion = '${sqlite}'; sqliteSha = '${sqliteSha}'`);
     // Kanal: önce alan adı, yoksa Vercel'in adresi; güncelleyicinin (guncelle.mjs) adresleriyle aynı
@@ -125,14 +126,14 @@ describe('siteden kurulum: LafPOS-Kur.cmd', () => {
     const kanal = /^\$Kanal = @\((.*)\)\r$/m.exec(body)![1]!;
     expect(kanal.split(', ').map((s) => `${s.slice(1, -1)}surum.json`)).toEqual(MANIFEST_URLS);
     // İndirme adresleri güncelleyicinin kalıbıyla aynı (kanal yalnız sürüm ve özet verir)
-    const values = { nodeVersion: NODE_VERSION, nodeAbi: NODE_ABI, sqliteVersion: sqlite, taban: 'https://lafpos.laffogato.net/guncelleme/', appFile: manifest.app.file };
+    const values = { nodeVersion: NODE_VERSION, nodeAbi: NODE_ABI, sqliteVersion: sqlite, taban: `https://${ALAN_ADI}/guncelleme/`, appFile: manifest.app.file };
     const nodeExpr = /Indir \((.*?)\) \$nodeZip /.exec(body)![1]!;
     expect(concat(nodeExpr, values)).toBe(nodeZipUrl(NODE_VERSION));
     const sqliteName = /\$sqliteAd = (.*?)\r/.exec(body)![1]!;
     const sqliteExpr = /Indir \((.*?)\) \$sqliteTgz /.exec(body)![1]!.replace('$sqliteAd', sqliteName);
     expect(concat(sqliteExpr, values)).toBe(sqliteTarUrl(sqlite, NODE_ABI));
     const appExpr = /Indir \((.*?)\) \$appZip /.exec(body)![1]!;
-    expect(concat(appExpr, values)).toBe(`https://lafpos.laffogato.net/guncelleme/lafpos-app-${manifest.build}.zip`);
+    expect(concat(appExpr, values)).toBe(`https://${ALAN_ADI}/guncelleme/${UYGULAMA_ZIP_ONEKI}${manifest.build}.zip`);
     // Her indirme SHA-256 ile doğrulanır; uygulama yükünün boyu da
     expect(body).toMatch(/Get-FileHash -LiteralPath \$Hedef -Algorithm SHA256/);
     expect(body).toMatch(/\$Surum\.nodeSha/);
@@ -141,32 +142,42 @@ describe('siteden kurulum: LafPOS-Kur.cmd', () => {
     expect(body).toMatch(/Length -ne \$Surum\.appSize/);
   });
 
-  it('kurulum dosyasıyla (lafpos.nsi) aynı görev, güvenlik duvarı ve klasörler', async () => {
+  it('kurulum dosyasıyla (asilpos.nsi) aynı görev, güvenlik duvarı ve klasörler', async () => {
     const { text } = await build();
-    const nsi = read('scripts/kasa/windows/kurulum/lafpos.nsi');
+    const nsi = read('scripts/kasa/windows/kurulum/asilpos.nsi');
     const body = psBody(text);
     // Görev XML'i satır satır aynı (komut ve klasör satırları dışında)
     const nsiTask = [...nsi.matchAll(/!insertmacro TaskLine '(.*)'$/gm)].map((m) => m[1]!).filter((l) => !/\$(SYSDIR|INSTDIR)/.test(l));
     for (const line of nsiTask) expect(body, line).toContain(`'${line}'`);
     expect(body).toContain("'/RU', 'SYSTEM'");
-    expect(nsi).toContain('!define TASK "LafPOS Sunucu"');
-    expect(body).toContain("$Gorev = 'LafPOS Sunucu'");
+    expect(nsi).toContain(`!define TASK "${SUNUCU_GOREVI}"`);
+    expect(body).toContain(`$Gorev = '${SUNUCU_GOREVI}'`);
     expect(body).toContain("@('localsubnet', '100.64.0.0/10')");
     expect(body).toContain("'*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'");
-    expect(body).toContain("Join-Path $env:ProgramData 'LafPOS'");
+    // Klasörler kurulu kasadaki eski adla (shared/eski-adlar.ts); eski Başlat menüsü ve kısayollar silinir
+    expect(body).toContain(`Join-Path $env:ProgramData '${KURULUM_KLASORU}'`);
+    expect(body).toContain(`Join-Path $ProgramKlasoru '${KURULUM_KLASORU}'`);
+    expect(body).toContain(`$EskiAd = '${ESKI_URUN_ADI}'`);
+    expect(nsi).toContain('!insertmacro EskiKisayollariSil');
     // Başlatıcı, kasa kısayolu, yönetim betiği, simge, notlar, ayar örneği ve kaldırıcı dosyanın içinde
     const files = embedded(text);
-    expect(Object.keys(files).sort()).toEqual(['BENIOKU.txt', 'LafPOS-Kaldir.ps1', 'LafPOS-Kasa.bat', 'ayarlar.env.ornek', 'baslat.cmd', 'lafpos.ico', 'yonet.ps1']);
+    // Eski adlı kök dosyalar: eski kısayolların çağırdığı yönlendirici, eski Uygulamalar kaydının simgesi ve kaldırıcı
+    const eskiKasa = `${ESKI_URUN_ADI}-Kasa.bat`;
+    const kaldirici = `${ESKI_URUN_ADI}-Kaldir.ps1`;
+    const eskiIkon = `${ESKI_URUN_ADI.toLowerCase()}.ico`;
+    expect(Object.keys(files).sort()).toEqual(['AsilPOS-Kasa.bat', 'BENIOKU.txt', eskiKasa, kaldirici, 'ayarlar.env.ornek', 'asilpos.ico', 'baslat.cmd', eskiIkon, 'yonet.ps1'].sort());
+    expect(files[eskiIkon]!.equals(files['asilpos.ico']!)).toBe(true);
+    expect(files[eskiKasa]!.toString('latin1')).toContain('"%~dp0AsilPOS-Kasa.bat" %*');
     expect(files['baslat.cmd']!.toString('utf8')).toBe(read('scripts/kasa/windows/kurulum/baslat.cmd').replace(/\r?\n/g, '\r\n'));
-    expect(files['lafpos.ico']!.equals(readFileSync(new URL('scripts/kasa/windows/kurulum/lafpos.ico', root)))).toBe(true);
+    expect(files['asilpos.ico']!.equals(readFileSync(new URL('scripts/kasa/windows/kurulum/asilpos.ico', root)))).toBe(true);
     // cmd ve Windows PowerShell 5.1 BOM'suz dosyayı yerel kod sayfasıyla okur: bu ikisi ASCII
-    for (const f of ['baslat.cmd', 'LafPOS-Kasa.bat', 'yonet.ps1']) expect(/^[\x00-\x7f]*$/.test(files[f]!.toString('latin1')), f).toBe(true);
-    for (const f of ['BENIOKU.txt', 'ayarlar.env.ornek', 'LafPOS-Kaldir.ps1']) expect(files[f]!.subarray(0, 3).toString('hex'), f).toBe('efbbbf');
+    for (const f of ['baslat.cmd', 'AsilPOS-Kasa.bat', eskiKasa, 'yonet.ps1']) expect(/^[\x00-\x7f]*$/.test(files[f]!.toString('latin1')), f).toBe(true);
+    for (const f of ['BENIOKU.txt', 'ayarlar.env.ornek', kaldirici]) expect(files[f]!.subarray(0, 3).toString('hex'), f).toBe('efbbbf');
   });
 
   it('gizli bir şey taşımaz', async () => {
     const sentinel = 'gizli-deger-7f3a9c2e1b5d4a6f8e0c';
-    for (const k of ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_PAROLA', 'LAFFOGATO_SYNC_SECRET', 'LAFMALIYET_SYNC_SECRET', 'GITHUB_TOKEN', 'KV_REST_API_TOKEN', 'VERCEL_OIDC_TOKEN']) process.env[k] = sentinel;
+    for (const k of ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_PAROLA', 'LAFFOGATO_SYNC_SECRET', 'LAFMALIYET_SYNC_SECRET', 'GITHUB_TOKEN', 'KV_REST_API_TOKEN', 'VERCEL_OIDC_TOKEN']) process.env[k] = sentinel;
     const { text } = await build();
     expect(text).not.toContain(sentinel);
     for (const marker of ['ghp_', 'github_pat_', 'Authorization', 'Bearer ', 'BEGIN PRIVATE KEY']) expect(text, marker).not.toContain(marker);
@@ -206,18 +217,26 @@ describe('siteden kurulum: LafPOS-Kur.cmd', () => {
     expect(() => webInstaller({ manifest: { ...manifest, build: 12 } })).toThrow(/derleme/);
   });
 
-  it('kanal derlemesi kurucuyu güncelleme kanalının yanına yazar; Vercel onu indirme olarak sunar', () => {
-    expect(read('scripts/kasa/windows/kurulum/kanal.mjs')).toMatch(/writeFileSync\(join\(OUT, WEB_INSTALLER_NAME\), webInstaller\(\{ manifest \}\)\)/);
+  it('kanal derlemesi kurucuyu güncelleme kanalının yanına iki adla yazar; Vercel ikisini de indirme olarak sunar', async () => {
+    // İki adla, aynı baytlar: ladmin'in şube kurucusu ve eski bağlantılar eski adı ister
+    const { OLD_WEB_INSTALLER_NAME } = await load('web-kurucu.mjs');
+    const kanal = read('scripts/kasa/windows/kurulum/kanal.mjs');
+    expect(kanal).toContain('const kurucu = webInstaller({ manifest });');
+    expect(kanal).toContain('writeFileSync(join(OUT, WEB_INSTALLER_NAME), kurucu);');
+    expect(kanal).toContain('writeFileSync(join(OUT, OLD_WEB_INSTALLER_NAME), kurucu);');
+    expect(OLD_WEB_INSTALLER_NAME).toBe(ESKI_WEB_KURUCU);
     const vercel = JSON.parse(read('vercel.json'));
     // Arayüzün yedek sayfası /guncelleme/'yi yutmaz
     expect(vercel.rewrites.at(-1).source).toContain('guncelleme/');
-    const h = vercel.headers.find((x: any) => x.source === '/guncelleme/LafPOS-Kur.cmd');
-    expect(h.headers.find((x: any) => x.key === 'content-disposition').value).toContain('attachment');
+    for (const ad of ['AsilPOS-Kur.cmd', ESKI_WEB_KURUCU]) {
+      const h = vercel.headers.find((x: any) => x.source === `/guncelleme/${ad}`);
+      expect(h.headers.find((x: any) => x.key === 'content-disposition').value, ad).toBe(`attachment; filename="${ad}"`);
+    }
   });
 });
 
 describe('siteden kurulum: İndir sayfası', () => {
-  it('menüde yalnız LafPOS Uzaktan’da, en sonda', async () => {
+  it('menüde yalnız AsilPOS Uzaktan’da, en sonda', async () => {
     const { remoteNav } = await import('../src/lib/remote');
     const { POS_NAV } = await import('../src/lib/nav');
     const { DOWNLOAD_NAV, WEB_INSTALLER_PATH } = await import('../src/lib/download');
@@ -227,7 +246,7 @@ describe('siteden kurulum: İndir sayfası', () => {
     expect(remote.at(-1)).toBe(DOWNLOAD_NAV);
     expect(remote.map((n) => n.to)).toEqual(['/masalar', '/mutfak', '/raporlar', '/patron', '/merkez', '/uzaktan-yonetim', '/indir']);
     expect(DOWNLOAD_NAV.label).toBe('İndir');
-    expect(WEB_INSTALLER_URL).toBe(`https://lafpos.laffogato.net${WEB_INSTALLER_PATH}`);
+    expect(WEB_INSTALLER_URL).toBe(`https://${ALAN_ADI}${WEB_INSTALLER_PATH}`);
     expect(WEB_INSTALLER_PATH.endsWith(WEB_INSTALLER_NAME)).toBe(true);
   });
 
@@ -245,7 +264,7 @@ describe('siteden kurulum: İndir sayfası', () => {
     // Oturum yoksa App giriş ekranını çizer, Authed'e hiç inmez
     expect(app.slice(appFn)).toMatch(/if \(!me\) \{[\s\S]*?RemoteLoginPage[\s\S]*?\}\s*if \(location\.pathname === '\/giris'\)[\s\S]*?return <Authed \/>;/);
     const login = read('src/pages/RemoteLoginPage.tsx');
-    expect(login).not.toMatch(/LafPOS-Kur|guncelleme\/|download|indir'/i);
+    expect(login).not.toMatch(/AsilPOS-Kur|guncelleme\/|download|indir'/i);
     expect(login).toContain('Üye girişi');
   });
 

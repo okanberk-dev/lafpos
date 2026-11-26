@@ -2,12 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { get, setConditionalGets, setShopHeader } from './api';
 import { DOWNLOAD_NAV, DOWNLOAD_PATH, KONTROL_NAV, KONTROL_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
 import type { NavItem } from './nav';
+import { ESKI_ENV_ONEKI } from '@shared/eski-adlar';
 
 /**
- * LafPOS Uzaktan: Vercel'deki salt okunur görünüm (vercel.json derlemede VITE_LAFPOS_UZAKTAN=1 verir). Veri kafedeki
- * sunucunun ittiği canlı özetten gelir; işlem düğmeleri gizlidir, canlı bağlantı yerine kısa aralıkla yenilenir.
+ * AsilPOS Uzaktan: Vercel'deki salt okunur görünüm (vercel.json derlemede VITE_ASILPOS_UZAKTAN=1 verir; ad
+ * değişikliğinden önceki adı da okunur, kanal derlemesi ikisini de siler). Veri kafedeki sunucunun ittiği canlı özetten
+ * gelir; işlem düğmeleri gizlidir, canlı bağlantı yerine kısa aralıkla yenilenir.
  */
-export const REMOTE = import.meta.env.VITE_LAFPOS_UZAKTAN === '1' && import.meta.env.MODE !== 'demo';
+const uzaktanBayragi = import.meta.env.VITE_ASILPOS_UZAKTAN ?? (import.meta.env as Record<string, string | undefined>)[`VITE_${ESKI_ENV_ONEKI}UZAKTAN`];
+export const REMOTE = uzaktanBayragi === '1' && import.meta.env.MODE !== 'demo';
 
 /**
  * Uzaktaki canlı ekranların yoklama aralığı. Kasa değişikliği en sık 15 sn'de bir iter (server/sync/cloud.ts
@@ -24,7 +27,7 @@ export const remotePollMs = (dayOpen: boolean | undefined) => (dayOpen === false
 
 // ─── Dükkân seçici (Merkez'e bağlı birden çok kasa) ─────────────────────────
 
-const SHOP_STORE = 'lafpos.dukkan';
+const SHOP_STORE = 'asilpos.dukkan';
 export interface RemoteShop {
   id: string;
   ad: string | null;
@@ -109,9 +112,9 @@ export interface RemoteSetup {
   snapshotAt: number | null;
   /** Kafe bağlanmadı: örnek gün parolasız açılır */
   demo?: boolean;
-  /** Parolasız görünüm (LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
+  /** Parolasız görünüm (ASILPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
   open?: boolean;
-  /** Üyelik açık (LAFPOS_UYE_EPOSTA): 'new' üye ilk girişte parolasını belirler, 'ready' e-posta ve parolayla girer */
+  /** Üyelik açık (ASILPOS_UYE_EPOSTA): 'new' üye ilk girişte parolasını belirler, 'ready' e-posta ve parolayla girer */
   member?: 'new' | 'ready';
 }
 

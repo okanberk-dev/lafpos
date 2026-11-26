@@ -8,6 +8,8 @@
 //      Başlangıç'taki kasa kısayolu yalnız varsa yenilenir (kurulumda seçilmemişse eklenmez). Kasa bekçisinin Başlangıç
 //      kısayolu Başlangıç'ta kasa kısayolu varsa konur: kasa ekranı açılışta açılıyorsa bekçi de açılır.
 //   Kısayollar derleme başına bir kez yazılır (guncelleme\kurulum-yenileme.json); hata olursa her açılışta yeniden denenir.
+//   Ad değişikliği (26 Kasım 2026): eski adlı kısayollar (masaüstü, Başlangıç) koşulda yeni adla eş sayılır; yenisi
+//   yazılınca eskisi silinir, Başlat menüsünün eski klasöründe kalanlar (kaldırma, tarayıcı kısayolu) yeni klasöre taşınır.
 // Yapılamayan bir şey kalırsa güncelleme durumuna (durum.json `kurulumUyari`) yazılır; Merkez nabzıyla patron panelinde
 // "Kurulumu yenileyin" görünür. Bağımlılıksız; pakete girer (paket.mjs). Testi tests/kurulum-yenile.test.ts.
 import { execFile } from 'node:child_process';
@@ -19,42 +21,54 @@ export const ROOT_DIR = 'kok';
 /** Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır */
 export const LOCKED_ROOT_FILES = ['baslat.cmd'];
 /**
- * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betik, lafpos.nsi ve
+ * Yalnız kurulumda zaten varsa yenilenen kök dosyalar: siteden kurulumun kaldırıcısı (Uygulamalar listesi onu çağırır;
+ * kurulum dosyasıyla kurulanda Kaldir.exe var, bu dosya yok)
+ */
+export const IF_PRESENT_ROOT_FILES = ['LafPOS-Kaldir.ps1'];
+/** Başlat menüsü klasörü ve kısayolların eski adı (shared/eski-adlar.ts; ad değişikliğinden önceki kurulum) */
+export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
+/**
+ * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betik, asilpos.nsi ve
  * web-kurucu.ps1 ile aynı). 3: müşteri ekranı sunucu cevap verince açılır (inceleme, 23 Kas 2026); kasada çalışan eski
  * bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir. 4: bakım arasında (Yönetim › Ağ) kasa penceresi
  * yeniden açılmaz
  */
 export const WATCHER_VERSION = 4;
 /** Kasa bekçisinin Başlangıç kısayolu (ASCII ad: kasa-yazici.ps1 de arar) */
-export const WATCHER_LINK = 'LafPOS Kasa Bekcisi.lnk';
+export const WATCHER_LINK = 'AsilPOS Kasa Bekcisi.lnk';
 const MARKER = 'kurulum-yenileme.json';
 const errText = (e) => (e instanceof Error ? e.message : String(e));
 
 /**
- * Kurulumun kısayolları (lafpos.nsi ve web-kurucu.ps1 ile aynı adlar). `klasor`: .NET özel klasör adı; `kosul`: aynı
- * klasörde bu dosya yoksa kısayol yazılmaz (yalnız varsa yenilenir)
+ * Kurulumun kısayolları (asilpos.nsi ve web-kurucu.ps1 ile aynı adlar). `klasor`: .NET özel klasör adı; `kosul`: aynı
+ * klasörde bu dosyalardan hiçbiri yoksa kısayol yazılmaz (yalnız varsa yenilenir); `eski`: kısayol yazılınca aynı
+ * klasörden silinen eski adlar
  */
 export function shortcutSpec(installDir, systemRoot = 'C:\\Windows') {
   const j = win32.join;
   const ps = j(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const psFile = (file, extra = '') => `-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${j(installDir, file)}"${extra}`;
-  const kasa = j(installDir, 'LafPOS-Kasa.bat');
-  const base = { ikon: `${j(installDir, 'lafpos.ico')},0`, calismaKlasoru: installDir };
+  const kasa = j(installDir, 'AsilPOS-Kasa.bat');
+  const base = { ikon: `${j(installDir, 'asilpos.ico')},0`, calismaKlasoru: installDir };
   const kasaLink = { ...base, hedef: kasa, arguman: '', aciklama: 'Kasa ekranı (tam ekran)', pencere: 7 };
+  // Masaüstü ve Başlangıç'taki kasa kısayolu eski adla da olabilir: koşulda ikisi, yenisi yazılınca eskisi silinir
+  const kasaAdi = `${MENU.yeni} Kasa.lnk`;
+  const eskiKasa = `${MENU.eski} Kasa.lnk`;
   return [
-    { ...kasaLink, klasor: 'CommonPrograms', ad: 'LafPOS\\LafPOS Kasa.lnk' },
-    { ...base, klasor: 'CommonPrograms', ad: 'LafPOS\\LafPOS ayarları.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' ayarlar'), aciklama: 'Site, lafmaliyet ve yazarkasa ayarları', pencere: 7 },
-    { ...base, klasor: 'CommonPrograms', ad: 'LafPOS\\Sunucuyu yeniden başlat.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' yeniden-baslat'), aciklama: '', pencere: 7 },
-    { ...base, klasor: 'CommonPrograms', ad: 'LafPOS\\Sunucu günlüğü.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' gunluk'), aciklama: '', pencere: 7 },
-    { ...base, klasor: 'CommonPrograms', ad: 'LafPOS\\Kasa hazırlığı.lnk', hedef: ps, arguman: psFile('app\\kasa-hazirla.ps1'), aciklama: 'Ekran, Windows Update, ağ kartı, otomatik oturum', pencere: 7 },
-    { ...base, klasor: 'CommonPrograms', ad: 'LafPOS\\Kurulum notları.lnk', hedef: j(installDir, 'BENIOKU.txt'), arguman: '', aciklama: '', pencere: 1 },
-    { ...kasaLink, klasor: 'CommonDesktopDirectory', ad: 'LafPOS Kasa.lnk', kosul: 'LafPOS Kasa.lnk' },
-    { ...kasaLink, klasor: 'CommonStartup', ad: 'LafPOS Kasa.lnk', kosul: 'LafPOS Kasa.lnk' },
+    { ...kasaLink, klasor: 'CommonPrograms', ad: 'AsilPOS\\AsilPOS Kasa.lnk' },
+    { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\AsilPOS ayarları.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' ayarlar'), aciklama: 'Site, lafmaliyet ve yazarkasa ayarları', pencere: 7 },
+    { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Sunucuyu yeniden başlat.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' yeniden-baslat'), aciklama: '', pencere: 7 },
+    { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Sunucu günlüğü.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' gunluk'), aciklama: '', pencere: 7 },
+    { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Kasa hazırlığı.lnk', hedef: ps, arguman: psFile('app\\kasa-hazirla.ps1'), aciklama: 'Ekran, Windows Update, ağ kartı, otomatik oturum', pencere: 7 },
+    { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Kurulum notları.lnk', hedef: j(installDir, 'BENIOKU.txt'), arguman: '', aciklama: '', pencere: 1 },
+    { ...kasaLink, klasor: 'CommonDesktopDirectory', ad: kasaAdi, kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
+    { ...kasaLink, klasor: 'CommonStartup', ad: kasaAdi, kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
     {
       ...base,
       klasor: 'CommonStartup',
       ad: WATCHER_LINK,
-      kosul: 'LafPOS Kasa.lnk',
+      kosul: [kasaAdi, eskiKasa],
+      eski: [`${MENU.eski} Kasa Bekcisi.lnk`],
       hedef: ps,
       arguman: psFile('app\\kasa-yazici.ps1', ` -Bekci -BekciSurum ${WATCHER_VERSION}`),
       aciklama: 'Kasa ve müşteri ekranı açık kalsın (kapanırsa yeniden açar)',
@@ -76,6 +90,7 @@ export function syncRootFiles({ appDir, installDir }) {
     const to = join(installDir, name);
     try {
       const data = readFileSync(from);
+      if (IF_PRESENT_ROOT_FILES.includes(name) && !existsSync(to)) continue;
       if (existsSync(to) && readFileSync(to).equals(data)) continue;
       if (LOCKED_ROOT_FILES.includes(name)) {
         out.stale.push(name);
@@ -97,7 +112,7 @@ export function warningFor({ failed = [], stale = [], shortcuts = null }) {
   if (stale.length) parts.push(`${stale.join(', ')} eski kaldı (çalışırken değiştirilemez)`);
   if (shortcuts) parts.push(`kısayollar yenilenemedi (${shortcuts})`);
   if (!parts.length) return null;
-  return `Kurulumu yenileyin (LafPOS-Kur.cmd'yi yeniden çalıştırın): ${parts.join('; ')}`.slice(0, 300);
+  return `Kurulumu yenileyin (AsilPOS-Kur.cmd'yi yeniden çalıştırın): ${parts.join('; ')}`.slice(0, 300);
 }
 
 /** kisayollar.ps1'i çalıştırır; hata yoksa null, varsa kısa açıklama */
@@ -106,7 +121,7 @@ function runShortcutScript({ appDir, listFile, systemRoot }) {
   return new Promise((resolve) => {
     execFile(
       ps,
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(appDir, 'kisayollar.ps1'), '-Liste', listFile],
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(appDir, 'kisayollar.ps1'), '-Liste', listFile, '-EskiMenu', MENU.eski, '-YeniMenu', MENU.yeni],
       { timeout: 60_000, windowsHide: true },
       (err, stdout) => {
         const lines = String(stdout ?? '')

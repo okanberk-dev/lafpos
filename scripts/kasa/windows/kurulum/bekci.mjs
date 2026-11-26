@@ -1,12 +1,14 @@
-// LafPOS sunucu bekçisi (Windows kurulumu). Görev Zamanlayıcı bunu açılışta SYSTEM olarak çalıştırır:
+// AsilPOS sunucu bekçisi (Windows kurulumu). Görev Zamanlayıcı bunu açılışta SYSTEM olarak çalıştırır:
 // ayarlar.env'yi okur, sunucuyu başlatır, düşerse artan beklemeyle (1 sn → 30 sn) yeniden başlatır ve
 // çıktıyı tarihli satırlarla logs/sunucu.log'a yazar. ayarlar.env kaydedilince sunucu yeni ayarlarla yeniden
 // başlar. Bekçi kapanınca sunucu da kapanır (Windows iş nesnesi). Sunucunun JavaScript belleği sınırlı
-// (LAFPOS_MAX_HEAP_MB; varsayılan bilgisayarın belleğinin dörtte biri, 1024-4096 MB, ayarlar.mjs): sızıntı kasa
+// (ASILPOS_MAX_HEAP_MB; varsayılan bilgisayarın belleğinin dörtte biri, 1024-4096 MB, ayarlar.mjs): sızıntı kasa
 // bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi onu yeniden başlatır.
 // Otomatik güncelleme (guncelle.mjs) de burada çalışır: yeni sürümü gün kapalıyken kurar, başarıda bekçi 75 koduyla
 // çıkar ve görevin başlatıcısı (baslat.cmd) onu yeni sürümle yeniden açar.
-// Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
+// Veri klasörü: ASILPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
+// Ad değişikliği (26 Kasım 2026): değişkenler ASILPOS_*; kurulu kasanın ayarlar.env'i ve eski güncelleyici eski adla
+// yazar. Bekçi ikisini de okur ve sunucuya ikisini de verir (eski sürüme dönülürse eski sunucu eski adı okur)
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
 import { totalmem } from 'node:os';
@@ -22,7 +24,25 @@ const APP = dirname(fileURLToPath(import.meta.url));
  * Windows çalışan bir sürecin içinde durduğu klasörü taşıtmaz */
 const INSTALL_DIR = dirname(APP);
 process.chdir(INSTALL_DIR);
-const HOME = process.env.LAFPOS_HOME || join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS');
+/** Eski adlar (shared/eski-adlar.ts; bu betik TypeScript içe aktaramaz): kurulu kasanın klasörü ve değişken öneki */
+const ESKI = { klasor: 'LafPOS', envOneki: 'LAFPOS_' }; // eski-ad
+const YENI_ONEK = 'ASILPOS_';
+/** `ASILPOS_X`, yoksa eski adla X */
+const posEnv = (vars, ad) => vars[YENI_ONEK + ad] ?? vars[ESKI.envOneki + ad];
+/**
+ * Değişkenleri iki adla da doldurur: yeni ad tanımlıysa eskisi (yoksa) ondan, eski ad tanımlıysa yenisi (yoksa) ondan.
+ * Sunucu yeni adı okur; geri dönülen eski sürüm eski adı
+ */
+function ikiAdla(vars) {
+  const out = { ...vars };
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) continue;
+    const es = k.startsWith(YENI_ONEK) ? ESKI.envOneki + k.slice(YENI_ONEK.length) : k.startsWith(ESKI.envOneki) ? YENI_ONEK + k.slice(ESKI.envOneki.length) : null;
+    if (es && out[es] === undefined) out[es] = v;
+  }
+  return out;
+}
+const HOME = posEnv(process.env, 'HOME') || join(process.env.ProgramData || 'C:\\ProgramData', ESKI.klasor);
 const ENV_FILE = join(HOME, 'ayarlar.env');
 const LOG = join(HOME, 'logs', 'sunucu.log');
 const LOG_MAX = 5 * 1024 * 1024;
@@ -88,8 +108,14 @@ function pipe(stream) {
 
 // Gerçek ortam değişkeni dosyadakini ezer (sunucunun .env kuralı); veri klasörü ve üretim modu sabit.
 // Her başlatmada dosya yeniden okunur: ayar değişikliği yeniden başlatmayla geçerli olur. Sunucu dosyanın yerini
-// LAFPOS_AYAR_DOSYASI'ndan bilir: Yönetim › Bağlantı bilgileri oraya yazar, bekçi değişikliği görüp yeniden başlatır
-const envFor = () => ({ ...readEnvFile(ENV_FILE), ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: HOME, LAFPOS_STDIN_CONTROL: '1', LAFPOS_AYAR_DOSYASI: ENV_FILE });
+// ASILPOS_AYAR_DOSYASI'ndan bilir: Yönetim › Bağlantı bilgileri oraya yazar, bekçi değişikliği görüp yeniden başlatır.
+// Bekçinin verdikleri iki adla (eski sürüme dönüş)
+const fixedEnv = () => {
+  const out = { NODE_ENV: 'production' };
+  for (const [ad, v] of [['DATA_DIR', HOME], ['STDIN_CONTROL', '1'], ['AYAR_DOSYASI', ENV_FILE]]) out[YENI_ONEK + ad] = out[ESKI.envOneki + ad] = v;
+  return out;
+};
+const envFor = () => ({ ...ikiAdla({ ...readEnvFile(ENV_FILE), ...process.env }), ...fixedEnv() });
 
 let child = null;
 let stopping = false;
@@ -146,9 +172,9 @@ function start() {
     return;
   }
   const env = envFor();
-  const heapMb = heapLimitMb(env.LAFPOS_MAX_HEAP_MB, totalmem());
-  const raw = env.LAFPOS_MAX_HEAP_MB;
-  const heapNote = `${heapMb} MB${raw && !validHeapSetting(raw) ? ` (LAFPOS_MAX_HEAP_MB=${raw} ${HEAP_MIN_MB}-${HEAP_MAX_MB} arasında değil, yok sayıldı)` : ''}`;
+  const heapMb = heapLimitMb(env.ASILPOS_MAX_HEAP_MB, totalmem());
+  const raw = env.ASILPOS_MAX_HEAP_MB;
+  const heapNote = `${heapMb} MB${raw && !validHeapSetting(raw) ? ` (ASILPOS_MAX_HEAP_MB=${raw} ${HEAP_MIN_MB}-${HEAP_MAX_MB} arasında değil, yok sayıldı)` : ''}`;
   if (heapNote !== loggedHeap) log(`[bekçi] sunucunun bellek sınırı ${heapNote}`);
   loggedHeap = heapNote;
   child = spawn(process.execPath, [`--max-old-space-size=${heapMb}`, join(APP, 'server', 'index.mjs')], { cwd: APP, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
@@ -182,7 +208,8 @@ function stop() {
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, stop);
 // Kurulum derlemesinin denemesi (derle.mjs) Windows'ta sinyal gönderemez (süreci sonlandırmak kapanış kodunu
 // çalıştırmaz): standart girdiden "kapat" bekçiyi düzgün durdurur. Görev Zamanlayıcı'da tanımsız
-if (process.env.LAFPOS_BEKCI_STDIN === '1') {
+// Eski güncelleyici eski adla verir (shared/eski-adlar.ts ESKI_BEKCI_STDIN_ENV)
+if (posEnv(process.env, 'BEKCI_STDIN') === '1') {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => String(d).includes('kapat') && stop());
 }
@@ -204,13 +231,13 @@ const serverControl = {
 
 // Deneme bekçisi (güncellemenin yeni sürümü sınadığı) güncelleme denetlemez
 const updater =
-  process.env.LAFPOS_GUNCELLEME_DENEME === '1'
+  posEnv(process.env, 'GUNCELLEME_DENEME') === '1'
     ? null
     : createUpdater({
         installDir: INSTALL_DIR,
         home: HOME,
         log,
-        port: () => Number(envFor().LAFPOS_PORT) || 4000,
+        port: () => Number(envFor().ASILPOS_PORT) || 4000,
         mode: () => updateMode(envFor()),
         manifestUrls: () => channelUrls(envFor()),
         server: serverControl,
@@ -255,7 +282,7 @@ watchFile(REQUEST_FILE, { interval: 2000 }, (cur) => {
 });
 
 
-log(`[bekçi] LafPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
+log(`[bekçi] AsilPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
 start();
 try {
   updater?.start();
@@ -265,10 +292,10 @@ try {
 // Güncelleme yalnız app\ ve node\'u değiştirir: kök dosyalar (kasa kısayolu, yönetim betiği...) ve Başlat menüsü,
 // masaüstü, Başlangıç kısayolları burada yeni sürümle yenilenir; yapılamayan kalırsa durum.json'a uyarı (panelde
 // "Kurulumu yenileyin"). Güncellemenin deneme bekçisinde updater yok, dokunulmaz. Kurulum derlemesinin paket denemesi
-// (derle.mjs, LAFPOS_PAKET_DENEME=1) bekçiyi geçici klasörden açar: yenilese, yönetici kabuğunda bu bilgisayardaki
-// LafPOS'un ortak kısayollarını deneme bitince silinen klasöre çevirirdi (inceleme, 23 Kas 2026). Güncelleyici orada
+// (derle.mjs, ASILPOS_PAKET_DENEME=1) bekçiyi geçici klasörden açar: yenilese, yönetici kabuğunda bu bilgisayardaki
+// AsilPOS'un ortak kısayollarını deneme bitince silinen klasöre çevirirdi (inceleme, 23 Kas 2026). Güncelleyici orada
 // da çalışır: deneme onun durum dosyasına bakar
-if (updater && process.env.LAFPOS_PAKET_DENEME !== '1') {
+if (updater && process.env.ASILPOS_PAKET_DENEME !== '1') {
   refreshInstall({ appDir: APP, installDir: INSTALL_DIR, home: HOME, build: readInstalled(APP).build, log, setWarning: (w) => updater.setInstallWarning(w) }).catch((e) =>
     log(`[kurulum] yenilenemedi: ${e instanceof Error ? e.message : e}`),
   );

@@ -2,7 +2,7 @@
 // Kurulum dosyası önce sessiz kurulur (/S); bu betik sonra:
 //   1. Sunucunun "LafPOS Sunucu" göreviyle açıldığını ve sağlığını (derleme numarası) denetler.
 //   2. Yerel bir güncelleme kanalı kurar (bir sonraki derleme, Node'un başka bir 24.x sürümüyle) ve ayarlar.env'e
-//      LAFPOS_GUNCELLEME_KANAL yazar: bekçi denetler, indirir, gün kapalıyken kurar, yeni sürümü dener, 75 koduyla
+//      ASILPOS_GUNCELLEME_KANAL yazar: bekçi denetler, indirir, gün kapalıyken kurar, yeni sürümü dener, 75 koduyla
 //      çıkar; baslat.cmd node.yeni'yi node'un yerine koyup bekçiyi yeniden açar (app ↔ app.eski, node.yeni).
 //   3. Bozuk bir derleme yayımlar (sunucusu açılmaz): kurulur, açılmaz, eski sürüme dönülür ("geri-dondu").
 // Başarısızlıkta sunucu ve bekçi günlüğünün sonu yazılır.
@@ -16,8 +16,8 @@ import { extractZip, zipFiles } from './arsiv.mjs';
 import { ROOT } from './paket.mjs';
 import { NODE_VERSION } from './surumler.mjs';
 
-const INSTALL = join(process.env.ProgramFiles || 'C:\\Program Files', 'LafPOS');
-const HOME = join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS');
+const INSTALL = join(process.env.ProgramFiles || 'C:\\Program Files', 'LafPOS'); // eski-ad: kurulu kasanın klasörü
+const HOME = join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS'); // eski-ad
 const ENV_FILE = join(HOME, 'ayarlar.env');
 const PORT = 4000;
 const KANAL_PORT = 8765;
@@ -97,7 +97,7 @@ async function otherNode() {
 /** Kanalın son derlemesinden sunucusu açılmayan bir derleme üretir (geri dönüş denemesi) */
 function publishBroken(build) {
   const m = JSON.parse(readFileSync(join(KANAL, 'surum.json'), 'utf8'));
-  const dir = mkdtempSync(join(tmpdir(), 'lafpos-bozuk-'));
+  const dir = mkdtempSync(join(tmpdir(), 'asilpos-bozuk-'));
   extractZip(readFileSync(join(KANAL, m.app.file)), dir);
   const files = [];
   const walk = (d) => {
@@ -127,7 +127,7 @@ for (const f of [join(INSTALL, 'node', 'node.exe'), join(INSTALL, 'app', 'bekci.
 const task = execFileSync('schtasks', ['/Query', '/TN', 'LafPOS Sunucu', '/FO', 'LIST'], { encoding: 'utf8' });
 console.log(task.split(/\r?\n/).filter((l) => /Görev|TaskName|Status|Durum/i.test(l)).join('\n'));
 const fw = execFileSync('netsh', ['advfirewall', 'firewall', 'show', 'rule', 'name=all'], { encoding: 'utf8' });
-if (!/LafPOS/i.test(fw)) fail('güvenlik duvarı kuralı yok');
+if (!/LafPOS Sunucu/i.test(fw)) fail('güvenlik duvarı kuralı yok');
 const b0 = installedBuild();
 
 step(`Sunucu görevle açılıyor (derleme ${b0})`);
@@ -138,14 +138,14 @@ if (h0.build !== b0) fail(`sağlık denetimi derlemeyi ${h0.build} dedi, beklene
 
 const b1 = b0 + 100;
 step(`Yerel kanal: derleme ${b1}`);
-execFileSync(process.execPath, [join(ROOT, 'scripts', 'kasa', 'windows', 'kurulum', 'kanal.mjs')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, LAFPOS_BUILD: String(b1) } });
+execFileSync(process.execPath, [join(ROOT, 'scripts', 'kasa', 'windows', 'kurulum', 'kanal.mjs')], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, ASILPOS_BUILD: String(b1) } });
 const node = await otherNode();
 const m1 = JSON.parse(readFileSync(join(KANAL, 'surum.json'), 'utf8'));
 writeFileSync(join(KANAL, 'surum.json'), JSON.stringify({ ...m1, node: { ...m1.node, version: node.version, sha256: node.sha256 } }, null, 2));
 console.log(`  Node ${NODE_VERSION} → ${node.version}`);
 const server = await serveWeb();
 mkdirSync(HOME, { recursive: true });
-appendFileSync(ENV_FILE, `\r\nLAFPOS_GUNCELLEME_KANAL=http://127.0.0.1:${KANAL_PORT}/guncelleme/surum.json\r\n`);
+appendFileSync(ENV_FILE, `\r\nASILPOS_GUNCELLEME_KANAL=http://127.0.0.1:${KANAL_PORT}/guncelleme/surum.json\r\n`);
 
 step('Bekçi indirir, gün kapalıyken kurar, dener, 75 koduyla yeniden açılır (node.yeni değişimi)');
 await until(

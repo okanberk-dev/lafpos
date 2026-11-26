@@ -18,7 +18,7 @@ export const ROOT = resolve(HERE, '../../../..');
 export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs', 'kurulum-yenile.mjs'];
 /**
  * Güncellemeyle gelen, app\'ten çalışan PowerShell betikleri: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF
- * yazılır). Kasa kısayolunun kendisi (LafPOS-Kasa.bat) kök dosyalarla app\kok\'ten gelir
+ * yazılır). Kasa kısayolunun kendisi (AsilPOS-Kasa.bat) kök dosyalarla app\kok\'ten gelir
  */
 export const KASA_LAUNCHER = [
   ['kasa-yazici.ps1', 'kasa-yazici.ps1'],
@@ -32,13 +32,13 @@ export const SQLITE_BINARY = 'node_modules/better-sqlite3/build/Release/better_s
 
 /**
  * Derlemenin numarası: HEAD commit'inin unix zamanı (sn). Aynı commit'in GitHub (kurulum dosyası) ve Vercel
- * (güncelleme kanalı) derlemesi aynı numarayı taşır; güncelleyici yalnız daha büyük numarayı kurar. LAFPOS_BUILD
+ * (güncelleme kanalı) derlemesi aynı numarayı taşır; güncelleyici yalnız daha büyük numarayı kurar. ASILPOS_BUILD
  * verilirse o (git yoksa)
  */
 export function buildInfo(root = ROOT) {
-  const fromEnv = process.env.LAFPOS_BUILD;
+  const fromEnv = process.env.ASILPOS_BUILD;
   if (fromEnv) {
-    if (!/^\d{9,11}$/.test(fromEnv)) throw new Error(`LAFPOS_BUILD anlaşılmadı: ${fromEnv}`);
+    if (!/^\d{9,11}$/.test(fromEnv)) throw new Error(`ASILPOS_BUILD anlaşılmadı: ${fromEnv}`);
     return { build: Number(fromEnv), commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '' };
   }
   let out;
@@ -76,7 +76,7 @@ export async function stageApp({ appDir, webDir, build: buildNo, commit, root = 
     tsconfig: join(root, 'tsconfig.server.json'),
     external: ['better-sqlite3'],
     // Paketin içindeki CommonJS bağımlılıklar require'ı bulsun
-    banner: { js: "import { createRequire as __lafposRequire } from 'node:module'; const require = __lafposRequire(import.meta.url);" },
+    banner: { js: "import { createRequire as __asilposRequire } from 'node:module'; const require = __asilposRequire(import.meta.url);" },
     legalComments: 'none',
     logLevel: 'warning',
   });
@@ -93,15 +93,16 @@ export async function stageApp({ appDir, webDir, build: buildNo, commit, root = 
   // app\'e ayrıca konan kopyasını #144'ten beri okuyan yoktu (inceleme, 23 Kas 2026)
   for (const [from, to] of KASA_LAUNCHER) writeFileSync(join(appDir, to), readFileSync(join(HERE, from), 'utf8').replace(/\r?\n/g, '\r\n'));
   // Kurulum klasörünün kök dosyaları (kurulumdakinin aynısı, web-kurucu.mjs shellFiles): bekçi açılışta farklı olanları
-  // yerine koyar (kurulum-yenile.mjs). Kaldırma betiği yalnız siteden kurulumun; güncellemeyle gelmez
+  // yerine koyar (kurulum-yenile.mjs). Kaldırma betiği yalnız siteden kurulumun: yalnız kurulumda zaten varsa yenilenir
+  // (IF_PRESENT_ROOT_FILES; ad değişikliğinden sonra yeni adlı kısayolları da silsin)
   mkdirSync(join(appDir, ROOT_DIR), { recursive: true });
-  for (const [name, data] of Object.entries(shellFiles(root))) if (name !== 'LafPOS-Kaldir.ps1') writeFileSync(join(appDir, ROOT_DIR, name), data);
+  for (const [name, data] of Object.entries(shellFiles(root))) writeFileSync(join(appDir, ROOT_DIR, name), data);
   for (const name of SQLITE_MODULES) {
     const src = join(root, 'node_modules', name);
     cpSync(src, join(appDir, 'node_modules', name), { recursive: true, filter: (p) => !/^[\\/](build|deps|src|test)([\\/]|$)/.test(p.slice(src.length)) });
   }
   // Sunucu sürümü ve derleme numarasını buradan okur (Ayarlar ve yedek, /api/health); güncelleyici de kurulu derlemeyi
-  const meta = { name: 'lafpos', version: pkg.version, private: true, type: 'module', build: buildNo, commit, node: NODE_VERSION, nodeAbi: NODE_ABI, sqlite: sqliteVersion(root) };
+  const meta = { name: 'asilpos', version: pkg.version, private: true, type: 'module', build: buildNo, commit, node: NODE_VERSION, nodeAbi: NODE_ABI, sqlite: sqliteVersion(root) };
   writeFileSync(join(appDir, 'package.json'), `${JSON.stringify(meta, null, 2)}\n`);
   return meta;
 }

@@ -1,5 +1,5 @@
-# LafPOS'u kaldırır: siteden kurulumun (LafPOS-Kur.cmd) kaldırıcısı, kurulum klasörüne LafPOS-Kaldir.ps1 olarak yazılır.
-# Kurulum dosyasıyla (LafPOS-Kurulum.exe) kurulan bilgisayarda Kaldir.exe aynı işi yapar. Veriler ve yedekler
+# AsilPOS'u kaldırır: siteden kurulumun (AsilPOS-Kur.cmd) kaldırıcısı, kurulum klasörüne LafPOS-Kaldir.ps1 olarak yazılır.
+# Kurulum dosyasıyla (AsilPOS-Kurulum.exe) kurulan bilgisayarda Kaldir.exe aynı işi yapar. Veriler ve yedekler
 # (C:\ProgramData\LafPOS) silinmez. Windows PowerShell 5.1 ile uyumlu kalır (tests/web-kurucu.test.ts).
 
 $ErrorActionPreference = 'Continue'
@@ -9,11 +9,11 @@ if (-not $kimlik.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator
   exit
 }
 
-$cevap = Read-Host 'LafPOS bu bilgisayardan kaldırılsın mı? Veriler silinmez. (E/H)'
+$cevap = Read-Host 'AsilPOS bu bilgisayardan kaldırılsın mı? Veriler silinmez. (E/H)'
 if ($cevap -notmatch '^\s*[eEyY]') { exit }
 
 $kur = Split-Path -Parent $PSCommandPath
-$veri = Join-Path $env:ProgramData 'LafPOS'
+$veri = Join-Path $env:ProgramData 'LafPOS' # eski-ad: kurulu kasanın veri klasörü
 $sys = Join-Path $env:SystemRoot 'System32'
 $gorev = 'LafPOS Sunucu'
 
@@ -22,17 +22,25 @@ $gorev = 'LafPOS Sunucu'
 Start-Sleep -Seconds 2
 & (Join-Path $sys 'netsh.exe') advfirewall firewall delete rule ('name=' + $gorev) 2>&1 | Out-Null
 
-Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'LafPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'LafPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'LafPOS Kasa Bekcisi.lnk') -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'LafPOS') -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'AsilPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'AsilPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'AsilPOS Kasa Bekcisi.lnk') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'AsilPOS') -Recurse -Force -ErrorAction SilentlyContinue
+# Ad değişikliğinden (26 Kasım 2026) önceki kısayollar: güncellemeyle yenisine geçmemiş olabilir
+$eskiAd = 'LafPOS' # eski-ad: shared/eski-adlar.ts
+foreach ($ozel in @('CommonDesktopDirectory', 'CommonStartup')) {
+  foreach ($ad in @(($eskiAd + ' Kasa.lnk'), ($eskiAd + ' Kasa Bekcisi.lnk'))) {
+    Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath($ozel)) $ad) -Force -ErrorAction SilentlyContinue
+  }
+}
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $eskiAd) -Recurse -Force -ErrorAction SilentlyContinue
 
-foreach ($ad in @('app', 'node', 'app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni', 'kurulum.gecici', 'baslat.cmd', 'LafPOS-Kasa.bat', 'yonet.ps1', 'lafpos.ico', 'BENIOKU.txt', 'ayarlar.env.ornek', 'LafPOS-Kaldir.ps1')) {
+foreach ($ad in @('app', 'node', 'app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni', 'kurulum.gecici', 'baslat.cmd', 'AsilPOS-Kasa.bat', 'LafPOS-Kasa.bat', 'yonet.ps1', 'asilpos.ico', 'lafpos.ico', 'BENIOKU.txt', 'ayarlar.env.ornek', 'LafPOS-Kaldir.ps1')) {
   Remove-Item -LiteralPath (Join-Path $kur $ad) -Recurse -Force -ErrorAction SilentlyContinue
 }
 # Klasör yalnız boşsa silinir (içine başka bir şey konduysa kalır)
 if (-not (Get-ChildItem -LiteralPath $kur -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $kur -Force -ErrorAction SilentlyContinue }
 Remove-Item -LiteralPath 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS' -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host ('LafPOS kaldırıldı. Veriler ve yedekler silinmedi: ' + $veri)
+Write-Host ('AsilPOS kaldırıldı. Veriler ve yedekler silinmedi: ' + $veri)
 [void](Read-Host 'Pencereyi kapatmak için Enter tuşuna basın')

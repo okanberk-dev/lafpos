@@ -1,4 +1,4 @@
-; LafPOS Windows kurulumu (NSIS 3). Derleme: npm run kurulum:windows (derle.mjs STAGE ve VERSION verir).
+; AsilPOS Windows kurulumu (NSIS 3). Derleme: npm run kurulum:windows (derle.mjs STAGE ve VERSION verir).
 ; Kurar: Program Files\LafPOS (Node, sunucu, arayüz, kasa kısayolu), veri C:\ProgramData\LafPOS (yalnız SYSTEM
 ; ve yöneticiler), açılışta SYSTEM olarak çalışan "LafPOS Sunucu" görevi, güvenlik duvarında yerel ağ ve
 ; Tailscale izni. Görev bekçiyi başlatıcıdan (baslat.cmd) açar; bekçi yeni sürümü kendiliğinden kurar (guncelle.mjs).
@@ -32,13 +32,13 @@ SetCompressorDictSize 64
 !define PORT 4000
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS"
 
-Name "LafPOS"
+Name "AsilPOS"
 OutFile "${OUTFILE}"
 ; Klasör sabit (seçim sayfası yok): görev bu klasördeki node.exe'yi SYSTEM olarak çalıştırır; standart kullanıcının
-; yazabildiği bir klasöre (C:\LafPOS gibi) kurulursa kasiyer hesabı dosyayı değiştirip SYSTEM yetkisi alabilirdi
+; yazabildiği bir klasöre (C:\AsilPOS gibi) kurulursa kasiyer hesabı dosyayı değiştirip SYSTEM yetkisi alabilirdi
 InstallDir "$PROGRAMFILES64\LafPOS"
 RequestExecutionLevel admin
-BrandingText "LafPOS ${VERSION}"
+BrandingText "AsilPOS ${VERSION}"
 
 !include MUI2.nsh
 !include LogicLib.nsh
@@ -48,16 +48,16 @@ BrandingText "LafPOS ${VERSION}"
 
 Var DATA ; C:\ProgramData\LafPOS
 
-!define MUI_ICON "${STAGE}${SEP}lafpos.ico"
-!define MUI_UNICON "${STAGE}${SEP}lafpos.ico"
+!define MUI_ICON "${STAGE}${SEP}asilpos.ico"
+!define MUI_UNICON "${STAGE}${SEP}asilpos.ico"
 !define MUI_ABORTWARNING
 
-!define MUI_WELCOMEPAGE_TITLE "LafPOS kurulumu"
-!define MUI_WELCOMEPAGE_TEXT "LafPOS bu bilgisayara kurulacak. Sunucu Windows açılınca arka planda kendiliğinden çalışır; kasa ekranı tam ekran açılır, tablet ve telefonlar kafenin ağından bağlanır.$\r$\n$\r$\nVeriler C:\ProgramData\LafPOS klasöründe durur. Güncelleme önce veritabanının kopyasını alır; kaldırma verilere dokunmaz."
+!define MUI_WELCOMEPAGE_TITLE "AsilPOS kurulumu"
+!define MUI_WELCOMEPAGE_TEXT "AsilPOS bu bilgisayara kurulacak. Sunucu Windows açılınca arka planda kendiliğinden çalışır; kasa ekranı tam ekran açılır, tablet ve telefonlar kafenin ağından bağlanır.$\r$\n$\r$\nVeriler C:\ProgramData\LafPOS klasöründe durur. Güncelleme önce veritabanının kopyasını alır; kaldırma verilere dokunmaz."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_TITLE "LafPOS hazır"
+!define MUI_FINISHPAGE_TITLE "AsilPOS hazır"
 !define MUI_FINISHPAGE_TEXT "Sunucu çalışıyor ve Windows her açıldığında kendiliğinden başlar.$\r$\n$\r$\nTablet ve telefonlar: http://<bu bilgisayarın IP adresi>:${PORT}. Adres ve karekod Yönetim › Ağ ve uzaktan erişim sayfasında.$\r$\n$\r$\nÖrnek PIN'leri canlıya geçmeden Yönetim › Personel'den değiştirin."
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_TEXT "Kasa ekranını şimdi aç"
@@ -73,9 +73,9 @@ Var DATA ; C:\ProgramData\LafPOS
 !insertmacro MUI_LANGUAGE "Turkish"
 
 VIProductVersion "${VERSION}.0"
-VIAddVersionKey /LANG=${LANG_TURKISH} "ProductName" "LafPOS"
+VIAddVersionKey /LANG=${LANG_TURKISH} "ProductName" "AsilPOS"
 VIAddVersionKey /LANG=${LANG_TURKISH} "CompanyName" "L'Affogato"
-VIAddVersionKey /LANG=${LANG_TURKISH} "FileDescription" "LafPOS kurulumu"
+VIAddVersionKey /LANG=${LANG_TURKISH} "FileDescription" "AsilPOS kurulumu"
 VIAddVersionKey /LANG=${LANG_TURKISH} "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=${LANG_TURKISH} "ProductVersion" "${VERSION}"
 VIAddVersionKey /LANG=${LANG_TURKISH} "LegalCopyright" "L'Affogato"
@@ -92,7 +92,7 @@ VIAddVersionKey /LANG=${LANG_TURKISH} "LegalCopyright" "L'Affogato"
 Function .onInit
   ${IfNot} ${RunningX64}
   ${OrIfNot} ${AtLeastWin10}
-    MessageBox MB_ICONSTOP "LafPOS 64 bit Windows 10 ya da 11 ister." /SD IDOK
+    MessageBox MB_ICONSTOP "AsilPOS 64 bit Windows 10 ya da 11 ister." /SD IDOK
     Abort
   ${EndIf}
   SetShellVarContext all
@@ -107,13 +107,22 @@ Function RestoreServer
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
 FunctionEnd
 
-Section "LafPOS sunucusu ve kasa ekranı" SecMain
+; Ad değişikliğinden (26 Kasım 2026) önceki kurulumun kısayolları (eski-ad; shared/eski-adlar.ts). Kurulum ve kaldırma
+; ikisini de siler: otomatik güncellenmiş kasada yenileri, eski kaldırıcının bıraktıkları
+!macro EskiKisayollariSil
+  Delete "$DESKTOP\LafPOS Kasa.lnk" ; eski-ad
+  Delete "$SMSTARTUP\LafPOS Kasa.lnk" ; eski-ad
+  Delete "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk" ; eski-ad
+  RMDir /r "$SMPROGRAMS\LafPOS" ; eski-ad
+!macroend
+
+Section "AsilPOS sunucusu ve kasa ekranı" SecMain
   SectionIn RO
   InitPluginsDir
 
   ; Güncellemede çalışan sunucuyu durdur: dosyalar kilitli kalmasın, veritabanı kopyası tutarlı olsun. Önce görev
   ; kapatılır, yoksa beş dakikalık güvence tetiği kurulum sürerken eski sürümü yeniden başlatabilir
-  DetailPrint "Çalışan LafPOS sunucusu durduruluyor"
+  DetailPrint "Çalışan AsilPOS sunucusu durduruluyor"
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Change /TN "${TASK}" /DISABLE'
   StrCpy $R9 $0 ; 0: eski görev vardı ve kapatıldı
   !insertmacro Run '"$SYSDIR\schtasks.exe" /End /TN "${TASK}"'
@@ -164,7 +173,7 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   FileWriteWord $9 0xFEFF
   !insertmacro TaskLine '<?xml version="1.0" encoding="UTF-16"?>'
   !insertmacro TaskLine '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">'
-  !insertmacro TaskLine '  <RegistrationInfo><Description>LafPOS yerel sunucusu: kasa, tablet ve telefonlar buna bağlanır</Description></RegistrationInfo>'
+  !insertmacro TaskLine '  <RegistrationInfo><Description>AsilPOS yerel sunucusu: kasa, tablet ve telefonlar buna bağlanır</Description></RegistrationInfo>'
   ; Öğe sırası Görev Zamanlayıcı'nın dışa aktardığıyla aynı. Açılış tetiği, bir de beş dakikada bir güvence: görev çalışıyorsa bir şey yapmaz (IgnoreNew), bekçi bir
   ; nedenle düşmüşse sunucuyu yeniden açar (RestartOnFailure yalnız açılamayan görevde devreye girer)
   !insertmacro TaskLine '  <Triggers>'
@@ -210,28 +219,30 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro Run '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FIREWALL}" dir=in action=allow protocol=TCP localport=${PORT} remoteip=localsubnet profile=any'
   !insertmacro Run '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FIREWALL}" dir=in action=allow protocol=TCP localport=${PORT} remoteip=100.64.0.0/10 profile=any'
 
-  ; Başlat menüsü; isteğe bağlı kısayollar aşağıdaki bölümlerde yeniden konur
-  Delete "$DESKTOP\LafPOS Kasa.lnk"
-  Delete "$SMSTARTUP\LafPOS Kasa.lnk"
-  Delete "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk"
-  RMDir /r "$SMPROGRAMS\LafPOS"
-  CreateDirectory "$SMPROGRAMS\LafPOS"
-  CreateShortcut "$SMPROGRAMS\LafPOS\LafPOS Kasa.lnk" "$INSTDIR\LafPOS-Kasa.bat" "" "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
-  WriteINIStr "$SMPROGRAMS\LafPOS\LafPOS (tarayıcıda).url" "InternetShortcut" "URL" "http://localhost:${PORT}/"
-  WriteINIStr "$SMPROGRAMS\LafPOS\LafPOS (tarayıcıda).url" "InternetShortcut" "IconFile" "$INSTDIR\lafpos.ico"
-  WriteINIStr "$SMPROGRAMS\LafPOS\LafPOS (tarayıcıda).url" "InternetShortcut" "IconIndex" "0"
-  CreateShortcut "$SMPROGRAMS\LafPOS\LafPOS ayarları.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" ayarlar' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Site, lafmaliyet ve yazarkasa ayarları"
-  CreateShortcut "$SMPROGRAMS\LafPOS\Sunucuyu yeniden başlat.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" yeniden-baslat' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED
-  CreateShortcut "$SMPROGRAMS\LafPOS\Sunucu günlüğü.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" gunluk' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED
-  CreateShortcut "$SMPROGRAMS\LafPOS\Kasa hazırlığı.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-hazirla.ps1"' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Ekran, Windows Update, ağ kartı, otomatik oturum"
-  CreateShortcut "$SMPROGRAMS\LafPOS\Kurulum notları.lnk" "$INSTDIR\BENIOKU.txt"
-  CreateShortcut "$SMPROGRAMS\LafPOS\LafPOS'u kaldır.lnk" "$INSTDIR\Kaldir.exe"
+  ; Başlat menüsü; isteğe bağlı kısayollar aşağıdaki bölümlerde yeniden konur. Ad değişikliğinden (26 Kasım 2026)
+  ; önceki kurulumun kısayolları da silinir (eski-ad)
+  Delete "$DESKTOP\AsilPOS Kasa.lnk"
+  Delete "$SMSTARTUP\AsilPOS Kasa.lnk"
+  Delete "$SMSTARTUP\AsilPOS Kasa Bekcisi.lnk"
+  RMDir /r "$SMPROGRAMS\AsilPOS"
+  !insertmacro EskiKisayollariSil
+  CreateDirectory "$SMPROGRAMS\AsilPOS"
+  CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
+  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "URL" "http://localhost:${PORT}/"
+  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "IconFile" "$INSTDIR\asilpos.ico"
+  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "IconIndex" "0"
+  CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS ayarları.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" ayarlar' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Site, lafmaliyet ve yazarkasa ayarları"
+  CreateShortcut "$SMPROGRAMS\AsilPOS\Sunucuyu yeniden başlat.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" yeniden-baslat' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED
+  CreateShortcut "$SMPROGRAMS\AsilPOS\Sunucu günlüğü.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" gunluk' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED
+  CreateShortcut "$SMPROGRAMS\AsilPOS\Kasa hazırlığı.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-hazirla.ps1"' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Ekran, Windows Update, ağ kartı, otomatik oturum"
+  CreateShortcut "$SMPROGRAMS\AsilPOS\Kurulum notları.lnk" "$INSTDIR\BENIOKU.txt"
+  CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS'u kaldır.lnk" "$INSTDIR\Kaldir.exe"
 
   WriteUninstaller "$INSTDIR\Kaldir.exe"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "LafPOS"
+  WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "AsilPOS"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "L'Affogato"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\lafpos.ico"
+  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\asilpos.ico"
   WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Kaldir.exe"'
   WriteRegStr HKLM "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Kaldir.exe" /S'
@@ -240,22 +251,22 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   ${GetSize} "$INSTDIR" "/S=0K" $1 $2 $3
   WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" $1
 
-  DetailPrint "LafPOS sunucusu başlatılıyor"
+  DetailPrint "AsilPOS sunucusu başlatılıyor"
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
 SectionEnd
 
 Section "Masaüstüne kısayol" SecDesktop
-  CreateShortcut "$DESKTOP\LafPOS Kasa.lnk" "$INSTDIR\LafPOS-Kasa.bat" "" "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
+  CreateShortcut "$DESKTOP\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
 SectionEnd
 
 Section "Oturum açılınca kasa ekranını aç" SecStartup
-  CreateShortcut "$SMSTARTUP\LafPOS Kasa.lnk" "$INSTDIR\LafPOS-Kasa.bat" "" "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
+  CreateShortcut "$SMSTARTUP\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
   ; Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
-  CreateShortcut "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-yazici.ps1" -Bekci -BekciSurum 4' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ve müşteri ekranı açık kalsın"
+  CreateShortcut "$SMSTARTUP\AsilPOS Kasa Bekcisi.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-yazici.ps1" -Bekci -BekciSurum 4' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ve müşteri ekranı açık kalsın"
 SectionEnd
 
 Section "Prizdeyken uyku kapalı" SecPower
-  ; Uyuyan bilgisayara tabletler bağlanamaz. Ekran açık kalsın diye LafPOS ekran kilidi ister
+  ; Uyuyan bilgisayara tabletler bağlanamaz. Ekran açık kalsın diye AsilPOS ekran kilidi ister
   !insertmacro Run '"$SYSDIR\powercfg.exe" /change standby-timeout-ac 0'
   !insertmacro Run '"$SYSDIR\powercfg.exe" /change hibernate-timeout-ac 0'
   ; USB'nin seçmeli askıya alınması prizdeyken kapalı (Güç seçenekleri › USB ayarları): fiş yazıcısı, dokunmatik ekran
@@ -266,14 +277,14 @@ SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Sunucu (açılışta SYSTEM olarak), kasa ekranı, güvenlik duvarında yerel ağ ve Tailscale izni."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Masaüstüne LafPOS Kasa kısayolu."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Masaüstüne AsilPOS Kasa kısayolu."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Windows'a girilince kasa ekranı tam ekran açılır."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPower} "Bilgisayar prizdeyken uykuya ve hazırda bekletmeye geçmez, USB aygıtları (yazıcı, dokunmatik ekran) askıya alınmaz; tabletler sunucuyu hep bulur."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; Kurulum yönetici olarak çalışır; kasa ekranı Gezgin üzerinden normal kullanıcı olarak açılır
 Function OpenKasa
-  Exec '"$WINDIR\explorer.exe" "$SMPROGRAMS\LafPOS\LafPOS Kasa.lnk"'
+  Exec '"$WINDIR\explorer.exe" "$SMPROGRAMS\AsilPOS\AsilPOS Kasa.lnk"'
 FunctionEnd
 
 Function un.onInit
@@ -287,10 +298,11 @@ Section "Uninstall"
   Sleep 2000
   !insertmacro Run '"$SYSDIR\netsh.exe" advfirewall firewall delete rule name="${FIREWALL}"'
 
-  Delete "$DESKTOP\LafPOS Kasa.lnk"
-  Delete "$SMSTARTUP\LafPOS Kasa.lnk"
-  Delete "$SMSTARTUP\LafPOS Kasa Bekcisi.lnk"
-  RMDir /r "$SMPROGRAMS\LafPOS"
+  Delete "$DESKTOP\AsilPOS Kasa.lnk"
+  Delete "$SMSTARTUP\AsilPOS Kasa.lnk"
+  Delete "$SMSTARTUP\AsilPOS Kasa Bekcisi.lnk"
+  RMDir /r "$SMPROGRAMS\AsilPOS"
+  !insertmacro EskiKisayollariSil
 
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\node"
@@ -300,8 +312,10 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\node.eski"
   RMDir /r "$INSTDIR\node.yeni"
   Delete "$INSTDIR\baslat.cmd"
+  Delete "$INSTDIR\AsilPOS-Kasa.bat"
   Delete "$INSTDIR\LafPOS-Kasa.bat"
   Delete "$INSTDIR\yonet.ps1"
+  Delete "$INSTDIR\asilpos.ico"
   Delete "$INSTDIR\lafpos.ico"
   Delete "$INSTDIR\BENIOKU.txt"
   Delete "$INSTDIR\ayarlar.env.ornek"
@@ -309,5 +323,5 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   DeleteRegKey HKLM "${UNINST_KEY}"
 
-  MessageBox MB_ICONINFORMATION "LafPOS kaldırıldı. Veriler ve yedekler silinmedi: $DATA" /SD IDOK
+  MessageBox MB_ICONINFORMATION "AsilPOS kaldırıldı. Veriler ve yedekler silinmedi: $DATA" /SD IDOK
 SectionEnd
