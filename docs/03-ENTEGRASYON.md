@@ -1367,6 +1367,15 @@ POST {adres}/api/lafpos/kurulum   { "kod": "…" }
 5. LafPOS Uzaktan'a (Merkez) ilk kayıt şubenin adını ve kodunu taşır (`sube: { ad, kod }`; kod şube kimliğinin büyük
    harflisi): dükkân bu adla açılır, sahip yine onaylar.
 
+**Anahtar değişimi (26 Kasım 2026).** Kurulu kasalar Uzaktan ve site bağlantısını da ladmin'den alır
+(`server/sync/baglanti-dagitim.ts`): 10 dakikada bir `GET {LAFMALIYET_URL}/api/panel/pos/baglanti?sube=<id>&uygulanan=<sürüm>`
+(lafmaliyet anahtarıyla imzalı) → `{ ok, surum, baglanti: { LAFPOS_CLOUD_URL, LAFPOS_CLOUD_SECRET, LAFFOGATO_URL,
+LAFFOGATO_SYNC_SECRET } }`. Değişen değer bekletilir (`sync_state` `baglanti.bekleyen`) ve **gün kapanınca** (gün açık
+değilse hemen) ayarlar dosyasına yazılır, bekçi yeniden başlatır; denetime `settings.connections` (anahtar adları,
+değer değil). Yalnız kasada tanımlı bağlantı (adresi dolu) güncellenir: kapalı tutulan site bağlantısı kendiliğinden
+açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz: ladmin'e yeni değer yazılır, kasalar gece alır, sunucudaki
+anahtar sonra değişir (`uygulanan` ladmin'in günlüğünde görünür).
+
 **Sınır:** lafmaliyet bugün tek LafPOS şubesinin gününü alır (§4 "Şube"); Marina LafPOS'tayken ikinci şubenin kasası
 kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de çoklu LafPOS şubesi ayrı iş).
 

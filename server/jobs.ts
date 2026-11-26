@@ -14,6 +14,7 @@ import { autoEodExpected, deviceEndOfDay, recoverDeviceEod, resumePolling } from
 import { kablo } from './okc/token-kablo';
 import { syncTokenKablo } from './okc/token-kablo-servis';
 import { redeemInstallCode } from './sync/kurulum-kodu';
+import { applyPendingConnections, connectionsTick, PULL_MS } from './sync/baglanti-dagitim';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -357,6 +358,9 @@ export function startJobs() {
   const kurulum = () => void redeemInstallCode().catch((e) => console.error('[kurulum] şube kodu', e));
   timers.push(setTimeout(kurulum, 3_000));
   timers.push(setInterval(kurulum, 5 * 60_000));
+  // Uzaktan ve site bağlantısı ladmin'den: değişen anahtar bekletilir, gün kapanınca yazılır (baglanti-dagitim.ts)
+  timers.push(setTimeout(() => void connectionsTick(), 45_000));
+  timers.push(setInterval(() => void connectionsTick(), PULL_MS));
   // Token kablolu (Windows kasa): köprü açılır, kablo takılınca cihaz kendiliğinden tanınır
   try {
     syncTokenKablo();
@@ -400,6 +404,14 @@ export function startJobs() {
  * Adisyon işlemi yazımı giden kutusuna koydu (server/sync/site-outbox.ts); burada hemen gönderilir.
  */
 export function onJobEvent(e: LiveEvent) {
+  // Gün kapandı: ladmin'den gelen bekleyen bağlantı (anahtar değişimi) şimdi yazılır
+  if (e.topic === 'cash' && e.kind === 'day.closed') {
+    try {
+      applyPendingConnections();
+    } catch (err) {
+      console.error('[bağlantı] bekleyen yazılamadı', err);
+    }
+  }
   if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
   // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
   if (e.topic === 'sync' && e.kind === 'site.menu.written') onSiteMenuWritten();
