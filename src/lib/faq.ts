@@ -75,7 +75,7 @@ const ENTRIES: Entry[] = [
     question: 'Gün sonunu (Z) nasıl alırım?',
     // Kör kasada sunucu Z özetini göndermez (server/routes/cash.ts): kasa yalnız "Gün kapandı" bildirimini gösterir
     answer: (c) =>
-      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın. Pencerenin başında [[Kayda geçecekler]] ayrıntılı gün sonunun neyi kaydettiğini söyler (satışlar, ödeme türleri, kasa hareketleri, sayım); sonra [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. Kapanış saati ayarlıysa kapanışa 30 dakika kala sağ altta [[Gün sonu al]] bildirimi çıkar. ${
+      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın. Pencerenin başında [[Kayda geçecekler]] ayrıntılı gün sonunun neyi kaydettiğini söyler (satışlar, ödeme türleri, kasa hareketleri, sayım); sonra [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. Kapanış saati ayarlıysa kapanışa 30 dakika kala sağ altta [[Gün sonu al]] bildirimi çıkar ve bu cihazda bir kez kısa bir uyarı sesi çalar; LafPOS Uzaktan kuruluysa patronun telefonuna da bildirim gider. ${
         seesCash(c)
           ? 'Ayrıntılı Z raporu ekranda açılır, özeti üstte; Yazdır ile basılır.'
           : 'Rolünüzde kör kasa açık: gün kapanınca Z numarası bildirimde yazar, Z raporu ve sayım farkı yöneticinin ekranında görünür.'

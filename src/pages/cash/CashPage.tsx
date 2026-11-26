@@ -141,19 +141,32 @@ export default function CashPage() {
     staleTime: 60_000,
   });
   const [closing, setClosing] = useState(false);
+  // Pencere yalnız istekten sonra çekilmiş veriyle açılır (önbellekteki gün kapanmış ya da başka kişinin olabilir).
+  // Parametre gelince gün yeniden çekilir (sürmekte olan çekim varsa o beklenir): önbellek tazeyken (15 sn) sayfa
+  // açılışta çekmez, pencere 60 sn'lik yoklamayı beklemesin (inceleme, 26 Kasım 2026; tests/kapanis-teslim.test.ts).
+  // Çekilemezse pencere açılmaz, parametre yine silinir
+  const [askedAt, setAskedAt] = useState<number | null>(null);
+  const refetchDay = current.refetch;
   useEffect(() => {
-    // Yalnız bu açılışta çekilmiş veriyle (önbellekteki eski gün kapanmış ya da başka kişinin olabilir)
-    if (!askClose || !current.data || !current.isFetchedAfterMount) return;
-    const d = current.data;
-    if (d.day && can('kasa.gun') && (d.summary || d.blind)) {
+    if (!askClose) return;
+    setAskedAt(Date.now());
+    void refetchDay({ cancelRefetch: false });
+  }, [askClose, refetchDay]);
+  useEffect(() => {
+    if (!askClose || askedAt == null || current.isFetching) return;
+    const fresh = current.dataUpdatedAt >= askedAt;
+    if (!fresh && current.errorUpdatedAt < askedAt) return;
+    const d = fresh ? current.data : undefined;
+    if (d?.day && can('kasa.gun') && (d.summary || d.blind)) {
       setTab('bugun');
       setSelected(null);
       setClosing(true);
     }
+    setAskedAt(null);
     const next = new URLSearchParams(params);
     next.delete('gunsonu');
     setParams(next, { replace: true });
-  }, [askClose, current.data, current.isFetchedAfterMount, can, params, setParams]);
+  }, [askClose, askedAt, current.data, current.dataUpdatedAt, current.errorUpdatedAt, current.isFetching, can, params, setParams]);
   const [handover, setHandover] = useState(false);
   const [count, setCount] = useState<CountResult>(emptyCount());
   const [counted, setCounted] = useState(true);

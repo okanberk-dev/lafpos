@@ -280,9 +280,14 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 - **Telefon bildirimleri** (Web Push; `api/_bildirim.ts`, kasada `server/sync/bildirim.ts`, `tests/bildirim.test.ts`):
   kasa önemli olayı imzalı iter (`POST /api/uzaktan/bildirim`), site abonelere bildirim atar. Olaylar: tek seferde
   eşik üstü iptal ya da ikram (varsayılan ₺500), gün sonunda kasa farkı (₺100), uzun internet kesintisi (15 dakika;
-  dönünce süresiyle), Pavo gün sonu alınamadı; güncelleme sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür.
-  Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri; internet yokken olay kuyrukta
-  bekler (en çok 20, 24 saat). Telefonda patron Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" der
+  dönünce süresiyle), Pavo gün sonu alınamadı, **kapanış saati** (`kapanis`; kapanışa 30 dakika kala gün hâlâ açıksa;
+  yalnız Ayarlar › Gün sonu ve Z'de kapanış saati girilince, kural kasadaki kartla ortak `shared/closing.ts`); güncelleme
+  sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür. Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim
+  › Telefon bildirimleri (kapatmak ya da eşiği yükseltmek yalnız patron); internet yokken olay kuyrukta bekler (en çok
+  20, 24 saat). Kapanış bildirimi kuyruğa girmez: gün başına bir kez (yeniden açılan günde bir kez daha), metni gittiği
+  an yazılır; internet yoksa dakika turunda (gidemezse en sık 5 dakikada bir) o anki durumla yeniden denenir, gün o
+  arada kapandıysa hiç gitmez. Push servisinde en çok 1 saat bekler (öteki türler 6 saat). Site bir bildirimi kabul
+  etmezse (400: eski sitede yeni tür) kasa onu düşürür, yeniden denemez; kuyruğun arkasındakini bekletmez. Telefonda patron Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" der
   (iPhone'da önce Ana Ekrana Ekle); abonelik yalnız gerçek oturumla. Bildirimde neden, müşteri adı ve maliyet yok.
   Anahtarlar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Vercel); servis çalışanı `public/sw.js` (önbellek tutmaz).
 

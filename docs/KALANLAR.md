@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 25 Kasım 2026.
+Son güncelleme: 26 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -49,6 +49,15 @@ Son güncelleme: 25 Kasım 2026.
   kutuda başka restoranın siparişini silmez. Komut sayısı aynı (`docs/PAKET-PLATFORMLARI.md`).
 - **Silinen deneme günleri Uzaktan'dan da kalkar:** "Denemeyi bitir" ve "Geçişi tamamla"nın sildiği tarihlere en geç
   5 dk'da boş gün raporu gider; gerçek günü ya da ModPOS günü olan tarih boşalmaz (`docs/07-UZAKTAN-ERISIM.md` §4).
+- **26 Kasım 2026:** kapanış hatırlatması patronun telefonuna da gider (Web Push, tür `kapanis`; Yönetim › Ağ ve uzaktan
+  erişim › Telefon bildirimleri › "Kapanış saati yaklaşınca", varsayılan açık; gün başına bir kez, yeniden açılan günde
+  bir kez daha, bayat gitmez) ve kart ilk göründüğünde kasada bir kez kısa ses çalar; sitenin kabul etmediği bildirim
+  (400) kuyruğu tıkamaz; kartın "Gün sonu al"ı önbellek tazeyken de pencereyi hemen açar.
+- **Gün sonu e-postası Pavo'yu beklerken kaybolmaz (26 Kasım 2026):** 25 Kasım akşamı Marina'nın gün sonu e-postası
+  gitmedi (ladmin sonucu taşıyan ikinci gövdeyi bekliyordu, gelmedi; gece bekleme bitmiyordu). LafPOS Pavo bekleniyorsa
+  ilk gövdeyi en çok 150 sn tutar, gün sonu bitince (ya da atlanınca) gün hemen ve tek gövdeyle gider; yeni alan
+  `bankPosPending` (`docs/03-ENTEGRASYON.md` §4.10). ladmin tarafı (lafmaliyet aynı adlı dal) beklemeyi aynı istekte
+  bitirir; e-postalar orada ortak, ferah ve telefona uygun tasarıma geçti.
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -98,8 +107,13 @@ PAVO_URL=https://<cihazın IP adresi>:4567
 PAVO_SERIAL=<cihazın seri numarası>
 ```
 
+- **Gün sonu e-postası (26 Kasım 2026):** bu sürüm Marina'ya kurulduktan sonraki ilk gün sonunda ladmin'in e-postası
+  gün sonundan en geç ~3 dakika sonra (Pavo'nun banka gün sonu bitince) tek e-posta olarak gelmeli; Pavo atlanırsa
+  hemen. Gelmezse Yönetim › Entegrasyon'da lafmaliyet satırına ve ladmin › Ayarlar › LafPOS kartına bakılır. ladmin'de
+  gün sonu e-postasını yalnız Kasa › Rapor alıcıları alır (25 Kasım'dan beri).
 - **Kapanış saati (25 Kasım 2026):** yeni sürüm Marina'ya kurulunca Yönetim › Ayarlar ve yedek › Gün sonu ve Z ›
-  "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Merkez'de Marina "Ben gönderince"yse yeni sürüm
+  "Kapanış saati hatırlatması" açılıp saat girilir (varsayılan kapalı). Saat girilince patronun telefonuna da
+  bildirim gider (Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri › "Kapanış saati yaklaşınca", varsayılan açık). Merkez'de Marina "Ben gönderince"yse yeni sürüm
   için Merkez › Marina › "Güncellemeyi şimdi gönder".
 
 ## 2. Sahibin kararını bekleyenler (sormadan yapılmaz)
@@ -140,13 +154,10 @@ PAVO_SERIAL=<cihazın seri numarası>
 3. **Şube başına ayrı kafe anahtarı:** bugün `LAFPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
    anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
    başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
-
 4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
-6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
+5. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planLafposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
-7. **Kapanış hatırlatmasının sesi ve telefon bildirimi:** bugün yalnız ekranda kart. İstenirse kapanışa 30 dk kala
-   patrona Web Push (`server/sync/bildirim.ts`, yeni tür) ve kasada tek seferlik uyarı sesi eklenir.
 
 ## Çalışma kuralları (kısa)
 

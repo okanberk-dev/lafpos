@@ -5,7 +5,9 @@
  * - Abonelik: patron Uzaktan'da (telefonda, ana ekrana eklenmiş sitede) "Bildirimleri aç"a basar; tarayıcının
  *   aboneliği gerçek oturumla (üye ya da parolalı giriş) saklanır. Parolasız görünümde abonelik açılmaz.
  * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, LAFPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
- *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı. Güncelleme hatasını Merkez nabızdan kendisi görür.
+ *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı, kapanış saati (gün hâlâ açık; `kapanis`). Güncelleme
+ *   hatasını Merkez nabızdan kendisi görür. Bilinmeyen tür 400 alır; kasa onu yeniden denemez (eski sitede yeni tür
+ *   kuyruğu tıkamaz).
  * - Anahtarlar: VAPID_PUBLIC_KEY ve VAPID_PRIVATE_KEY (Vercel). Yoksa bildirim kapalıdır, hiçbir şey kırılmaz.
  * - Redis: `lafpos:bildirim:aboneler` (JSON, uç → abonelik), `lafpos:bildirim:son` (son 30 bildirim)
  */
@@ -45,10 +47,15 @@ const MAX_SUBS = 20;
 
 export const pushConfigured = () => !!env('VAPID_PUBLIC_KEY') && !!env('VAPID_PRIVATE_KEY');
 
-type Sender = (sub: Sub, payload: string) => Promise<{ statusCode: number }>;
-let sender: Sender = (sub, payload) => {
+/** Telefon kapalıyken bildirimin push servisinde bekleyeceği en uzun süre (sn) */
+const PUSH_TTL_S = 6 * 3600;
+/** Anlık bildirim saatler sonra gelmesin: kapanış hatırlatması bir saat (sonrası bayat; gün çoktan kapanmış olabilir) */
+const KIND_TTL_S: Record<string, number> = { kapanis: 3600 };
+
+type Sender = (sub: Sub, payload: string, ttl: number) => Promise<{ statusCode: number }>;
+let sender: Sender = (sub, payload, ttl) => {
   webpush.setVapidDetails('https://lafpos.laffogato.net', env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
-  return webpush.sendNotification(sub, payload, { TTL: 6 * 3600, urgency: 'high' });
+  return webpush.sendNotification(sub, payload, { TTL: ttl, urgency: 'high' });
 };
 /** Testler: gönderimi yakalar */
 export function setPushSender(fn: Sender) {
@@ -86,7 +93,7 @@ export async function broadcast(deps: BildirimDeps, n: Notice): Promise<number> 
   let changed = false;
   for (const [endpoint, sub] of Object.entries(all)) {
     try {
-      await sender(sub, payload);
+      await sender(sub, payload, KIND_TTL_S[n.kind] ?? PUSH_TTL_S);
       sent++;
     } catch (e) {
       const code = (e as { statusCode?: number }).statusCode;
@@ -100,7 +107,7 @@ export async function broadcast(deps: BildirimDeps, n: Notice): Promise<number> 
   return sent;
 }
 
-const KINDS = new Set(['iptal', 'ikram', 'kasa-farki', 'internet', 'guncelleme', 'pavo', 'deneme']);
+const KINDS = new Set(['iptal', 'ikram', 'kasa-farki', 'internet', 'guncelleme', 'pavo', 'kapanis', 'deneme']);
 
 export async function bildirim(req: Request, path: string, deps: BildirimDeps): Promise<Response> {
   // Sayfanın sorusu: bildirim kurulu mu, açık anahtar (gizli değil)
