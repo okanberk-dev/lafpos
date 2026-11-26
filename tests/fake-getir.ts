@@ -11,7 +11,8 @@ import type { GetirOrder, InboxItem } from '../server/delivery/getir';
  * handover / deliver; sırasız çağrı 400 kod 3) ve `gapMs` aralık kuralı (verify, prepare, deliver arasında; ihlal 400,
  * prepare'de kod 74, deliver'da 62: bağdaştırıcının varsayımı); strict'te `GET /food-orders/{id}` `details`'te yoksa
  * akıştaki duruma göre üretilir (onaylı 350, hazır 550 + prepareDate, kuryede 600 + handoverDate, teslim 900 +
- * deliverDate). `singleToken`: yeni giriş eski jetonları düşürür.
+ * deliverDate). `singleToken`: yeni giriş eski jetonları düşürür. Gelen kutusu ortak kutu gibidir (restoran süzgeci
+ * yok): kasanın başka restoranın kaydını silmediği burada denetlenir.
  */
 export interface FakeGetir {
   url: string;
@@ -20,6 +21,8 @@ export interface FakeGetir {
   acked: string[];
   /** Silme isteği gelince, yanıttan önce (kasanın kaydı o an yazılmış mı) */
   beforeAck?: (ids: string[]) => void;
+  /** Gelen kutusu isteklerinin (çekim ve silme) imzalı `restoran` sorgusu, sırayla; sorgusuz istekte null */
+  restoran: (string | null)[];
   /** Yedek yoklamanın verdiği onaysız ve iptal edilmiş siparişler */
   unapproved: GetirOrder[];
   cancelledList: GetirOrder[];
@@ -66,6 +69,7 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     close: async () => undefined,
     inbox: [],
     acked: [],
+    restoran: [],
     unapproved: [],
     cancelledList: [],
     active: [],
@@ -103,6 +107,7 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     // Aktarıcı (kafe anahtarıyla imzalı)
     if (path === '/api/getir/inbox' && req.method === 'GET') {
       f.calls.push('GET inbox');
+      f.restoran.push(url.searchParams.get('restoran'));
       if (!req.headers['x-laf-signature']) return send(401, { error: 'imza' });
       const forced = f.statusFor.inbox?.shift();
       if (forced && forced !== 200) return send(typeof forced === 'number' ? forced : forced.status, { error: 'forced' });
@@ -110,6 +115,7 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     }
     if (path === '/api/getir/inbox/ack' && req.method === 'POST') {
       f.calls.push('POST ack');
+      f.restoran.push(url.searchParams.get('restoran'));
       if (!req.headers['x-laf-signature']) return send(401, { error: 'imza' });
       const ids = (JSON.parse(raw) as { ids: string[] }).ids;
       f.beforeAck?.(ids);

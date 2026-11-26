@@ -180,6 +180,11 @@ export interface GetirConfig {
   /** Testte kısaltılır */
   stepGapMs?: number;
   backupEveryMs?: number;
+  /**
+   * Son girişte öğrenilen restoran kimliğinin kalıcı kaydı (server/delivery/registry.ts, sync_state): kasa yeniden
+   * başlayıp Getir'e giremese de aktarıcıdan yalnız kendi gelen kutusunu ister, bütün kutuları okumaz (Upstash bütçesi)
+   */
+  restaurantMemory?: { load(): string | null; save(id: string): void };
 }
 
 export const getirConfigured = (c: GetirConfig) => !!(c.appSecretKey && c.restaurantSecretKey && c.cloudUrl && c.cloudSecret.length >= 32);
@@ -260,7 +265,7 @@ export interface GetirOrder {
 /** Aktarıcının gelen kutusundaki kayıt: sipariş (newOrder) ya da iptal (cancelOrder) */
 export type InboxItem =
   | { id: string; kind: 'order'; receivedAt: number; order: GetirOrder }
-  | { id: string; kind: 'cancel'; receivedAt: number; orderId: string; reason?: string };
+  | { id: string; kind: 'cancel'; receivedAt: number; orderId: string; reason?: string; restaurantId?: string };
 
 /**
  * Sayı okuyucu: sayı ya da sayısal metin ("150", "12,5"); yoksa null. Bir alanın "var" sayılması ile okunması aynı
@@ -659,9 +664,20 @@ export class GetirClient {
 
 // ─── Aktarıcı (LafPOS Uzaktan) ───────────────────────────────────────────────
 
+/**
+ * Aktarıcının adresi; restoranın kimliği (girişte öğrenilen ya da son girişteki) imzalı sorguda (`?restoran=`):
+ * aktarıcı yalnız bu restoranın gelen kutusunu verir ve siler (api/uzaktan.ts `pullLists`). Kimlik hiç bilinmiyorsa
+ * (ilk girişten önce) sorgusuz, eski kasa gibi bütün kutular. Eski aktarıcı sorguyu yok sayar (ortak kutu)
+ */
+function relayUrl(c: GetirConfig, path: string, restaurantId?: string | null): URL {
+  const url = new URL(`${c.cloudUrl}/api/getir/${path}`);
+  if (restaurantId) url.searchParams.set('restoran', restaurantId);
+  return url;
+}
+
 /** Gelen kutusunu çeker (imzalı; önce iptaller, en çok 50 kayıt) */
-export async function fetchInbox(c: GetirConfig): Promise<InboxItem[]> {
-  const { status, json } = await signedFetch(c.cloudSecret, 'GET', new URL(`${c.cloudUrl}/api/getir/inbox`)).catch((e) => {
+export async function fetchInbox(c: GetirConfig, restaurantId?: string | null): Promise<InboxItem[]> {
+  const { status, json } = await signedFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox', restaurantId)).catch((e) => {
     throw networkError(e, 8000);
   });
   if (status !== 200) throw new GetirHttpError(status, `aktarıcı gelen kutusu alınamadı (${explain(status, json)})`);
@@ -670,10 +686,10 @@ export async function fetchInbox(c: GetirConfig): Promise<InboxItem[]> {
   return body.items.filter((i): i is InboxItem => !!i && typeof (i as InboxItem).id === 'string' && ((i as InboxItem).kind === 'order' || (i as InboxItem).kind === 'cancel'));
 }
 
-/** İşlenen kayıtları siler; silinemezse bir sonraki çekimde yine gelir (tekilleştirme kasada) */
-export async function ackInbox(c: GetirConfig, ids: string[]): Promise<void> {
+/** İşlenen kayıtları siler (çekimle aynı kutudan); silinemezse bir sonraki çekimde yine gelir (tekilleştirme kasada) */
+export async function ackInbox(c: GetirConfig, ids: string[], restaurantId?: string | null): Promise<void> {
   if (!ids.length) return;
-  const { status } = await signedFetch(c.cloudSecret, 'POST', new URL(`${c.cloudUrl}/api/getir/inbox/ack`), { ids });
+  const { status } = await signedFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack', restaurantId), { ids });
   if (status !== 200) throw new GetirHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 
@@ -721,6 +737,32 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
   const reconfirmedAt = new Map<string, number>();
   /** Sipariş → iptal seçenekleri (`/cancel-options` hız sınırlı) */
   const cancelOptions = new Map<string, { at: number; options: unknown[] }>();
+  /** Son girişteki restoran kimliği (kalıcı kayıttan bir kez okunur; undefined: henüz okunmadı) */
+  let remembered: string | null | undefined;
+
+  /**
+   * Gelen kutusunun restoranı: girişte öğrenilen kimlik; giriş olmadıysa (yeniden başlatma) son girişteki, o da yoksa
+   * null (sorgusuz: aktarıcı bütün kutuları verir, eski kasa gibi). Yeni kimlik kalıcı kayda yazılır. Kayıt okunamaz
+   * ya da yazılamazsa yoklama durmaz
+   */
+  const inboxRestaurant = (): string | null => {
+    if (remembered === undefined) {
+      try {
+        remembered = c.restaurantMemory?.load() ?? null;
+      } catch {
+        remembered = null;
+      }
+    }
+    if (client.restaurantId && client.restaurantId !== remembered) {
+      remembered = client.restaurantId;
+      try {
+        c.restaurantMemory?.save(remembered);
+      } catch {
+        // Bir sonraki girişte yeniden yazılır
+      }
+    }
+    return client.restaurantId ?? remembered;
+  };
 
   const remaining = (orderId: string) => Math.min(gap, (lastCall.get(orderId) ?? bootAt) + gap - clock());
 
@@ -814,12 +856,15 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
       const invalid: { externalId: string; error: string }[] = [];
       const warnings: string[] = [];
       const seen = new Set<string>();
+      /** Başka restoranın siparişleri: gelen kutusunda kalır (kaydı da iptali de), o restoranın kasası alır */
+      const foreignOrders = new Set<string>();
       const take = (o: GetirOrder, opts: { preAccepted?: boolean } = {}) => {
         const id = typeof o.id === 'string' ? o.id : '';
         if (!id || seen.has(id)) return;
         seen.add(id);
         if (foreign(o)) {
-          invalid.push({ externalId: id, error: `başka restoranın siparişi (${o.restaurant!.id}); bu restoran ${client.restaurantId}` });
+          foreignOrders.add(id);
+          invalid.push({ externalId: id, error: `başka restoranın siparişi (${o.restaurant!.id}); bu restoran ${client.restaurantId}, kayıt gelen kutusunda o restorana bırakıldı` });
           return;
         }
         // Kasada /verify-scheduled ile kabul edilmiş ileri tarihli sipariş etkinleşince yeniden onay ister: sipariş
@@ -846,11 +891,13 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
           loginError = message(e);
         }
       }
-      // 1) Aktarıcının gelen kutusu
+      // 1) Aktarıcının gelen kutusu: restoranın kendi kutusu (kimlik girişte öğrenilir; giriş olmadıysa son girişteki);
+      // silme de aynı kutudan
+      const restaurantId = inboxRestaurant();
       let items: InboxItem[] = [];
       let relayError: string | null = null;
       try {
-        items = await fetchInbox(c);
+        items = await fetchInbox(c, restaurantId);
       } catch (e) {
         relayError = message(e);
       }
@@ -859,11 +906,22 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
       const orderIdOf = new Map<string, string>();
       const held = new Set<string>();
       const heldOrders = new Set<string>();
+      /** Kutuda bırakılan iptal kayıtları: başka restoranın ya da (giriş olmadan) sahibi henüz bilinmeyen */
+      const left = new Set<string>();
       /** Saati beklenen ileri tarihli siparişler (sipariş → kayıt): yedek liste saatiyle getirirse kayıt bekletilmez */
       const awaitingTime = new Map<string, string>();
       for (const item of items) {
         if (item.kind === 'cancel') {
           orderIdOf.set(item.id, item.orderId);
+          const owner = typeof item.restaurantId === 'string' && item.restaurantId ? item.restaurantId : null;
+          // Başka restoranın iptali (ortak gelen kutusunda): uygulanmaz, silinmez
+          if (owner && client.restaurantId && owner !== client.restaurantId) {
+            left.add(item.id);
+            continue;
+          }
+          // Giriş olmadı, restoran bilinmiyor: iptal uygulanır (kasada olmayan siparişe dokunmaz) ama silinmez, sahibi
+          // belli olunca yeniden gelir
+          if (owner && !client.identified) left.add(item.id);
           cancelled.add(item.orderId);
           continue;
         }
@@ -949,16 +1007,17 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
         confirmed.delete(id);
         reconfirm.delete(id);
       }
-      // Kasada işlenenler silinir; kayda alınmayan (Kapalı), kaydı düşen, iptali ertelenen ve bekletilen (siparişi ve
-      // iptaliyle) kutuda kalır
+      // Kasada işlenenler silinir; başka restoranınki (siparişi ve iptaliyle), kayda alınmayan (Kapalı), kaydı düşen,
+      // iptali ertelenen ve bekletilen (siparişi ve iptaliyle) kutuda kalır
       const commit = (keep: ReadonlySet<string>) => {
         const stays = (i: InboxItem) => {
           const orderId = orderIdOf.get(i.id) ?? '';
-          return held.has(i.id) || heldOrders.has(orderId) || keep.has(orderId);
+          return held.has(i.id) || left.has(i.id) || heldOrders.has(orderId) || foreignOrders.has(orderId) || keep.has(orderId);
         };
         return ackInbox(
           c,
           items.filter((i) => !stays(i)).map((i) => i.id),
+          restaurantId,
         );
       };
       return { orders: [...orders.values()], cancelled: [...cancelled], confirmed: [...confirmed], reconfirm: [...reconfirm], invalid, commit, warning: warnings.length ? warnings.join('; ') : undefined, blocked };

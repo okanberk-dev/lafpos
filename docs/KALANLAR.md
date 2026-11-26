@@ -44,6 +44,9 @@ Son güncelleme: 25 Kasım 2026.
   sağ altta "Gün sonu al", kabuğun akışında, hiçbir şeyi örtmez), teslimde zorunlu **Kime** (Z, fiş, WhatsApp, gün sonu
   penceresi kişi kişi; lafmaliyet'e `cashMoves[].recipient`, orada satırın "Kime"si), **Ayrıntılı gün sonu** penceresi
   ("Kayda geçecekler", sonuçta özet), oturum kapanınca önbellek boşalır (sonra giren öncekinin verisini görmez).
+- **Paket gelen kutusu şubeye ayrıldı:** Yemeksepeti ve Getir kaydı Vercel'de tanımlı restoranın kendi listesine girer
+  (Getir'de de `GETIR_<ŞUBE>_RESTAURANT_ID`), kasa imzalı `?restoran=` ile yalnız kendininkini çeker ve siler; ortak
+  kutuda başka restoranın siparişini silmez. Komut sayısı aynı (`docs/PAKET-PLATFORMLARI.md`).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -131,12 +134,9 @@ PAVO_SERIAL=<cihazın seri numarası>
    değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
 2. **Tasarım turu:** dil LafPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `lafpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
-3. **Yemeksepeti ve Getir gelen kutusu şubeye ayrılmalı (ikinci şubeden önce):** platform anahtarları şubeye göre
-   (`docs/PAKET-PLATFORMLARI.md` › Anahtarlar buluttan) ama LafPOS Uzaktan'daki gelen kutusu (`lafpos:ys:*`, Getir'inki)
-   bütün şubelerde ortak; aktarıcı her şubenin `YEMEKSEPETI_<ŞUBE>_REMOTE_ID`'sini kabul eder, kasa başka restoranın
-   siparişini atlar. İkinci şube LafPOS üzerinden Yemeksepeti'ne (ya da Getir'e) geçmeden önce kutu şubeye ayrılmalı
-   (kasa yalnız kendi şubesinin kutusunu çeker ve siler). Şube başına ayrı kafe anahtarı da aynı işte düşünülür (bugün
-   `LAFPOS_CLOUD_SECRET` ortak; `?sube=` yanlışlık önlemi, yetki sınırı değil).
+3. **Şube başına ayrı kafe anahtarı:** bugün `LAFPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
+   anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
+   başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
 
 4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
 5. **Geçişi tamamla ile silinen deneme günleri Uzaktan'da kalıyor:** kasa silinenleri bildirsin, bulut raporlarını

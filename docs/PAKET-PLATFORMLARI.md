@@ -114,8 +114,14 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     iptali ertelenen kayıt kutuda kalır. Kutu en çok 500 kayıt ve 2 gün tutar; doluysa kırpılmaz, Delivery Hero 503
     alır ve yeniden dener. Yalnız `ORDER_CANCELLED` durumu saklanır (ötekiler 200 ile geçilir), siparişlerden ayrı
     listede ve önce verilir: kasanın beklettiği siparişler iptalin önünü tıkamaz. Sipariş gövdesi en çok 256 KB,
-    belirteç en çok 512 karakter. Başka restoranın kimliğiyle gelen kayıt atlanır ama bir kez alarm düşer (Kapalı'da
-    kutuda kalır, Canlı'ya dönünce bildirilir).
+    belirteç en çok 512 karakter. **Kutu restorana (şubeye) ayrılır:** `remoteId` Vercel'de tanımlıysa kayıt o
+    restoranın kendi listelerine girer (`lafpos:ys:inbox:r:<kimliğin özeti>`, `…:status:r:…`), kasa imzalı sorguda kendi
+    kimliğini verir (`?restoran=<YEMEKSEPETI_REMOTE_ID>`) ve yalnız onları çeker ve siler: bir şubenin kasası öbürünün
+    siparişine dokunamaz, komut sayısı ortak kutuyla aynı. Vercel'de hiçbir kimlik yoksa ortak liste (`lafpos:ys:inbox`,
+    `lafpos:ys:status`) kullanılır; sorgusuz eski kasa ortak listeyle birlikte bütün restoranlarınkini görür (güncellenene
+    dek sipariş kaçmasın). Ortak kutuda başka restoranın kimliğiyle gelen kayıt atlanır ve **silinmez** (o restoranın
+    kasası alır), bir kez alarm düşer. Kimliği platform canlıya geçmeden Vercel'e girin: sonradan girilirse ortak
+    listede kalmış kayıt (en çok 2 gün) güncel kasaya gelmez.
     Kabul ve ret kasadan middleware'e gider (`POST /v2/login` jetonuyla, 401'de bir kez yeniden giriş), yalnız
     siparişin `callbackUrls` adreslerine ve yalnız adres middleware'in alan adındaysa (jeton başka sunucuya gitmez).
     Kabulde `order_accepted` + `remoteOrderId` + `acceptanceTime`: platformun saatine uyulur (gel-alda alma saati,
@@ -147,8 +153,9 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     Kafede `.env`: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID` ve
     LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
     Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (aktarıcı bunların hepsini ve eski
-    öneksiz `YEMEKSEPETI_REMOTE_ID`'yi kabul eder, başka restoranın siparişi 400; hiçbiri yoksa süzgeç yok). Kurulum
-    durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false` (değer asla).
+    öneksiz `YEMEKSEPETI_REMOTE_ID`'yi kabul eder, her birinin kendi gelen kutusu olur, başka restoranın siparişi 400;
+    hiçbiri yoksa süzgeç yok, kutu ortak). Kurulum durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false`
+    (değer asla).
   - **Getir Yemek** (GetirFood API; `server/delivery/getir.ts`, aktarıcı `api/uzaktan.ts` `getir/*`): Getir siparişi
     bizim verdiğimiz iki adrese iter; LafPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
     `POST https://lafpos.vercel.app/api/getir/order`, iptal `POST https://lafpos.vercel.app/api/getir/cancel`; ikisinde
@@ -156,10 +163,16 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     zamanlı karşılaştırılır; yoksa ya da `LAFPOS_CLOUD_SECRET`'e veya `YEMEKSEPETI_PLUGIN_SECRET`'e eşitse aktarıcı
     503: üçüncü tarafa verilen değer gelen kutularını okuyan, özeti ezen anahtar olamaz; ayrı üretin, ör.
     `openssl rand -hex 24`). Kayıt Redis'teki gelen kutusuna girer (siparişler `lafpos:getir:inbox`, iptaller ayrı
-    listede `lafpos:getir:status`, yalnız sipariş kimliği ve nedeniyle, serbest metin not saklanmaz; önce iptaller
-    verilir). Sipariş kaydı yalnız kasanın okuduğu alanlarla saklanır: müşteri ve kurye konumu ile kurye hiç, Getir
-    kuryesinde müşterinin telefonu ve adresi de saklanmaz; kendi kuryemizde tek telefon (kasanın kullandığı: iletişim
-    ya da maskeli numara, maskesiz numara yalnız ikisi yoksa). Kutu, doluluk ve boyut kuralları Yemeksepeti'ninkiyle
+    listede `lafpos:getir:status`, yalnız sipariş kimliği, nedeni ve restoran kimliğiyle, serbest metin not saklanmaz;
+    önce iptaller verilir). Kutu Yemeksepeti'ndeki gibi restorana ayrılır: `restaurant.id` Vercel'de tanımlıysa
+    (`GETIR_<ŞUBE>_RESTAURANT_ID` ya da eski öneksiz `GETIR_RESTAURANT_ID`) kayıt o restoranın kendi listelerine
+    (`lafpos:getir:inbox:r:<kimliğin özeti>`, `…:status:r:…`) girer; kasa girişte öğrendiği restoran kimliğini imzalı
+    sorguda verir (`?restoran=`) ve yalnız onları çeker ve siler. Kimlik kasada da saklanır (`sync_state`
+    `platform.getir.restaurant`): yeniden başlayıp Getir'e giremeyen kasa da yalnız kendi kutusunu ister. Hiç giriş
+    olmamışsa (ilk kurulum) sorgusuz ister, aktarıcı bütün kutuları verir; girişe dek kayıtlar bekletilir, restoranı
+    belli iptal uygulanır ama silinmez. Sipariş kaydı yalnız kasanın okuduğu alanlarla saklanır: müşteri ve kurye
+    konumu ile kurye hiç, Getir kuryesinde müşterinin telefonu ve adresi de saklanmaz; kendi kuryemizde tek telefon
+    (kasanın kullandığı: iletişim ya da maskeli numara, maskesiz numara yalnız ikisi yoksa). Kutu, doluluk ve boyut kuralları Yemeksepeti'ninkiyle
     aynı (500 kayıt, dolu → 503, gövde 256 KB, kimlik 512 karakter); ayrıca kayıt 1 gün sonra verilmez ve silinir
     (itmede ve çekimde), liste 1 gün etkinliksiz kalınca düşer: itme ve çekim olmasa da hiçbir kayıt 2 günden uzun
     kalmaz. Kasa aynı imzalı uçlardan (`GET /api/getir/inbox`, `POST /api/getir/inbox/ack`) 20 saniyede bir çeker ve
@@ -175,7 +188,8 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     onaylı listesinin hatası onaysız siparişleri düşürmez, uyarı olur. Aktarıcı düşüp Getir çalışıyorsa yoklama
     başarılı sayılır, Yönetim'de "aktarıcı gelen kutusu alınamadı … doğrudan Getir'den alınıyor" uyarısı görünür;
     aktarıcı ve onaysız liste birlikte düşerse yoklama hatası. Girişte Getir'in verdiği restoran kimliğiyle uyuşmayan
-    sipariş atlanır, bir kez alarm düşer (Vercel'de isteğe bağlı `GETIR_RESTAURANT_ID` aynı siparişi 400 ile reddeder).
+    sipariş atlanır ve gelen kutusundan silinmez (iptali de; o restoranın kasası alır), bir kez alarm düşer (Vercel'de
+    isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` tanımlıysa tanımsız restoranın siparişi 400 ile reddedilir).
     **Getir panelinden onaylanan sipariş** (belge "Time Limit for Order Confirmation": kabul Getir'e ulaşmadı ya da
     yanıtı kayboldu, personel Getir panelinden onayladı): onaylı listede görünür (350 ve üstü, 400 değil, teslim
     edilmemiş, iptal belirtisi yok: yanıt şemasında iptal nedeni ve notu); kasada onay bekleyen ya da süresi
@@ -253,7 +267,9 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     Kafede `.env`: `GETIR_APP_SECRET_KEY`, `GETIR_RESTAURANT_SECRET_KEY`, test ortamı için `GETIR_API_URL`
     (boşsa canlı `https://food-external-api-gateway.getirapi.com`) ve LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`,
     `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz; Getir'e adreslerle birlikte verilir),
-    isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
+    isteğe bağlı her şubenin `GETIR_<ŞUBE>_RESTAURANT_ID`'si (Getir'in restoran kimliği; Marina için
+    `GETIR_MARINA_RESTAURANT_ID`, eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; her birinin kendi gelen kutusu olur,
+    hiçbiri yoksa kutu ortak). Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
   - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
 ## Anahtarlar buluttan
@@ -302,8 +318,9 @@ değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
 **Bilinen sınırlar.** Kafe anahtarı (`LAFPOS_CLOUD_SECRET`) bütün şubelerde aynı: `?sube=` imzalıdır (imzadan sonra
 değiştirilemez) ama uç isteyen kasanın gerçekten o şube olduğunu doğrulamaz. Şube adı bir yanlışlık önlemidir (Marina
 kasası Tuzla'nın anahtarını yanlışlıkla almaz), yetki sınırı değildir: kafe anahtarını bilen her şubenin anahtarını
-isteyebilir. Şube başına ayrı anahtar ileride. Yemeksepeti ve Getir'in gelen kutusu da şubeler arasında ortak
-(`docs/KALANLAR.md`).
+isteyebilir. Şube başına ayrı anahtar ileride (`docs/KALANLAR.md`). Yemeksepeti ve Getir'in gelen kutusu restorana
+ayrıdır (restoran kimliği Vercel'de tanımlıysa; yukarıda Yemeksepeti ve Getir): kasa yalnız kendi restoranının
+kutusunu çeker ve siler; aynı kafe anahtarıyla bu da yanlışlık önlemidir, yetki sınırı değil.
 
 ## Otomatik kabul
 İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik

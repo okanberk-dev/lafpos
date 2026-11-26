@@ -94,6 +94,12 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     (bekleyen varken + HVALS); bir komut GET + HLEN + INCR + HSET + SET. Panel üyeleri: `lafpos:uye:<e-posta>` (rol
     yalnız davetle eklenende), `lafpos:uye-davet:<e-posta>` (kodun özeti, 7 gün), `lafpos:uyeler` (küme); rol oturumun
     zaten okuduğu üye kaydından gelir, ek okuma yok.
+  - **Platform gelen kutusu** (Yemeksepeti, Getir; `docs/PAKET-PLATFORMLARI.md`): kasanın 20 saniyelik çekimi iki
+    liste (iptaller, siparişler) için LRANGE + LLEN, silmesi liste başına LRANGE ve silinen kayıt başına LREM. Kutu
+    restorana ayrılınca da (`?restoran=`, kimlik Vercel'de tanımlıysa) kasa yalnız kendi iki listesini okur: komut
+    sayısı ortak kutuyla aynı, şube eklense de artmaz (Getir'de kimlik kasada saklanır, girişi düşen kasa da kendi
+    kutusunu ister). Yalnız sorgusuz istek, yani güncellenmemiş eski kasa ya da Getir'e hiç girememiş yeni kurulum,
+    ortak listeyle birlikte bütün restoranlarınkini okur (restoran başına iki LRANGE + iki LLEN fazla).
   - Geçiş: bu sürümden önce yazılmış kayıt (`lafpos:dukkanlar`, eski kasanın `lafpos:snapshot`'ı) sürüm yokken
     okunmaya devam eder (koşullu yanıt yok); kasanın ilk itmesi sürümü yazar, `lafpos:dukkanlar` artık yazılmaz.
 
@@ -276,8 +282,8 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
 | Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `LAFPOS_UYE_EPOSTA` ve gizli `LAFPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
-| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
-| Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_RESTAURANT_ID`; aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
 **İlk etapta parolasız** (27 Ekim 2026 kararı): `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
 sormaz; bağlantıyı bilen herkes gerçek ciroyu ve personel adlarını salt okunur görür. Gerçek kullanıma geçmeden
