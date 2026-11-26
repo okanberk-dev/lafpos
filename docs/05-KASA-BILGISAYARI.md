@@ -133,6 +133,13 @@ Sunucu" çalışıyor; `http://localhost:4000` açılıyor; tablet kafenin ağı
 `C:\ProgramData\LafPOS\logs\sunucu.log` yazılıyor; bilgisayar yeniden başlayınca sunucu ve kasa ekranı
 kendiliğinden geliyor; LafPOS ayarları kaydedilince sunucu yeniden başlıyor.
 
+### Yeni şube: ladmin'den kurulum
+
+Yeni şubede kurucu ladmin'den gelir: ana yönetici şubeyi e-postasıyla ekleyince şubenin e-postasına (ve şube hesabının
+Hesabım sayfasına) şubeye özel indirme bağlantısı gider. Kasa bilgisayarında açılıp inen `LafPOS-Kur-<şube>.cmd`
+çalıştırılır; kurulum bitince kasa şubesini, gün sonu bağlantısını ve LafPOS Uzaktan'ı kendiliğinden alır, Merkez'e
+şubenin adıyla kaydolur. Şube kimliği ya da anahtar elle yazılmaz (`docs/03-ENTEGRASYON.md` §4b).
+
 ### İlk açılış: deneme modu, sonra gerçek kullanım
 
 Yeni kurulumda sahte işletme verisi yoktur: adisyon, ödeme, gün, müşteri, rezervasyon, platform siparişi yok

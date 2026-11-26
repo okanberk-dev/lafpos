@@ -1338,6 +1338,38 @@ bilmiyordu. İkisi de artık denetim kaydına alarm yazar ve patronun telefonuna
   yerine yenisi giren ya da gün yeniden açıldığı için atılan kayıt bildirilmez. Anahtarlar `sync_state`
   `lafmaliyet.alarms`'ta (en yeni 50).
 
+## 4b. Şube kurulumu: lafmaliyet (ladmin) → LafPOS (26 Kasım 2026)
+
+Yeni şube ladmin'de eklenir, kasası kendiliğinden kurulur (ladmin `docs/LAFPOS.md` › Şube kurulumu):
+
+1. ladmin › Ayarlar › Şubeler'de **yalnız ana yönetici** (`info@nextgenlab.com.tr`) şubeyi e-postasıyla ekler. Şubenin
+   panel hesabı açılır, şubeye özel **kurulum bağlantısı** (`https://ladmin.laffogato.net/lafpos/indir/<kod>`, 14 gün,
+   tek kurulumluk) şubenin e-postasına gider ve şube hesabının Hesabım sayfasında durur.
+2. Bağlantı, kanaldaki genel web kurucusunu (`LafPOS-Kur.cmd`, `scripts/kasa/windows/kurulum/web-kurucu.ps1`) indirir;
+   ladmin içindeki iki boş satırı doldurur: `$KurulumAdresi = '<ladmin kökü>'`, `$KurulumKodu = '<kod>'`. Satırların
+   yazımı sözleşmedir (iki depoda testli). Genel kurucuda ikisi boştur, kod taşımaz.
+3. Kurucu kodu veri klasörüne yazar: `C:\ProgramData\LafPOS\kurulum-kodu.json` `{ "adres", "kod" }` (UTF-8, BOM'suz).
+4. Sunucu açılışta (ve kod durdukça 5 dakikada bir) kodu verir (`server/sync/kurulum-kodu.ts`):
+
+```
+POST {adres}/api/lafpos/kurulum   { "kod": "…" }
+200 { "ok": true, "sube": { "id": "kadikoy", "ad": "Kadıköy" },
+      "baglanti": { "LAFMALIYET_URL", "LAFMALIYET_SYNC_SECRET", "LAFPOS_CLOUD_URL"?, "LAFPOS_CLOUD_SECRET"?, "LAFFOGATO_URL"?, "LAFFOGATO_SYNC_SECRET"? } }
+404 kod yok · 410 kullanılmış, iptal ya da süresi dolmuş · 400 biçim · 429 çok deneme
+```
+
+   - Şube kimliği (`branchId`) `sube.id` olur; lafmaliyet bu kasanın bir gününü kabul ettiyse (şube kilidi) ve kimlik
+     farklıysa değişmez, denetime alarm düşer.
+   - `baglanti`'dan yalnız bu altı anahtar, Bağlantı bilgileri'nin kurallarıyla (`checkConnValue`: https, en az 32
+     karakterlik anahtar) ayarlar dosyasına yazılır; bekçi sunucuyu yeni ayarlarla yeniden başlatır.
+   - Başarıda ve kalıcı hatada (404, 410) dosya `kurulum-kodu.json.kullanildi` olur; internet yoksa kalır, yeniden denenir.
+     Durum `sync_state` `kurulum.sube`.
+5. LafPOS Uzaktan'a (Merkez) ilk kayıt şubenin adını ve kodunu taşır (`sube: { ad, kod }`; kod şube kimliğinin büyük
+   harflisi): dükkân bu adla açılır, sahip yine onaylar.
+
+**Sınır:** lafmaliyet bugün tek LafPOS şubesinin gününü alır (§4 "Şube"); Marina LafPOS'tayken ikinci şubenin kasası
+kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de çoklu LafPOS şubesi ayrı iş).
+
 ## 5. Sıklık ve bütçe
 
 `.env`'de `LAFFOGATO_URL` yoksa aşağıdaki site işlerinin hiçbiri çalışmaz (§2).

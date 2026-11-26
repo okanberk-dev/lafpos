@@ -175,6 +175,20 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(forged.status).toBe(401);
   });
 
+  it('ladmin’den kurulan kasa kayıtta şubesini söyler: dükkân o adla ve kodla açılır, yine onay bekler', async () => {
+    const { installIdFor } = await import('../server/sync/merkez');
+    const { signedHeaders } = await import('../server/lib/signature');
+    const { POST } = await api();
+    const key = 'k'.repeat(43);
+    const id = installIdFor(key);
+    const body = JSON.stringify({ id, anahtar: key, surum: '0.3.0', sube: { ad: 'Kadıköy', kod: 'kadikoy' } });
+    const res = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body, headers: signedHeaders(SECRET, 'POST', new URL(`${CLOUD}/api/merkez/kayit`), body) }));
+    expect(res.status).toBe(200);
+    const list = await panel('GET', 'merkez/kurulumlar');
+    expect(list.json.kurulumlar.find((k: { id: string }) => k.id === id)).toMatchObject({ ad: 'Kadıköy', kod: 'KADIKOY', lisans: { durum: 'bekliyor' } });
+    await panel('POST', 'merkez/sil', { id });
+  });
+
   it('panel yalnız gerçek oturumla: jetonsuz 401, parolasız görünümde 403 (oturum düşmez)', async () => {
     expect((await panel('GET', 'merkez/kurulumlar', undefined, 'yok')).status).toBe(401);
     delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;

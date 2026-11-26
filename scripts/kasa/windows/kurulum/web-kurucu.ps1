@@ -22,6 +22,11 @@ $Gorev = 'LafPOS Sunucu'
 $Port = 4000
 $Gomulu = __GOMULU__
 $Dosyalar = __DOSYALAR__
+# Şubenin kurulum kodu: ladmin (Ayarlar › Şubeler) şubeye özel indirmede bu iki satırı doldurur (docs/03-ENTEGRASYON.md
+# "Şube kurulumu"). Kod tek kullanımlıktır; kasa ilk açılışta onunla ladmin'den şubesini ve bağlantı bilgilerini alır.
+# Kanaldaki genel kurucuda ikisi de boştur
+$KurulumAdresi = ''
+$KurulumKodu = ''
 
 $Sys = Join-Path $env:SystemRoot 'System32'
 $ProgramKlasoru = $env:ProgramW6432
@@ -296,6 +301,12 @@ try {
   [void](Calistir (Join-Path $Sys 'icacls.exe') @($Veri, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'))
   if (-not (Test-Path -LiteralPath (Join-Path $Veri 'ayarlar.env'))) {
     Copy-Item -LiteralPath (Join-Path $Kur 'ayarlar.env.ornek') -Destination (Join-Path $Veri 'ayarlar.env')
+  }
+  # Şubeye özel kurucu: kod veri klasörüne yazılır, sunucu ilk açılışta ladmin'den şubesini ve bağlantılarını alır
+  if ($KurulumKodu -and $KurulumAdresi) {
+    $kodJson = '{"adres":"' + $KurulumAdresi + '","kod":"' + $KurulumKodu + '"}'
+    [IO.File]::WriteAllText((Join-Path $Veri 'kurulum-kodu.json'), $kodJson, (New-Object Text.UTF8Encoding($false)))
+    Write-Host 'Şube kurulum kodu kaydedildi: kasa açılınca şubesine kendiliğinden bağlanır.'
   }
 
   Adim 'Sunucu görevi, güvenlik duvarı ve kısayollar'
