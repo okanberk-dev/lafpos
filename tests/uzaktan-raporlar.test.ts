@@ -5,6 +5,12 @@ import type { OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
 
 /**
+ * Müşterinin telefonunun yazılabileceği biçimler (yalnız '0530' aranmaz: gövdedeki milisaniyelik bir zaman damgası
+ * rastgele o rakamları taşıyabiliyordu, test ara sıra düşüyordu)
+ */
+const PHONE_FORMS = ['0530 000 11 22', '05300001122', '5300001122', '000 11 22'];
+
+/**
  * LafPOS Uzaktan raporları (server/sync/cloud-reports.ts → api/uzaktan.ts). Kasa günlük rapor özetlerini iter, bulut
  * dönemin günlerini toplar. Doğrulama: aynı veriyle uzaktaki Ciro, Saatlik, Ürünler ve Personel kasadakiyle kuruşu
  * kuruşuna aynı (tek gün, çok gün, bugünü içeren dönemin "aynı saate kadar" kıyası); günlerde maliyet, kâr, PIN,
@@ -293,7 +299,7 @@ describe('uzaktan raporlar', () => {
   it('ek veride neden, müşteri adı ve telefonu, maliyet yok; para ve tarih biçimi kasayla aynı', async () => {
     const cr = await import('../server/sync/cloud-reports');
     const x = JSON.stringify(cr.buildDayReport(today, NOW));
-    for (const secret of ['Vazgeçti', 'Müdavim', 'Kampanya', 'Müşteri şikâyeti', 'Ayşe', '0530', 'cost', 'margin', 'commission']) expect(x).not.toContain(secret);
+    for (const secret of ['Vazgeçti', 'Müdavim', 'Kampanya', 'Müşteri şikâyeti', 'Ayşe', ...PHONE_FORMS, 'cost', 'margin', 'commission']) expect(x).not.toContain(secret);
     const { csvCell, csvDateTime } = await import('@shared/report-csv');
     const { tlPlain } = await import('@shared/money');
     const { fmtDateTime } = await import('@shared/time');
@@ -338,7 +344,7 @@ describe('uzaktan raporlar', () => {
     const days = [...store.entries()].filter(([k]) => k.startsWith('lafpos:rapor:')).map(([, v]) => v);
     expect(days.length).toBeGreaterThan(0);
     const text = days.join('\n');
-    for (const bad of ['Ayşe', 'Yılmaz', '0530', '"cost"', '"margin"', '"costsAt"', '"revenueNet"', 'pin', 'phone', 'Müşteri şikâyeti']) expect(text).not.toContain(bad);
+    for (const bad of ['Ayşe', 'Yılmaz', ...PHONE_FORMS, '"cost"', '"margin"', '"costsAt"', '"revenueNet"', 'pin', 'phone', 'Müşteri şikâyeti']) expect(text).not.toContain(bad);
     // Ödenmez yine ciro dışında sayılır, kişisi olmadan
     const d = JSON.parse(days[0]!) as RemoteDayReport;
     expect(Object.keys(d).sort()).toEqual(['at', 'clock', 'closed', 'closes', 'date', 'hours', 'kdv', 'n', 'pay', 'prod', 's', 'staff', 'types', 'v', 'xpay', 'z']);

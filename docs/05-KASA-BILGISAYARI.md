@@ -165,6 +165,8 @@ gerçek gün varken çalışmaz. Sırasıyla:
 4. Kurulum modu kapanır, yazarkasa simülatörden **Kapalı**'ya geçer (Pavo'yu patron Yönetim › Yazarkasa POS'tan
    seçer), paket platformlarının Deneme modu kapanır. Z numarası baştan (ya da İlk Z numarasından) başlar.
 5. Denetim kaydına tek bir uyarı düşer (`deneme.bitir`: silinen sayılar, yedeğin adı, kapatılan hesaplar).
+6. LafPOS Uzaktan bağlıysa silinen günler oradan da en geç 5 dk'da kalkar (raporu boşaltılır; o tarihte geçmiş ciro
+   günü varsa o görünür; `docs/07-UZAKTAN-ERISIM.md` §4 "Silinen günler"). "Geçişi tamamla" da aynı.
 
 Bir kez çalışır (`liveSince` ayarı): yeniden basmak hiçbir şey silmez. Sonra kurulum modu yeniden açılmaz.
 

@@ -29,7 +29,7 @@ import {
   shiftCountToDTO,
   workedUserIdsOf,
 } from '../services/days';
-import { deviceEndOfDay } from '../okc/service';
+import { autoEodExpected, deviceEndOfDay } from '../okc/service';
 import { afterDayClosed, anyStaffLinked, categoriesIfStale, devirIfStale, enqueueDay, expenseCategories, flushOutbox, lafmaliyetConfigured } from '../sync/lafmaliyet';
 import { expectedOpening } from '../services/devir';
 import { onlineOrdersDayOpened } from '../sync/laffogato-orders';
@@ -176,8 +176,9 @@ cashRoutes.post('/day/close', async (c) => {
   // 23 Kas 2026)
   const remote = actor.user.id === 'uzaktan';
   const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input, remote ? { userId: actor.user.id, name: actor.user.name } : undefined));
-  // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
-  afterDayClosed(day.id);
+  // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir. Pavo'nun otomatik gün sonu
+  // başlayacaksa gövde onun sonucunu bekler (tek gövde, lafmaliyet'te tek e-posta)
+  afterDayClosed(day.id, { eodExpected: autoEodExpected(day.id) });
   // Kasa farkı eşiği geçtiyse patronun telefonuna
   afterDayClose(day.summary, day.zNo);
   // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)

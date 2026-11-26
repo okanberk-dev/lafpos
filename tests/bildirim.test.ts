@@ -1,18 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { CLOSING_REMINDER_MS, closingAtMs } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
 
 /**
  * Patrona telefon bildirimi: kasa olayı imzalı iter (server/sync/bildirim.ts), site abonelere Web Push atar
  * (api/_bildirim.ts). Eşikler, internetsiz kuyruk, abonelik için gerçek oturum, geçersizleşen aboneliğin silinmesi,
- * Merkez'in güncelleme sorunu bildirimi.
+ * Merkez'in güncelleme sorunu bildirimi, kapanış saati hatırlatması (`closingNoticeTick`) ve sitenin kabul etmediği
+ * bildirimin (eski sitede yeni tür) kuyruğu tıkamaması.
  */
 const CLOUD = 'https://bildirim.test';
 const SECRET = 'b'.repeat(40);
 const PASSWORD = 'bildirim-parola-1';
 const store = new Map<string, string>();
-const pushed: { endpoint: string; payload: { title: string; body: string } }[] = [];
+const pushed: { endpoint: string; payload: { title: string; body: string; tag: string }; ttl: number }[] = [];
 let offline = false;
+/** Eski siteyi taklit eder: bu türü bilmez (400) */
+let rejectKind: string | null = null;
 let h: Harness;
 
 beforeAll(async () => {
@@ -22,9 +26,9 @@ beforeAll(async () => {
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET });
   Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0', VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' });
   const { setPushSender } = await import('../api/_bildirim');
-  setPushSender(async (sub, payload) => {
+  setPushSender(async (sub, payload, ttl) => {
     if (sub.endpoint.endsWith('/gitti')) throw Object.assign(new Error('gone'), { statusCode: 410 });
-    pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload) });
+    pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload), ttl });
     return { statusCode: 201 };
   });
   const realFetch = globalThis.fetch;
@@ -43,6 +47,7 @@ beforeAll(async () => {
     }
     if (url.startsWith(CLOUD)) {
       if (offline) throw new TypeError('fetch failed');
+      if (rejectKind && (JSON.parse(String(init!.body)) as { kind?: string }).kind === rejectKind) return new Response(JSON.stringify({ code: 'bad_body' }), { status: 400 });
       const { POST } = await import('../api/uzaktan');
       const path = new URL(url).pathname.replace(/^\/api\//, '');
       return POST(new Request(`${CLOUD}/api/uzaktan?yol=${path}`, { method: 'POST', body: init!.body as string, headers: init!.headers as Record<string, string> }));
@@ -158,5 +163,100 @@ describe('telefon bildirimi', () => {
     const list = (await (await cloud('GET', 'uzaktan/bildirim/son', undefined, t)).json()) as { kind: string }[];
     expect(list.length).toBeGreaterThan(0);
     expect((await cloud('GET', 'uzaktan/bildirim/son')).status).toBe(401);
+  });
+});
+
+describe('kapanış saati bildirimi', () => {
+  /** Gün kasa farkı testinde kapandı: senaryo için gün veritabanında açılır (yeniden açılış anı elle; saat oynatılamaz) */
+  async function setDay(patch: { closedAt?: number | null; reopenedAt?: number | null }) {
+    const { db, schema } = await import('../server/db/client');
+    const { desc, eq } = await import('drizzle-orm');
+    const day = db.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get()!;
+    db.update(schema.businessDays).set(patch).where(eq(schema.businessDays.id, day.id)).run();
+    return { ...day, ...patch };
+  }
+  const titles = () => pushed.map((p) => p.payload.title);
+
+  it('kapanışa 30 dk kala bir kez; saat girilmemişse, bu tür kapalıyken ve pencereden önce gitmez; kapatmayı yalnız patron yapar', async () => {
+    const { closingNoticeTick, notifySettings } = await import('../server/sync/bildirim');
+    pushed.length = 0;
+    const day = await setDay({ closedAt: null, reopenedAt: null });
+    expect(notifySettings().kapanis).toBe(true);
+    // Kapanış saati varsayılan boş: anahtar açık olsa da hiçbir şey gitmez
+    expect(await closingNoticeTick(Date.now())).toBe(false);
+    await h.ok('mudur', 'PUT', '/admin/settings', { closingTime: '23:00' });
+    const closeAt = closingAtMs(day.date, '23:00');
+    expect(await closingNoticeTick(closeAt - CLOSING_REMINDER_MS - 60_000)).toBe(false);
+    // Kapatmak bildirimi azaltır: müdür yapamaz, patron yapar (denetim kaydında)
+    expect((await h.call('mudur', 'PUT', '/sync/bildirim', { kapanis: false })).status).toBe(403);
+    await h.ok('patron', 'PUT', '/sync/bildirim', { kapanis: false });
+    const { db, schema } = await import('../server/db/client');
+    const audit = db.select().from(schema.auditLog).all().filter((a) => a.action === 'ayar').at(-1);
+    expect(audit?.message).toContain('kapanış saati açık → kapalı');
+    expect(await closingNoticeTick(closeAt - 10 * 60_000)).toBe(false);
+    // Açmak bildirimi çoğaltır: müdür de yapar
+    await h.ok('mudur', 'PUT', '/sync/bildirim', { kapanis: true });
+    expect(await closingNoticeTick(closeAt - 10 * 60_000)).toBe(true);
+    expect(await closingNoticeTick(closeAt - 9 * 60_000)).toBe(false);
+    // Kapanış geçse de aynı gün için ikinci bildirim yok
+    expect(await closingNoticeTick(closeAt + 5 * 60_000)).toBe(false);
+    expect(titles()).toEqual([expect.stringMatching(/^Kapanışa 10 dk kaldı/)]);
+    expect(pushed[0]!.payload).toMatchObject({ body: `Kapanış 23:00 · gün sonu henüz alınmadı (Z ${day.zNo})`, tag: 'kapanis' });
+    // Push servisinde bir saatten fazla beklemez (telefon kapalıysa saatler sonra gelmez)
+    expect(pushed[0]!.ttl).toBe(3600);
+  });
+
+  it('yeniden açılan günde bir kez daha; internet yokken kuyruğa girmez, dönünce o anki durumla gider; kapalı günde gitmez', async () => {
+    const { closingNoticeTick, pendingNotices } = await import('../server/sync/bildirim');
+    const { noteReachable } = await import('../server/lib/internet');
+    pushed.length = 0;
+    const day = await setDay({ closedAt: null, reopenedAt: null });
+    const closeAt = closingAtMs(day.date, '23:00');
+    // Kapanıştan sonra gelen müşteri: gün yeniden açıldı, 30 dakika hatırlatılmaz
+    const reopenedAt = closeAt + 60_000;
+    await setDay({ reopenedAt });
+    expect(await closingNoticeTick(reopenedAt + 60_000)).toBe(false);
+    // 30 dakika sonra gün hâlâ açık ama internet yok: gitmez, kuyrukta bekletilmez (bayat "kapanışa N dk" gitmesin)
+    offline = true;
+    expect(await closingNoticeTick(reopenedAt + CLOSING_REMINDER_MS)).toBe(false);
+    expect(pendingNotices()).toBe(0);
+    offline = false;
+    noteReachable();
+    // Gidemeyen bildirim en sık 5 dakikada bir yeniden denenir; sonra o anki durumla ("geçti") bir kez gider
+    expect(await closingNoticeTick(reopenedAt + CLOSING_REMINDER_MS + 2 * 60_000)).toBe(false);
+    expect(await closingNoticeTick(reopenedAt + CLOSING_REMINDER_MS + 6 * 60_000)).toBe(true);
+    expect(await closingNoticeTick(reopenedAt + CLOSING_REMINDER_MS + 7 * 60_000)).toBe(false);
+    expect(titles()).toEqual([expect.stringMatching(/^Kapanış saati geçti/)]);
+    expect(pushed[0]!.payload.body).toBe(`Kapanış 23:00 · gün hâlâ açık (Z ${day.zNo})`);
+    // Gün sonu alındıysa hiçbir şey
+    await setDay({ closedAt: closeAt + 3 * 3600_000, reopenedAt: closeAt + 2 * 3600_000 });
+    expect(await closingNoticeTick(closeAt + 4 * 3600_000)).toBe(false);
+    expect(pushed).toHaveLength(1);
+  });
+
+  it('sitenin kabul etmediği bildirim (eski sitede yeni tür, 400) düşer: yeniden denenmez, kuyruğu tıkamaz', async () => {
+    const { closingNoticeTick, flushNotices, notify, pendingNotices } = await import('../server/sync/bildirim');
+    pushed.length = 0;
+    const day = await setDay({ closedAt: null, reopenedAt: null });
+    const closeAt = closingAtMs(day.date, '23:00');
+    // Yeni yeniden açılış: yeni hatırlatma; eski site "kapanis"i bilmiyor
+    await setDay({ reopenedAt: closeAt + 5 * 3600_000 });
+    rejectKind = 'kapanis';
+    expect(await closingNoticeTick(closeAt + 6 * 3600_000)).toBe(false);
+    rejectKind = null;
+    expect(await closingNoticeTick(closeAt + 6 * 3600_000 + 60_000)).toBe(false);
+    expect(pushed).toHaveLength(0);
+    // Kuyrukta 400 alan kayıt arkadakini bekletmez
+    offline = true;
+    await notify({ kind: 'internet', title: 'eski sitede yok', body: '' });
+    await notify({ kind: 'deneme', title: 'arkadaki', body: '' });
+    expect(pendingNotices()).toBe(2);
+    offline = false;
+    rejectKind = 'internet';
+    expect(await flushNotices()).toBe(1);
+    rejectKind = null;
+    expect(pendingNotices()).toBe(0);
+    expect(titles()).toEqual([expect.stringContaining('arkadaki')]);
+    await h.ok('mudur', 'PUT', '/admin/settings', { closingTime: null });
   });
 });

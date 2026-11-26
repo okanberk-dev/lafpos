@@ -361,9 +361,19 @@ export class YemeksepetiClient {
 
 // ─── Aktarıcı (LafPOS Uzaktan) ───────────────────────────────────────────────
 
+/**
+ * Aktarıcının adresi; restoranın kimliği imzalı sorguda (`?restoran=`): aktarıcı yalnız bu restoranın gelen kutusunu
+ * verir ve siler (api/uzaktan.ts `pullLists`). Eski aktarıcı sorguyu yok sayar (ortak kutu, bugünkü davranış)
+ */
+function relayUrl(c: YemeksepetiConfig, path: string): URL {
+  const url = new URL(`${c.cloudUrl}/api/yemeksepeti/${path}`);
+  if (c.remoteId) url.searchParams.set('restoran', c.remoteId);
+  return url;
+}
+
 /** Gelen kutusunu çeker (imzalı; en çok 50 kayıt) */
 export async function fetchInbox(c: YemeksepetiConfig): Promise<InboxItem[]> {
-  const { status, json } = await signedFetch(c.cloudSecret, 'GET', new URL(`${c.cloudUrl}/api/yemeksepeti/inbox`)).catch((e) => {
+  const { status, json } = await signedFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox')).catch((e) => {
     throw networkError(e, 8000);
   });
   if (status !== 200) throw new YemeksepetiHttpError(status, `aktarıcı gelen kutusu alınamadı (${explain(status, json)})`);
@@ -375,7 +385,7 @@ export async function fetchInbox(c: YemeksepetiConfig): Promise<InboxItem[]> {
 /** İşlenen kayıtları siler; silinemezse bir sonraki çekimde yine gelir (tekilleştirme kasada) */
 export async function ackInbox(c: YemeksepetiConfig, ids: string[]): Promise<void> {
   if (!ids.length) return;
-  const { status } = await signedFetch(c.cloudSecret, 'POST', new URL(`${c.cloudUrl}/api/yemeksepeti/inbox/ack`), { ids });
+  const { status } = await signedFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack'), { ids });
   if (status !== 200) throw new YemeksepetiHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 
@@ -448,12 +458,15 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
       const invalid: { externalId: string; error: string }[] = [];
       // Kayıt kimliği → siparişin belirteci (kasada kalacaklar için)
       const tokenOf = new Map<string, string>();
+      /** Başka restoranın kayıtları (ortak gelen kutusunda): hiç silinmez, o restoranın kasası alır */
+      const foreign = new Set<string>();
       for (const item of items) {
         const token = item.kind === 'order' ? (item.order && typeof item.order.token === 'string' ? item.order.token : item.id) : item.remoteOrderId;
         tokenOf.set(item.id, token);
-        // Başka restoranın kimliği: atlanır ama bildirilir (yanlış ayarda siparişler sessizce kaybolmasın)
+        // Başka restoranın kimliği: atlanır ve kutuda bırakılır ama bildirilir (yanlış ayarda siparişler sessizce kaybolmasın)
         if (item.remoteId && c.remoteId && item.remoteId !== c.remoteId) {
-          invalid.push({ externalId: token, error: `başka restoranın kimliği (${item.remoteId}); YEMEKSEPETI_REMOTE_ID ${c.remoteId}` });
+          foreign.add(item.id);
+          invalid.push({ externalId: token, error: `başka restoranın kimliği (${item.remoteId}); bu kasanın YEMEKSEPETI_REMOTE_ID'si ${c.remoteId}, kayıt gelen kutusunda o restorana bırakıldı` });
           continue;
         }
         if (item.kind === 'order') {
@@ -466,8 +479,8 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
           }
         } else if (item.status === 'ORDER_CANCELLED') cancelled.push(item.remoteOrderId);
       }
-      // Kasada işlenenler silinir; kayda alınmayan (Kapalı), kaydı düşen ve iptali ertelenen kutuda kalır
-      const commit = (keep: ReadonlySet<string>) => ackInbox(c, items.filter((i) => !keep.has(tokenOf.get(i.id) ?? '')).map((i) => i.id));
+      // Kasada işlenenler silinir; başka restoranınki, kayda alınmayan (Kapalı), kaydı düşen ve iptali ertelenen kutuda kalır
+      const commit = (keep: ReadonlySet<string>) => ackInbox(c, items.filter((i) => !foreign.has(i.id) && !keep.has(tokenOf.get(i.id) ?? '')).map((i) => i.id));
       return { orders, cancelled, invalid, commit };
     },
     async accept(order, prepMinutes) {

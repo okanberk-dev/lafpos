@@ -10,7 +10,7 @@ import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings, getSyncState } from './lib/settings';
-import { deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
+import { autoEodExpected, deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -24,7 +24,7 @@ import { type PriceTiming, priceInstant } from './sync/laffogato-menu';
 import { startCloudSync } from './sync/cloud';
 import { startMerkez } from './sync/merkez';
 import { startPlatformKeys } from './sync/platform-anahtar';
-import { afterDeviceEod, startNotices } from './sync/bildirim';
+import { afterDeviceEod, closingNoticeTick, startNotices } from './sync/bildirim';
 import { afterDailyBackup } from './sync/yedek';
 import { startCatchUp } from './sync/catch-up';
 
@@ -264,7 +264,7 @@ export function autoDayEndTick(now = Date.now()) {
   }
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
-  afterDayClosed(closed.id);
+  afterDayClosed(closed.id, { eodExpected: autoEodExpected(closed.id) });
   // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5).
   // Alınamaz ya da belirsiz kalırsa kasadan alınan gün sonundaki gibi patronun telefonuna (routes/cash.ts); otomatik
   // gün sonunda bildirim hiç gitmiyordu (inceleme, 23 Kas 2026)
@@ -352,6 +352,8 @@ export function startJobs() {
   timers.push(...startPlatformKeys());
   // İnternet dönünce bekleyen bildirimler ve uzun kesinti haberi
   startNotices();
+  // Kapanış saatine 30 dakika kala gün açıksa patronun telefonuna (Ayarlar'da kapanış saati ve Uzaktan yoksa istek yok)
+  timers.push(setInterval(() => void closingNoticeTick().catch((e) => console.error('[bildirim] kapanış', e)), 60_000));
   // İnternet dönüşü: bekleyenler beklemeden bir kez gider; internet yokken dakikada bir TCP denemesi (HTTP yok)
   timers.push(...startCatchUp());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır

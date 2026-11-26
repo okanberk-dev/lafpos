@@ -5,7 +5,8 @@ import type { InboxItem } from '../server/delivery/yemeksepeti';
 /**
  * Testler için sahte LafPOS Uzaktan gelen kutusu (`/api/yemeksepeti/inbox`, `/inbox/ack`; imza başlığı aranır) ve
  * sahte Delivery Hero middleware'i (`/v2/login`, `/v2/order/status/{token}`, `/v2/orders/{token}/preparation-completed`
- * ve siparişin `callbackUrls` adresleri `/cb/{ne}/{token}`). Çağrılar ve gövdeler kaydedilir.
+ * ve siparişin `callbackUrls` adresleri `/cb/{ne}/{token}`). Çağrılar ve gövdeler kaydedilir. Gelen kutusu ortak kutu
+ * gibidir (restoran süzgeci yok): kasanın başka restoranın kaydını silmediği burada denetlenir.
  */
 export interface FakeYemeksepeti {
   url: string;
@@ -14,6 +15,8 @@ export interface FakeYemeksepeti {
   acked: string[];
   /** Silme isteği gelince, yanıttan önce (kasanın kaydı o an yazılmış mı) */
   beforeAck?: (ids: string[]) => void;
+  /** Gelen kutusu isteklerinin (çekim ve silme) imzalı `restoran` sorgusu, sırayla; sorgusuz istekte null */
+  restoran: (string | null)[];
   /** "POST /v2/login", "POST /cb/accepted/tok-1" gibi */
   calls: string[];
   bodies: Record<string, unknown[]>;
@@ -32,7 +35,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 export async function startFakeYemeksepeti(creds: { username: string; password: string }): Promise<FakeYemeksepeti> {
-  const f: FakeYemeksepeti = { url: '', close: async () => undefined, inbox: [], acked: [], calls: [], bodies: {}, statusFor: {}, tokens: new Set(), logins: 0, count: (c) => f.calls.filter((x) => x === c).length };
+  const f: FakeYemeksepeti = { url: '', close: async () => undefined, inbox: [], acked: [], restoran: [], calls: [], bodies: {}, statusFor: {}, tokens: new Set(), logins: 0, count: (c) => f.calls.filter((x) => x === c).length };
   const server: Server = createServer(async (req, res) => {
     const raw = await readBody(req);
     const url = new URL(req.url ?? '/', 'http://ys.test');
@@ -44,6 +47,7 @@ export async function startFakeYemeksepeti(creds: { username: string; password: 
     // Aktarıcı (kafe anahtarıyla imzalı)
     if (path === '/api/yemeksepeti/inbox' && req.method === 'GET') {
       f.calls.push('GET inbox');
+      f.restoran.push(url.searchParams.get('restoran'));
       if (!req.headers['x-laf-signature']) return send(401, { error: 'imza' });
       const forced = f.statusFor.inbox?.shift();
       if (forced && forced !== 200) return send(forced, { error: 'forced' });
@@ -51,6 +55,7 @@ export async function startFakeYemeksepeti(creds: { username: string; password: 
     }
     if (path === '/api/yemeksepeti/inbox/ack' && req.method === 'POST') {
       f.calls.push('POST ack');
+      f.restoran.push(url.searchParams.get('restoran'));
       if (!req.headers['x-laf-signature']) return send(401, { error: 'imza' });
       const ids = (JSON.parse(raw) as { ids: string[] }).ids;
       f.beforeAck?.(ids);

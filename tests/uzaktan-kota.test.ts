@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -13,7 +14,7 @@ import { type UpstashCall, upstashCommand } from './fake-upstash';
  * yaklaşabilir"; docs/07-UZAKTAN-ERISIM.md §4 "Upstash bütçesi"). Sahte Upstash her komutu ve okunan baytı sayar:
  * değişmeyen özette yoklama tek komut ve 304, büyük özet okunmaz; kasanın nabzı değişmeyen özeti yeniden yazmaz ama
  * görünümün saati ilerler; bir saat açık kalan ekranın komut sayısı bütçede; istemci 304'te önbellekteki gövdeyi döner;
- * gizli sekmede yoklama yok.
+ * gizli sekmede yoklama yok; şubeye ayrılan platform gelen kutusunun çekimi ortak kutununki kadar komut.
  */
 const CLOUD = 'https://lafpos.vercel.app';
 const SECRET = 'k'.repeat(40);
@@ -225,6 +226,41 @@ describe('uzaktan ekran: Upstash komutu', () => {
     // Öteki sekmeler verilen dönemin günleriyle yetinir: tek MGET
     expect((await GET(new Request(`${CLOUD}/api/uzaktan?yol=reports/products&from=2026-11-20&to=2026-11-20`, { headers: { authorization: `Bearer ${token}`, 'x-laf-dukkan': 'default' } }))).status).toBe(200);
     expect(cmds()).toEqual(['MGET']);
+  });
+});
+
+describe('platform gelen kutusu: Upstash komutu', () => {
+  const IDS = { YEMEKSEPETI_MARINA_REMOTE_ID: 'POS_MARINA', YEMEKSEPETI_TUZLA_REMOTE_ID: 'POS_TUZLA' };
+  const own = (list: 'inbox' | 'status', id: string) => `lafpos:ys:${list}:r:${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16)}`;
+  /** Kasanın imzalı çekimi; `restoran` yoksa sorgusuz eski kasa */
+  async function pull(restoran?: string) {
+    const { GET } = await api();
+    const q = restoran == null ? '' : `?restoran=${restoran}`;
+    const url = new URL(`${CLOUD}/api/yemeksepeti/inbox${q}`);
+    log.length = 0;
+    const res = await GET(new Request(`${CLOUD}/api/uzaktan?yol=yemeksepeti/inbox${q.replace('?', '&')}`, { headers: signedHeaders(SECRET, 'GET', url, '') }));
+    expect(res.status).toBe(200);
+    return (await res.json()) as { items: { id: string }[] };
+  }
+
+  it('restoranın kasası bugünkü kadar komutla çeker (iki liste: 2 LRANGE + 2 LLEN), şube eklense de artmaz; yalnız sorgusuz eski kasa bütün listeleri okur', async () => {
+    // Bugünkü (ortamda restoran kimliği yok): ortak iki liste
+    await pull('POS_MARINA');
+    expect(cmds()).toEqual(['LRANGE', 'LRANGE', 'LLEN', 'LLEN']);
+    Object.assign(process.env, IDS);
+    try {
+      store.set(own('inbox', 'POS_MARINA'), JSON.stringify([JSON.stringify({ id: 'k1', kind: 'order', remoteId: 'POS_MARINA', receivedAt: Date.now(), order: { token: 't1' } })]));
+      store.set(own('inbox', 'POS_TUZLA'), JSON.stringify([JSON.stringify({ id: 'k2', kind: 'order', remoteId: 'POS_TUZLA', receivedAt: Date.now(), order: { token: 't2' } })]));
+      expect((await pull('POS_MARINA')).items.map((i) => i.id)).toEqual(['k1']);
+      expect(cmds()).toEqual(['LRANGE', 'LRANGE', 'LLEN', 'LLEN']);
+      expect(log.map((c) => c.key)).not.toContain(own('inbox', 'POS_TUZLA'));
+      // Güncellenmemiş kasa: ortak listeyle birlikte iki şubeninki (3 × 2 liste)
+      expect((await pull()).items.map((i) => i.id).sort()).toEqual(['k1', 'k2']);
+      expect(cmds().filter((c) => c === 'LRANGE')).toHaveLength(6);
+      expect(cmds().filter((c) => c === 'LLEN')).toHaveLength(6);
+    } finally {
+      for (const k of Object.keys(IDS)) delete process.env[k];
+    }
   });
 });
 

@@ -94,6 +94,12 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     (bekleyen varken + HVALS); bir komut GET + HLEN + INCR + HSET + SET. Panel üyeleri: `lafpos:uye:<e-posta>` (rol
     yalnız davetle eklenende), `lafpos:uye-davet:<e-posta>` (kodun özeti, 7 gün), `lafpos:uyeler` (küme); rol oturumun
     zaten okuduğu üye kaydından gelir, ek okuma yok.
+  - **Platform gelen kutusu** (Yemeksepeti, Getir; `docs/PAKET-PLATFORMLARI.md`): kasanın 20 saniyelik çekimi iki
+    liste (iptaller, siparişler) için LRANGE + LLEN, silmesi liste başına LRANGE ve silinen kayıt başına LREM. Kutu
+    restorana ayrılınca da (`?restoran=`, kimlik Vercel'de tanımlıysa) kasa yalnız kendi iki listesini okur: komut
+    sayısı ortak kutuyla aynı, şube eklense de artmaz (Getir'de kimlik kasada saklanır, girişi düşen kasa da kendi
+    kutusunu ister). Yalnız sorgusuz istek, yani güncellenmemiş eski kasa ya da Getir'e hiç girememiş yeni kurulum,
+    ortak listeyle birlikte bütün restoranlarınkini okur (restoran başına iki LRANGE + iki LLEN fazla).
   - Geçiş: bu sürümden önce yazılmış kayıt (`lafpos:dukkanlar`, eski kasanın `lafpos:snapshot`'ı) sürüm yokken
     okunmaya devam eder (koşullu yanıt yok); kasanın ilk itmesi sürümü yazar, `lafpos:dukkanlar` artık yazılmaz.
 
@@ -164,6 +170,15 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     `tests/uzaktan-raporlar.test.ts`.
   - **Yeniden gönder:** Redis silinir ya da eksik kalırsa Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan ›
     "Raporları yeniden gönder" gönderim geçmişini sıfırlar; tarama 400 günü yaklaşık bir saatte yeniden iter.
+  - **Silinen günler:** "Denemeyi bitir" ve "Geçişi tamamla" (`server/services/deneme.ts`) kasada sildiği günlerin
+    tarihlerini silmeyle aynı işlemde yazar (`sync_state` `cloud.reports.silinen`). Sıradaki canlı bakışta (en geç 5 dk)
+    o tarihlere satışsız gün raporu (`n: 0`, ek verisiz) gider: bulut eski deneme raporunun ve ek verisinin üstüne yazar,
+    Uzaktan o günü gün listesine ve toplamlara katmaz. API değişmedi. O tarihte LafPOS günü kaldıysa (deneme günüyle aynı
+    tarihte gerçek gün) ya da geçmiş ciro (ModPOS) günü varsa boş gün gitmez, aynı bakışta o günün raporu gider (deneme
+    satışı çıkmış hâliyle; günlük taramayı beklemez). Gidemeyen tarih
+    listede kalır; "Raporları yeniden gönder" listeyi silmez. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan
+    tarih (bu sürümden önce yapılmış geçiş) günlük tarama ona gelince (en geç bir gün) aynı yolla boşaltılır
+    (`tests/deneme-uzaktan.test.ts`).
   - Buluta gitmez: maliyet, kâr ve komisyon, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi "Müşteri"), iptal,
     ikram, indirim ve iade nedenleri.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
@@ -265,9 +280,14 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 - **Telefon bildirimleri** (Web Push; `api/_bildirim.ts`, kasada `server/sync/bildirim.ts`, `tests/bildirim.test.ts`):
   kasa önemli olayı imzalı iter (`POST /api/uzaktan/bildirim`), site abonelere bildirim atar. Olaylar: tek seferde
   eşik üstü iptal ya da ikram (varsayılan ₺500), gün sonunda kasa farkı (₺100), uzun internet kesintisi (15 dakika;
-  dönünce süresiyle), Pavo gün sonu alınamadı; güncelleme sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür.
-  Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri; internet yokken olay kuyrukta
-  bekler (en çok 20, 24 saat). Telefonda patron Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" der
+  dönünce süresiyle), Pavo gün sonu alınamadı, **kapanış saati** (`kapanis`; kapanışa 30 dakika kala gün hâlâ açıksa;
+  yalnız Ayarlar › Gün sonu ve Z'de kapanış saati girilince, kural kasadaki kartla ortak `shared/closing.ts`); güncelleme
+  sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür. Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim
+  › Telefon bildirimleri (kapatmak ya da eşiği yükseltmek yalnız patron); internet yokken olay kuyrukta bekler (en çok
+  20, 24 saat). Kapanış bildirimi kuyruğa girmez: gün başına bir kez (yeniden açılan günde bir kez daha), metni gittiği
+  an yazılır; internet yoksa dakika turunda (gidemezse en sık 5 dakikada bir) o anki durumla yeniden denenir, gün o
+  arada kapandıysa hiç gitmez. Push servisinde en çok 1 saat bekler (öteki türler 6 saat). Site bir bildirimi kabul
+  etmezse (400: eski sitede yeni tür) kasa onu düşürür, yeniden denemez; kuyruğun arkasındakini bekletmez. Telefonda patron Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" der
   (iPhone'da önce Ana Ekrana Ekle); abonelik yalnız gerçek oturumla. Bildirimde neden, müşteri adı ve maliyet yok.
   Anahtarlar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Vercel); servis çalışanı `public/sw.js` (önbellek tutmaz).
 
@@ -276,8 +296,8 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
 | Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `LAFPOS_UYE_EPOSTA` ve gizli `LAFPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
-| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
-| Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_RESTAURANT_ID`; aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
 **İlk etapta parolasız** (27 Ekim 2026 kararı): `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
 sormaz; bağlantıyı bilen herkes gerçek ciroyu ve personel adlarını salt okunur görür. Gerçek kullanıma geçmeden

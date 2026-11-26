@@ -1411,8 +1411,11 @@ export async function runFlows(ctx) {
             await dialog.getByRole('button', { name: 'Teslimi kaydet', exact: true }).click();
             await dialog.waitFor({ state: 'detached', timeout: 8000 });
             await page.getByText('Kime: Patron').first().waitFor({ timeout: 8000 });
-            // Kapanış hatırlatması: başka ekrandan "Gün sonu al" → Kasa, ayrıntılı gün sonu penceresi, alıcılı teslim
-            await go(ctx, page, '/masalar');
+            // Kapanış hatırlatması: başka ekrandan "Gün sonu al" → Kasa, ayrıntılı gün sonu penceresi, alıcılı teslim.
+            // Sayfa yenilenmeden (alt sekmeyle) gidilir: Kasa'nın günü önbellekte tazeyken (15 sn) de pencere hemen açılır,
+            // 60 sn'lik yoklamayı beklemez (inceleme, 26 Kasım 2026)
+            await page.getByRole('link', { name: 'Masalar', exact: true }).first().click();
+            await page.waitForURL(/\/masalar$/, { timeout: 8000 });
             const card = page.getByRole('status', { name: 'Kapanış hatırlatması' });
             await card.waitFor({ timeout: 8000 });
             await card.getByText(/^(Kapanışa \d+ dk kaldı|Kapanış saati geçti)$/).waitFor();
@@ -1422,7 +1425,7 @@ export async function runFlows(ctx) {
             assert(cardBox && mainBox && cardBox.y >= mainBox.y + mainBox.height - 1, `kart ekranın üstüne biniyor: kart ${JSON.stringify(cardBox)}, ana alan ${JSON.stringify(mainBox)}`);
             await card.getByRole('button', { name: 'Gün sonu al' }).click();
             const close = page.getByRole('dialog', { name: /^Ayrıntılı gün sonu · Z/ });
-            await close.waitFor({ timeout: 8000 });
+            await close.waitFor({ timeout: 5000 });
             await close.getByRole('heading', { name: 'Kayda geçecekler' }).waitFor();
             await close.getByText('Patron', { exact: true }).first().waitFor();
             assert(!new URL(page.url()).searchParams.has('gunsonu'), `parametre adreste kaldı: ${page.url()}`);

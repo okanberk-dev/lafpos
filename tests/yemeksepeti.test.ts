@@ -174,7 +174,7 @@ describe('canlı bağlantı', () => {
     expect((await byExt(o.token)).status).toBe('ret');
   });
 
-  it('platformun iptali (ORDER_CANCELLED) gelen kutusundan: kabul edilmiş adisyon iptal olur; başka restoranın kaydı atlanır', async () => {
+  it('platformun iptali (ORDER_CANCELLED) gelen kutusundan: kabul edilmiş adisyon iptal olur; başka restoranın kaydı atlanır ve silinmez', async () => {
     const o = dhOrder();
     fake.inbox.push(inboxOrder(o));
     await live.pollPlatform('yemeksepeti');
@@ -188,7 +188,11 @@ describe('canlı bağlantı', () => {
     expect(r).toEqual({ created: 0, cancelled: 1 });
     expect((await byExt(o.token)).status).toBe('iptal');
     expect((await h.ok<OrderDTO>('patron', 'GET', `/orders/${orderId}`)).status).toBe('iptal');
-    expect(fake.inbox).toHaveLength(0);
+    // Başka restoranın kaydı kutuda kalır (ortak kutuda o restoranın kasası alır); çekim ve silme restoranın kimliğiyle
+    expect(fake.inbox.map((i) => i.remoteId)).toEqual(['BASKA']);
+    expect(fake.acked).not.toContain(fake.inbox[0]!.id);
+    expect(fake.restoran.slice(-2)).toEqual(['POS_1', 'POS_1']);
+    fake.inbox = [];
   });
 
   it('gelen kutusu kayıt kasada yazıldıktan sonra silinir; bozuk sipariş ötekileri durdurmaz, bir kez denetim kaydına düşer', async () => {
@@ -327,7 +331,11 @@ describe('Yemeksepeti gözden geçirme bulguları', () => {
     const other = dhOrder();
     fake.inbox.push({ ...inboxOrder(other), remoteId: 'BASKA_RESTORAN' });
     await live.pollPlatform('yemeksepeti');
+    await live.pollPlatform('yemeksepeti');
     expect((await audit()).filter((a) => a.action === 'platform.package_invalid' && a.message.includes('BASKA_RESTORAN'))).toHaveLength(1);
+    // Kutuda kalır: kasa başka restoranın siparişini silmez
+    expect(fake.inbox.map((i) => i.id)).toEqual([`in-${other.token}`]);
+    fake.inbox = [];
     const t = await arrive(dhOrder({ test: true }));
     const r = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${t.id}/accept`, {});
     expect([r.status, r.json.code]).toEqual([409, 'test_order']);

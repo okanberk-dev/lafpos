@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
-import { and, gte, isNull, lt, lte } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, lte } from 'drizzle-orm';
 import { type HistoryDay, type HistoryProducts, historyReport, type PushedHistoryProducts } from '@shared/gecmis';
 import type { ItemListRow } from '@shared/remote-calc';
 import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
 import { addDays, businessDayStartMs } from '@shared/time';
-import { db, schema } from '../db/client';
+import { db, schema, type Tx } from '../db/client';
 import { env } from '../env';
 import { bus } from '../lib/events';
 import { getSyncState, setSyncState } from '../lib/settings';
@@ -34,6 +34,12 @@ import { cloudEnabled, patronSeesCash } from './cloud';
  * Böylece Uzaktan, geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da o günleri bu
  * kasanın dükkânında gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an). Kayıt
  * değişince (`historyAt`) bütün geçmiş günlerine bir kez bakılır, yalnız içeriği değişen gün gider.
+ *
+ * Silinen günler ("Denemeyi bitir", "Geçişi tamamla"; server/services/deneme.ts): kasada artık hiçbir şeyi olmayan
+ * tarihe boş gün (`n: 0`, ek verisiz) gider; bulut o tarihin eski raporunun ve ek verisinin üstüne yazar, Uzaktan o günü
+ * listeye ve toplamlara katmaz. Tarihler silmeyle aynı işlemde `REMOVED_KEY`'e yazılır, sıradaki canlı bakışta (en geç
+ * 5 dk) gider. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan tarih de (eski sürümde yapılmış geçiş) tarama
+ * ona gelince boşaltılır. O tarihte LafPOS günü ya da geçmiş ciro günü varsa boş gün gitmez, o günün raporu gider.
  */
 export const LIVE_MIN_MS = 5 * 60_000;
 export const BACKFILL_MS = 60_000;
@@ -43,6 +49,12 @@ export const SWEEP_EVERY_MS = 24 * 3600_000;
 /** Gün açık kalsa da tarama en geç bu kadarda bir */
 const SWEEP_FORCE_MS = 3 * SWEEP_EVERY_MS;
 const STATE_KEY = 'cloud.reports';
+/**
+ * Kasada silinen günlerin tarihleri (server/services/deneme.ts `markRemovedDays`): Uzaktan'da yenilenmeyi bekler
+ * (kalan günü olmayan tarih boşaltılır, kalan günü olana o günün raporu gider).
+ * Gönderim durumundan ayrı durur: "Raporları yeniden gönder" sıfırlasa da kalır. Tarihin raporu gidince listeden düşer
+ */
+export const REMOVED_KEY = 'cloud.reports.silinen';
 
 interface State {
   /** Gönderilmiş günlerin içerik özeti (tarih → sha256'nın ilk 16'sı) */
@@ -260,13 +272,27 @@ export const pendingReportDays = () => (cloudEnabled() ? loadState().queue.lengt
 
 /**
  * Uzaktan raporları baştan gönder (Yönetim › Ağ ve uzaktan erişim): bulutta Redis silinmiş ya da eksikse. Gönderim
- * geçmişi sıfırlanır; tarama 400 günü dakikada 7 günlük paketlerle yeniden iter (yaklaşık bir saat)
+ * geçmişi sıfırlanır; tarama 400 günü dakikada 7 günlük paketlerle yeniden iter (yaklaşık bir saat). Boşaltılmayı
+ * bekleyen silinen günler (`REMOVED_KEY`) kalır
  */
 export function resendReports() {
   // Süren tur bitince eski durumu geri yazmasın: kuşak değişir, o tur yazmadan çıkar
   generation += 1;
   setSyncState(STATE_KEY, emptyState());
   void reportTick({ backfill: true });
+}
+
+/**
+ * Silinen günlerin tarihleri Uzaktan'da boşaltılmak üzere yazılır. Silmeyle aynı veritabanı işleminde çağrılır
+ * (`t`): silme geri alınırsa liste de yazılmaz. Bulutta saklanmayan (400 günden eski) tarih yazılmaz
+ */
+export function markRemovedDays(t: Tx, dates: string[], now = Date.now()) {
+  const oldest = addDays(reportToday(now), -(REMOTE_REPORT_DAYS - 1));
+  const add = dates.filter((d) => d >= oldest);
+  if (!add.length) return;
+  const prev = (t.select({ value: schema.syncState.value }).from(schema.syncState).where(eq(schema.syncState.key, REMOVED_KEY)).get()?.value ?? []) as string[];
+  const value = [...new Set([...prev.filter((d) => d >= oldest), ...add])].sort();
+  t.insert(schema.syncState).values({ key: REMOVED_KEY, value, updatedAt: now }).onConflictDoUpdate({ target: schema.syncState.key, set: { value, updatedAt: now } }).run();
 }
 
 /** Test için */
@@ -278,6 +304,7 @@ export function resetReportSync() {
   liveTimer = null;
   state = {};
   setSyncState(STATE_KEY, emptyState());
+  setSyncState(REMOVED_KEY, []);
 }
 
 /**
@@ -356,6 +383,9 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
       }
     }
     const liveDates = live ? [today, addDays(today, -1), ...st.queue] : [];
+    // Kasada silinen günler: canlı bakışta (en geç 5 dk) boşaltılır; gidemeyen listede kalır, sonraki canlı bakışta yine
+    const removed = new Set(getSyncState<string[]>(REMOVED_KEY) ?? []);
+    const removedDue = live ? [...removed].filter((d) => d >= oldest && d <= today) : [];
     if (live) lastLiveAt = now;
     // Geçmiş ciro günleri (ModPOS): LafPOS'ta gerçek iş günü olmayan tarihte gün raporu onlardan kurulur
     const hist = historyFor({ from: oldest, to: addDays(today, -1) }, today);
@@ -368,13 +398,15 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     // Önceki bakışta geçmiş günü olarak gidip artık kayıtta olmayan tarih: o tarihin LafPOS raporu, yoksa boş gün gider
     const histGone = new Set(histDirty ? (st.historyDates ?? []).filter((d) => !histByDate.has(d) && d >= oldest && d < today) : []);
     const block = historyBlockOf(hist);
-    const dates = [...new Set([...liveDates, ...batch, ...histDue, ...histGone])].filter((d) => d >= oldest && d <= today);
+    const dates = [...new Set([...liveDates, ...batch, ...histDue, ...histGone, ...removedDue])].filter((d) => d >= oldest && d <= today);
     // Boş tur (canlı bakışın sırası gelmedi, tarama bitti): veritabanına yazılmaz
     if (!dates.length && st.sweptAt === sweptBefore && !histDirty) return { sent: 0, queued: st.queue.length };
     const changed: { date: string; hash: string; report: RemoteDayReport }[] = [];
     for (const date of dates) {
       const h = histByDate.get(date);
-      const report = h ? historyDayReport(h, hist!.kaynak, block, now) : (buildDayReport(date, now) ?? (histGone.has(date) ? emptyDayReport(date, now) : null));
+      // Sıra: geçmiş ciro günü, LafPOS günü; ikisi de yoksa ve tarih kasada silindiyse ya da daha önce gönderildiyse
+      // boş gün (bulutta eski rapor kalmasın). Gerçek günü ya da geçmiş günü olan tarih hiç boşaltılmaz
+      const report = h ? historyDayReport(h, hist!.kaynak, block, now) : (buildDayReport(date, now) ?? (histGone.has(date) || removed.has(date) || st.sent[date] ? emptyDayReport(date, now) : null));
       if (!report) continue;
       const hash = dayHash(report);
       if (st.sent[date] !== hash) changed.push({ date, hash, report });
@@ -414,6 +446,14 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     // Bu sırada durum sıfırlandıysa ("Yeniden gönder") eski durum yazılmaz; sıfır durumla tarama baştan başlar
     if (myGen !== generation) return { sent, queued: st.queue.length };
     setSyncState(STATE_KEY, st);
+    // Raporu giden (ya da zaten aynısı gitmiş) silinen tarih listeden düşer. Liste ağ beklenirken büyümüş olabilir
+    // (yeni silme): beklemeden yeniden okunup yazılır
+    const done = new Set(dates.filter((d) => removed.has(d) && !failed.has(d)));
+    if (removed.size) {
+      const list = getSyncState<string[]>(REMOVED_KEY) ?? [];
+      const left = list.filter((d) => d >= oldest && !done.has(d));
+      if (left.length !== list.length) setSyncState(REMOVED_KEY, left);
+    }
     return { sent, queued: st.queue.length };
   } finally {
     busy = false;

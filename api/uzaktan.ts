@@ -6,9 +6,9 @@
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
  * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
  * isteğe bağlı YEMEKSEPETI_<ŞUBE>_REMOTE_ID (ve eski öneksiz YEMEKSEPETI_REMOTE_ID; yalnız bu restoranların
- * siparişleri). Getir aktarıcısı (`/api/getir/*`):
+ * siparişleri, her restoranın kendi gelen kutusu). Getir aktarıcısı (`/api/getir/*`):
  * GETIR_WEBHOOK_SECRET (bizim ürettiğimiz, Getir'e x-api-key olarak verilen anahtar, en az 16, öteki anahtarlardan
- * ayrı), isteğe bağlı GETIR_RESTAURANT_ID.
+ * ayrı), isteğe bağlı GETIR_<ŞUBE>_RESTAURANT_ID (ve eski öneksiz GETIR_RESTAURANT_ID; Yemeksepeti'ndeki gibi).
  * Uzaktan yönetim (`/api/kontrol/*`, api/_kontrol.ts; docs/UZAKTAN-YONETIM.md): sahip ve panele eklediği yönetici
  * kasaya değişiklik gönderir; komut kuyruğa girer, kasa Merkez nabzıyla alır. Görünümün geri kalanı salt okunurdur.
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
@@ -456,6 +456,12 @@ export async function platformKeys(req: Request, url: URL): Promise<Response> {
  * kasa listeyi kafe anahtarıyla imzalı olarak çeker (`GET /api/<platform>/inbox`) ve işlediğini siler
  * (`POST /api/<platform>/inbox/ack`). İptal bildirimleri ayrı listede: kasanın beklettiği siparişler (Kapalı) önlerini
  * tıkamasın, önce onlar verilir. Kabul, ret ve aşamalar kasadan platforma gider (server/delivery/*.ts).
+ *
+ * Gelen kutusu restorana (şubeye) ayrılır: platformdaki restoran kimliği (Yemeksepeti remoteId, Getir restaurant.id)
+ * ortamda tanımlıysa kayıt o restoranın kendi listelerine girer, kasa imzalı sorguda kendi kimliğini (`?restoran=`)
+ * verir ve yalnız onları çeker ve siler (başka şubenin siparişine dokunamaz). Kimlik ortamda yoksa (süzgeç yok) eski
+ * ortak listeler kullanılır. Komut sayısı ortak listeyle aynı (iki liste); yalnız sorgusuz eski kasa güncellenene dek
+ * ortak listeyle birlikte bütün restoranlarınkini okur (docs/07-UZAKTAN-ERISIM.md, Upstash bütçesi)
  */
 /** Sipariş belirteci en çok 512 karakter (Delivery Hero order.yaml; Getir kimliği 24 karakter) */
 const INBOX_TOKEN_MAX = 512;
@@ -467,6 +473,57 @@ const INBOX_STATUS_MAX_BYTES = 8 * 1024;
 /** Kasanın bir çekimde aldığı en çok kayıt ve bayt (Vercel yanıt sınırının altında) */
 const INBOX_PULL_MAX = 50;
 const INBOX_PULL_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Bir platformun iki listesi: iptal ve durum bildirimleri, siparişler */
+interface InboxLists {
+  status: string;
+  inbox: string;
+}
+
+/**
+ * Restoranın kendi listeleri: adda kimliğin SHA-256 özetinin ilk 16 hanesi (ham kimlik anahtara girmez, uzunluk
+ * sabit). Örnek: `lafpos:ys:inbox:r:<özet>`
+ */
+export function restaurantLists(base: InboxLists, id: string): InboxLists {
+  const h = createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16);
+  return { status: `${base.status}:r:${h}`, inbox: `${base.inbox}:r:${h}` };
+}
+
+/** Kaydın gideceği listeler: restoranın kimliği ortamda tanımlıysa kendi listeleri, değilse ortak eski listeler */
+export function pushLists(base: InboxLists, known: ReadonlySet<string>, id: unknown): InboxLists {
+  return typeof id === 'string' && known.has(id) ? restaurantLists(base, id) : base;
+}
+
+/**
+ * Kasanın çektiği ve sildiği listeler (önce iptaller): imzalı sorgudaki restoran ortamda tanımlıysa yalnız onun iki
+ * listesi, tanımlı değilse ortak iki liste. Sorgusuz eski kasa ortak listelerle birlikte bütün tanımlı restoranlarınkini
+ * görür: güncellenene dek siparişi kaçmasın (eskisi gibi hepsini çeker)
+ */
+export function pullLists(base: InboxLists, known: ReadonlySet<string>, restoran: string | null): string[] {
+  if (restoran != null) {
+    const own = pushLists(base, known, restoran);
+    return [own.status, own.inbox];
+  }
+  const all = [base, ...[...known].sort().map((id) => restaurantLists(base, id))];
+  return [...all.map((l) => l.status), ...all.map((l) => l.inbox)];
+}
+
+/** Kasanın imzalı sorgusundaki restoran kimliği (`?restoran=`); yoksa ya da boşsa null (eski kasa) */
+const restoranOf = (url: URL): string | null => url.searchParams.get('restoran')?.trim() || null;
+
+/**
+ * Ortamda tanımlı restoran kimlikleri: öneksiz eski ad (`legacy`) ve her şubenin `<PLATFORM>_<ŞUBE>_<ALAN>` adı
+ * (`pattern`). Boşlar atılır; hiçbiri yoksa süzgeç yok (her kimlik kabul, kayıt ortak listeye)
+ */
+function envIds(legacy: string, pattern: RegExp): Set<string> {
+  const ids = new Set<string>();
+  for (const [name, value] of Object.entries(process.env)) {
+    if (name !== legacy && !pattern.test(name)) continue;
+    const id = (value ?? '').trim();
+    if (id) ids.add(id);
+  }
+  return ids;
+}
 
 /** Kaydın yaşı süreyi aştı mı (`receivedAt`; okunamayan kayıt yaşlı sayılmaz, bozuksa çekimde silinir) */
 const aged = (raw: string, maxAgeMs: number | undefined, now: number) => {
@@ -503,14 +560,17 @@ async function inboxPush(item: Record<string, unknown>, key: string, maxAgeMs?: 
 /**
  * Kasanın çekimi ve silmesi (kafe anahtarıyla imzalı, LAFPOS_CLOUD_SECRET): `GET <prefix>/inbox` önce durum (iptal)
  * listesini sonra siparişleri verir (en çok 50 kayıt ve 2 MB; bozuk ya da tek başına sınırı aşan kayıt silinir),
- * `POST <prefix>/inbox/ack` {ids} işlenenleri siler. `maxAgeMs` verilmişse süresi geçmiş kayıt verilmez, silinir. Yol bu
- * ikisinden değilse null
+ * `POST <prefix>/inbox/ack` {ids} işlenenleri siler. İkisi de `lists`'in verdiği listelerde (`pullLists`: kasanın
+ * restoranınınkiler), başka restoranın listesine dokunmaz. `maxAgeMs` verilmişse süresi geçmiş kayıt verilmez, silinir.
+ * Yol bu ikisinden değilse null
  */
-async function inboxRoutes(req: Request, url: URL, path: string, prefix: string, keys: readonly string[], maxAgeMs?: number): Promise<Response | null> {
+async function inboxRoutes(req: Request, url: URL, path: string, prefix: string, lists: () => readonly string[], maxAgeMs?: number): Promise<Response | null> {
   if (path !== `${prefix}/inbox` && path !== `${prefix}/inbox/ack`) return null;
   if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
   const body = await req.text();
   if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+  // Kasanın restoranının listeleri (eski kasada ortak listeyle bütün restoranlarınki): çekim ve silme aynı listelerde
+  const keys = lists();
   if (path === `${prefix}/inbox` && req.method === 'GET') {
     const items: unknown[] = [];
     let bytes = 0;
@@ -570,8 +630,7 @@ async function inboxRoutes(req: Request, url: URL, path: string, prefix: string,
  * verilen anahtarla imzalı bir JWT taşır. Sipariş `remoteOrderId` (= sipariş belirteci) ile saniyeler içinde
  * onaylanır. Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
  */
-const YS_INBOX_KEY = 'lafpos:ys:inbox';
-const YS_STATUS_KEY = 'lafpos:ys:status';
+const YS_LISTS: InboxLists = { status: 'lafpos:ys:status', inbox: 'lafpos:ys:inbox' };
 
 /** Delivery Hero'nun JWT'si: HS512 (ya da HS256), `service: middleware` iddiası, süresi varsa geçmemiş */
 export function verifyMiddlewareJwt(secret: string, authorization: string | null, nowMs = Date.now()): boolean {
@@ -598,24 +657,17 @@ export function verifyMiddlewareJwt(secret: string, authorization: string | null
 /**
  * Aktarıcının kabul ettiği restoranlar: öneksiz eski `YEMEKSEPETI_REMOTE_ID` ve her şubenin
  * `YEMEKSEPETI_<ŞUBE>_REMOTE_ID`'si (platform anahtarları şubeye göre; sahip `YEMEKSEPETI_MARINA_REMOTE_ID` girer). Boşlar
- * atılır; hiçbiri yoksa süzgeç yok (her remoteId kabul). Gelen kutusu şubeler arasında ortak (docs/KALANLAR.md)
+ * atılır; hiçbiri yoksa süzgeç yok (her remoteId kabul, kayıt ortak listeye). Tanımlı her restoranın kendi gelen kutusu
+ * var (`pushLists`); kasa kimliğini aynı ortam değişkeninden alır (`GET /api/uzaktan/anahtarlar?sube=`)
  */
-export function yemeksepetiRemoteIds(): Set<string> {
-  const ids = new Set<string>();
-  for (const [name, value] of Object.entries(process.env)) {
-    if (name !== 'YEMEKSEPETI_REMOTE_ID' && !/^YEMEKSEPETI_[A-Z0-9]{1,32}_REMOTE_ID$/.test(name)) continue;
-    const id = (value ?? '').trim();
-    if (id) ids.add(id);
-  }
-  return ids;
-}
+export const yemeksepetiRemoteIds = (): Set<string> => envIds('YEMEKSEPETI_REMOTE_ID', /^YEMEKSEPETI_[A-Z0-9]{1,32}_REMOTE_ID$/);
 
 async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
   const pluginSecret = env('YEMEKSEPETI_PLUGIN_SECRET');
   const wantRemote = yemeksepetiRemoteIds();
   const now = Date.now();
   // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (LAFPOS_CLOUD_SECRET)
-  const inbox = await inboxRoutes(req, url, path, 'yemeksepeti', [YS_STATUS_KEY, YS_INBOX_KEY]);
+  const inbox = await inboxRoutes(req, url, path, 'yemeksepeti', () => pullLists(YS_LISTS, wantRemote, restoranOf(url)));
   if (inbox) return inbox;
   // Delivery Hero'nun itmesi: JWT
   if (!pluginSecret) return fail(503, 'Yemeksepeti aktarıcısı kurulmamış (YEMEKSEPETI_PLUGIN_SECRET)', 'not_configured');
@@ -633,7 +685,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
       return json({ reason: 'TECHNICAL_PROBLEM', message: 'json-not-readable' }, 400);
     }
     if (typeof dh.token !== 'string' || !dh.token || dh.token.length > INBOX_TOKEN_MAX) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
-    if (!(await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh }, YS_INBOX_KEY))) {
+    if (!(await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh }, pushLists(YS_LISTS, wantRemote, remoteId).inbox))) {
       return json({ reason: 'TECHNICAL_PROBLEM', message: 'inbox-full' }, 503);
     }
     // remoteOrderId: siparişin kasadaki kimliği olarak belirtecin kendisi (tekil); durum bildirimleri bununla gelir
@@ -657,7 +709,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     // Kasa yalnız iptali kullanır; ötekiler (kurye geldi, alındı, uyarılar) kutuyu doldurmasın
     if (dh.status !== 'ORDER_CANCELLED') return json({ ok: true });
     const item = { id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId, status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' };
-    if (!(await inboxPush(item, YS_STATUS_KEY))) return fail(503, 'inbox-full', 'inbox_full');
+    if (!(await inboxPush(item, pushLists(YS_LISTS, wantRemote, remoteId).status))) return fail(503, 'inbox-full', 'inbox_full');
     return json({ ok: true });
   }
   return fail(404, 'Yok', 'not_found');
@@ -675,8 +727,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
  * etkinlik olmasa da hiçbir kayıt 2 günden uzun kalmaz. Kabul, ret ve aşamalar kasadan Getir'e gider
  * (server/delivery/getir.ts).
  */
-const GETIR_INBOX_KEY = 'lafpos:getir:inbox';
-const GETIR_STATUS_KEY = 'lafpos:getir:status';
+const GETIR_LISTS: InboxLists = { status: 'lafpos:getir:status', inbox: 'lafpos:getir:inbox' };
 const GETIR_SECRET_MIN = 16;
 /**
  * Getir kaydı kayıt başına 1 gün (Getir siparişi 5 dk'da yanıt ister; eskisi işe yaramaz), liste süresi de 1 gün:
@@ -695,6 +746,13 @@ function getirKey(): string {
   if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET')) return '';
   return key;
 }
+
+/**
+ * Aktarıcının kabul ettiği Getir restoranları: öneksiz eski `GETIR_RESTAURANT_ID` ve her şubenin
+ * `GETIR_<ŞUBE>_RESTAURANT_ID`'si (Yemeksepeti'ndeki gibi). Hiçbiri yoksa süzgeç yok (kayıt ortak listeye); tanımlı her
+ * restoranın kendi gelen kutusu var. Kasa kimliğini Getir girişinde öğrenir (server/delivery/getir.ts)
+ */
+export const getirRestaurantIds = (): Set<string> => envIds('GETIR_RESTAURANT_ID', /^GETIR_[A-Z0-9]{1,32}_RESTAURANT_ID$/);
 
 type GetirPush = { id?: unknown; deliveryType?: unknown; restaurant?: { id?: unknown }; client?: Record<string, unknown>; courier?: unknown; cancelNote?: unknown; cancelReason?: { messages?: { tr?: unknown; en?: unknown } } };
 
@@ -722,7 +780,8 @@ export function verifyApiKey(expected: string, given: string | null): boolean {
 async function getir(req: Request, url: URL, path: string): Promise<Response> {
   const now = Date.now();
   // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (LAFPOS_CLOUD_SECRET)
-  const inbox = await inboxRoutes(req, url, path, 'getir', [GETIR_STATUS_KEY, GETIR_INBOX_KEY], GETIR_MAX_AGE_MS);
+  const wantRestaurant = getirRestaurantIds();
+  const inbox = await inboxRoutes(req, url, path, 'getir', () => pullLists(GETIR_LISTS, wantRestaurant, restoranOf(url)), GETIR_MAX_AGE_MS);
   if (inbox) return inbox;
   // Getir'in itmesi: x-api-key
   const key = getirKey();
@@ -738,18 +797,20 @@ async function getir(req: Request, url: URL, path: string): Promise<Response> {
     return fail(400, 'json-not-readable', 'bad_body');
   }
   if (!order || typeof order !== 'object' || typeof order.id !== 'string' || !order.id || order.id.length > INBOX_TOKEN_MAX) return fail(400, 'order id', 'bad_body');
-  const wantRestaurant = env('GETIR_RESTAURANT_ID');
-  if (wantRestaurant && order.restaurant?.id !== wantRestaurant) return fail(400, 'Unknown restaurant', 'bad_restaurant');
+  const restaurantId = typeof order.restaurant?.id === 'string' && order.restaurant.id.length <= INBOX_TOKEN_MAX ? order.restaurant.id : undefined;
+  if (wantRestaurant.size && !(restaurantId && wantRestaurant.has(restaurantId))) return fail(400, 'Unknown restaurant', 'bad_restaurant');
+  const lists = pushLists(GETIR_LISTS, wantRestaurant, restaurantId);
   const id = randomBytes(9).toString('base64url');
   if (path === 'getir/order') {
-    if (!(await inboxPush({ id, kind: 'order', receivedAt: now, order: slimGetirOrder(order) }, GETIR_INBOX_KEY, GETIR_MAX_AGE_MS, GETIR_LIST_TTL_S))) return fail(503, 'inbox-full', 'inbox_full');
+    if (!(await inboxPush({ id, kind: 'order', receivedAt: now, order: slimGetirOrder(order) }, lists.inbox, GETIR_MAX_AGE_MS, GETIR_LIST_TTL_S))) return fail(503, 'inbox-full', 'inbox_full');
     return json({ ok: true });
   }
   const msg = order.cancelReason?.messages;
   const reason = typeof msg?.tr === 'string' ? msg.tr : typeof msg?.en === 'string' ? msg.en : '';
-  // Yalnız kimlik ve neden (seçenek metni): müşterinin ya da temsilcinin serbest metin notu kişisel veri taşıyabilir, kasa okumaz
-  const item = { id, kind: 'cancel', receivedAt: now, orderId: order.id, reason: reason.slice(0, 500) };
-  if (!(await inboxPush(item, GETIR_STATUS_KEY, GETIR_MAX_AGE_MS, GETIR_LIST_TTL_S))) return fail(503, 'inbox-full', 'inbox_full');
+  // Yalnız kimlik ve neden (seçenek metni): müşterinin ya da temsilcinin serbest metin notu kişisel veri taşıyabilir, kasa
+  // okumaz. Restoran kimliği de: ortak listede kasa başka restoranın iptalini ayırır, silmez
+  const item = { id, kind: 'cancel', receivedAt: now, orderId: order.id, reason: reason.slice(0, 500), ...(restaurantId ? { restaurantId } : {}) };
+  if (!(await inboxPush(item, lists.status, GETIR_MAX_AGE_MS, GETIR_LIST_TTL_S))) return fail(503, 'inbox-full', 'inbox_full');
   return json({ ok: true });
 }
 

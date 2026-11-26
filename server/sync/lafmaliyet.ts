@@ -357,8 +357,31 @@ function refundsOf(dayId: string) {
     .map((p) => ({ amount: toTL(p.amount - (rewritten.get(p.id) ?? 0)), zField: p.zField, name: p.methodName, channel: channels.get(p.methodId) ?? null, reason: cap(p.refundReason) }));
 }
 
-/** Sözleşme §4: bir iş gününün paketi (tutarlar TL) */
-export function buildDayPayload(dayId: string) {
+/**
+ * Gün kapanınca Pavo'nun banka gün sonu bekleniyorsa ilk gövde en çok bu kadar tutulur (25 Kasım 2026): gün sonu bitince
+ * (alındı, alınamadı ya da atlandı; okc/service.ts saveEod) gün sonucuyla hemen gider ve lafmaliyet tek e-posta gönderir.
+ * Bitmezse tutulan gövde bu sürenin sonunda `bankPosPending: true` ile gider; lafmaliyet kısa bekler, e-postayı yine
+ * gönderir. 24 Kasım'da gün sonu 58 sn sürdü; cihazın üst sınırı 30 + 180 sn (pavoTiming)
+ */
+export const EOD_FIRST_PUSH_HOLD_MS = 150_000;
+
+/**
+ * lafmaliyet'in gün sonu e-postası Pavo'yu beklesin mi (`bankPosPending`; docs/03-ENTEGRASYON.md §4.9): yalnız Pavo
+ * seçiliyken gider. Kapanışta (`atClose`) otomatik gün sonu başlayacaksa true; sonra günün kaydına göre: sürüyorsa true,
+ * bittiyse ya da atlandıysa (ya da hiç denenmediyse) false
+ */
+function bankPosPendingOf(dayId: string, atClose?: boolean): boolean | undefined {
+  if (getSettings().okcProvider !== 'pavo') return undefined;
+  const eod = getSyncState<Pick<PavoEodRecord, 'status'>>(`pavo.eod.${dayId}`);
+  if (eod) return eod.status === 'running';
+  return atClose === true;
+}
+
+/**
+ * Sözleşme §4: bir iş gününün paketi (tutarlar TL). `eodAtClose`: gün şimdi kapandı ve Pavo'nun otomatik gün sonu
+ * başlayacak (`bankPosPending` için; verilmezse günün kaydından)
+ */
+export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = {}) {
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day) throw notFound('Gün');
   const summary = day.summary ?? computeSummary(db, day);
@@ -450,6 +473,12 @@ export function buildDayPayload(dayId: string) {
     revision: revisionOf(day.date),
     ...(correction ? { correction } : {}),
     ...(bankPos ? { bankPos } : {}),
+    // Pavo'nun sonucu birazdan gelecek mi (Pavo seçiliyken, sonuç henüz gövdede yokken): lafmaliyet gün sonu e-postasını
+    // yalnız true'da bekletir; sonuç gövdedeyse alan gitmez (beklenecek bir şey yok)
+    ...(() => {
+      const pending = bankPos ? undefined : bankPosPendingOf(day.id, opts.eodAtClose);
+      return pending === undefined ? {} : { bankPosPending: pending };
+    })(),
     // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel yalnız kendi şubesinin (marina) gününü alır, başkasına 409
     // wrong_branch (docs/03-ENTEGRASYON.md §4). Gönderirken güncel ayardan yeniden yazılır (sendDue)
     sube: getSettings().branchId,
@@ -814,17 +843,18 @@ const notConfigured = () => conflict('lafmaliyet bağlantısı tanımlı değil 
  * Günün paketini giden kutusuna koyar (aynı günün bekleyen paketi varsa yerine geçer). Bağlantı yoksa, kurulum
  * modundaysa ya da gün eğitim günüyse hiçbir şey yapmaz ve `null` döner; koyunca günün anahtarını (`gun:<tarih>`).
  */
-export function enqueueDay(dayId: string): string | null {
+export function enqueueDay(dayId: string, opts: { eodAtClose?: boolean; holdMs?: number } = {}): string | null {
   if (!configured() || trainingDayNow()) return null;
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (day && !realDay(day)) return null;
-  const payload = buildDayPayload(dayId);
+  const payload = buildDayPayload(dayId, { eodAtClose: opts.eodAtClose });
   const key = `gun:${payload.date}`;
   const now = Date.now();
   tx((t) => {
-    // Yoldaki (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, sıra ve düzeltme ona göre (sendDue)
+    // Yoldaki (yanıtı beklenen) kayıt silinmez: 200 alırsa gönderilmiş sayılır, sıra ve düzeltme ona göre (sendDue).
+    // Tutulan ilk gövde (Pavo bekleniyor) de böyle değişir: gün sonu bitince gelen yeni gövde onun yerine hemen gider
     dropPending(t, 'lafmaliyet', key);
-    t.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now }).run();
+    t.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now + (opts.holdMs ?? 0) }).run();
   });
   return key;
 }
@@ -1358,9 +1388,14 @@ export async function pullCostsIfStale(now = Date.now()): Promise<boolean> {
   }
 }
 
-/** Gün sonu alınınca (kasadan ya da otomatik): gün lafmaliyet'e gider, maliyetler günde bir yenilenir */
-export function afterDayClosed(dayId: string) {
-  if (enqueueDay(dayId)) void flushOutbox();
+/**
+ * Gün sonu alınınca (kasadan ya da otomatik): gün lafmaliyet'e gider, maliyetler günde bir yenilenir. `eodExpected`:
+ * Pavo'nun otomatik banka gün sonu şimdi başlayacak (okc/service.ts autoEodExpected); o zaman gövde gün sonu bitene dek
+ * en çok EOD_FIRST_PUSH_HOLD_MS tutulur (sonuçla tek gövde, tek e-posta), sonra yine gider
+ */
+export function afterDayClosed(dayId: string, opts: { eodExpected?: boolean } = {}) {
+  if (opts.eodExpected) enqueueDay(dayId, { eodAtClose: true, holdMs: EOD_FIRST_PUSH_HOLD_MS });
+  else if (enqueueDay(dayId)) void flushOutbox();
   void pullCostsIfStale();
 }
 
