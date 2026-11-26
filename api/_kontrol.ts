@@ -10,11 +10,11 @@
  * sokamaz, bir şubenin komutunu başkasına taşıyamaz, rolü değiştiremez. Kasa rolü ve hedefin gerçek rolünü yeniden
  * denetler (bulutun özeti eski olabilir). Panel yalnız satırları görür; komutun verisi (şifreli PIN) ve imzası dönmez.
  *
- * Redis, kurulum kimliğiyle: `lafpos:kontrol:komut:<id>` (HASH, kimlik → KomutKaydi), `…:var:<id>` (kuyrukta komut var),
+ * Redis, kurulum kimliğiyle: `${REDIS_ONEKI}kontrol:komut:<id>` (HASH, kimlik → KomutKaydi), `…:var:<id>` (kuyrukta komut var),
  * `…:teslim:<id>` (kasaya giden son komutun anı: kasaya ulaşan komut iptal edilmez), `…:durum:<id>` (kasanın son özeti),
  * `…:ozet:<id>` (onun parmak izi), `…:gecmis:<id>` (LIST, bitmiş işlemler), `…:sayac:<id>:<saat>:<üye>`. Panel üyeleri:
- * `lafpos:uye:<e-posta>` (kayıt; rol yalnız davetle gelende), `lafpos:uye-davet:<e-posta>` (davet: kodun özeti, 7 gün),
- * `lafpos:uyeler` (davet edilenlerin kümesi).
+ * `${REDIS_ONEKI}uye:<e-posta>` (kayıt; rol yalnız davetle gelende), `${REDIS_ONEKI}uye-davet:<e-posta>` (davet: kodun özeti, 7 gün),
+ * `${REDIS_ONEKI}uyeler` (davet edilenlerin kümesi).
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
@@ -54,6 +54,7 @@ import {
 } from '../shared/kontrol.js';
 import { ONLINE_MS } from '../shared/lisans.js';
 import { ROLE_DEFAULTS, ROLES, type Role } from '../shared/permissions.js';
+import { REDIS_ONEKI } from '../shared/eski-adlar.js';
 
 type Redis = (...cmd: (string | number)[]) => Promise<unknown>;
 
@@ -109,24 +110,24 @@ const SAHIP_PAYI = 10;
  */
 const TESLIM_PAYI_MS = 2_000;
 
-const komutKey = (id: string) => `lafpos:kontrol:komut:${id}`;
-const varKey = (id: string) => `lafpos:kontrol:var:${id}`;
-const teslimKey = (id: string) => `lafpos:kontrol:teslim:${id}`;
-const durumKey = (id: string) => `lafpos:kontrol:durum:${id}`;
-const ozetKey = (id: string) => `lafpos:kontrol:ozet:${id}`;
-const gecmisKey = (id: string) => `lafpos:kontrol:gecmis:${id}`;
+const komutKey = (id: string) => `${REDIS_ONEKI}kontrol:komut:${id}`;
+const varKey = (id: string) => `${REDIS_ONEKI}kontrol:var:${id}`;
+const teslimKey = (id: string) => `${REDIS_ONEKI}kontrol:teslim:${id}`;
+const durumKey = (id: string) => `${REDIS_ONEKI}kontrol:durum:${id}`;
+const ozetKey = (id: string) => `${REDIS_ONEKI}kontrol:ozet:${id}`;
+const gecmisKey = (id: string) => `${REDIS_ONEKI}kontrol:gecmis:${id}`;
 /** Saatlik sayaç üye başına: bir üye (ya da ele geçirilmiş hesabı) sınırı doldurup başkasını bekletemez */
-const sayacKey = (id: string, saat: number, kim: string) => `lafpos:kontrol:sayac:${id}:${saat}:${kim}`;
+const sayacKey = (id: string, saat: number, kim: string) => `${REDIS_ONEKI}kontrol:sayac:${id}:${saat}:${kim}`;
 /**
  * Merkez kurulum kimliği ve kaydı: api/_merkez.ts ID_RE ve anahtarlarıyla aynı. O dosya nabız için bunu içe aktardığından
  * burada yeniden tanımlı (döngü olmasın); eşitliği tests/kontrol-bulut.test.ts denetler
  */
 export const KURULUM_RE = /^[a-z0-9]{20,40}$/;
-const merkezKeys = (id: string) => [`lafpos:merkez:kurulum:${id}`, `lafpos:merkez:durum:${id}`];
+const merkezKeys = (id: string) => [`${REDIS_ONEKI}merkez:kurulum:${id}`, `${REDIS_ONEKI}merkez:durum:${id}`];
 
-export const uyeKey = (eposta: string) => `lafpos:uye:${eposta}`;
-export const davetKey = (eposta: string) => `lafpos:uye-davet:${eposta}`;
-export const UYELER_KEY = 'lafpos:uyeler';
+export const uyeKey = (eposta: string) => `${REDIS_ONEKI}uye:${eposta}`;
+export const davetKey = (eposta: string) => `${REDIS_ONEKI}uye-davet:${eposta}`;
+export const UYELER_KEY = `${REDIS_ONEKI}uyeler`;
 
 // ─── Yardımcılar ─────────────────────────────────────────────────────────────
 

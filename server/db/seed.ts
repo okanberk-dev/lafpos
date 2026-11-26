@@ -7,6 +7,7 @@ import { ulid } from '../lib/ids';
 import { updateSettings } from '../lib/settings';
 import { applyMenu, type SiteMenu } from '../sync/laffogato-menu';
 import { db, runMigrations, schema, tx } from './client';
+import { posEnv } from '@shared/pos-env';
 
 /**
  * Deneme modunda giriş ekranında görünen örnek personel ve PIN'leri: kafede her rolü denemek için. "Denemeyi bitir,
@@ -32,7 +33,7 @@ export const DEMO_USERS = [
  * Demonun ilk gününün satışları ayrıca demo/scenario.ts'ten gerçek uçlarla girilir.
  */
 export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
-  const demo = opts.demo ?? (typeof process !== 'undefined' && process.env?.LAFPOS_DEMO_SEED === '1');
+  const demo = opts.demo ?? (typeof process !== 'undefined' && posEnv(process.env ?? {}, 'DEMO_SEED') === '1');
   const row = db.select({ n: sql<number>`count(*)` }).from(schema.users).get();
   if ((row?.n ?? 0) > 0) return false;
 

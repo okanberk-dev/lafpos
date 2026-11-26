@@ -1,5 +1,6 @@
 import { Building2, Download, MonitorCog } from 'lucide-react';
 import type { NavItem } from './nav';
+import { GITHUB_DEPOSU } from '@shared/eski-adlar';
 
 /**
  * Siteden kurulum (LafPOS Uzaktan › İndir, yalnız girişten sonra görünür). Web kurucusu kanal derlemesinin yanında
@@ -9,7 +10,7 @@ export const DOWNLOAD_PATH = '/indir';
 export const WEB_INSTALLER_NAME = 'LafPOS-Kur.cmd';
 export const WEB_INSTALLER_PATH = `/guncelleme/${WEB_INSTALLER_NAME}`;
 /** Tam kurulum dosyası: özel depo, GitHub hesabıyla */
-export const RELEASES_URL = 'https://github.com/okanberk-dev/lafpos/releases/latest';
+export const RELEASES_URL = `https://github.com/${GITHUB_DEPOSU}/releases/latest`;
 
 /** Uzaktan menüsünün son öğesi; yetki istemez (oturum yeter) */
 export const DOWNLOAD_NAV: NavItem = {

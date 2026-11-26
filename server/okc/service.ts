@@ -43,6 +43,7 @@ import { findPavo } from './pavo-bul';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
 import { describe as describePavo, PAIRING_LOST_MESSAGE, pairingLost, pavoAddress, PavoError, pavoSerial } from './pavo';
 import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
+import { PAVO_TABAN_KASA } from '@shared/eski-adlar';
 
 /**
  * Yazarkasa POS (ÖKC) bağlantısı. Sağlayıcılar `providers/` altında (Token, eğitim cihazı...); burası markadan
@@ -1210,7 +1211,7 @@ function markEodRunning(rec: PavoEodRecord) {
  * eşleştirme bozulmuşsa (73, 74) hata atar: gün sonu gönderilmez
  */
 async function deviceBaseline(c: NonNullable<ReturnType<typeof pavo>>): Promise<EodBaseline> {
-  const stored: EodBaseline = { prevBatchNo: getSyncState<string>(EOD_BATCH), prevBatchFrom: 'lafpos' };
+  const stored: EodBaseline = { prevBatchNo: getSyncState<string>(EOD_BATCH), prevBatchFrom: PAVO_TABAN_KASA };
   try {
     return readEodBaseline(await c.eodCopy(undefined, pavoTiming.eodCopyMs)) ?? stored;
   } catch (e) {
@@ -1248,7 +1249,7 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
     dayClosed,
     earlier,
     prevBatchNo: getSyncState<string>(EOD_BATCH),
-    prevBatchFrom: 'lafpos',
+    prevBatchFrom: PAVO_TABAN_KASA,
   };
   const blocked = eodBlocker(!opts.manual) ?? (opts.manual ? null : autoEodHeld(dayId));
   if (blocked) {
@@ -1256,7 +1257,7 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
     saveEod(rec, actorId);
     return rec;
   }
-  let baseline: EodBaseline = { prevBatchNo: base.prevBatchNo, prevBatchFrom: 'lafpos' };
+  let baseline: EodBaseline = { prevBatchNo: base.prevBatchNo, prevBatchFrom: PAVO_TABAN_KASA };
   // Hata nerede: gönderimden önce (taban okunamadı: gün sonu gitmedi, kesin) ya da gönderimde
   let stage = 'start' as 'start' | 'baseline' | 'sent';
   let reading: EodReading;

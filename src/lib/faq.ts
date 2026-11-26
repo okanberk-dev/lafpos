@@ -1,4 +1,5 @@
 import type { Permission } from '@shared/permissions';
+import { ALAN_ADI } from '@shared/eski-adlar';
 
 /**
  * Sık sorulan sorular (`/yardim`): kasadaki kişinin ve yöneticinin gerçekten sorduğu sorular. Yanıtlar yalnız kodun ve
@@ -323,7 +324,7 @@ const ENTRIES: Entry[] = [
     show: any('patron.panel'),
     question: 'Kafede değilken rakamlara nasıl bakarım?',
     answer: (c) =>
-      `LafPOS Uzaktan’dan (lafpos.laffogato.net): telefonun tarayıcısından girersiniz; patron paneli, masalar, bar kuyruğu ve raporlar kasadan gelen özetle görünür, işlem yapılmaz.${c.can('rapor.maliyet') ? ' Maliyet ve kâr, PIN’ler ve müşteri telefonları buluta gitmez.' : ' PIN’ler ve müşteri telefonları buluta gitmez.'}`,
+      `LafPOS Uzaktan’dan (${ALAN_ADI}): telefonun tarayıcısından girersiniz; patron paneli, masalar, bar kuyruğu ve raporlar kasadan gelen özetle görünür, işlem yapılmaz.${c.can('rapor.maliyet') ? ' Maliyet ve kâr, PIN’ler ve müşteri telefonları buluta gitmez.' : ' PIN’ler ve müşteri telefonları buluta gitmez.'}`,
   },
 ];
 

@@ -22,8 +22,9 @@ import { splitKdv } from './money.js';
 import { type StatsDayReport, reportStatsDates } from './remote-calc.js';
 import type { RemoteDayReport } from './remote-reports.js';
 import type { PatronStats } from './today-stats.js';
+import { REDIS_ONEKI } from './eski-adlar.js';
 
-export const historyKey = (shop: string) => `lafpos:gecmis:${shop}`;
+export const historyKey = (shop: string) => `${REDIS_ONEKI}gecmis:${shop}`;
 /** Kasada Merkez'den gelen geçmişin sync_state anahtarı (server/sync/merkez.ts yazar, server/sync/modpos.ts birleştirir) */
 export const GECMIS_KEY = 'merkez.gecmis';
 /** Kasada lafmaliyet'ten (ladmin) gelen ModPOS döneminin sync_state anahtarı (server/sync/modpos.ts) */
@@ -33,7 +34,7 @@ export const MODPOS_KEY = 'lafmaliyet.modpos';
  * (api/uzaktan.ts `VERSIONS_KEY`) ayrı alanda durur: geçmişi olmayan dükkânda tek ek Redis komutu çalışmaz, geçmişi
  * olanda kayıt işlev örneği başına bir kez okunur (işaret değişince yeniden)
  */
-export const HISTORY_FLAG_HASH = 'lafpos:surum';
+export const HISTORY_FLAG_HASH = `${REDIS_ONEKI}surum`;
 export const historyFlag = (shop: string) => `gecmis:${shop}`;
 
 export interface HistoryDay {

@@ -10,9 +10,11 @@
  *   hatasını Merkez nabızdan kendisi görür. Bilinmeyen tür 400 alır; kasa onu yeniden denemez (eski sitede yeni tür
  *   kuyruğu tıkamaz).
  * - Anahtarlar: VAPID_PUBLIC_KEY ve VAPID_PRIVATE_KEY (Vercel). Yoksa bildirim kapalıdır, hiçbir şey kırılmaz.
- * - Redis: `lafpos:bildirim:aboneler` (JSON, uç → abonelik), `lafpos:bildirim:son` (son 30 bildirim)
+ * - Redis: `${REDIS_ONEKI}bildirim:aboneler` (JSON, uç → abonelik), `${REDIS_ONEKI}bildirim:son` (son 30 bildirim)
  */
 import webpush from 'web-push';
+import { eskiEnvAdi } from '../shared/pos-env.js';
+import { ALAN_ADI, REDIS_ONEKI } from '../shared/eski-adlar.js';
 
 export interface Notice {
   kind: string;
@@ -40,10 +42,11 @@ export interface BildirimDeps {
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (status: number, error: string, code: string) => json({ error, code }, status);
-const env = (k: string) => (process.env[k] ?? '').trim();
+/** Ortam değişkeni: `ASILPOS_X` verilince Vercel'de eski adla duran değer de okunur (shared/pos-env.ts) */
+const env = (k: string) => (process.env[k] ?? '').trim() || (process.env[eskiEnvAdi(k) ?? ''] ?? '').trim();
 
-const SUBS_KEY = 'lafpos:bildirim:aboneler';
-const LAST_KEY = 'lafpos:bildirim:son';
+const SUBS_KEY = `${REDIS_ONEKI}bildirim:aboneler`;
+const LAST_KEY = `${REDIS_ONEKI}bildirim:son`;
 const MAX_SUBS = 20;
 
 export const pushConfigured = () => !!env('VAPID_PUBLIC_KEY') && !!env('VAPID_PRIVATE_KEY');
@@ -55,7 +58,7 @@ const KIND_TTL_S: Record<string, number> = { kapanis: 3600 };
 
 type Sender = (sub: Sub, payload: string, ttl: number) => Promise<{ statusCode: number }>;
 let sender: Sender = (sub, payload, ttl) => {
-  webpush.setVapidDetails('https://lafpos.laffogato.net', env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
+  webpush.setVapidDetails(`https://${ALAN_ADI}`, env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
   return webpush.sendNotification(sub, payload, { TTL: ttl, urgency: 'high' });
 };
 /** Testler: gönderimi yakalar */

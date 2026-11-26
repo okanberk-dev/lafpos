@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { type DB, schema, type Tx } from '../db/client';
 import { getSyncState } from '../lib/settings';
+import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
  * Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): gün açılırken beklenen nakit önceki gerçek günün devridir. LafPOS'ta gün
@@ -18,7 +19,7 @@ export const OPENING_REASON_MIN = 100;
 /** lafmaliyet'in devri (kuruş): gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı nesne */
 export interface NextOpening {
   amount: number;
-  source: 'kasa_raporu' | 'lafpos';
+  source: 'kasa_raporu' | typeof TEL_KAYNAK;
 }
 
 /** Tembel devir okumasının durumu (sync_state `lafmaliyet.devir`) */
@@ -38,7 +39,7 @@ export interface OpeningExpectation {
   /** Beklenen açılış nakdi (kuruş) */
   amount: number;
   /** `lafmaliyet`: panelin devri; `lafpos`: kasanın kendi sayımı */
-  source: 'lafmaliyet' | 'lafpos';
+  source: 'lafmaliyet' | typeof ACILIS_KASA;
   /** lafmaliyet'in kaynağı (yalnız `source: 'lafmaliyet'`) */
   ladminSource?: NextOpening['source'];
   /** Devrin geldiği gün */
@@ -120,6 +121,6 @@ export function expectedOpening(t: Tx | DB): OpeningExpectation | null {
   const from = { fromDate: day.date, fromZNo: day.zNo, fromDayId: day.id };
   const ladmin = dayPushPending(t, day.date) ? undefined : ladminNextOpening(t, day.date);
   if (ladmin?.value) return { amount: ladmin.value.amount, source: 'lafmaliyet', ladminSource: ladmin.value.source, ...from };
-  if (day.countedCash != null) return { amount: day.countedCash, source: 'lafpos', ...from };
+  if (day.countedCash != null) return { amount: day.countedCash, source: ACILIS_KASA, ...from };
   return null;
 }

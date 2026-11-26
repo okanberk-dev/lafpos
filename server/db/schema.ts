@@ -6,6 +6,7 @@ import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
 import type { CompKind, CompPersonKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 export type { CompKind, ZField, ZSummary };
 
@@ -202,7 +203,7 @@ export const products = sqliteTable(
      * Tükendi'yi kim kapattı: 'lafpos' (kasadan, bardan ya da porsiyon bitince) ya da 'site' (sitede satıştan
      * kalktı, senkron kapattı). Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar; menü yöneticisi hepsini
      */
-    soldOutBy: text('sold_out_by').$type<'lafpos' | 'site'>(),
+    soldOutBy: text('sold_out_by').$type<typeof TUKENDI_KASA | 'site'>(),
     /** POS ekranında gösterme (sitede durabilir) */
     hidden: bool('hidden').notNull().default(false),
     favorite: bool('favorite').notNull().default(false),

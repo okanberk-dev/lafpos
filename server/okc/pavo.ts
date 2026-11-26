@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { TLSSocket } from 'node:tls';
+import { PAVO_KIMLIGI } from '@shared/eski-adlar';
 
 /**
  * Pavo yazarkasa POS (N86 ve diğer PavoPay cihazları) için yerel ağ REST istemcisi.
@@ -143,7 +144,7 @@ export class PavoClient {
     const url = (env.PAVO_URL ?? '').trim().replace(/\/+$/, '');
     const serial = (env.PAVO_SERIAL ?? '').trim();
     if (!/^https?:\/\/[^/\s]+$/.test(url) || !serial) return null;
-    return { url, serial, fingerprint: (env.PAVO_FINGERPRINT ?? '').trim() || 'LafPOS' };
+    return { url, serial, fingerprint: (env.PAVO_FINGERPRINT ?? '').trim() || PAVO_KIMLIGI };
   }
 
   /** Bağlantı denemesi (eşleştirmesiz çalışır) */

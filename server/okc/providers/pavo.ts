@@ -2,6 +2,7 @@ import { parseTL } from '@shared/money';
 import type { MethodKind } from '../basket';
 import { describe, PAIRING_LOST_MESSAGE, pairingLost, PAVO_EOD, PavoClient, PavoError, type PavoResponse, type PavoSale, type PavoSaleItem, type PavoStore } from '../pavo';
 import type { DocKind, FiscalBasket, FiscalPayment, FiscalProvider, FiscalResult, PendingReceipt, PollOutcome } from './types';
+import { PAVO_KIMLIGI, PAVO_TABAN_KASA, PAVO_UYGULAMA } from '@shared/eski-adlar';
 
 /**
  * Pavo (N86 ve diğer PavoPay cihazları) kafenin yerel ağında REST ile. Satış cihaza gider, kasiyer cihazda ödemeyi
@@ -49,7 +50,7 @@ export function usePavoConfig(fn: () => { url: string; serial: string } | null) 
 }
 
 /** Eski kurulumların (kimlik saklanmadan eşleştirilmiş) ve ortamda tanımsızken eşleştirilmemiş kurulumun kimliği */
-export const LEGACY_FINGERPRINT = 'LafPOS';
+export const LEGACY_FINGERPRINT = PAVO_KIMLIGI;
 /** Pavo kimliği biçimi: kısa, harf-rakam-tire (docs/04-YAZARKASA.md §8.1) */
 export const FINGERPRINT_RE = /^[A-Za-z0-9-]{1,32}$/;
 
@@ -181,7 +182,7 @@ export function pavoSale(basket: FiscalBasket, orderNo: string, appVersion = '1'
     }
   }
   return {
-    RefererApp: 'LafPOS',
+    RefererApp: PAVO_UYGULAMA,
     RefererAppVersion: appVersion,
     OrderNo: orderNo,
     MainDocumentType: 1,
@@ -413,7 +414,7 @@ export function eodTimeMs(deviceDateTime: string | null | undefined): number | n
  */
 export interface EodBaseline {
   prevBatchNo: string | null;
-  prevBatchFrom: 'cihaz' | 'bos' | 'lafpos';
+  prevBatchFrom: 'cihaz' | 'bos' | typeof PAVO_TABAN_KASA;
 }
 
 /**

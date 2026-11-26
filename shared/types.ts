@@ -5,6 +5,7 @@ import type { PlatformId } from './platforms';
 import type { ServiceMode } from './service-mode';
 import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
 import type { TableCallDTO } from './site-alerts';
+import { TUKENDI_KASA } from './eski-adlar.js';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -100,7 +101,7 @@ export interface ProductDTO {
   image: string | null;
   active: boolean;
   /** Tükendi'yi kim kapattı: 'site' ise kasiyer açamaz (Sitede satışta değil), yalnız menü yetkisi olan */
-  soldOutBy: 'lafpos' | 'site' | null;
+  soldOutBy: typeof TUKENDI_KASA | 'site' | null;
   hidden: boolean;
   favorite: boolean;
   sort: number;

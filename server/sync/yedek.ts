@@ -9,6 +9,8 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
+import { posEnv } from '@shared/pos-env';
+import { YEDEK_SIFRE_BILGISI } from '@shared/eski-adlar';
 
 /**
  * Otomatik bulut yedeği (docs/05-KASA-BILGISAYARI.md §6 "Bulut yedeği"): günlük veritabanı yedeği kasada sıkıştırılıp
@@ -37,7 +39,7 @@ export interface CloudBackupState {
 export const cloudBackupState = (): CloudBackupState => ({ lastAt: null, lastName: null, lastSize: null, lastError: null, lastDay: null, ...(getSyncState<Partial<CloudBackupState>>(STATE) ?? {}) });
 const saveState = (patch: Partial<CloudBackupState>) => setSyncState(STATE, { ...cloudBackupState(), ...patch });
 
-const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, 'lafpos-yedek-v1', 32));
+const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, YEDEK_SIFRE_BILGISI, 32));
 
 /** Veritabanını sıkıştırıp şifreler: LPY1 | tuz (16) | iv (12) | etiket (16) | şifreli gzip */
 export function sealBackup(db: Buffer, secret: string): Buffer {
@@ -124,7 +126,7 @@ export interface CloudBackup {
 export const listCloudBackups = (dukkan?: string) => cloud<{ shop: string; dukkanlar: string[]; yedekler: CloudBackup[] }>('liste', dukkan ? { dukkan } : {});
 
 /** Kurulum Windows bekçisiyle mi çalışıyor (geri yükleme ancak onunla: veritabanı sunucu dururken değişir) */
-export const underBekci = () => process.env.LAFPOS_STDIN_CONTROL === '1';
+export const underBekci = () => posEnv(process.env, 'STDIN_CONTROL') === '1';
 
 /**
  * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar

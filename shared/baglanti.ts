@@ -1,3 +1,4 @@
+import { ALAN_ADI } from './eski-adlar.js';
 /**
  * Yönetim › Bağlantı bilgileri: kasa bilgisayarının ayarlar dosyasındaki (Windows kurulumunda
  * C:\ProgramData\LafPOS\ayarlar.env) dış sistem adresleri ve anahtarları, panelden girilir. Sunucu yalnız bu listedeki
@@ -47,7 +48,7 @@ export const CONN_GROUPS: ConnGroup[] = [
     title: 'LafPOS Uzaktan',
     desc: 'Uzaktan raporlar, bulut yedeği, lisans, güncelleme seçimi ve telefon bildirimleri',
     fields: [
-      { key: 'LAFPOS_CLOUD_URL', label: 'Adres', kind: 'url', placeholder: 'https://lafpos.laffogato.net' },
+      { key: 'LAFPOS_CLOUD_URL', label: 'Adres', kind: 'url', placeholder: `https://${ALAN_ADI}` },
       { key: 'LAFPOS_CLOUD_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Vercel’deki LAFPOS_CLOUD_SECRET ile aynı, en az 32 karakter' },
     ],
   },

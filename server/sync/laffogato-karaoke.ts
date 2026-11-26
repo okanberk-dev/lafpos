@@ -17,6 +17,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { requireSiteSigned, siteBranch, siteLinked, siteSigned } from './laffogato-link';
+import { SITE_ISTEMCI } from '@shared/eski-adlar';
 
 /**
  * Sitedeki karaoke rezervasyonları (laffogato `GET /api/panel/karaoke`, F1): oda sitede rezerveyken kasada boş
@@ -389,7 +390,7 @@ export async function siteKaraokePrice(now = Date.now()): Promise<SiteKaraokePri
   let value: SiteKaraokePrice;
   try {
     const res = await fetch(`${env.laffogatoUrl}/api/mobile/v1/karaoke/availability`, {
-      headers: { accept: 'application/json', 'user-agent': 'LafPOS/0.1 (+kafe kasasi)' },
+      headers: { accept: 'application/json', 'user-agent': SITE_ISTEMCI },
       signal: AbortSignal.timeout(8000),
     });
     const json = (await res.json().catch(() => null)) as { hourlyMinor?: unknown } | null;

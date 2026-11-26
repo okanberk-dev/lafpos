@@ -8,6 +8,7 @@ import { env } from './env';
 import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
 import { recordRestoreResult } from './sync/yedek';
+import { posEnv } from '@shared/pos-env';
 
 runMigrations();
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; LafPOS deneme modunda (satışlar gerçek sayılmaz)');
@@ -48,7 +49,7 @@ function shutdown() {
   process.exit(0);
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) process.on(sig, shutdown);
-if (process.env.LAFPOS_STDIN_CONTROL === '1') {
+if (posEnv(process.env, 'STDIN_CONTROL') === '1') {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => String(d).includes('kapat') && shutdown());
 }

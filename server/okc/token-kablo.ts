@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { KOPRU_PS1 } from './token-kablo-kopru';
 import type { TokenxBasket, TokenxSale, TokenxSection } from './tokenx';
+import { posEnv } from '@shared/pos-env';
+import { TOKEN_FIRMA } from '@shared/eski-adlar';
 
 /**
  * Token kablolu bağlantı (TokenX Connect Wire / Integration Hub): Beko 300TR ve X30TR kasa bilgisayarına kabloyla
@@ -18,7 +20,7 @@ import type { TokenxBasket, TokenxSale, TokenxSection } from './tokenx';
  * Köprünün klasörü (betik, Token kütüphanesi): kasada C:\ProgramData\LafPOS\token-kablo. Veri klasörü servis bağlar
  * (`useKabloDir`); bu modül ortamı yüklemez (sağlayıcı listesi testlerde ortam ayarlanmadan yüklenir)
  */
-let kabloDir: () => string = () => resolve(process.env.LAFPOS_DATA_DIR ?? 'data', 'token-kablo');
+let kabloDir: () => string = () => resolve(posEnv(process.env, 'DATA_DIR') ?? 'data', 'token-kablo');
 export const TOKEN_KABLO_DIR = () => kabloDir();
 export function useKabloDir(fn: () => string) {
   kabloDir = fn;
@@ -169,7 +171,7 @@ export function powershell32(): string {
 }
 
 const realSpawn: Spawner = (script, dll, cwd) =>
-  spawn(powershell32(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Dll', dll, '-Firma', 'LafPOS'], {
+  spawn(powershell32(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Dll', dll, '-Firma', TOKEN_FIRMA], {
     cwd,
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],

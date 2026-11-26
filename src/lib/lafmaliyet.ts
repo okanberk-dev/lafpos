@@ -4,6 +4,7 @@
  */
 
 import { fmtDateLong } from '@shared/time';
+import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /** lafmaliyet'in gün sonu yanıtından saklananlar (sunucudaki `DayAnswer`); eski lafmaliyet alanları göndermez */
 export interface DayAnswer {
@@ -15,7 +16,7 @@ export interface DayAnswer {
   counted?: boolean;
   switchDay?: string | null;
   /** Ertesi günün beklenen açılışı (TL; kasa zinciri); kasa rakamlarını görmeyene gitmez */
-  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  nextOpening?: { amount: number; source: 'kasa_raporu' | typeof TEL_KAYNAK } | null;
   /** Gövdenin `workedStaffRefs`'inin lafmaliyet'teki karşılığı (§4.8); yalnız personel ya da bağlantı yöneticisine */
   staff?: { counted: string[]; unknown: string[]; otherBranch: string[] };
 }
@@ -54,8 +55,8 @@ export function staffAnswerText(a: DayAnswer, issues: StaffIssues | null | undef
  */
 export interface OpeningSuggestion {
   suggested: number;
-  source: 'lafmaliyet' | 'lafpos';
-  ladminSource?: 'kasa_raporu' | 'lafpos';
+  source: 'lafmaliyet' | typeof ACILIS_KASA;
+  ladminSource?: 'kasa_raporu' | typeof TEL_KAYNAK;
   fromDate: string;
 }
 
@@ -65,9 +66,9 @@ export interface OpeningSuggestion {
  */
 export function openingSourceText(o: Pick<OpeningSuggestion, 'source' | 'ladminSource' | 'fromDate'>): string {
   const day = fmtDateLong(o.fromDate);
-  if (o.source === 'lafpos') return `${day} gün sonu sayımı`;
+  if (o.source === ACILIS_KASA) return `${day} gün sonu sayımı`;
   if (o.ladminSource === 'kasa_raporu') return `${day} devri, lafmaliyet kasa raporundan`;
-  if (o.ladminSource === 'lafpos') return `${day} gün sonu sayımı, lafmaliyet'ten`;
+  if (o.ladminSource === TEL_KAYNAK) return `${day} gün sonu sayımı, lafmaliyet'ten`;
   return `${day} devri, lafmaliyet'ten`;
 }
 

@@ -1,6 +1,7 @@
 import { salePayments } from '../basket';
 import { TOKENX_PAYMENT, TokenxClient, TokenxError, type TokenxSale } from '../tokenx';
 import type { FiscalProvider, FiscalResult, PollOutcome } from './types';
+import { posEnv } from '@shared/pos-env';
 
 /**
  * Token ÖKC'ler (Beko 300TR, X30TR; 400TR e-belge) TokenX Connect Cloud ile. Sepet Token'ın sunucusuna gider,
@@ -17,7 +18,7 @@ export function tokenx(): TokenxClient | null {
 }
 
 export function webhookUrl(): string | null {
-  const base = (process.env.LAFPOS_PUBLIC_URL ?? '').replace(/\/+$/, '');
+  const base = (posEnv(process.env, 'PUBLIC_URL') ?? '').replace(/\/+$/, '');
   return base ? `${base}/api/public/okc/tokenx/webhook` : null;
 }
 

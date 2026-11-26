@@ -1,14 +1,17 @@
+import { posEnv } from '@shared/pos-env';
+
 /**
- * Ortam değişkenlerinden okunan ayarlar. Disk ve Node modülü kullanmaz: tarayıcı demosu da aynısını okur
+ * Ortam değişkenlerinden okunan ayarlar. Kasanın kendi değişkenleri `ASILPOS_*`; kurulu kasadaki eski adlar da okunur
+ * (shared/pos-env.ts). Disk ve Node modülü kullanmaz: tarayıcı demosu da aynısını okur
  * (demo/env.ts); dosya ve klasör ayarları server/env.ts'te.
  */
 export function configFrom(vars: Record<string, string | undefined>) {
   return {
     isProd: vars.NODE_ENV === 'production',
-    port: Number(vars.LAFPOS_PORT ?? 4000),
-    host: vars.LAFPOS_HOST ?? '0.0.0.0',
+    port: Number(posEnv(vars, 'PORT') ?? 4000),
+    host: posEnv(vars, 'HOST') ?? '0.0.0.0',
     /** Oturum süresi (saat) */
-    sessionHours: Number(vars.LAFPOS_SESSION_HOURS ?? 14),
+    sessionHours: Number(posEnv(vars, 'SESSION_HOURS') ?? 14),
 
     /**
      * laffogato (site + mobil uygulama API'si). Varsayılanı yok: yalnız .env'de açıkça yazılınca dolu, boşken LafPOS
@@ -24,13 +27,13 @@ export function configFrom(vars: Record<string, string | undefined>) {
     lafmaliyetToken: (vars.LAFMALIYET_SYNC_SECRET ?? '').trim(),
 
     /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
-    cloudUrl: (vars.LAFPOS_CLOUD_URL ?? '').replace(/\/$/, ''),
-    cloudSecret: (vars.LAFPOS_CLOUD_SECRET ?? '').trim(),
+    cloudUrl: (posEnv(vars, 'CLOUD_URL') ?? '').replace(/\/$/, ''),
+    cloudSecret: (posEnv(vars, 'CLOUD_SECRET') ?? '').trim(),
     /**
      * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan LafPOS Uzaktan'ın adresi. LAFPOS_MERKEZ_URL=0 kapatır;
      * ikisi de yoksa lisans uygulanmaz ve güncelleme kanalın son sürümünü izler (server/sync/merkez.ts)
      */
-    merkezUrl: vars.LAFPOS_MERKEZ_URL?.trim() === '0' ? '' : (vars.LAFPOS_MERKEZ_URL ?? vars.LAFPOS_CLOUD_URL ?? '').trim().replace(/\/+$/, ''),
+    merkezUrl: posEnv(vars, 'MERKEZ_URL')?.trim() === '0' ? '' : (posEnv(vars, 'MERKEZ_URL') ?? posEnv(vars, 'CLOUD_URL') ?? '').trim().replace(/\/+$/, ''),
 
     /**
      * Yemeksepeti (Delivery Hero POS middleware): siparişler LafPOS Uzaktan aktarıcısına (Vercel) iter, kasa oradan çeker

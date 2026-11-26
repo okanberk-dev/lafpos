@@ -17,6 +17,8 @@ import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteBranch, siteLinked, siteSigned, unknownSiteListVersion, wrongSiteBranch } from './laffogato-link';
 import { dropSiteSoldOut, enqueueSiteAvailability, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
 import { applyTableCalls, type PanelCall, parsePanelCalls } from './table-calls';
+import { posEnv } from '@shared/pos-env';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -691,7 +693,7 @@ export function setAvailability(productId: string, active: boolean, actor: { nam
     const fx = new Effects();
     tx((t) => {
       t.update(schema.products)
-        .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
+        .set({ active, soldOutBy: active ? null : TUKENDI_KASA, portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
         .where(eq(schema.products.id, productId))
         .run();
       // Kuyruktaki yazım aynı ürünün bekleyen yazımının yerini alır. Siteye doğrudan yazıldıysa (ya da siteye hiç
@@ -866,7 +868,7 @@ export function onlineOrdersTick(): Promise<void> {
  * istek; zamanlayıcı kapalıyken (`LAFPOS_NO_JOBS`, testler) hiçbir şey yapmaz.
  */
 export function onlineOrdersDayOpened(): Promise<void> {
-  if (process.env.LAFPOS_NO_JOBS === '1' || !configured() || !getSettings().onlineOrdersSync) return Promise.resolve();
+  if (posEnv(process.env, 'NO_JOBS') === '1' || !configured() || !getSettings().onlineOrdersSync) return Promise.resolve();
   lastTick = 0;
   pullSoon = true;
   return onlineOrdersTick();

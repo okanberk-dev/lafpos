@@ -43,6 +43,7 @@ import {
   sizePrice,
   stationFor,
 } from './menu';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 type OrderRow = typeof schema.orders.$inferSelect;
 type ItemRow = typeof schema.orderItems.$inferSelect;
@@ -435,7 +436,7 @@ export function addItems(
       if (p.portionsLeft < qty) throw conflict(`${p.name}: son ${p.portionsLeft} porsiyon kaldı`, 'portions');
       const left = p.portionsLeft - qty;
       t.update(schema.products)
-        .set({ portionsLeft: left, active: left > 0, ...(left > 0 ? {} : { soldOutBy: 'lafpos' as const }), updatedAt: now })
+        .set({ portionsLeft: left, active: left > 0, ...(left > 0 ? {} : { soldOutBy: TUKENDI_KASA }), updatedAt: now })
         .where(eq(schema.products.id, p.id))
         .run();
       if (left === 0) {

@@ -7,6 +7,7 @@ import { Effects } from '../lib/effects';
 import { HttpError, notFound } from '../lib/http';
 import { signedFetch } from '../lib/signature';
 import { requireSiteSigned, siteBranch, siteSigned } from './laffogato-link';
+import { SITE_AKTOR } from '@shared/eski-adlar';
 
 /**
  * Masadan çağrılar (uygulamada "Garson çağır", su, peçete; laffogato `src/lib/admin/table-calls-core.ts`). Site açık
@@ -166,7 +167,7 @@ export async function ackTableCall(id: string, actor: { id: string; name: string
   if (state.acked[id]) return { ok: true, already: true };
   const call = state.calls.find((c) => c.id === id);
   if (!call) throw notFound('Çağrı');
-  const name = actor.name.trim().slice(0, ACTOR_MAX).trim() || 'LafPOS';
+  const name = actor.name.trim().slice(0, ACTOR_MAX).trim() || SITE_AKTOR;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/calls/ack`), { id, actor: name, branch: siteBranch() }).catch(() => {
     throw new HttpError(502, 'Siteye ulaşılamadı; çağrı sitede açık kaldı. İnternet gelince yeniden deneyin', 'site_call');
   });

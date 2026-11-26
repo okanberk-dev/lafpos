@@ -8,6 +8,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { requireSiteLinked, siteBranch, siteSigned, unknownSiteListVersion, wrongSiteBranch } from './laffogato-link';
 import { SITE_GROUP_KEYS, siteGroupsFor } from './option-profile';
+import { SITE_ISTEMCI, TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * laffogato menüsünü LafPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
@@ -82,7 +83,7 @@ function siteUnreachable(e: unknown): Error {
 export async function fetchPublicMenu(force = false): Promise<{ status: 'degismedi' } | { status: 'yeni'; menu: SiteMenu; etag: string | null }> {
   requireSiteLinked();
   const prev = getSyncState<{ etag?: string }>('laffogato.menu');
-  const headers: Record<string, string> = { accept: 'application/json', 'user-agent': 'LafPOS/0.1 (+kafe kasasi)' };
+  const headers: Record<string, string> = { accept: 'application/json', 'user-agent': SITE_ISTEMCI };
   if (prev?.etag && !force) headers['if-none-match'] = prev.etag;
   let res: Response;
   try {
@@ -214,7 +215,7 @@ export function shouldBeActive(p: LocalProduct, listed: boolean, panel: PanelMen
   return p.active || (p.syncedAt ?? 0) < lastSync;
 }
 
-type SoldOutBy = 'lafpos' | 'site';
+type SoldOutBy = typeof TUKENDI_KASA | 'site';
 
 /**
  * Senkrondan sonra Tükendi'nin sahibi. Açılan üründe yok. Site `onMenu` gönderiyorsa (şubeli site) kilit yalnız
@@ -226,9 +227,9 @@ type SoldOutBy = 'lafpos' | 'site';
 export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | null; portionsLeft: number | null }, active: boolean, onMenu?: boolean): SoldOutBy | null {
   if (active) return null;
   if (onMenu === false) return 'site';
-  if (onMenu === true) return 'lafpos';
+  if (onMenu === true) return TUKENDI_KASA;
   if (!p.active) return p.soldOutBy ?? 'site';
-  return p.portionsLeft === 0 ? 'lafpos' : 'site';
+  return p.portionsLeft === 0 ? TUKENDI_KASA : 'site';
 }
 
 /**

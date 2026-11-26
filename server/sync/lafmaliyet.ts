@@ -25,6 +25,7 @@ import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { notify } from './bildirim';
 import { dropPending, land, takeOff } from './outbox-flight';
+import { TEL_KART_ALANI, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
  * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
@@ -445,7 +446,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
           batchNo: eod.batchNo,
           at: new Date(eod.at).toISOString(),
           pavoCard: eod.grandTotalKurus != null ? toTL(eod.grandTotalKurus) : null,
-          lafposCard: eod.dayCardKurus != null ? toTL(eod.dayCardKurus) : null,
+          [TEL_KART_ALANI]: eod.dayCardKurus != null ? toTL(eod.dayCardKurus) : null,
           diff: eod.grandTotalKurus != null && eod.dayCardKurus != null ? toTL(eod.grandTotalKurus - eod.dayCardKurus) : null,
           acquirers: eod.acquirers.map((a) => ({ name: a.name, count: a.count, total: a.totalKurus != null ? toTL(a.totalKurus) : null })),
           message: eod.message,
@@ -469,7 +470,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
       : null;
   return {
     version: 1,
-    source: 'lafpos',
+    source: TEL_KAYNAK,
     // Bu günün kaçıncı gönderimi (lafmaliyet sürüm geçmişini tutar) ve varsa düzeltmenin türü ve nedeni
     revision: revisionOf(day.date),
     ...(correction ? { correction } : {}),
@@ -902,7 +903,7 @@ export interface DayAnswer {
    * Ertesi günün beklenen açılışı (TL; kasa zinciri §4.6): lafmaliyet'te bu günün kasa raporu varsa sayılan − teslim
    * (`kasa_raporu`), yoksa gövdenin sayımı (`lafpos`); null: gün sayılmadı
    */
-  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  nextOpening?: { amount: number; source: 'kasa_raporu' | typeof TEL_KAYNAK } | null;
   /**
    * Gövdedeki `workedStaffRefs`'in lafmaliyet'teki karşılığı (§4.8): sayılan, lafmaliyet'te bulunmayan ve başka şubenin
    * kaydı olan kimlikler. Yalnız alan gönderildiyse gelir
@@ -911,7 +912,7 @@ export interface DayAnswer {
 }
 
 /** lafmaliyet'in devir nesnesi (gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı) */
-const nextOpeningShape = z.object({ amount: z.number().finite().min(0).max(10_000_000), source: z.enum(['kasa_raporu', 'lafpos']) });
+const nextOpeningShape = z.object({ amount: z.number().finite().min(0).max(10_000_000), source: z.enum(['kasa_raporu', TEL_KAYNAK]) });
 
 const count = z.number().int().min(0).optional().catch(undefined);
 /** lafmaliyet personel kimlikleri (`s:<staff.id>`); bozuk liste yanıtın `staff`'ını düşürür, günü değil */

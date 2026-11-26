@@ -15,6 +15,7 @@
 // (Vite, tsx ve vitest `.js`'i `.ts`'e çözer; tests/kontrol-sozlesme.test.ts derleyip Node'la yükler)
 import { ALL_PERMISSIONS, type Permission, ROLE_LABELS, ROLES, type Role } from './permissions.js';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-mode.js';
+import { KONTROL_IMZA_ONEKI } from './eski-adlar.js';
 
 /** Sözleşmenin sürümü: kasa özetinde `v`; bulut bilmediği sürümdeki kasaya komut göndermez */
 export const KONTROL_SURUM = 1;
@@ -498,11 +499,11 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
  * kurulumu kendi kimliğiyle kurar (başka şubenin komutu tutmaz), rolü kayıttan okur (değiştirilirse imza tutmaz)
  */
 export function imzaMetni(k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>): string {
-  return `lafpos-kontrol:v${KONTROL_SURUM}:${k.kurulum}:${k.id}:${k.tur}:${k.at}:${k.kim}:${k.rol}:${JSON.stringify(k.veri)}`;
+  return `${KONTROL_IMZA_ONEKI}:v${KONTROL_SURUM}:${k.kurulum}:${k.id}:${k.tur}:${k.at}:${k.kim}:${k.rol}:${JSON.stringify(k.veri)}`;
 }
 
 /** Kasanın açık anahtarının imzalanan metni (`KontrolDurumu.anahtarImza`): kuruluma bağlı, başka şubeye taşınmaz */
-export const anahtarImzaMetni = (kurulum: string, anahtar: string) => `lafpos-kontrol-anahtar:v${KONTROL_SURUM}:${kurulum}:${anahtar}`;
+export const anahtarImzaMetni = (kurulum: string, anahtar: string) => `${KONTROL_IMZA_ONEKI}-anahtar:v${KONTROL_SURUM}:${kurulum}:${anahtar}`;
 
 /**
  * Üye rolü bu komutu verebilir mi. `hedefRol`: komutun dokunduğu personelin kasadaki rolü (düzenleme ve PIN'de) ya da

@@ -14,9 +14,9 @@
  * derleme (hiç gönderilmediyse kurulu olan). Panelden kasaya giden her şey bu yanıtla gider (kasa 5 dakikada bir sorar;
  * ayrı itme yok): "Şimdi güncelle" de kasaya en geç bir sonraki nabızda ulaşır.
  *
- * Redis: `lafpos:merkez:kurulum:<id>` (JSON; panelin alanları: ad, lisans, mod, hedef), `lafpos:merkez:durum:<id>`
- * (JSON; nabzın alanları: son görülme, sürüm, güncelleme durumu), `lafpos:merkez:kurulumlar` (kimlik kümesi),
- * `lafpos:merkez:bekleyen` (onay bekleyenler). Nabız ve panel ayrı anahtara yazar: biri ötekinin değişikliğini ezmez.
+ * Redis: `${REDIS_ONEKI}merkez:kurulum:<id>` (JSON; panelin alanları: ad, lisans, mod, hedef), `${REDIS_ONEKI}merkez:durum:<id>`
+ * (JSON; nabzın alanları: son görülme, sürüm, güncelleme durumu), `${REDIS_ONEKI}merkez:kurulumlar` (kimlik kümesi),
+ * `${REDIS_ONEKI}merkez:bekleyen` (onay bekleyenler). Nabız ve panel ayrı anahtara yazar: biri ötekinin değişikliğini ezmez.
  * Panel uçları yalnız sahibin gerçek oturumuyla (ortamdaki üye ya da parolalı giriş); parolasız görünümde ve panele
  * davet edilen yönetici ya da izleyicide Merkez kapalıdır (403).
  *
@@ -29,6 +29,7 @@ import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDAT
 import { fmtTime } from '../shared/time.js';
 import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory, readHistoryStore } from '../shared/gecmis.js';
 import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
+import { REDIS_ONEKI } from '../shared/eski-adlar.js';
 
 export interface Install {
   id: string;
@@ -96,12 +97,12 @@ export interface MerkezDeps {
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (status: number, error: string, code: string) => json({ error, code }, status);
 
-const SET_KEY = 'lafpos:merkez:kurulumlar';
-const PENDING_KEY = 'lafpos:merkez:bekleyen';
-const installKey = (id: string) => `lafpos:merkez:kurulum:${id}`;
-const statusKey = (id: string) => `lafpos:merkez:durum:${id}`;
+const SET_KEY = `${REDIS_ONEKI}merkez:kurulumlar`;
+const PENDING_KEY = `${REDIS_ONEKI}merkez:bekleyen`;
+const installKey = (id: string) => `${REDIS_ONEKI}merkez:kurulum:${id}`;
+const statusKey = (id: string) => `${REDIS_ONEKI}merkez:durum:${id}`;
 /** Silinen kurulumun mezar taşı: aynı kimlik ve anahtarla yeniden kayıtta ad, kod, lisans ve kuruluş geri gelir */
-const graveKey = (id: string) => `lafpos:merkez:silinen:${id}`;
+const graveKey = (id: string) => `${REDIS_ONEKI}merkez:silinen:${id}`;
 const GRAVE_TTL_S = 180 * 86_400;
 type Grave = Pick<Install, 'ad' | 'createdAt' | 'lisans' | 'mod' | 'kod'> & { anahtarOzet: string };
 export const ID_RE = /^[a-z0-9]{20,40}$/;
@@ -315,7 +316,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     const key = String(body.anahtar ?? '');
     if (!ID_RE.test(id) || key.length < MIN_KEY || key.length > 200) return fail(400, 'Kurulum kimliği ya da anahtarı anlaşılamadı', 'bad_body');
     const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim().slice(0, 64);
-    const ipKey = `lafpos:merkez:kayit:ip:${ip}`;
+    const ipKey = `${REDIS_ONEKI}merkez:kayit:ip:${ip}`;
     const tries = Number(await deps.redis('INCR', ipKey));
     if (tries === 1) await deps.redis('EXPIRE', ipKey, 3600);
     if (tries > REGISTER_PER_HOUR) return fail(429, 'Çok fazla kayıt denemesi; bir saat sonra yeniden deneyin', 'rate_limited');
@@ -419,7 +420,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     // ileti yalnız panelde görünür), dükkânın adı sahibin verdiği; aynı kurulum 6 saatte en çok bir kez
     const failedNow = durum === 'geri-dondu' || durum === 'hata';
     if (failedNow && inst.guncelleme?.durum !== durum && next.lisans.durum === 'aktif' && deps.notify) {
-      if ((await deps.redis('SET', `lafpos:merkez:bildirim:${id}`, '1', 'NX', 'EX', NOTIFY_EVERY_S)) === 'OK') {
+      if ((await deps.redis('SET', `${REDIS_ONEKI}merkez:bildirim:${id}`, '1', 'NX', 'EX', NOTIFY_EVERY_S)) === 'OK') {
         const body = durum === 'geri-dondu' ? 'Yeni sürüm kurulamadı; eski sürüm çalışıyor' : 'Güncelleme sorun çıkardı; ayrıntı Merkez’de';
         await deps.notify({ kind: 'guncelleme', title: 'Güncelleme sorunu', body, at: now, shop: next.ad }).catch(() => undefined);
       }

@@ -31,6 +31,8 @@ import { startPlatformKeys } from './sync/platform-anahtar';
 import { afterDeviceEod, closingNoticeTick, startNotices } from './sync/bildirim';
 import { afterDailyBackup } from './sync/yedek';
 import { startCatchUp } from './sync/catch-up';
+import { posEnv } from '@shared/pos-env';
+import { YEDEK_DOSYA_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Menü yoklaması 15 dakikada bir (ETag). Herkese açık menü CDN'den gelir ama CDN'deki kopya eskiyince istek sitenin
@@ -175,27 +177,29 @@ export function schedulePriceSync(now = Date.now()) {
   scheduleMenuSync(when, true, false);
 }
 
-/** Günlük SQLite yedeği: data/backups/lafpos-YYYY-MM-DD.db, son N gün tutulur. */
+const GUNLUK_YEDEK_RE = new RegExp(`^${YEDEK_DOSYA_ONEKI}\\d{4}-\\d{2}-\\d{2}\\.db$`);
+
+/** Günlük SQLite yedeği: data/backups/<önek>YYYY-MM-DD.db (önek kurulu kasalardaki adla, shared/eski-adlar.ts), son N gün tutulur. */
 export async function backupNow(): Promise<string> {
   const dir = resolve(env.dataDir, 'backups');
   mkdirSync(dir, { recursive: true });
-  const file = resolve(dir, `lafpos-${businessDate(Date.now())}.db`);
+  const file = resolve(dir, `${YEDEK_DOSYA_ONEKI}${businessDate(Date.now())}.db`);
   await sqlite.backup(file);
   const keep = getSettings().backupKeep;
-  const files = readdirSync(dir).filter((f) => /^lafpos-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
+  const files = readdirSync(dir).filter((f) => GUNLUK_YEDEK_RE.test(f)).sort();
   for (const f of files.slice(0, Math.max(0, files.length - keep))) rmSync(resolve(dir, f));
   return file;
 }
 
 /**
- * Adlı tek seferlik yedek (denemeyi bitirmeden önce: `lafpos-deneme-oncesi-<an>.db`). Günlük yedeklerin döngüsüne
+ * Adlı tek seferlik yedek (denemeyi bitirmeden önce: `<önek>deneme-oncesi-<an>.db`). Günlük yedeklerin döngüsüne
  * girmez, silinmez. Dosya yazılamazsa hata fırlatır: çağıran silme işine geçmez
  */
 export async function backupNamed(label: string): Promise<string> {
   const dir = resolve(env.dataDir, 'backups');
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
-  const file = resolve(dir, `lafpos-${label}-${stamp}.db`);
+  const file = resolve(dir, `${YEDEK_DOSYA_ONEKI}${label}-${stamp}.db`);
   await sqlite.backup(file);
   return file;
 }
@@ -220,7 +224,7 @@ function dailyMaintenance(day: string) {
 
 async function backupTick() {
   const day = businessDate(Date.now());
-  const file = resolve(env.dataDir, 'backups', `lafpos-${day}.db`);
+  const file = resolve(env.dataDir, 'backups', `${YEDEK_DOSYA_ONEKI}${day}.db`);
   if (!existsSync(file)) {
     try {
       await backupNow();
@@ -324,7 +328,7 @@ function platformTick() {
 }
 
 export function startJobs() {
-  if (process.env.LAFPOS_NO_JOBS === '1') return;
+  if (posEnv(process.env, 'NO_JOBS') === '1') return;
   timers.push(setTimeout(() => void menuTick(), 8_000));
   timers.push(setInterval(() => void menuTick(), MENU_SYNC_INTERVAL_MS));
   // Online siparişler: 20 sn'de bir sürüm sinyali (site veritabanına dokunmaz); sinyal yoksa en sık 5 dk'da bir çekme
@@ -423,7 +427,7 @@ export function onJobEvent(e: LiveEvent) {
   // Gün açıldı: gece atlanan menü yoklaması bir kez
   if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void onMenuDayOpened();
   // Paket siparişinin aşaması değişti: canlı platforma hemen yazılır (gidemezse 20 sn'lik turda yeniden)
-  if (e.topic === 'delivery' && e.kind === 'delivery.status' && process.env.LAFPOS_NO_JOBS !== '1') void reconcileNotifications().catch(() => undefined);
+  if (e.topic === 'delivery' && e.kind === 'delivery.status' && posEnv(process.env, 'NO_JOBS') !== '1') void reconcileNotifications().catch(() => undefined);
 }
 
 export function stopJobs() {

@@ -28,8 +28,10 @@ import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
 import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
+import { eskiEnvAdi } from '../shared/pos-env.js';
+import { REDIS_ONEKI } from '../shared/eski-adlar.js';
 
-const SNAPSHOT_KEY = 'lafpos:snapshot';
+const SNAPSHOT_KEY = `${REDIS_ONEKI}snapshot`;
 const TOKEN_HOURS = 12;
 const LOGIN_LIMIT = 8;
 const SKEW_S = 300;
@@ -46,7 +48,8 @@ interface Snapshot {
   orders: Record<string, Json>;
 }
 
-const env = (k: string) => (process.env[k] ?? '').trim();
+/** Ortam değişkeni: `ASILPOS_X` verilince Vercel'de eski adla duran değer de okunur (shared/pos-env.ts) */
+const env = (k: string) => (process.env[k] ?? '').trim() || (process.env[eskiEnvAdi(k) ?? ''] ?? '').trim();
 const secret = () => env('LAFPOS_CLOUD_SECRET');
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
@@ -256,11 +259,11 @@ export function resetReleaseCache() {
 /**
  * Dükkân kimliği kasanın Merkez kurulum kimliğidir (Merkez'e bağlı olmayan eski kasa: `default`). Kasa itmede
  * `x-laf-dukkan` başlığını gönderir; uzaktan görünüm seçili dükkânı aynı başlıkla ister. `default` özeti eski anahtarda
- * kalır (taşınmadan okunur); dükkânların son itme anı `lafpos:dukkanlar`'da (JSON)
+ * kalır (taşınmadan okunur); dükkânların son itme anı `${REDIS_ONEKI}dukkanlar`'da (JSON)
  */
 export const SHOP_RE = /^[a-z0-9-]{1,40}$/;
 /** Bu sürümden önceki dükkân listesi (JSON, saatte bir yazılırdı): yalnız geçişte okunur, artık yazılmaz */
-const SHOPS_KEY = 'lafpos:dukkanlar';
+const SHOPS_KEY = `${REDIS_ONEKI}dukkanlar`;
 export const snapshotKey = (shop: string) => (shop === REPORT_SHOP ? SNAPSHOT_KEY : `${SNAPSHOT_KEY}:${shop}`);
 const shopHeader = (req: Request) => {
   const v = (req.headers.get('x-laf-dukkan') ?? '').trim();
@@ -273,7 +276,7 @@ const shopHeader = (req: Request) => {
  * Sürüm değişmediyse yanıt 304, büyük özet Redis'ten hiç okunmaz. Kasa itince yazılır (HSET; dükkânlar birbirinin
  * alanını ezmez). Ayrıntı: docs/07-UZAKTAN-ERISIM.md §4 "Upstash bütçesi"
  */
-export const VERSIONS_KEY = 'lafpos:surum';
+export const VERSIONS_KEY = `${REDIS_ONEKI}surum`;
 export interface SnapVersion {
   /** Kasanın son itmesinin anı (nabız dahil): görünümün sürümü */
   at: number;
@@ -482,7 +485,7 @@ interface InboxLists {
 
 /**
  * Restoranın kendi listeleri: adda kimliğin SHA-256 özetinin ilk 16 hanesi (ham kimlik anahtara girmez, uzunluk
- * sabit). Örnek: `lafpos:ys:inbox:r:<özet>`
+ * sabit). Örnek: `${REDIS_ONEKI}ys:inbox:r:<özet>`
  */
 export function restaurantLists(base: InboxLists, id: string): InboxLists {
   const h = createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16);
@@ -630,7 +633,7 @@ async function inboxRoutes(req: Request, url: URL, path: string, prefix: string,
  * verilen anahtarla imzalı bir JWT taşır. Sipariş `remoteOrderId` (= sipariş belirteci) ile saniyeler içinde
  * onaylanır. Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
  */
-const YS_LISTS: InboxLists = { status: 'lafpos:ys:status', inbox: 'lafpos:ys:inbox' };
+const YS_LISTS: InboxLists = { status: `${REDIS_ONEKI}ys:status`, inbox: `${REDIS_ONEKI}ys:inbox` };
 
 /** Delivery Hero'nun JWT'si: HS512 (ya da HS256), `service: middleware` iddiası, süresi varsa geçmemiş */
 export function verifyMiddlewareJwt(secret: string, authorization: string | null, nowMs = Date.now()): boolean {
@@ -727,7 +730,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
  * etkinlik olmasa da hiçbir kayıt 2 günden uzun kalmaz. Kabul, ret ve aşamalar kasadan Getir'e gider
  * (server/delivery/getir.ts).
  */
-const GETIR_LISTS: InboxLists = { status: 'lafpos:getir:status', inbox: 'lafpos:getir:inbox' };
+const GETIR_LISTS: InboxLists = { status: `${REDIS_ONEKI}getir:status`, inbox: `${REDIS_ONEKI}getir:inbox` };
 const GETIR_SECRET_MIN = 16;
 /**
  * Getir kaydı kayıt başına 1 gün (Getir siparişi 5 dk'da yanıt ister; eskisi işe yaramaz), liste süresi de 1 gün:
@@ -885,9 +888,9 @@ const REPORT_DAY_MAX_BYTES = 256 * 1024;
 const REPORT_EXTRA_MAX_BYTES = 900 * 1024;
 const MGET_CHUNK = 60;
 const ROLLOVER_HOUR = 5;
-export const reportDayKey = (shop: string, date: string) => `lafpos:rapor:${shop}:gun:${date}`;
-export const reportMetaKey = (shop: string) => `lafpos:rapor:${shop}:son`;
-export const reportExtraKey = (shop: string, date: string) => `lafpos:rapor:${shop}:ek:${date}`;
+export const reportDayKey = (shop: string, date: string) => `${REDIS_ONEKI}rapor:${shop}:gun:${date}`;
+export const reportMetaKey = (shop: string) => `${REDIS_ONEKI}rapor:${shop}:son`;
+export const reportExtraKey = (shop: string, date: string) => `${REDIS_ONEKI}rapor:${shop}:ek:${date}`;
 
 type DayRep = RemoteDayReport;
 type Range = { from: string; to: string };
@@ -1420,7 +1423,7 @@ async function withStats(shop: string, snap: Snapshot, stamp?: number): Promise<
 async function shopList(vs: Versions): Promise<{ id: string; ad: string | null; at: number }[]> {
   const ids = Object.keys(vs.map);
   if (!ids.length) return [];
-  const raws = (await redis('MGET', ...ids.map((id) => `lafpos:merkez:kurulum:${id}`))) as (string | null)[];
+  const raws = (await redis('MGET', ...ids.map((id) => `${REDIS_ONEKI}merkez:kurulum:${id}`))) as (string | null)[];
   return ids
     .map((id, i) => {
       let ad: string | null = null;
@@ -1816,7 +1819,7 @@ async function handle(req: Request): Promise<Response> {
   // Üyelik: ilk girişte üye parolasını belirler (yalnız izinli e-posta, yalnız bir kez), sonra e-posta ve parola
   if (memberMode && login) {
     const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim();
-    const key = `lafpos:giris:${ip}`;
+    const key = `${REDIS_ONEKI}giris:${ip}`;
     const tries = Number(await redis('INCR', key));
     if (tries === 1) await redis('EXPIRE', key, 900);
     if (tries > LOGIN_LIMIT) return fail(429, 'Çok fazla deneme; 15 dakika sonra yeniden deneyin', 'rate_limited');
@@ -1874,7 +1877,7 @@ async function handle(req: Request): Promise<Response> {
     const password = env('LAFPOS_UZAKTAN_PAROLA');
     if (password.length < 10) return fail(503, 'Uzaktan parola tanımlı değil (LAFPOS_UZAKTAN_PAROLA)', 'not_configured');
     const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim();
-    const key = `lafpos:giris:${ip}`;
+    const key = `${REDIS_ONEKI}giris:${ip}`;
     const tries = Number(await redis('INCR', key));
     if (tries === 1) await redis('EXPIRE', key, 900);
     if (tries > LOGIN_LIMIT) return fail(429, 'Çok fazla deneme; 15 dakika sonra yeniden deneyin', 'rate_limited');

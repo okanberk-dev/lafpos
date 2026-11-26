@@ -5,6 +5,7 @@ import { Effects } from '../lib/effects';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { siteBranch, siteSigned } from './laffogato-link';
+import { SITE_AKTOR } from '@shared/eski-adlar';
 
 /**
  * Siteye giden Satışta yazımları (`POST /api/panel/menu`). Porsiyon sayacının değiştirdiği Satışta bilgisi giden
@@ -70,7 +71,7 @@ export function enqueueSiteTables(t: Tx | DB): boolean {
   const tables = [...live, ...retired];
   const now = Date.now();
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, TABLES_KEY), isNull(schema.outbox.sentAt))).run();
-  t.insert(schema.outbox).values({ target: 'laffogato', kind: TABLES_KIND, dedupeKey: TABLES_KEY, payload: { tables, actor: 'LafPOS' }, createdAt: now, nextAttemptAt: now }).run();
+  t.insert(schema.outbox).values({ target: 'laffogato', kind: TABLES_KIND, dedupeKey: TABLES_KEY, payload: { tables, actor: SITE_AKTOR }, createdAt: now, nextAttemptAt: now }).run();
   return true;
 }
 
@@ -91,7 +92,7 @@ export function withSiteMenuLock<T>(fn: () => Promise<T>): Promise<T> {
  * koyar; çağıranın işleminde (adisyon kalemiyle ya da ürünün yazımıyla tek işlem). Aynı ürünün bekleyen yazımının
  * yerini alır: siteye yalnız son istenen durum gider. Yeni kayıt sona girer: kutu kayıt sırasıyla gönderilir.
  */
-export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean, actor = 'LafPOS porsiyon'): boolean {
+export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean, actor = `${SITE_AKTOR} porsiyon`): boolean {
   if (!siteSigned() || p.extSource !== 'laffogato' || !p.extId) return false;
   const key = keyOf(p.extId);
   const now = Date.now();

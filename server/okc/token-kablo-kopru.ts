@@ -1,3 +1,4 @@
+import { TOKEN_FIRMA } from '@shared/eski-adlar';
 /**
  * Token kablolu bağlantının köprüsü: Windows PowerShell'de (32 bit; Token'ın IntegrationHub.dll'i içindeki yerel
  * kütüphane x86) çalışan küçük bir program. Token'ın C# kütüphanesini yükler, cihazla USB/RS232 üzerinden konuşur,
@@ -15,7 +16,7 @@
  * `{"t":"fatal","message":"…"}` (kütüphane yüklenemedi).
  */
 export const KOPRU_PS1 = String.raw`# LafPOS - Token kablolu baglanti koprusu (LafPOS sunucusu yazar; elle degistirmeyin)
-param([Parameter(Mandatory = $true)][string]$Dll, [string]$Firma = 'LafPOS')
+param([Parameter(Mandatory = $true)][string]$Dll, [string]$Firma = '${TOKEN_FIRMA}')
 $ErrorActionPreference = 'Stop'
 # Kutuphane adiyla istendiginde diskteki DLL verilir (derlenen kopru onu adiyla arar)
 $yukleyici = @'

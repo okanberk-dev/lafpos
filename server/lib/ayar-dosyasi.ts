@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
 import { cloudKeys, currentSube, pullState } from './platform-anahtar';
+import { posEnv } from '@shared/pos-env';
 
 /**
  * Ayarlar dosyası (Windows kurulumunda C:\ProgramData\LafPOS\ayarlar.env): dış sistemlerin adresleri ve anahtarları
@@ -22,8 +23,8 @@ export interface SettingsFile {
 }
 
 export function settingsFile(): SettingsFile | null {
-  const bekci = process.env.LAFPOS_STDIN_CONTROL === '1';
-  const explicit = process.env.LAFPOS_AYAR_DOSYASI?.trim();
+  const bekci = posEnv(process.env, 'STDIN_CONTROL') === '1';
+  const explicit = posEnv(process.env, 'AYAR_DOSYASI')?.trim();
   if (explicit) return { path: resolve(explicit), restart: bekci ? 'otomatik' : 'elle' };
   // Eski bekçi dosyanın yolunu söylemez: veri klasörü kurulumun klasörüdür (LAFPOS_DATA_DIR = C:\ProgramData\LafPOS)
   if (bekci) return { path: resolve(env.dataDir, 'ayarlar.env'), restart: 'otomatik' };
