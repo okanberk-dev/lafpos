@@ -87,13 +87,28 @@ export interface PrivateSettings {
   /** Saat; yarım saat için .5 (22.5 = 22:30) */
   autoDayEndHour: number;
   /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud), Pavo (yerel ağ) ya da eğitim simülatörü */
-  okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
+  okcProvider: 'kapali' | 'tokenx' | 'tokenkablo' | 'pavo' | 'simulator';
   /** anlik: kasada ödeme (sepet hemen cihaza düşer) · liste: masada ödeme (cihaz açık sepetleri listeler) */
   okcMode: 'anlik' | 'liste';
   /** KDV oranı -> cihazdaki kısım no ("10" -> 1) */
   okcSectionMap: Record<string, number>;
   /** Yemek kartı operatör kimliği -> LafPOS ödeme türü (ör. "1005" -> Multinet) */
   okcOperatorMethods: Record<string, string>;
+  /**
+   * Pavo: cihazın ödeme aracı no'su (`/PaymentMediators`, ör. "5" Multinet) -> LafPOS ödeme türü (yemek kartı). Eşlenen
+   * yemek kartı kasada seçilince cihaza o araçla gider, cihazın yanıtındaki aynı no o türe yazılır (docs/04-YAZARKASA.md §8.6)
+   */
+  okcPavoMediatorMethods: Record<string, string>;
+  /**
+   * Token kablolu: kasada seçilen ödeme türü sepetle gider (`paymentItems`: nakit 1, kart 3, yemek kartı 7 ve operatörü);
+   * nakitte cihaz fişi kendiliğinden keser, kartta ve yemek kartında ilgili uygulama açılır. Kapalıysa kasiyer cihazda seçer
+   */
+  okcTokenOdemeSecili: boolean;
+  /**
+   * Token kablolu: kasa bilgisayarında (Windows) kablo takılınca cihaz kendiliğinden tanınır, kısımlar ve yemek kartları
+   * eşlenir; yazarkasa kapalıyken (ya da gün açık değilken eğitim cihazındayken) bağlantı kendiliğinden Token kabloluya geçer
+   */
+  okcTokenKabloOto: boolean;
   /**
    * Pavo: LafPOS gün sonundan hemen sonra cihazda banka gün sonu (`/PerformEOD`). Gün sonunu beklemez ve bozmaz;
    * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
@@ -163,6 +178,9 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcMode: 'anlik',
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
+  okcPavoMediatorMethods: {},
+  okcTokenOdemeSecili: true,
+  okcTokenKabloOto: true,
   okcPavoAutoEod: true,
   okcPavoOdemeSecili: true,
   okcPavoEodFis: true,

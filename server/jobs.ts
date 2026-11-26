@@ -11,6 +11,8 @@ import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings, getSyncState } from './lib/settings';
 import { autoEodExpected, deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
+import { kablo } from './okc/token-kablo';
+import { syncTokenKablo } from './okc/token-kablo-servis';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -349,6 +351,12 @@ export function startJobs() {
   timers.push(setTimeout(backupTick, 30_000));
   // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
   resumePolling();
+  // Token kablolu (Windows kasa): köprü açılır, kablo takılınca cihaz kendiliğinden tanınır
+  try {
+    syncTokenKablo();
+  } catch (e) {
+    console.error('[token-kablo] başlatılamadı', e);
+  }
   // Pavo gün sonu sürerken süreç kapandıysa sonuç belirsizdir: alarm, yeniden denemeden önce doğrulama
   try {
     recoverDeviceEod();
@@ -401,6 +409,7 @@ export function onJobEvent(e: LiveEvent) {
 }
 
 export function stopJobs() {
+  kablo.stop();
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
   bus.off('event', onJobEvent);

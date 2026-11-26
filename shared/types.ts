@@ -303,7 +303,16 @@ export interface BootstrapDTO {
   branch?: { name: string | null; code: string | null } | null;
   integrations: {
     /** `auto`: "Ödemeyi al" sepeti kendiliğinden cihaza yollar (Yönetim › Yazarkasa POS) */
-    okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste'; auto: boolean };
+    okc: {
+      provider: 'kapali' | 'tokenx' | 'tokenkablo' | 'pavo' | 'simulator';
+      mode: 'anlik' | 'liste';
+      auto: boolean;
+      /**
+       * Kasada seçilince cihaza giden yemek kartı ödeme türleri (LafPOS ödeme türü kimliği). Pavo'da yalnız cihazın ödeme
+       * aracına eşlenenler; Token'da hepsi (cihaz operatörü sorar ya da eşlenen uygulamayı açar). Eski sunucu göndermez
+       */
+      mealMethods?: string[];
+    };
     /** Kasa bilgisayarında fiş yazıcısı bulundu (Windows kasa kısayolu bildirdi): ödeme sonrası fişler sessiz basılır */
     receiptPrinter: boolean;
     laffogatoPanel: boolean;
@@ -368,7 +377,7 @@ export interface DenemeStatusDTO {
   samplePinUsers: { id: string; name: string; role: string }[];
   /** Patronun kendi PIN'i örnek PIN: bitirirken yeni PIN zorunlu */
   mustChangeOwnPin: boolean;
-  okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
+  okcProvider: 'kapali' | 'tokenx' | 'tokenkablo' | 'pavo' | 'simulator';
 }
 
 export interface OrderItemDTO {

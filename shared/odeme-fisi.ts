@@ -7,7 +7,7 @@ import type { PublicSettings } from './types';
  */
 
 export type PayMode = 'tutar' | 'kalem' | 'paylas';
-type Provider = 'kapali' | 'tokenx' | 'pavo' | 'simulator';
+type Provider = 'kapali' | 'tokenx' | 'tokenkablo' | 'pavo' | 'simulator';
 
 export interface DeviceRouteInput {
   provider: Provider;
@@ -28,6 +28,11 @@ export interface DeviceRouteInput {
   amountPaidHere: boolean;
   /** Adisyona hiç ödeme alınmamış (`order.paid === 0`): bölünmüş hesabın bütünü cihaza gidebilir */
   nothingPaid?: boolean;
+  /**
+   * Seçilen yemek kartı cihaza gidebilir mi (`boot.integrations.okc.mealMethods`'ta): Pavo'da yalnız cihazın ödeme
+   * aracına eşlenmiş kart. Verilmezse Pavo'da gitmez, diğerlerinde gider (eski sunucu)
+   */
+  mealOnDevice?: boolean;
 }
 
 /**
@@ -38,8 +43,11 @@ export function deviceRoute(i: DeviceRouteInput): { on: boolean; send: boolean; 
   const on = i.provider !== 'kapali' && i.mode === 'anlik' && i.auto && i.canSend;
   if (!on) return { on, send: false, reason: null };
   if (!i.methodKind) return { on, send: false, reason: null };
-  // Pavo'nun belgelediği ödeme tipleri yalnız nakit ve kart (docs/04-YAZARKASA.md §8.3)
-  const kinds = i.provider === 'pavo' ? ['nakit', 'kart'] : ['nakit', 'kart', 'yemek'];
+  // Pavo'nun belgelediği ödeme tipleri yalnız nakit ve kart (docs/04-YAZARKASA.md §8.3); yemek kartı yalnız cihazın
+  // ödeme aracına eşlenmişse (§8.6)
+  const meal = i.mealOnDevice ?? i.provider !== 'pavo';
+  const kinds = meal ? ['nakit', 'kart', 'yemek'] : ['nakit', 'kart'];
+  if (i.methodKind === 'yemek' && !meal && i.provider === 'pavo') return { on, send: false, reason: 'Bu yemek kartı cihazın ödeme aracına eşlenmedi, LafPOS’a yazılır (Yönetim › Yazarkasa POS)' };
   const no = (reason: string) => ({ on, send: false, reason });
   if (!kinds.includes(i.methodKind)) return no('Bu ödeme türü yazarkasaya gitmez, LafPOS’a yazılır');
   // Hiç pay alınmamış bölünmüş hesap cihaza bütün olarak gider (Yazarkasa bölümü: cihazda N ayrı ödeme, tek fiş)

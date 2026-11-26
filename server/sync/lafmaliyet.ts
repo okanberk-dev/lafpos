@@ -767,7 +767,7 @@ function okcField(dayId: string) {
     .all();
   const setting = getSettings().okcProvider;
   const real = receipts.filter((x) => x.provider !== 'simulator');
-  const provider = (real.at(-1)?.provider as 'pavo' | 'tokenx' | undefined) ?? (setting === 'pavo' || setting === 'tokenx' ? setting : null);
+  const provider = (real.at(-1)?.provider as 'pavo' | 'tokenx' | 'tokenkablo' | undefined) ?? (setting === 'pavo' || setting === 'tokenx' || setting === 'tokenkablo' ? setting : null);
   if (!provider) return {};
   const viaDevice = new Set(receipts.flatMap((x) => x.paymentIds));
   const voidedIds = new Set(receipts.filter((x) => x.status === 'fis_iptal').flatMap((x) => x.paymentIds));
@@ -786,7 +786,7 @@ function okcField(dayId: string) {
     okc: {
       provider,
       // Token yazarkasası mali Z basar; Pavo (VUK 507, e-Arşiv) basmaz: personelin fotoğrafı yalnız gün sonu fişi
-      zReport: provider === 'tokenx',
+      zReport: provider === 'tokenx' || provider === 'tokenkablo',
       docs: completed.length,
       cash: toTL(sums.cash),
       card: toTL(sums.card),

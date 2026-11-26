@@ -144,7 +144,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
     day: dayToDTO(t, getOpenDay(t)),
     branch: merkezBranch(),
     integrations: {
-      okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode, auto: okcAutoOn() },
+      okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode, auto: okcAutoOn(), mealMethods: mealOnDevice(t) },
       receiptPrinter: receiptPrinterKnown(),
       laffogatoPanel: siteSigned(),
       lafmaliyetPush: !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= 32,
@@ -167,4 +167,17 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
 function receiptPrinterKnown(): boolean {
   const seen = getSyncState<{ printers: WinPrinter[] }>(PRINTERS_KEY);
   return !!seen && !!pickReceiptPrinter(seen.printers ?? [], getSettings().receiptPrinter).name;
+}
+
+/**
+ * Kasada seçilince cihaza giden yemek kartı ödeme türleri: Pavo'da yalnız cihazın ödeme aracına eşlenenler (eşlenmemiş
+ * yemek kartı cihaz yanıtında tanınmaz), Token ve eğitim cihazında hepsi; yazarkasa kapalıyken hiçbiri
+ */
+function mealOnDevice(t: Tx | DB): string[] {
+  const s = getSettings();
+  if (s.okcProvider === 'kapali') return [];
+  const meal = t.select().from(schema.paymentMethods).all().filter((m) => m.kind === 'yemek' && m.active);
+  if (s.okcProvider !== 'pavo') return meal.map((m) => m.id);
+  const mapped = new Set(Object.values(s.okcPavoMediatorMethods));
+  return meal.filter((m) => mapped.has(m.id)).map((m) => m.id);
 }

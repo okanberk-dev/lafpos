@@ -18,6 +18,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { REMOTE } from '@/lib/remote';
 import { toast } from '@/lib/toast';
+import { MealCardMap, PavoQuickSetup, TokenKabloCard, type TokenKabloStatus } from './OkcKurulum';
 
 interface PavoExchange {
   at: number;
@@ -47,10 +48,18 @@ interface PavoEod {
   amountsHidden: boolean;
 }
 interface OkcStatus {
-  provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
+  provider: 'kapali' | 'tokenx' | 'tokenkablo' | 'pavo' | 'simulator';
   mode: 'anlik' | 'liste';
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
+  /** Pavo: cihazın ödeme aracı no'su → yemek kartı ödeme türü (yoksa eski sunucu) */
+  pavoMediatorMethods?: Record<string, string>;
+  /** Token kablolu: ödeme türü sepetle gider */
+  tokenOdemeSecili?: boolean;
+  /** Token kablolu: kablo takılınca kendiliğinden kurulum ve geçiş */
+  tokenKabloOto?: boolean;
+  /** Token kablolu köprüsünün durumu ve son kurulum (yoksa eski sunucu) */
+  tokenKablo?: TokenKabloStatus;
   pavoAutoEod: boolean;
   /** Pavo: ödeme türü cihazda önceden seçili (yoksa eski sunucu: açık sayılır) */
   pavoOdemeSecili?: boolean;
@@ -74,6 +83,8 @@ interface OkcStatus {
     busy: string | null;
     exchanges: PavoExchange[];
     eod: PavoEod | null;
+    /** Son "Bağlantıyı dene"de okunan ödeme araçları (yemek kartı eşlemesi için) */
+    mediators?: { id: number | null; name: string | null }[];
   };
   lastError: { message: string; at: number } | null;
   /** Son hata: cihaz başka programla eşleşmiş (73/74); ekranda doğrudan "Yeniden eşleştir" */
@@ -106,7 +117,7 @@ type Mode = OkcStatus['mode'];
 /** Cihazda her zaman eşlenebilen oranlar; menüde başka bir oran varsa o da listelenir */
 const RATES = ['1', '10', '20'];
 
-const PROVIDER_LABEL: Record<Provider, string> = { kapali: 'Kapalı', simulator: 'Eğitim cihazı', tokenx: 'Token · Beko', pavo: 'Pavo' };
+const PROVIDER_LABEL: Record<Provider, string> = { kapali: 'Kapalı', simulator: 'Eğitim cihazı', tokenkablo: 'Token kablolu', tokenx: 'Token bulut', pavo: 'Pavo' };
 const MODE_LABEL: Record<Mode, string> = { anlik: 'Kasada ödeme', liste: 'Masada ödeme' };
 /** Ödeme yerinin anlamı; Token cihazında aynı mod ayrıca seçilir */
 const MODE_HINT: Record<Mode, { what: string; token: string }> = {
@@ -122,7 +133,13 @@ const DOC_LABEL: Record<string, string> = { okc_fis: 'Mali fiş', bilgi_fisi: 'B
 const PROVIDER_CONFIRM: Record<Provider, ConfirmOptions> = {
   kapali: { title: 'Yazarkasa bağlantısı kapatılsın mı', body: 'Adisyonlar cihaza gitmez; mali fişi kasiyer yazarkasada elle keser', confirmLabel: 'Bağlantıyı kapat', tone: 'danger' },
   simulator: { title: 'Eğitim cihazına geçilsin mi', body: 'Hesaplar eğitim cihazı ekranına gider, mali fiş kesilmez; gerçek cihaz bağlanana kadar deneme ve eğitim için', confirmLabel: 'Eğitim cihazına geç', tone: 'primary' },
-  tokenx: { title: 'Token cihazına geçilsin mi', body: 'Bundan sonraki hesaplar Token cihazına sepet olarak gider; ödeme ve mali fiş cihazda alınır', confirmLabel: 'Token’a geç', tone: 'primary' },
+  tokenx: { title: 'Token bulut bağlantısına geçilsin mi', body: 'Bundan sonraki hesaplar TokenX Connect bulutu üzerinden Token cihazına gider; ödeme ve mali fiş cihazda alınır', confirmLabel: 'Token buluta geç', tone: 'primary' },
+  tokenkablo: {
+    title: 'Token kabloluya geçilsin mi',
+    body: 'Bundan sonraki hesaplar kasa bilgisayarına kabloyla bağlı Token cihazına (Beko 300TR, X30TR) gider; ödeme ve mali fiş cihazda alınır',
+    confirmLabel: 'Token kabloluya geç',
+    tone: 'primary',
+  },
   pavo: {
     title: 'Pavo cihazına geçilsin mi',
     body: 'Bundan sonraki hesaplar kafenin ağındaki Pavo cihazına gider; ödeme cihazda alınır, e-Arşiv belgesi cihazdan çıkar. Önce cihazı eşleştirin ve küçük bir satışla deneyin',
@@ -500,7 +517,7 @@ export default function OkcAdmin() {
   const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
-  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | 'secili' | 'fis' | null>(null);
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | 'secili' | 'fis' | 'oto' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
   // Pavo'nun adresi ve seri no'su kayıtlıyken form kapalı durur; "Adresi değiştir" açar
   const [editDevice, setEditDevice] = useState(false);
@@ -620,7 +637,13 @@ export default function OkcAdmin() {
   const setSecili = async (v: boolean) => {
     if (saving) return;
     setSaving('secili');
-    await save({ pavoOdemeSecili: v }, v ? 'Kasada seçilen ödeme türü cihazda hazır gelecek' : 'Ödeme türü cihazda seçilecek');
+    await save(s.provider === 'tokenkablo' ? { tokenOdemeSecili: v } : { pavoOdemeSecili: v }, v ? 'Kasada seçilen ödeme türü cihazda hazır gelecek' : 'Ödeme türü cihazda seçilecek');
+    setSaving(null);
+  };
+  const setOto = async (v: boolean) => {
+    if (saving) return;
+    setSaving('oto');
+    await save({ tokenKabloOto: v }, v ? 'Kablo takılınca Token cihazı kendiliğinden bağlanacak' : 'Token cihazı yalnız “Kurulumu yap” ile bağlanacak');
     setSaving(null);
   };
   const setEodFis = async (v: boolean) => {
@@ -667,7 +690,7 @@ export default function OkcAdmin() {
             label="Yazarkasa bağlantısı"
             value={s.provider}
             onChange={(v) => void setProvider(v)}
-            options={(['kapali', 'simulator', 'tokenx', 'pavo'] as const).map((value) => ({ value, label: PROVIDER_LABEL[value] }))}
+            options={(['kapali', 'simulator', 'tokenkablo', 'tokenx', 'pavo'] as const).map((value) => ({ value, label: PROVIDER_LABEL[value] }))}
           />
         </div>
         {s.provider === 'kapali' && <p className="text-sm text-muted">Adisyon cihaza gitmez; mali fişi kasiyer yazarkasada elle keser</p>}
@@ -690,10 +713,12 @@ export default function OkcAdmin() {
             Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için; sepetler <Link to="/cihaz" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">eğitim cihazı</Link> ekranında ödenir
           </p>
         )}
-        {s.provider === 'pavo' && (
-          <p className="border-t border-[var(--admin-divider)] pt-4 text-sm text-muted">Ödeme yeri: kasada ödeme. Hesap cihazın ekranına düşer; Pavo masada ödeme listesi tutmaz</p>
+        {(s.provider === 'pavo' || s.provider === 'tokenkablo') && (
+          <p className="border-t border-[var(--admin-divider)] pt-4 text-sm text-muted">
+            Ödeme yeri: kasada ödeme. Hesap cihazın ekranına düşer; {s.provider === 'pavo' ? 'Pavo' : 'kablolu Token'} masada ödeme listesi tutmaz
+          </p>
         )}
-        {s.provider !== 'kapali' && s.provider !== 'pavo' && (
+        {s.provider !== 'kapali' && s.provider !== 'pavo' && s.provider !== 'tokenkablo' && (
           // Bağlantıdan sonra ikinci karar: satır ayracıyla ayrı bölüm (seçim rayı ve açıklaması birlikte)
           <div className="border-t border-[var(--admin-divider)] pt-4">
             <Label>Ödeme yeri</Label>
@@ -714,20 +739,33 @@ export default function OkcAdmin() {
               label="Ödemeyi alınca cihaza gönder"
               hint={`Ödeme penceresinde “Ödemeyi al”a basınca hesap kendiliğinden cihaza gider; kapalıyken “Yazarkasaya gönder” ile${s.provider === 'simulator' ? '. Eğitim cihazında varsayılan kapalı' : ''}`}
             />
-            {s.provider === 'pavo' && (
+            {(s.provider === 'pavo' || s.provider === 'tokenkablo') && (
               <Toggle
                 block
                 className="mt-3"
-                checked={s.pavoOdemeSecili !== false}
+                checked={s.provider === 'tokenkablo' ? s.tokenOdemeSecili !== false : s.pavoOdemeSecili !== false}
                 disabled={saving === 'secili'}
                 onChange={(v) => void setSecili(v)}
                 label="Ödeme türü cihazda hazır gelsin"
-                hint="Kasada “Kredi kartı al” denince cihaz doğrudan kartla, “Nakit al” denince nakitle açılır; kasiyer cihazda tür seçmez. Cihaz beklenmedik davranırsa kapatın"
+                hint={
+                  s.provider === 'tokenkablo'
+                    ? 'Kasada seçilen tür sepetle gider: nakitte cihaz fişi hemen keser, kartta kart uygulaması, yemek kartında o kartın uygulaması açılır. Kapalıyken kasiyer cihazda seçer'
+                    : 'Kasada “Kredi kartı al” denince cihaz doğrudan kartla, “Nakit al” denince nakitle, eşlenmiş yemek kartında o araçla açılır; kasiyer cihazda tür seçmez. Cihaz beklenmedik davranırsa kapatın'
+                }
               />
             )}
           </div>
         )}
       </Card>
+
+      {s.tokenKablo && (s.provider === 'tokenkablo' || s.provider === 'kapali' || s.provider === 'simulator') && (
+        <TokenKabloCard status={s.tokenKablo} active={s.provider === 'tokenkablo'} oto={s.tokenKabloOto !== false} onOto={(v) => void setOto(v)} savingOto={saving === 'oto'} />
+      )}
+      {(s.provider === 'kapali' || s.provider === 'simulator') && (
+        <Card title="Pavo’yu tek düğmeyle kur" subtitle="Seri numarasını yazın: cihaz ağda bulunur, kaydedilir, eşleştirilir ve denenir; bağlantı Pavo’ya geçer">
+          <PavoQuickSetup />
+        </Card>
+      )}
 
       {s.provider === 'pavo' && (
         <>
@@ -748,7 +786,13 @@ export default function OkcAdmin() {
           >
             {!s.pavo.configured || editDevice ? (
               <>
-                {!s.pavo.configured && <p className="text-muted">Cihazın IP adresini ve seri numarasını yazın ya da cihazı ağda arayın; sonra Eşleştir</p>}
+                {!s.pavo.configured && (
+                  <>
+                    <p className="text-muted">Tek düğme: seri numarasını yazıp “Pavo’yu kur”a basın; cihaz ağda bulunur, eşleştirilir ve denenir</p>
+                    <PavoQuickSetup className="border-b border-[var(--admin-divider)] pb-4" />
+                    <p className="text-muted">Ya da adresi ve seri numarasını elle yazın, sonra Eşleştir</p>
+                  </>
+                )}
                 <PavoDeviceForm s={s} onCancel={s.pavo.configured ? () => setEditDevice(false) : undefined} />
               </>
             ) : (
@@ -963,6 +1007,10 @@ export default function OkcAdmin() {
           {/* Bilgiler eksikken açık gelir: o an gereken tek şey bu, sayfanın sonunda aranmaz */}
           <TokenSetup open={!s.tokenx.configured} />
         </>
+      )}
+
+      {(s.provider === 'tokenkablo' || s.provider === 'tokenx' || s.provider === 'pavo') && (
+        <MealCardMap provider={s.provider} operatorMethods={s.operatorMethods} pavoMediatorMethods={s.pavoMediatorMethods ?? {}} mediators={pavoTest?.mediators ?? s.pavo.mediators ?? []} />
       )}
 
       {s.provider !== 'kapali' && s.provider !== 'pavo' && (

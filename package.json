@@ -1,6 +1,6 @@
 {
   "name": "lafpos",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "L'Affogato POS: masa, adisyon, mutfak ekranı, kasa, stok, cari ve patron paneli; laffogato ve lafmaliyet ile bağlantılı",

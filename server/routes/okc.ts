@@ -28,6 +28,8 @@ import {
   verifyDeviceEod,
   webhookUrl,
 } from '../okc/service';
+import { kabloWanted, runPavoSetup, startTokenKabloSetup, syncTokenKablo } from '../okc/token-kablo-servis';
+import { kablo } from '../okc/token-kablo';
 import { claimStoreCopy, pendingStoreCopies, storeCopyPrinted } from '../okc/store-copy';
 import { getOrderDTO } from '../services/orders';
 
@@ -40,10 +42,16 @@ okcRoutes.put('/settings', async (c) => {
   const input = await body(
     c,
     z.object({
-      provider: z.enum(['kapali', 'tokenx', 'pavo', 'simulator']).optional(),
+      provider: z.enum(['kapali', 'tokenx', 'tokenkablo', 'pavo', 'simulator']).optional(),
       mode: z.enum(['anlik', 'liste']).optional(),
       sectionMap: z.record(z.string().regex(/^\d{1,2}$/), z.number().int().min(1).max(99)).optional(),
       operatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
+      /** Pavo: cihazın ödeme aracı no'su → yemek kartı ödeme türü */
+      pavoMediatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
+      /** Token kablolu: ödeme türü sepetle gider */
+      tokenOdemeSecili: z.boolean().optional(),
+      /** Token kablolu: kablo takılınca kendiliğinden kurulum ve geçiş */
+      tokenKabloOto: z.boolean().optional(),
       /** Pavo: gün kapanınca cihazda banka gün sonu */
       pavoAutoEod: z.boolean().optional(),
       /** Pavo: ödeme türü cihazda önceden seçili */
@@ -55,9 +63,10 @@ okcRoutes.put('/settings', async (c) => {
   );
   const user = c.get('user');
   const prev = getSettings();
-  // Pavo yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
-  const mode = input.provider === 'pavo' ? 'anlik' : input.mode;
-  if (input.mode === 'liste' && (input.provider ?? prev.okcProvider) === 'pavo') throw conflict('Pavo yalnız kasada ödemeyle çalışır', 'okc_mode');
+  // Pavo ve Token kablolu yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
+  const kasaOnly = (p: string) => p === 'pavo' || p === 'tokenkablo';
+  const mode = input.provider && kasaOnly(input.provider) ? 'anlik' : input.mode;
+  if (input.mode === 'liste' && kasaOnly(input.provider ?? prev.okcProvider)) throw conflict('Bu cihaz yalnız kasada ödemeyle çalışır', 'okc_mode');
   const providerChanged = !!input.provider && input.provider !== prev.okcProvider;
   const modeChanged = !!mode && mode !== prev.okcMode;
   // Sağlayıcı ve mod mali sonucu değiştirir (fiş kesilir mi, gün eğitim günü mü): yalnız patron, eski → yeni kayıtla
@@ -72,6 +81,9 @@ okcRoutes.put('/settings', async (c) => {
         ...(mode ? { okcMode: mode } : {}),
         ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
         ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
+        ...(input.pavoMediatorMethods ? { okcPavoMediatorMethods: input.pavoMediatorMethods } : {}),
+        ...(input.tokenOdemeSecili !== undefined ? { okcTokenOdemeSecili: input.tokenOdemeSecili } : {}),
+        ...(input.tokenKabloOto !== undefined ? { okcTokenKabloOto: input.tokenKabloOto } : {}),
         ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
         ...(input.pavoOdemeSecili !== undefined ? { okcPavoOdemeSecili: input.pavoOdemeSecili } : {}),
         ...(input.pavoEodFis !== undefined ? { okcPavoEodFis: input.pavoEodFis } : {}),
@@ -94,7 +106,38 @@ okcRoutes.put('/settings', async (c) => {
   });
   fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
   fx.flush();
+  // Token kablolu köprüsü bağlantıya göre açılır ya da kapanır
+  syncTokenKablo();
   return c.json(okcStatus(user));
+});
+
+/**
+ * Token kablolu: tek düğmeyle kurulum (Visual C++, Token kütüphanesi, köprü, gerekirse sürücü, kısımlar, yemek
+ * kartları, bağlantı). Arka planda sürer; adımlar durumda (`tokenKablo.setup`)
+ */
+okcRoutes.post('/token-kablo/kur', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  startTokenKabloSetup(actorFrom(c));
+  return c.json(okcStatus(c.get('user')));
+});
+
+/** Token kablolu köprüsünü yeniden başlatır (cihaz takılı ama görünmüyorsa) */
+okcRoutes.post('/token-kablo/yeniden', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  if (!kabloWanted()) throw conflict('Token kablolu bu bilgisayarda çalışmıyor (Windows kasa bilgisayarında, Token kablolu ya da kendiliğinden geçiş açıkken)', 'okc_off');
+  kablo.restart();
+  return c.json(okcStatus(c.get('user')));
+});
+
+/**
+ * Pavo: tek düğmeyle kurulum (cihazı ağda bul, kaydet, Pavo'ya geç, eşleştir, dene, yemek kartı araçlarını eşle).
+ * Eşleştirme cihazdaki onayı bekler (en çok 2 dk)
+ */
+okcRoutes.post('/pavo/kur', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  const input = await body(c, z.object({ serial: z.string().min(3).max(60), address: z.string().max(200).nullish() }));
+  const run = await runPavoSetup(actorFrom(c), input);
+  return c.json({ run, status: okcStatus(c.get('user')) });
 });
 
 /**
@@ -176,12 +219,14 @@ okcRoutes.post('/orders/:id/send', async (c) => {
       items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish(),
       /** Gönderen ekran ödemeden sonra nüsha (müşteri, işyeri; ayarı açık olanlar) basan kasa ekranı: cihaz ödeyince nüsha sunucuda bekler */
       storeCopy: z.boolean().optional(),
-      /** Kasada seçilen ödeme türü: Pavo'da cihazda önceden seçili gelir */
-      odeme: z.enum(['nakit', 'kart']).optional(),
+      /** Kasada seçilen ödeme türü: Pavo'da cihazda önceden seçili gelir, Token kabloluda sepetle gider */
+      odeme: z.enum(['nakit', 'kart', 'yemek']).optional(),
+      /** Seçilen ödeme türü (yemek kartında hangi kart: Token operatörü, Pavo ödeme aracı ondan) */
+      methodId: z.string().max(64).optional(),
     }),
   );
   const actor = actorFrom(c);
-  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null, { storeCopy: input.storeCopy, odeme: input.odeme });
+  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null, { storeCopy: input.storeCopy, odeme: input.odeme, methodId: input.methodId });
   return c.json({ receipt, order: blindOrder(c.get('user'), getOrderDTO(db, c.req.param('id'))) });
 });
 
