@@ -5,7 +5,7 @@ import { compReasonText } from '@shared/comp';
 import { allocate, splitKdv } from '@shared/money';
 import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { PLATFORM_FEE_POS_NAME, posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
-import { addDays, businessDate, isCalendarDate } from '@shared/time';
+import { addDays, businessDate, fmtDateShort, isCalendarDate } from '@shared/time';
 import type { SelectedOption } from '@shared/types';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
@@ -23,6 +23,7 @@ import type { TokenxBasket } from '../okc/tokenx';
 import { closedToday, computeSummary, deviceReceipts, lafmaliyetZ, shiftCountsOf, workedUserIdsOf } from '../services/days';
 import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../services/devir';
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
+import { notify } from './bildirim';
 import { dropPending, land, takeOff } from './outbox-flight';
 
 /**
@@ -998,6 +999,124 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
   return httpErrorText(status, json);
 }
 
+// ─── Gün gitmediyse patrona (denetim kaydı ve telefon bildirimi) ───────────
+
+/**
+ * Gün sonunun lafmaliyet'e gitmediği iki durum sessiz kalmaz (26 Kasım 2026; 25 Kasım teşhisinde bulundu): kapanışta
+ * gövde kurulamadı (`dayPrepFailed`) ve lafmaliyet günü kalıcı reddetti (`parkedAlarm`). İkisinde de denetim kaydına
+ * alarm yazılır ve patronun telefonuna bildirim gider (tür `lafmaliyet`; Telefon bildirimleri açıkken her zaman, ayrı
+ * anahtarı yok). Aynı olay için bir kez: anahtarlar burada (en yeni 50)
+ */
+const ALARMS = 'lafmaliyet.alarms';
+const ALARMS_MAX = 50;
+
+/** Anahtar ilk kez görülüyorsa saklar ve true döner */
+function firstAlarm(key: string): boolean {
+  const seen = getSyncState<string[]>(ALARMS) ?? [];
+  if (seen.includes(key)) return false;
+  setSyncState(ALARMS, [...seen, key].slice(-ALARMS_MAX));
+  return true;
+}
+
+/** Gün lafmaliyet'e ulaştı: o günün ret anahtarları silinir (sonra aynı nedenle yeniden reddedilirse yine haber verilir) */
+function forgetAlarms(prefix: string) {
+  try {
+    const seen = getSyncState<string[]>(ALARMS) ?? [];
+    const kept = seen.filter((k) => !k.startsWith(prefix));
+    if (kept.length !== seen.length) setSyncState(ALARMS, kept);
+  } catch (e) {
+    // Gönderim başarılı sayıldı; anahtar kalırsa yalnız aynı nedenin sonraki bildirimi gitmez
+    console.warn('[lafmaliyet] bildirim anahtarları', e instanceof Error ? e.message : e);
+  }
+}
+
+const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/** Bildirim gönderimi kasayı hiç bekletmez ve düşürmez */
+function alarmNotice(title: string, body: string) {
+  void notify({ kind: 'lafmaliyet', title, body }).catch((e) => console.warn('[lafmaliyet] bildirim', e instanceof Error ? e.message : e));
+}
+
+/**
+ * Kalıcı retin telefon bildirimi: günü, nedenin kısası (`pushErrorText`'in sınıflandırmasıyla) ve yeniden gönderme yolu.
+ * Site gövdeyi 240 karakterde keser; `pushErrorText`'in tamamı sığmaz (yol sonda kalırdı), tamamı denetim kaydında
+ */
+export function pushRejectNotice(status: number, json: unknown, payload: unknown): { title: string; body: string } {
+  const date = dateOf(payload);
+  const zNo = (payload as { z?: { zNo?: unknown } } | null)?.z?.zNo;
+  const day = date ? `${fmtDateShort(date)}: ` : '';
+  const title = `lafmaliyet gün sonunu reddetti${typeof zNo === 'number' ? ` (Z ${zNo})` : ''}`;
+  const j = (json && typeof json === 'object' ? json : {}) as { error?: unknown; field?: unknown; zNo?: unknown; sube?: unknown; expected?: unknown };
+  if (status === 409 && j.error === 'wrong_branch') {
+    return { title, body: `${day}kasa "${clip(String(j.sube), 24)}" şubesine ayarlı, lafmaliyet "${clip(String(j.expected), 24)}" bekliyor. Yönetim › Ayarlar ve yedek › Şube kimliğini düzeltip ${RESEND} ile yeniden gönderin` };
+  }
+  if (status === 409) {
+    const known = typeof j.zNo === 'number' ? `Z ${j.zNo}` : 'başka bir Z';
+    return { title, body: `${day}lafmaliyet'te bu güne ${known} kayıtlı (HTTP 409). lafmaliyet'te günün kaydı silinince ${RESEND} ile yeniden gönderin` };
+  }
+  const code = [j.error, j.field].filter((x): x is string => typeof x === 'string' && x.length > 0).join(': ');
+  return { title, body: `${day}gövde kabul edilmedi (HTTP ${status}${code ? `, ${clip(code, 48)}` : ''}). LafPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin` };
+}
+
+/**
+ * lafmaliyet günü kalıcı reddetti, kayıt park edildi (kendiliğinden yeniden denenmez, yalnız `lastError`'da görünürdü):
+ * denetim kaydına alarm ve patrona bildirim, aynı gün ve neden (`pushErrorText`) için bir kez. Hata gönderimi bozmaz
+ */
+function parkedAlarm(payload: unknown, status: number, json: unknown, text: string) {
+  try {
+    const date = dateOf(payload);
+    if (!firstAlarm(`ret:${date}:${text}`)) return;
+    const zNo = (payload as { z?: { zNo?: unknown } } | null)?.z?.zNo;
+    const day = date ? db.select({ id: schema.businessDays.id }).from(schema.businessDays).where(eq(schema.businessDays.date, date)).orderBy(desc(schema.businessDays.zNo)).get() : undefined;
+    const fx = new Effects();
+    fx.audit(db, {
+      action: 'sync.lafmaliyet_rejected',
+      severity: 'alarm',
+      entity: 'day',
+      entityId: day?.id ?? null,
+      message: `${date ? fmtDateShort(date) : 'Gün'}${typeof zNo === 'number' ? ` (Z ${zNo})` : ''} gün sonu lafmaliyet'e gitmedi: ${text}`,
+      data: { date, zNo: typeof zNo === 'number' ? zNo : null, status, error: (json as { error?: unknown } | null)?.error ?? null },
+    });
+    fx.flush();
+    const n = pushRejectNotice(status, json, payload);
+    alarmNotice(n.title, n.body);
+  } catch (e) {
+    console.error('[lafmaliyet] kalıcı ret bildirilemedi:', e);
+  }
+}
+
+/**
+ * Gün kapandı ama lafmaliyet gövdesi kurulamadı (`buildDayPayload` attı): gün kapalı kalır, giden kutusuna bir şey
+ * girmez, lafmaliyet'in gün sonu e-postası gitmez. Denetim kaydına alarm, patrona bildirim (kapanış başına bir kez).
+ * Yeniden deneme elle (Kasa › Geçmiş günler › Z › Gönder; Entegrasyon'daki "Geçmiş günleri gönder" de günü gönderilmemiş
+ * sayar). Hata kapanışı bozmaz
+ */
+function dayPrepFailed(dayId: string, err: unknown) {
+  const reason = err instanceof Error ? err.message || err.name : String(err);
+  console.error("[lafmaliyet] gün sonu gövdesi kurulamadı, gün lafmaliyet'e gitmedi:", err);
+  try {
+    const day = db.select({ date: schema.businessDays.date, zNo: schema.businessDays.zNo, closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
+    if (!firstAlarm(`hazirlik:${dayId}:${day?.closedAt ?? 0}`)) return;
+    const label = day ? `${fmtDateShort(day.date)} (Z ${day.zNo})` : 'Gün';
+    const fx = new Effects();
+    fx.audit(db, {
+      action: 'sync.lafmaliyet_failed',
+      severity: 'alarm',
+      entity: 'day',
+      entityId: dayId,
+      message: `${label} gün sonu lafmaliyet'e gitmedi: gövde kurulamadı (${clip(reason, 300)}). Gün kapandı; ${RESEND} ile yeniden deneyin, sürerse destekle görüşün`,
+      data: { date: day?.date ?? null, zNo: day?.zNo ?? null, error: clip(reason, 500) },
+    });
+    fx.flush();
+    alarmNotice(
+      `Gün sonu lafmaliyet'e gitmedi${day ? ` (Z ${day.zNo})` : ''}`,
+      `${day ? `${fmtDateShort(day.date)}: ` : ''}gün kapandı ama gövde kurulamadı (${clip(reason, 60)}). ${RESEND} ile yeniden deneyin, sürerse destekle görüşün`,
+    );
+  } catch (e) {
+    console.error('[lafmaliyet] gövde hatası bildirilemedi:', e);
+  }
+}
+
 interface PushState {
   lastRunAt?: number;
   /** En son başarılı gönderim (Genel bakış › Sistem sağlığı) */
@@ -1040,8 +1159,8 @@ function finalBody(row: typeof schema.outbox.$inferSelect): Record<string, unkno
  * Gidemeyen kayıt, yanıtı beklenirken yerine yenisi kuyruğa girdiyse ya da gün yeniden açıldıysa atılır: sonra yeniden
  * denenip yeni gövdeyi eskisiyle ezmesin, gün açıkken eski Z gitmesin (outbox-flight.ts)
  */
-function dropIfStale(row: typeof schema.outbox.$inferSelect) {
-  if (!row.dedupeKey) return;
+function dropIfStale(row: typeof schema.outbox.$inferSelect): boolean {
+  if (!row.dedupeKey) return false;
   const newer = db
     .select({ id: schema.outbox.id })
     .from(schema.outbox)
@@ -1053,6 +1172,7 @@ function dropIfStale(row: typeof schema.outbox.$inferSelect) {
     .where(and(eq(schema.businessDays.date, dateOf(row.payload)), isNull(schema.businessDays.closedAt)))
     .get();
   if (newer || reopened) db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+  return !!(newer || reopened);
 }
 
 async function sendDue(): Promise<{ sent: number; failed: number }> {
@@ -1083,11 +1203,13 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       // 400/413/422 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
       // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
       if (PERMANENT.has(status)) {
+        const text = pushErrorText(status, json, row.payload);
         db.update(schema.outbox)
-          .set({ attempts: row.attempts + 1, lastError: pushErrorText(status, json, row.payload), nextAttemptAt: Date.now() + PARKED_MS })
+          .set({ attempts: row.attempts + 1, lastError: text, nextAttemptAt: Date.now() + PARKED_MS })
           .where(eq(schema.outbox.id, row.id))
           .run();
-        dropIfStale(row);
+        // Park edilen kayıt patrona bildirilir (bir kez); yerine yenisi girdiyse ya da gün yeniden açıldıysa bayattır
+        if (!dropIfStale(row)) parkedAlarm(row.payload, status, json, text);
         failed++;
         continue;
       }
@@ -1109,6 +1231,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
           .where(and(eq(schema.businessDays.date, date), isNotNull(schema.businessDays.closedAt), lte(schema.businessDays.closedAt, row.createdAt)))
           .run();
       });
+      forgetAlarms(`ret:${date}:`);
       lastAnswer = answer;
       acceptedBranch = String(body.sube);
       sent++;
@@ -1391,11 +1514,19 @@ export async function pullCostsIfStale(now = Date.now()): Promise<boolean> {
 /**
  * Gün sonu alınınca (kasadan ya da otomatik): gün lafmaliyet'e gider, maliyetler günde bir yenilenir. `eodExpected`:
  * Pavo'nun otomatik banka gün sonu şimdi başlayacak (okc/service.ts autoEodExpected); o zaman gövde gün sonu bitene dek
- * en çok EOD_FIRST_PUSH_HOLD_MS tutulur (sonuçla tek gövde, tek e-posta), sonra yine gider
+ * en çok EOD_FIRST_PUSH_HOLD_MS tutulur (sonuçla tek gövde, tek e-posta), sonra yine gider. Atmaz: gövde kurulamazsa
+ * denetim kaydına alarm yazılır ve patrona bildirim gider, çağıran kapanışın kalanını (Pavo, kasa farkı) sürdürür
  */
 export function afterDayClosed(dayId: string, opts: { eodExpected?: boolean } = {}) {
-  if (opts.eodExpected) enqueueDay(dayId, { eodAtClose: true, holdMs: EOD_FIRST_PUSH_HOLD_MS });
-  else if (enqueueDay(dayId)) void flushOutbox();
+  // Gün zaten kapandı (işlem bitti): gövde kurulamazsa hata buradan çıkmaz. Çıksaydı kasa 500 alır, ardından gelen
+  // Pavo'nun banka gün sonu ve kasa farkı bildirimi hiç çağrılmaz, otomatik gün sonunda süreç düşebilirdi; giden
+  // kutusuna da bir şey girmediği için kimse bilmezdi. Denetim kaydı ve patrona bildirim (`dayPrepFailed`)
+  try {
+    if (opts.eodExpected) enqueueDay(dayId, { eodAtClose: true, holdMs: EOD_FIRST_PUSH_HOLD_MS });
+    else if (enqueueDay(dayId)) void flushOutbox();
+  } catch (e) {
+    dayPrepFailed(dayId, e);
+  }
   void pullCostsIfStale();
 }
 

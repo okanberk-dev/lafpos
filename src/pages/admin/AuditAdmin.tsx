@@ -138,6 +138,8 @@ const ACTION_LABEL: Record<string, string> = {
   'settings.update': 'Ayar değişikliği',
   'settings.z_start': 'İlk Z numarası',
   'sync.lafmaliyet_backfill': 'lafmaliyet aktarımı',
+  'sync.lafmaliyet_failed': "Gün sonu lafmaliyet'e gitmedi",
+  'sync.lafmaliyet_rejected': 'lafmaliyet gün sonunu reddetti',
   'table.qr_created': 'Masa QR',
   'table.qr_rotated': 'Masa QR yenileme',
   'user.create': 'Personel ekleme',

@@ -807,8 +807,9 @@ gider (`cashMoves[].recipient`, sahibin kararı 25 Kasım 2026; kimlik gitmez). 
   (§4.2). Ürün satışları aylık modele (B08), Kasa raporu ön doldurması, ikram ve ödeme kanalları geçiş gününden
   sonraki günlerde lafmaliyet partileriyle (B09-B11) okunur; ikram lafmaliyet'te `ikram[]` olarak saklanır, Zayi
   & ikram'a elle girilmez. Yanıtlar §4.2'de. 400, 409, 413 ve 422 kalıcıdır: LafPOS tekrar denemez, kaydı giden
-  kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Site ve lafmaliyet; metin "Kendiliğinden yeniden denenmez" der);
-  düzeltilince Kasa › Geçmiş günler'de günün Z raporundaki "Gönder" ile yeniden gider.
+  kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Site ve lafmaliyet; metin "Kendiliğinden yeniden denenmez" der),
+  denetim kaydına alarm yazar ve patronun telefonuna bir kez bildirir (§4.11); düzeltilince Kasa › Geçmiş günler'de günün
+  Z raporundaki "Gönder" ile yeniden gider.
 - Aynı gün içinde `posName` tekildir (§3.1 satır anahtarı ve çakışma kuralı). lafmaliyet karşılığı:
   [RiosenBeq/lafmaliyet#34](https://github.com/RiosenBeq/lafmaliyet/pull/34).
 - **Ortak örnek gövde:** `tests/fixtures/lafmaliyet-gun.golden.json` (iki boy, ek, ikram ve eki, karaoke, cari,
@@ -1313,6 +1314,29 @@ beklemeyi bitiren bir tetik yoktu. İki tarafta düzeltildi; eski LafPOS ile yen
 - **lafmaliyet tarafı** (lafmaliyet docs/LAFPOS.md "Pavo'yu bekler"): bekleme günün ilk gelişinden sayılır; beklemeye alan
   gönderimin kendi işi süresi içinde sonucu yoklar, gelmezse e-postayı Pavo'suz gönderir (sonuç sonra gelirse kısa Pavo
   e-postası). E-posta hiçbir gece sonraki bir tetiğe kalmaz.
+
+### 4.11 Gün gitmediyse patron bilir (26 Kasım 2026)
+
+25 Kasım teşhisinde iki sessiz yol daha bulundu: ikisinde de gün lafmaliyet'e gitmiyor, e-posta gelmiyor ve kimse
+bilmiyordu. İkisi de artık denetim kaydına alarm yazar ve patronun telefonuna bildirim gönderir (Web Push, tür
+`lafmaliyet`; Telefon bildirimleri açıkken her zaman, ayrı anahtarı yok, kartta tek satırla yazar; `docs/07-UZAKTAN-ERISIM.md`
+§4). Sözleşme değişmez, lafmaliyet'e yeni alan gitmez.
+
+- **Kapanışta gövde kurulamazsa** (`afterDayClosed` → `enqueueDay` → `buildDayPayload` atarsa; `POST /api/cash/day/close`
+  ve otomatik gün sonu): gün kapalı kalır ve kapanış 200 döner (önce 500 dönüyordu, gün yine kapanmıştı). Giden kutusuna
+  bir şey girmez; denetimde `sync.lafmaliyet_failed` (alarm: gün, Z, hata ve "Kasa › Geçmiş günler › Z › Gönder"),
+  patrona "Gün sonu lafmaliyet'e gitmedi (Z n)" bildirimi, kapanış başına bir kez. Ardından gelenler yine çalışır:
+  Pavo'nun banka gün sonu (`deviceEndOfDay`) ve kasa farkı bildirimi (önce hiç çağrılmıyordu). Pavo'nun sonucu gelince
+  gün yeniden kuyruğa girer (`saveEod`); gövde o zaman kurulabiliyorsa gün yine gider. Entegrasyon'daki "Geçmiş günleri
+  gönder" günü gönderilmemiş sayar. Otomatik gün sonunun zamanlayıcısı hatayı yakalar: süreç düşmez, sonraki tur dener.
+- **Kalıcı ret** (400, 409, 413, 422; kayıt 365 gün park edilir, kendiliğinden yeniden denenmez): denetimde
+  `sync.lafmaliyet_rejected` (alarm, `lastError`'ın tam metni) ve patrona "lafmaliyet gün sonunu reddetti (Z n)"
+  bildirimi: gün, nedenin kısası (`pushRejectNotice`, `pushErrorText`'in sınıflandırmasıyla: şube, başka Z ya da sürüm
+  farkı) ve yol "Kasa › Geçmiş günler › Z › Gönder" (site gövdeyi 240 karakterde keser; tam metin denetim kaydında).
+  Aynı gün ve neden (`pushErrorText`) için bir kez: elle "Gönder" aynı nedenle yine reddedilirse yeniden bildirmez,
+  başka nedenle reddedilirse bildirir. Gün lafmaliyet'e ulaşınca (200) o günün anahtarları silinir. Yanıtı beklenirken
+  yerine yenisi giren ya da gün yeniden açıldığı için atılan kayıt bildirilmez. Anahtarlar `sync_state`
+  `lafmaliyet.alarms`'ta (en yeni 50).
 
 ## 5. Sıklık ve bütçe
 
