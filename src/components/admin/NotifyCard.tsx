@@ -22,7 +22,8 @@ const KEY = ['sync', 'bildirim'];
 /**
  * Telefon bildirimleri (Yönetim › Ağ ve uzaktan erişim): hangi olayın patronun telefonuna gideceği ve eşikleri
  * (server/sync/bildirim.ts). Telefonda bildirimi patron LafPOS Uzaktan › Merkez'de açar. Kapanış saati bildirimi
- * Ayarlar'daki kapanış saatine bağlı: saat girilmemişse anahtar açık olsa da bir şey gitmez, altında nereden girileceği
+ * Ayarlar'daki kapanış saatine bağlı: saat girilmemişse anahtar açık olsa da bir şey gitmez, altında nereden girileceği.
+ * lafmaliyet'e gitmeyen gün sonunun (`lafmaliyet`) anahtarı yok: bildirim açıkken her zaman gider, kartta tek satır
  */
 export function NotifyCard() {
   const qc = useQueryClient();
@@ -76,6 +77,7 @@ export function NotifyCard() {
             hint={closingTime ? `kapanışa 30 dakika kala gün hâlâ açıksa (kapanış ${closingTime}); gün başına bir kez` : "Ayarlar ve yedek › Gün sonu ve Z'de kapanış saati girilince çalışır"}
             disabled={!s.enabled}
           />
+          <p className="text-[13px] text-muted">Gün sonu lafmaliyet'e gitmezse (gövde kurulamadı ya da reddedildi) her zaman bildirilir</p>
           <div>
             <Button variant="secondary" loading={test.isPending} disabled={!d?.ready || !s.enabled} onClick={() => test.mutate()}>
               Deneme bildirimi gönder

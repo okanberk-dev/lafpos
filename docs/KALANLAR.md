@@ -58,6 +58,10 @@ Son güncelleme: 26 Kasım 2026.
   ilk gövdeyi en çok 150 sn tutar, gün sonu bitince (ya da atlanınca) gün hemen ve tek gövdeyle gider; yeni alan
   `bankPosPending` (`docs/03-ENTEGRASYON.md` §4.10). ladmin tarafı (lafmaliyet aynı adlı dal) beklemeyi aynı istekte
   bitirir; e-postalar orada ortak, ferah ve telefona uygun tasarıma geçti.
+- **Gün gitmediyse patron bilir (26 Kasım 2026):** kapanışta lafmaliyet gövdesi kurulamazsa gün kapalı kalır, kapanış
+  200 döner, Pavo gün sonu ve kasa farkı bildirimi yine çalışır (otomatik gün sonu süreci düşürmez); lafmaliyet günü
+  kalıcı reddederse (400/409/413/422) de sessiz kalmaz. İkisinde denetim kaydına alarm ve patrona bir kez telefon
+  bildirimi (tür `lafmaliyet`: gün, neden, "Kasa › Geçmiş günler › Z › Gönder"; `docs/03-ENTEGRASYON.md` §4.11).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 

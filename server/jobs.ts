@@ -264,6 +264,7 @@ export function autoDayEndTick(now = Date.now()) {
   }
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
+  // Atmaz (gövde kurulamazsa denetim kaydı ve patrona bildirim): Pavo'nun gün sonu aşağıda her durumda başlar
   afterDayClosed(closed.id, { eodExpected: autoEodExpected(closed.id) });
   // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5).
   // Alınamaz ya da belirsiz kalırsa kasadan alınan gün sonundaki gibi patronun telefonuna (routes/cash.ts); otomatik
@@ -331,7 +332,16 @@ export function startJobs() {
   timers.push(setInterval(() => void modposTick(), 60_000));
   // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
-  timers.push(setInterval(() => autoDayEndTick(), 60_000));
+  // Zamanlayıcıda yakalanmayan hata süreci düşürür (kasa kapanır): kapanış hatası günlüğe, sonraki tur yine dener
+  timers.push(
+    setInterval(() => {
+      try {
+        autoDayEndTick();
+      } catch (e) {
+        console.error('[gün sonu] otomatik gün sonu', e);
+      }
+    }, 60_000),
+  );
   timers.push(setInterval(platformTick, 30_000));
   // Canlı platform bağlantısı: yoklama (Trendyol Go) ve bekleyen aşama bildirimleri; anahtar yokken hiç istek yok
   timers.push(setTimeout(() => void liveTick(), 15_000));
