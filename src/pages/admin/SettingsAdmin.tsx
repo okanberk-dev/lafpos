@@ -384,12 +384,12 @@ export default function SettingsAdmin() {
                 onClick={() => void chooseMode(m)}
                 className={cn(
                   // Seçim karosu (köşe 12): telefonda ikon solda, geniş ekranda üstte; seçim dairesi sağ üstte, ikonun
-                  // hizasında. Seçili açık nane zeminde, ikon beyaz karoda (kasanın ödeme türü karosu gibi); uygulanırken
+                  // hizasında. Seçili mürekkep kenarda (Keel `.k-picked`), ikon kuyu karosunda; uygulanırken
                   // seçilen karo soluklaşmaz, dairesinde dönen gösterge
                   'relative flex min-h-16 items-start gap-3 rounded-[var(--r-tile)] border p-3.5 pr-11 text-left transition-[background-color,border-color,box-shadow] sm:flex-col sm:pr-3.5',
                   !busy && 'disabled:opacity-60',
                   on
-                    ? 'border-primary bg-[var(--admin-primary-soft)] shadow-[inset_0_0_0_1px_var(--admin-primary)]'
+                    ? 'k-picked'
                     : 'border-line bg-surface shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-hover',
                 )}
               >
@@ -397,13 +397,13 @@ export default function SettingsAdmin() {
                   aria-hidden="true"
                   className={cn(
                     'grid size-9 shrink-0 place-items-center rounded-[var(--r-control)] [&>svg]:size-[18px]',
-                    on ? 'bg-[var(--admin-surface)] text-primary shadow-[var(--shadow-control)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]',
+                    on ? 'bg-[var(--k-well-2)] text-ink' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]',
                   )}
                 >
                   <Icon />
                 </span>
                 <span className="min-w-0">
-                  <span className={cn('block text-sm font-semibold', on && 'text-primary')}>{SERVICE_MODE_LABEL[m]}</span>
+                  <span className="block text-sm font-semibold">{SERVICE_MODE_LABEL[m]}</span>
                   <span className="mt-0.5 block text-xs leading-4 text-muted">{SERVICE_MODE_HINT[m]}</span>
                 </span>
                 {/* Boş halka alan kenarı tonunda (iki temada 3:1): seçilmemiş kutucuk düz metin kutusu gibi okunmasın */}
@@ -411,8 +411,8 @@ export default function SettingsAdmin() {
                   aria-hidden="true"
                   className={cn(
                     'absolute right-3.5 top-[22px] grid size-5 place-items-center rounded-full border',
-                    on ? 'border-primary bg-primary text-primary-ink' : 'border-[var(--admin-border-field)] bg-surface',
-                    busy && 'border-transparent bg-transparent text-primary',
+                    on ? 'k-picked-dot' : 'border-[var(--admin-border-field)] bg-surface',
+                    busy && 'border-transparent bg-transparent text-ink',
                   )}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> : on && <Check className="size-3.5 stroke-[2.5]" />}

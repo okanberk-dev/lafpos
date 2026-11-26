@@ -19,7 +19,7 @@ export function UzaktanYonetimKarti({ className }: { className?: string }) {
       to={KONTROL_PATH}
       className={cn(FLOAT_CARD, 'flex min-h-16 items-center gap-4 px-5 py-4 transition-[border-color,transform] duration-150 hover:border-[var(--admin-border-strong)] active:scale-[0.99] motion-reduce:active:scale-100', className)}
     >
-      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-[18px]">
+      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-[var(--r-segment)] bg-[var(--k-well)] text-[var(--k-ink)] [&>svg]:size-[18px]">
         <MonitorCog />
       </span>
       <span className="min-w-0 flex-1">

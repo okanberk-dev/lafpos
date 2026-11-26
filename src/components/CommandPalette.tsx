@@ -217,7 +217,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-transparent bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
       >
         <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-4">
-          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]">
+          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--k-well)] text-[var(--k-ink)]">
             <Search className="size-4 stroke-2" />
           </span>
           <input

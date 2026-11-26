@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SetupCard } from '@/components/admin/SetupCard';
-import { AlertTriangle, BadgePercent, ChevronRight, Cloud, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ReceiptText, ShieldAlert, ShoppingBag, TurkishLira, Utensils, Wifi } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Cloud, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ShieldAlert, ShoppingBag, Wifi } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -52,7 +52,7 @@ function internetRow(n: SyncStatus['internet']) {
   return { ...base, tone: (n.state === 'var' ? 'success' : 'neutral') as Tone, state: n.state === 'var' ? 'Var' : 'Denetlenmedi', detail: n.lastOkAt ? `Son başarılı bağlantı ${fmtDateTime(n.lastOkAt)}` : 'Henüz dışarıya istek gitmedi' };
 }
 
-const pct = (v: number | null) => (v == null ? null : { text: `${v >= 0 ? '▲' : '▼'} %${Math.abs(v).toLocaleString('tr-TR')}`, good: v >= 0 });
+const pct = (v: number | null) => (v == null ? null : { text: `%${Math.abs(v).toLocaleString('tr-TR')}`, good: v >= 0 });
 const ago = (at?: number) => (at ? fmtDateTime(at) : 'henüz yok');
 
 /** Kartın satır listesi: gidilecek yeri olan satır bağlantıdır (üzerinde gri, sağda ›), olmayan düz satır */
@@ -103,15 +103,13 @@ export default function OverviewAdmin() {
   // Grafik ve en çok satanlar sütunu yalnız rakam gelirken ya da gelmişken: yoksa ızgarada boş sütun kalırdı
   const main = livePending || !!d;
 
-  // İkon tonu Raporlar'la aynı: ciro yeşil, açık adisyon kobalt (dolu masa), indirim ve ikram pembe (kayıp), online mor;
-  // kapanan adisyon sayısı durumsuz, nötr
+  // KPI kartı ikonsuz (Keel; rakam, etiket, köşede değişim hapı); ciro öne çıkan koyu kart
   const cells: KpiCell[] = d
     ? [
         {
           key: 'ciro',
           label: 'Net ciro',
-          icon: <TurkishLira />,
-          hue: 'green',
+          inverse: true,
           value: tl(d.netSales),
           delta: pct(d.compare.lastWeek.change),
           reference: `Geçen hafta bu saatte ${tl(d.compare.lastWeek.netSales)}`,
@@ -120,7 +118,6 @@ export default function OverviewAdmin() {
           key: 'adisyon',
           // Kısa etiket hücreye sığar ("Kapanan adisyon" bilgisayarda da kesiliyordu); "kapanan" referansta
           label: 'Adisyon',
-          icon: <ReceiptText />,
           value: d.orders,
           delta: pct(d.compare.lastWeek.orders ? Math.round(((d.orders - d.compare.lastWeek.orders) / d.compare.lastWeek.orders) * 100) : null),
           reference: d.orders ? `Kapanan · ortalama ${tl(d.avgCheck)} · geçen hafta ${d.compare.lastWeek.orders}` : `Henüz kapanan yok · geçen hafta ${d.compare.lastWeek.orders}`,
@@ -128,24 +125,18 @@ export default function OverviewAdmin() {
         {
           key: 'acik',
           label: 'Açık adisyon',
-          icon: <Utensils />,
-          hue: 'blue',
           value: d.open.count,
           reference: d.open.count ? `Tahsil edilecek ${tl(d.open.total)}` : 'Bekleyen tahsilat yok',
         },
         {
           key: 'indirim',
           label: 'İndirim ve ikram',
-          icon: <BadgePercent />,
-          hue: 'rose',
           value: tl(d.discounts + d.complimentary),
           reference: `İptal edilen ${tl(d.voided)}`,
         },
         {
           key: 'online',
           label: 'Online sipariş',
-          icon: <ShoppingBag />,
-          hue: 'violet',
           value: d.online.orders,
           reference: d.online.orders ? `${tl(d.online.amount)} sitede ödendi` : 'Bugün sitede sipariş yok',
         },
@@ -321,7 +312,7 @@ export default function OverviewAdmin() {
                             aria-hidden="true"
                             className={cn(
                               'grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums',
-                              i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+                              i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--k-well-2)] text-[var(--k-ink-2)]',
                             )}
                           >
                             {i + 1}

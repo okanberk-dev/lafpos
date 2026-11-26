@@ -38,9 +38,9 @@ const allergenLabel = (key: string) => ALLERGEN_LABEL[key] ?? key.replace(/_/g, 
 
 type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 
-// Seçenek ve hızlı not çipleri aynı dilde: 10 px köşe, seçilince ev yeşili; amber bu sistemde durum rengidir, seçim rengi değil
+// Seçenek ve hızlı not çipleri aynı dilde: 10 px köşe, seçilince mürekkep kenar (Keel `.k-picked`); amber durum rengidir, seçim rengi değil
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
-const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
+const CHIP_ON = 'k-picked';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
 // Kasada tükenen seçenek: gri, seçilemez, yanında "Tükendi" (Tükenen ürünler › Seçenekler)
 const CHIP_SOLD = 'border-line bg-surface-2 text-muted disabled:cursor-not-allowed';
@@ -167,7 +167,7 @@ export function OptionsModal({
                   key={s}
                   aria-pressed={size === s}
                   onClick={() => setSize(s)}
-                  className={cn('rounded-xl border p-3 text-left transition-colors duration-150', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)] active:bg-press')}
+                  className={cn('rounded-xl border p-3 text-left transition-colors duration-150', size === s ? 'k-picked' : 'border-line bg-surface hover:border-[var(--admin-border-field)] active:bg-press')}
                 >
                   <div className="font-semibold">{boot.settings.sizeLabels[s]}</div>
                   <div className="tabular text-sm text-muted">{tlShort(s === 'L' ? product.priceL! : product.price)}</div>
@@ -229,13 +229,13 @@ export function OptionsModal({
                         aria-pressed={on}
                         disabled={sold || (full && !on)}
                         onClick={() => (g.kind === 'single' ? setPicks(pickSingle(g, picks, i.id)) : setCount(i.id, on ? 0 : 1))}
-                        className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-primary active:bg-press') : on ? CHIP_ON : CHIP_OFF, full && !on && !i.soldOut && 'cursor-not-allowed opacity-50')}
+                        className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-[var(--k-select)] active:bg-press') : on ? CHIP_ON : CHIP_OFF, full && !on && !i.soldOut && 'cursor-not-allowed opacity-50')}
                       >
                         {i.name}
                         {i.soldOut ? (
                           <span className={SOLD_BADGE}>Tükendi</span>
                         ) : (
-                          i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
+                          i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-ink-2' : 'text-muted')}>+{tlCompact(i.price)}</span>
                         )}
                       </button>
                     );

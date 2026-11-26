@@ -38,13 +38,13 @@ const COMP_ICON: Record<CompKind, ReactNode> = { ikram: <Gift className="size-4"
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
 
-/** Seçim kartı (ödeme türü, kalem satırı): seçili yeşil kenar ve açık yeşil zemin; dinlenmede ince kenar */
+/** Seçim kartı (ödeme türü, kalem satırı): seçili mürekkep kenar (Keel `.k-picked`); dinlenmede ince kenar */
 const choice = (on: boolean) =>
-  cn('rounded-xl border transition-colors duration-150', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press');
+  cn('rounded-xl border transition-[color,background-color,border-color,box-shadow] duration-150', on ? 'k-picked' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press');
 
-/** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde, rakam Gabarito; seçili olan yeşil kenar ve halka */
+/** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde, rakam Inter; yazılan alan mürekkep kenar ve kuyu halka */
 const typedField = (on: boolean) =>
-  cn('tabular w-full rounded-xl border px-4 text-right font-headline font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
+  cn('tabular w-full rounded-xl border px-4 text-right font-headline font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-[var(--k-select)] ring-4 ring-[var(--k-well-2)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
 
 /** Ödeme türünün ikonu (karonun içinde, türün renginde): nakit banknot, kart, yemek kartı çatal bıçak, havale banka */
 const PAY_ICON: Record<PaymentMethodDTO['kind'], LucideIcon> = { nakit: Banknote, kart: CreditCard, yemek: UtensilsCrossed, havale: Landmark, cari: NotebookPen, online: Globe, diger: Wallet };

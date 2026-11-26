@@ -46,7 +46,7 @@ export function DownloadContent() {
           <ol className="mt-5 space-y-4 border-t border-line pt-5">
             {STEPS.map((s, i) => (
               <li key={s.title} className="flex gap-3">
-                <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-sm font-semibold text-[var(--admin-primary)]">
+                <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--k-well-2)] text-sm font-semibold text-[var(--k-ink)]">
                   {i + 1}
                 </span>
                 <div className="min-w-0">

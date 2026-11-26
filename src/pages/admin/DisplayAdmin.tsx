@@ -208,7 +208,7 @@ export default function DisplayAdmin() {
                     onClick={() => set('theme', t)}
                     className={cn(
                       'flex overflow-hidden rounded-[var(--r-tile)] border bg-[var(--admin-surface)] text-left transition-[border-color,box-shadow] duration-150 sm:flex-col',
-                      on ? 'border-[var(--admin-ink-fill)] shadow-[0_0_0_3px_var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)] hover:shadow-[var(--shadow-control)]',
+                      on ? 'k-picked' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)] hover:shadow-[var(--shadow-control)]',
                     )}
                   >
                     {/* Örnek yazı süs: seçeneğin adı temanın adıdır */}

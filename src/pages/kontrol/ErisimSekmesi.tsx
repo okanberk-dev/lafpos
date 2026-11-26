@@ -280,7 +280,7 @@ function DavetFormu({ ilk, onClose, onDavet }: { ilk: { eposta: string; rol: Dav
                 key={r}
                 className={cn(
                   'flex min-h-11 cursor-pointer items-start gap-3 rounded-[var(--r-tile)] border px-4 py-3 transition-colors duration-150',
-                  rol === r ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-strong)]',
+                  rol === r ? 'k-picked' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-strong)]',
                 )}
               >
                 <input type="radio" name="davet-rol" value={r} checked={rol === r} onChange={() => setRol(r)} className="mt-0.5 size-5 shrink-0 accent-[var(--admin-primary)] pointer-fine:size-4" />

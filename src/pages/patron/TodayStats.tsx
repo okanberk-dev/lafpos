@@ -37,15 +37,18 @@ export function Group({ title, meta, label, children, footer, className, flush, 
 }
 
 /**
- * Kartın başlığındaki görünüm seçici (grafik türü): sakin yazı düğmeleri, seçili olan nötr hap içinde ve kalın. Dokunma
- * hedefi 44 px (hap içeride 28 px); seçim `aria-pressed` ve ağırlıkla, renkle değil
+ * Kartın başlığındaki görünüm seçici (grafik türü): Keel segmenti (`.k-seg`; sahibin örnekleri, 26 Kas 2026), kuyu
+ * tonunda ray ve seçili beyaz başparmak. Ray 34 px, dokunma hedefi 44 px (düğme rayın üstünden ve altından taşar,
+ * başparmak içeride 28 px); seçim `aria-pressed` ve başparmakla
  */
 export function ViewTabs<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
   return (
-    <div role="group" aria-label={label} className="-my-2 -mr-2 flex items-center">
+    <div role="group" aria-label={label} className="k-seg -my-1 flex h-[34px] items-center">
       {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)} className="group inline-flex min-h-9 items-center px-0.5 focus-visible:-outline-offset-2 pointer-coarse:min-h-11">
-          <span className={cn('inline-flex min-h-7 items-center rounded-full px-2.5 text-[13px] leading-5 transition-colors duration-150', value === o.value ? 'bg-surface-3 font-semibold text-ink' : 'text-muted group-hover:text-ink')}>{o.label}</span>
+        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)} className="group inline-flex h-9 items-center focus-visible:-outline-offset-2 pointer-coarse:h-11">
+          <span data-on={value === o.value || undefined} className="k-seg-opt h-7 px-3 text-[13px] leading-5">
+            {o.label}
+          </span>
         </button>
       ))}
     </div>

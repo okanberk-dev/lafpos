@@ -193,6 +193,13 @@ export function Button({ variant = 'secondary', size = 'md', icon, loading, bloc
   );
 }
 
+/**
+ * Üst çubuğun ve telefon şeridinin düğmesi (sahibin örneği, 26 Kas 2026: zil ve kişi zeminde beyaz kare): sekmeyle aynı
+ * beyaz hap zemini (--k-tab-bg) ve köşesi; boyu çağıranda (44 px). Kabuk (AppShell) ve yönetimin telefon şeridi
+ */
+export const TOP_BTN =
+  'rounded-[var(--r-segment)] border-0 bg-[var(--k-tab-bg)] text-ink shadow-none hover:bg-[color-mix(in_oklab,var(--k-tab-bg),var(--k-ink)_5%)] active:bg-[color-mix(in_oklab,var(--k-tab-bg),var(--k-ink)_9%)]';
+
 export function IconButton({ label, className, variant = 'ghost', size = 'md', children, ...rest }: Omit<ButtonProps, 'icon'> & { label: string }) {
   return (
     <Button aria-label={label} title={label} variant={variant} size={size} ring={false} className={cn(squares[size], className)} {...rest}>

@@ -169,10 +169,10 @@ export function StaffLinkSection({ user, configured, names }: { user: { id: stri
                       className={cn(
                         'flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors',
                         disabled ? 'cursor-not-allowed bg-[var(--admin-surface-2)] text-[var(--admin-text-soft)]' : 'hover:bg-hover',
-                        chosen === c.ref && 'bg-[var(--admin-primary-soft)]',
+                        chosen === c.ref && 'bg-[var(--k-well)]',
                       )}
                     >
-                      <span aria-hidden="true" className={cn('grid size-4 shrink-0 place-items-center rounded-full border', chosen === c.ref ? 'border-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)]')}>
+                      <span aria-hidden="true" className={cn('grid size-4 shrink-0 place-items-center rounded-full border', chosen === c.ref ? 'border-[var(--k-select)]' : 'border-[var(--admin-border-strong)]')}>
                         {chosen === c.ref && <span className="size-2 rounded-full bg-[var(--admin-primary)]" />}
                       </span>
                       {/* Ad ve hesap kesilmez (doğru kişiyi seçmek için tamamı okunmalı): dar ekranda alt satıra iner */}

@@ -104,7 +104,11 @@ async function openWithSale(): Promise<void> {
     if (!d.closedAt || d.date.startsWith('2020-')) continue;
     const to = `2020-02-${String(++past).padStart(2, '0')}`;
     m.db.update(m.schema.businessDays).set({ date: to }).where(m.eq(m.schema.businessDays.id, d.id)).run();
-    m.db.update(m.schema.outbox).set({ dedupeKey: `gun:${to}` }).where(m.eq(m.schema.outbox.dedupeKey, `gun:${d.date}`)).run();
+    // Gövdenin tarihi de taşınır: önceki testten kalan bir yeniden deneme bugünün tarihiyle gidip bu testin gövdesi sanılmasın
+    for (const r of m.db.select().from(m.schema.outbox).where(m.eq(m.schema.outbox.dedupeKey, `gun:${d.date}`)).all()) {
+      const payload = { ...(r.payload as Record<string, unknown>), date: to };
+      m.db.update(m.schema.outbox).set({ dedupeKey: `gun:${to}`, payload }).where(m.eq(m.schema.outbox.id, r.id)).run();
+    }
   }
   // Her gün bugünün tarihiyle açılır: önceki günlerin gövdeleri aynı tarihli, sayılmaz
   posts.length = 0;

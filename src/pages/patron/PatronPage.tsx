@@ -9,7 +9,7 @@ import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { agoText, cutoffMinute, dayLabel, type PatronStats, statsSource, summaryCompares, todayStats, topCompare } from '@shared/today-stats';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { Button, IconButton } from '@/components/ui/Button';
-import { ErrorState, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
+import { ErrorState, KPill, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
@@ -23,7 +23,7 @@ import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
 import { Amount, COMPARE_SHORT, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs, GROUP, PaymentMix } from './TodayStats';
 import { UzaktanYonetimKarti } from '@/pages/kontrol/UzaktanYonetimKarti';
-import { CompareBars, HeroNumber, KPill, KpiTile, PaymentGaugeCard, PctPill, ThinBars } from './KeelPanel';
+import { CompareBars, HeroNumber, KpiTile, PaymentGaugeCard, PctPill, ThinBars } from './KeelPanel';
 import { KiyasDokum } from './KiyasDokum';
 
 export interface PatronData {

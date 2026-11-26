@@ -97,7 +97,8 @@ export default function FloorPage() {
   const today = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' }).format(now);
 
   const viewToggle = wide && (
-    <div role="radiogroup" aria-label="Görünüm" className="inline-flex gap-0.5 rounded-full border border-[var(--admin-border-strong)] bg-surface p-[3px]">
+    // Keel segmenti (.k-seg): saydam mürekkep ray, seçili beyaz başparmak
+    <div role="radiogroup" aria-label="Görünüm" className="k-seg inline-flex">
       {(
         [
           ['plan', 'Plan görünümü', LayoutGrid],
@@ -112,10 +113,7 @@ export default function FloorPage() {
           aria-label={label}
           title={label}
           onClick={() => setView(v)}
-          className={cn(
-            'grid h-9 w-10 place-items-center rounded-full transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
-            view === v ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'text-muted hover:bg-hover hover:text-ink',
-          )}
+          className="k-seg-opt h-9 w-10 px-0 pointer-coarse:size-11"
         >
           <Icon className="size-4" />
         </button>

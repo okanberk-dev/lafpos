@@ -1,7 +1,7 @@
 import { tl, tlShort } from '@shared/money';
-import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
+import { KPill } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
 import { PAY_KINDS, payKind } from './TodayStats';
 
@@ -13,24 +13,6 @@ import { PAY_KINDS, payKind } from './TodayStats';
  * verisinden gelir; burada hesap yok, yalnız çizim
  */
 
-/** Değişim hapı (Keel): artış dolu nane, düşüş yumuşak kırmızı; yön okla ve ekran okuyucuya yazıyla */
-export function KPill({ dir, children, className }: { dir: 'up' | 'down' | 'flat'; children: ReactNode; className?: string }) {
-  const Arrow = dir === 'down' ? ArrowDown : ArrowUp;
-  return (
-    <span
-      className={cn(
-        'tabular inline-flex h-[22px] shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-2 text-[11.5px] font-medium leading-none',
-        dir === 'up' ? 'bg-[var(--k-mint)] text-[#0b3d22]' : dir === 'down' ? 'bg-[var(--k-neg-soft)] text-[var(--k-neg-ink)]' : 'bg-[var(--k-well-2)] text-[var(--k-ink-2)]',
-        className,
-      )}
-    >
-      {dir !== 'flat' && <Arrow aria-hidden="true" className="size-3 stroke-[2.25]" />}
-      {children}
-      <span className="sr-only">{dir === 'up' ? ' arttı' : dir === 'down' ? ' azaldı' : ' değişmedi'}</span>
-    </span>
-  );
-}
-
 /** Yüzdeyi hapa çevirir; null ise hap yok */
 export function PctPill({ value }: { value: number | null | undefined }) {
   if (value == null) return null;
@@ -40,7 +22,7 @@ export function PctPill({ value }: { value: number | null | undefined }) {
 /** Küçük karo: rakam solda, hap sağ üstte, etiket altta */
 export function KpiTile({ value, label, pill, className }: { value: ReactNode; label: ReactNode; pill?: ReactNode; className?: string }) {
   return (
-    <div className={cn('k-tile min-w-0 rounded-[var(--k-r-tile)] px-4 py-3.5', className)}>
+    <div className={cn('k-tile min-w-0 rounded-[var(--k-r-tile)] px-4 py-4 sm:px-5', className)}>
       {/* Rakam asla kısalmaz ("₺26…" olmaz): hap yanına sığmazsa rakamın altına iner */}
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="tabular whitespace-nowrap font-headline text-[26px] font-medium leading-8 tracking-[-0.035em] text-ink">{value}</span>

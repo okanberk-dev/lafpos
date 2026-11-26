@@ -129,9 +129,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   return <textarea ref={ref} className={cn(base, 'min-h-20 resize-y py-2.5', className)} {...rest} />;
 });
 
+/**
+ * Açılır liste (Keel `.k-select`, keel.css): kapalıyken alanla aynı (ok sağda), açılınca tablette ve bilgisayarda Keel'in
+ * yüzen yüzeyi (köşe 14, satır 40 / dokunmatikte 44, seçili satır kalın ve tikli); telefonda işletim sisteminin listesi
+ */
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(base, 'select-arrow h-10 pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} {...rest}>
+    <select className={cn(base, 'k-select select-arrow h-10 pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9 bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} {...rest}>
       {children}
     </select>
   );
@@ -310,15 +314,16 @@ export function Toggle({
   block?: boolean;
 }) {
   const track = (
-    // Pano anahtarı: açıkken ev yeşili, kapalıyken gri (3:1); beyaz top yumuşak gölgeli, açıkken içinde küçük tik
-    <span className={cn('relative mt-px h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-200', checked ? 'bg-[var(--admin-ink-fill)] group-hover:bg-[var(--admin-ink-fill-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
+    // Keel anahtarı (sahibin örneği, 26 Kas 2026): açıkken nane, kapalıyken gri (alan kenarı, 3:1); beyaz top yumuşak
+    // gölgeli, açıkken içinde koyu yeşil tik (durum yalnız renge kalmaz)
+    <span className={cn('relative mt-px h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-200', checked ? 'bg-[var(--k-mint)] group-hover:bg-[color-mix(in_oklab,var(--k-mint),var(--k-mint-ink)_12%)]' : 'bg-[var(--admin-border-field)] group-hover:bg-[var(--admin-text-mute)]')}>
       <span
         className={cn(
-          'absolute left-[3px] top-[3px] grid size-5 place-items-center rounded-full bg-white text-[var(--admin-primary)] shadow-[0_1px_3px_rgb(15_35_28/0.3)] transition-transform duration-200 ease-out motion-reduce:transition-none',
+          'absolute left-[3px] top-[3px] grid size-5 place-items-center rounded-full bg-white shadow-[0_1px_3px_rgb(23_26_38/0.3)] transition-transform duration-200 ease-out motion-reduce:transition-none',
           checked && 'translate-x-5',
         )}
       >
-        {checked && <Check aria-hidden="true" className="size-3 stroke-[3] text-[#0a6e52]" />}
+        {checked && <Check aria-hidden="true" className="size-3 stroke-[3] text-[#0b5a34]" />}
       </span>
     </span>
   );
@@ -463,8 +468,8 @@ export function Chip({
 }
 
 /**
- * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi; kitin .seg'i): beyaz hap ray, ince kenar, seçili mürekkep hap;
- * köşeler eş merkezli (`wrap` modunda ray 22, hap 18). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı
+ * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi; Keel `.k-seg`): saydam mürekkep ray, seçili beyaz başparmak ve
+ * hafif gölge (sahibin örnekleri, 26 Kas 2026); köşeler eş merkezli (başparmak 12, ray 15; `wrap` modunda ray 18). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı
  * kırpar). `label` grubu adlandırır.
  * Kısa etiketler tek satırda kalır, sığmazsa ray kayar. `wrap`: uzun etiketli seçenekler (yazarkasa bağlantısı ve
  * ödeme yeri) rayı tam genişlikte eşit böler, etiket kendi içinde kırılır, telefonda alt alta dizilir; hiçbiri gizli
@@ -491,7 +496,8 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[var(--r-card)] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}
+      // Keel segmenti (.k-seg, keel.css): saydam mürekkep ray, seçili beyaz başparmak; uzun seçenekte (wrap) ray kart köşesinde
+      className={cn('k-seg', wrap ? 'flex w-full rounded-[var(--r-card)] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto', className)}
     >
       {options.map((o) => (
         <button
@@ -500,12 +506,11 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={cn(
-            'inline-flex items-center justify-center font-medium',
+            'k-seg-opt',
             wrap ? 'rounded-[0.875rem]' : 'rounded-[var(--r-segment)]',
-            wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
-            'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
-            size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',
-            value === o.value ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'text-ink-2 hover:bg-hover hover:text-ink',
+            wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0',
+            'pointer-coarse:min-h-11',
+            size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-[2.125rem] text-sm [[data-area=admin]_&]:text-[13px] [[data-area=admin]_&]:pointer-fine:min-h-[1.875rem]',
           )}
         >
           {o.label}
