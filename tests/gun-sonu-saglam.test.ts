@@ -62,8 +62,10 @@ beforeAll(async () => {
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.startsWith(CLOUD)) {
-      if (new URL(url).pathname === '/api/uzaktan/bildirim') notices.push(JSON.parse(String(init!.body)) as (typeof notices)[number]);
+    // Sahte Uzaktan: adresin kökeni birebir karşılaştırılır (önek değil)
+    const parsed = URL.canParse(url) ? new URL(url) : null;
+    if (parsed?.origin === CLOUD) {
+      if (parsed.pathname === '/api/uzaktan/bildirim') notices.push(JSON.parse(String(init!.body)) as (typeof notices)[number]);
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     return realFetch(input, init);
