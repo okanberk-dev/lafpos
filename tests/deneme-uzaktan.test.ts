@@ -144,24 +144,35 @@ describe('Geçişi tamamla: silinen deneme günleri Uzaktan\'dan da kalkar', () 
     expect(cloudDay(D(2))).toMatchObject({ n: 1 });
   });
 
-  it('geçiş silinen tarihleri aynı işlemde yazar; gerçek günü kalan tarih yazılmaz', async () => {
+  it('geçiş silinen tarihleri aynı işlemde yazar (gerçek günü kalan tarih de: raporu deneme satışsız yenilenir)', async () => {
     const r = await h.ok<{ finalized: boolean; purged: { days: number } }>('patron', 'POST', '/admin/deneme/bitir', { pin: PINS.patron, newPin: NEW_PIN });
     expect(r).toMatchObject({ finalized: true, purged: { days: 4 } });
-    // D4'te gerçek gün kaldı; D5'in geçmiş ciro günü var ama LafPOS günü kalmadı (listede, raporu geçmiş günüyle gider)
-    expect(await removedList()).toEqual([D(5), D(3), D(2)]);
+    // D4'te gerçek gün kaldı (listede, yalnız gerçek günün raporu gider); D5'in geçmiş ciro günü var ama LafPOS günü
+    // kalmadı (listede, raporu geçmiş günüyle gider)
+    expect(await removedList()).toEqual([D(5), D(4), D(3), D(2)]);
     const { db, schema } = await import('../server/db/client');
     const audit = db.select().from(schema.auditLog).all().filter((a) => a.action === 'deneme.bitir').at(-1)!;
     expect(audit.data).toMatchObject({ remoteDays: 3 });
   });
 
-  it('bulut gidemezse liste kalır; "Raporları yeniden gönder" listeyi silmez, silinen günler boşalır', async () => {
+  it('bulut gidemezse liste kalır; "Raporları yeniden gönder" listeyi silmez', async () => {
     cloudDown = true;
-    await tick();
-    expect(await removedList()).toEqual([D(5), D(3), D(2)]);
-    expect(cloudDay(D(2))).toMatchObject({ n: 1 });
-    cloudDown = false;
-    const { resendReports } = await import('../server/sync/cloud-reports');
-    resendReports();
+    try {
+      await tick();
+      expect(await removedList()).toEqual([D(5), D(4), D(3), D(2)]);
+      expect(cloudDay(D(2))).toMatchObject({ n: 1 });
+      const { resendReports } = await import('../server/sync/cloud-reports');
+      resendReports();
+      await tick({ backfill: true });
+      expect(await removedList()).toEqual([D(5), D(4), D(3), D(2)]);
+      expect(cloudDay(D(4))).toMatchObject({ n: 2 });
+    } finally {
+      cloudDown = false;
+    }
+  });
+
+  it('sıradaki canlı bakış silinen günleri boşaltır, gerçek günü kalan tarihi deneme satışsız yeniler', async () => {
+    // Tarama beklenmez: yalnız canlı bakış
     await tick();
     expect(await removedList()).toEqual([]);
     for (const n of [2, 3]) {

@@ -50,7 +50,8 @@ export const SWEEP_EVERY_MS = 24 * 3600_000;
 const SWEEP_FORCE_MS = 3 * SWEEP_EVERY_MS;
 const STATE_KEY = 'cloud.reports';
 /**
- * Kasada silinen günlerin tarihleri (server/services/deneme.ts `markRemovedDays`): Uzaktan'da boşaltılmayı bekler.
+ * Kasada silinen günlerin tarihleri (server/services/deneme.ts `markRemovedDays`): Uzaktan'da yenilenmeyi bekler
+ * (kalan günü olmayan tarih boşaltılır, kalan günü olana o günün raporu gider).
  * Gönderim durumundan ayrı durur: "Raporları yeniden gönder" sıfırlasa da kalır. Tarihin raporu gidince listeden düşer
  */
 export const REMOVED_KEY = 'cloud.reports.silinen';

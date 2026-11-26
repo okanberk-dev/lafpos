@@ -301,8 +301,9 @@ export interface PurgeCounts {
  * Verilen günlerin bütün hareketleri, deneme silmesindeki sırayla (yabancı anahtar sırası): fiş, platform siparişi,
  * oda, ödeme, kalem, açık hesap satırı, adisyon, kasa hareketi, vardiya sayımı, gün. Açık hesap satırı silinince
  * müşterinin bakiyesi o kadar geri alınır. O günlerin lafmaliyet giden kutusu kayıtları (`gun:<tarih>`) da silinir;
- * kalan bir günle aynı tarihi taşıyan kayda dokunulmaz. Başka güne bağlı hiçbir kayda dokunulmaz. Kalan günü olmayan
- * tarihler LafPOS Uzaktan'da boşaltılmak üzere yazılır (`markRemovedDays`); kalan günü olan tarihin raporu o günle gider
+ * kalan bir günle aynı tarihi taşıyan kayda dokunulmaz. Başka güne bağlı hiçbir kayda dokunulmaz. Silinen günlerin
+ * tarihleri LafPOS Uzaktan'da yenilenmek üzere yazılır (`markRemovedDays`): kalan günü olmayan tarih boşaltılır, kalan
+ * günü olan tarihe yalnız o günün raporu gider. `removedDates`: kalan günü olmayan tarihler
  */
 function purgeDays(t: Tx, days: DayRow[], realDays: number): { counts: PurgeCounts; removedDates: string[] } {
   const range = rangeOf(days);
@@ -339,12 +340,15 @@ function purgeDays(t: Tx, days: DayRow[], realDays: number): { counts: PurgeCoun
   c.shiftCounts = t.delete(schema.shiftCounts).where(inArray(schema.shiftCounts.dayId, dayIds)).run().changes;
   t.delete(schema.businessDays).where(inArray(schema.businessDays.id, dayIds)).run();
 
+  const dates = [...new Set(days.map((d) => d.date))];
   const kept = new Set(closedDays(t).map((d) => d.date));
-  const removedDates = [...new Set(days.map((d) => d.date))].filter((date) => !kept.has(date));
+  const removedDates = dates.filter((date) => !kept.has(date));
   const keys = removedDates.map((date) => `gun:${date}`);
   // Gönderilmiş kayıt iz olarak kalır (lafmaliyet o günü almıştır; LafPOS'tan silmek orada silmez)
   if (keys.length) c.outbox = t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys), isNull(schema.outbox.sentAt))).run().changes;
-  markRemovedDays(t, removedDates);
+  // Uzaktan'da bütün tarihler yenilenir: kalan günü olan tarihin raporu deneme satışı çıkmış hâliyle hemen gider
+  // (beklerse bulutta günlük taramaya dek deneme satışıyla kalır), kalmayan tarih boşaltılır
+  markRemovedDays(t, dates);
   return { counts: c, removedDates };
 }
 

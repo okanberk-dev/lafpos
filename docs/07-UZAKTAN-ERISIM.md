@@ -168,7 +168,8 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     tarihlerini silmeyle aynı işlemde yazar (`sync_state` `cloud.reports.silinen`). Sıradaki canlı bakışta (en geç 5 dk)
     o tarihlere satışsız gün raporu (`n: 0`, ek verisiz) gider: bulut eski deneme raporunun ve ek verisinin üstüne yazar,
     Uzaktan o günü gün listesine ve toplamlara katmaz. API değişmedi. O tarihte LafPOS günü kaldıysa (deneme günüyle aynı
-    tarihte gerçek gün) ya da geçmiş ciro (ModPOS) günü varsa boş gün gitmez, o günün raporu gider. Gidemeyen tarih
+    tarihte gerçek gün) ya da geçmiş ciro (ModPOS) günü varsa boş gün gitmez, aynı bakışta o günün raporu gider (deneme
+    satışı çıkmış hâliyle; günlük taramayı beklemez). Gidemeyen tarih
     listede kalır; "Raporları yeniden gönder" listeyi silmez. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan
     tarih (bu sürümden önce yapılmış geçiş) günlük tarama ona gelince (en geç bir gün) aynı yolla boşaltılır
     (`tests/deneme-uzaktan.test.ts`).
