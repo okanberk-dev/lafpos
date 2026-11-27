@@ -94,8 +94,8 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
 Kafedeki bağlantı satırları (Yönetim › Bağlantı bilgileri'ne yapıştırılır). **Anahtarlar 21 Kasım 2026'da yenilendi:**
 Vercel kayıtlarında kasanın 20 Kasım'daki istekleri siteden ve lafmaliyet'ten 401 almıştı (kasadaki anahtarlar
 Vercel'dekilerle uyuşmuyordu), AsilPOS Uzaktan'a imzalı istek hiç gelmemişti. Üç projede anahtar yeniden üretildi
-(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, `lafpos` projesi `LAFPOS_CLOUD_SECRET`; ad değişikliğinden önceki adlar, yeni
-kod ikisini de okur; üretim yeniden yayımlandı) ve yeni satırlar sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`,
+(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, `lafpos` projesi `LAFPOS_CLOUD_SECRET`; lafmaliyet ve `lafpos` projesinde
+ad değişikliğinden önceki adlar, yeni kod ikisini de okur; laffogato'da ad bu; üretim yeniden yayımlandı) ve yeni satırlar sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`,
 21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
 **geçersiz**. Dosya kaybolursa anahtarlar yeniden üretilir (`scripts/vercel/baglanti-kur.sh --yenile` ya da Vercel'de
 elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", geri okunamaz. Kasa bağlanınca doğrulama: Yönetim
@@ -154,13 +154,22 @@ PAVO_SERIAL=<cihazın seri numarası>
 1. **baslat.cmd güncellemeyle değişmez (bilerek):** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i
    değiştirir. Çalışan toplu dosyayı değiştirmek güvenli değil (cmd.exe dosyayı satır satır okur). 21 Kasım'daki Node
    değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
-2. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
+   Ad değişikliğinde (26 Kasım 2026) de baytları değişmedi: kurulu kasadakinden farklı olsaydı her açılışta "Kurulumu
+   yenileyin" uyarısı çıkardı (`tests/asilpos-adi.test.ts` özeti sabitler).
+2. **Ad değişikliğinin kalanları (ladmin ile birlikte):** (a) `docs/hesap-sozlesmesi.md` ladmin'deki kopyasıyla bayt
+   bayt aynı kaldığı için eski adla duruyor; iki kopya aynı PR serisinde birlikte yeniden adlandırılır, iki depodaki
+   SHA-256 sabiti birlikte değişir (ladmin'in ad değişikliği PR'ı bu dosyayı ya dışarıda bırakır ya da aynı baytlarla
+   değiştirir). (b) Banka gün sonu kâğıdının kıyas başlığı eski adla basılır (`shared/eski-adlar.ts`
+   `BANKA_KIYAS_BASLIGI`): ladmin'in kâğıt okuyucusu iki adı da tanıyınca yeni ada geçer. (c) Ayarlar dosyasına
+   yazım eski adla (`shared/pos-env.ts` `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş
+   gerekmeyince yeni ada geçer.
+3. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
-3. **Şube başına ayrı kafe anahtarı:** bugün `ASILPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
+4. **Şube başına ayrı kafe anahtarı:** bugün `ASILPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
    anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
    başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
-4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
-5. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
+5. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
+6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
 

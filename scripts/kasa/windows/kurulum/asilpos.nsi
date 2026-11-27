@@ -319,6 +319,8 @@ Section "Uninstall"
   Delete "$INSTDIR\lafpos.ico"
   Delete "$INSTDIR\BENIOKU.txt"
   Delete "$INSTDIR\ayarlar.env.ornek"
+  ; Siteden kurulumun kaldırıcısı (siteden kurulum üzerine kurulduysa ya da eski Kaldir.exe'nin yerine konduysa)
+  Delete "$INSTDIR\LafPOS-Kaldir.ps1"
   Delete "$INSTDIR\Kaldir.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKLM "${UNINST_KEY}"

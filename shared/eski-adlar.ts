@@ -17,7 +17,7 @@ export const ESKI_URUN_ADI = 'LafPOS';
 
 /**
  * Ortam değişkenlerinin eski öneki: kurulu kasanın ayarlar.env'i ve Vercel'deki değişkenler bu adla durur. Okuma
- * `ASILPOS_X ?? LAFPOS_X` (shared/pos-env.ts); ayarlar dosyasına yazan, dosyada zaten duran adı korur
+ * `ASILPOS_X ?? LAFPOS_X` (shared/pos-env.ts); ayarlar dosyasına yazan, dosyada yeni ad yoksa eski adı yazar
  */
 export const ESKI_ENV_ONEKI = 'LAFPOS_';
 /**
@@ -29,6 +29,9 @@ export const ESKI_GUNCELLEME_DENEME_ENV = 'LAFPOS_GUNCELLEME_DENEME';
 /** Sitenin (laffogato) imza anahtarı ve şube listesi: site deposunda eski adla okunur */
 export const SITE_ANAHTAR_ENV = 'LAFPOS_SYNC_SECRET';
 export const SITE_SUBELER_ENV = 'LAFPOS_BRANCHES';
+/** ladmin'in kasaya gönderdiği Uzaktan bağlantısı (`baglanti{}`): telde eski adla gelir (plan A3'e kadar) */
+export const TEL_UZAK_ADRES_ENV = 'LAFPOS_CLOUD_URL';
+export const TEL_UZAK_ANAHTAR_ENV = 'LAFPOS_CLOUD_SECRET';
 
 // ─── Barındırma ve güncelleme kanalı ─────────────────────────────────────────
 
@@ -87,6 +90,15 @@ export const ESKI_KURULUM_YOLU = '/api/lafpos/kurulum';
 /** Sitenin gördüğü işlem yapan (masa listesi) ve istemci adı */
 export const SITE_AKTOR = 'LafPOS';
 export const SITE_ISTEMCI = 'LafPOS/0.1 (+kafe kasasi)';
+/** Sitenin (laffogato) kasa belgesi: site deposu yeniden adlandırılmadı, belge bu adla durur */
+export const SITE_BELGESI = 'docs/LAFPOS.md';
+/**
+ * Banka gün sonu kâğıdındaki (Pavo) kıyas bölümünün başlığı. ladmin kâğıdın fotoğrafını okur: kodla okuyucusu (yapay
+ * zekâ kullanılamayınca) banka satırlarını bu başlıkta bitirir (lafmaliyet src/lib/photo-read/pavo-ocr.ts). Yeni adla
+ * basılırsa eski panel kıyas satırlarını (Pavo ve kasa kart toplamı, FARK) banka sayar, tutarlar düşük güvenli olur.
+ * Panel iki adı da tanıyınca (plan A1) yeni ada geçilebilir
+ */
+export const BANKA_KIYAS_BASLIGI = 'PAVO - LAFPOS KARŞILAŞTIRMA';
 
 // ─── Veritabanında duran değerler ────────────────────────────────────────────
 
@@ -114,12 +126,27 @@ const yol = (...p: string[]) => [p.join('\\'), p.join('\\\\')];
 const ESKI_DOSYA_ADI = KURULUM_KLASORU.toLowerCase();
 
 /**
+ * TypeScript dışındaki dosyalarda eski adla yazılabilen tam ortam değişkeni adları: yalnız eski adla okunan ya da telde
+ * eski adla gelen değişkenler. Başka bir eski adlı değişken (`<eski önek>X`, şablonu da) ancak aynı satırda yeni adıyla
+ * (`ASILPOS_X`) birlikte yazılır: "iki ad da okunur" açıklaması ya da iki adı birden okuyan, yazan kod
+ */
+export const ESKI_ENV_ADLARI: readonly string[] = [
+  ESKI_BEKCI_STDIN_ENV,
+  ESKI_GUNCELLEME_DENEME_ENV,
+  SITE_ANAHTAR_ENV,
+  SITE_SUBELER_ENV,
+  TEL_UZAK_ADRES_ENV,
+  TEL_UZAK_ANAHTAR_ENV,
+  `VITE_${ESKI_ENV_ONEKI}UZAKTAN`,
+];
+
+/**
  * TypeScript dışındaki dosyalarda (betikler, yapılandırma, belgeler) eski adın geçebildiği metinler. Satırdan bunlar
- * çıkarılınca eski ad kalmamalı. Betikte bunlara uymayan küçük kopya (ör. `'LafPOS'` klasör adı) satır sonundaki
- * `eski-ad` notuyla işaretlenir; TypeScript dosyası eski adı yalnız bu modülden alır
+ * çıkarılınca eski ad kalmamalı. Ortam değişkenleri ayrıca `ESKI_ENV_ADLARI` kuralıyla denetlenir. Betikte bunlara
+ * uymayan küçük kopya (ör. `'LafPOS'` klasör adı) satır sonundaki `eski-ad` notuyla işaretlenir; TypeScript dosyası eski
+ * adı yalnız bu modülden alır
  */
 export const ESKI_AD_METINLERI: readonly string[] = [
-  ESKI_ENV_ONEKI,
   ALAN_ADI,
   VERCEL_ALANI,
   GITHUB_DEPOSU,
@@ -178,6 +205,7 @@ export const BELGE_ALINTILARI: readonly string[] = [
   `cd ${VERCEL_PROJESI}`,
   `${VERCEL_PROJESI}-kasa-ayarlari.env`,
   `26 Kasım 2026'ya kadar adı ${ESKI_URUN_ADI}`,
+  `laffogato \`${SITE_BELGESI}\``,
 ];
 
 /** Betik satırında küçük kopyanın notu (satır sonundaki yorum) */

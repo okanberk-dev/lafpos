@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
 import { cloudKeys, currentSube, pullState } from './platform-anahtar';
-import { envDegeri, eskiEnvAdi, posEnv, yazilacakEnvAdi } from '@shared/pos-env';
+import { envDegeri, eskiEnvAdi, posEnv, yazilacakEnvAdi, yeniEnvAdi } from '@shared/pos-env';
 
 /**
  * Ayarlar dosyası (Windows kurulumunda veri klasöründeki ayarlar.env; klasör eski adla, shared/eski-adlar.ts): dış sistemlerin adresleri ve anahtarları
@@ -60,9 +60,9 @@ function activeKeys(lines: string[]): Set<string> {
 }
 
 /**
- * Yeni adla (`ASILPOS_X`) gelen değişikliği dosyanın adına çevirir: kurulu kasanın dosyasında yalnız eski ad duruyorsa
- * o satır değişir (shared/pos-env.ts `yazilacakEnvAdi`), ikisi de duruyorsa ikisi; kaldırmada ikisi de kalkar. Dosya
- * yeniden adlandırılmaz: eski sürüme dönülürse eski sunucu aynı satırı okur
+ * Yeni adla (`ASILPOS_X`) gelen değişikliği dosyanın adına çevirir (shared/pos-env.ts `yazilacakEnvAdi`): dosyada yeni
+ * ad yoksa eski adlı satır değişir ya da eski adla eklenir, yeni ad duruyorsa o (eski ad da duruyorsa ikisi);
+ * kaldırmada ikisi de kalkar. Dosya yeniden adlandırılmaz: eski sürüme dönülürse eski sunucu aynı satırı okur
  */
 function toFileNames(keys: Set<string>, edits: Record<string, string | null>): Record<string, string | null> {
   const out: Record<string, string | null> = {};
@@ -86,9 +86,9 @@ function toFileNames(keys: Set<string>, edits: Record<string, string | null>): R
 
 /**
  * Değişiklikleri dosyanın metnine işler (saf). Değer: yeni değer; null: satır kaldırılır. Etkin satır yerinde değişir
- * (aynı anahtarın sonraki tekrarları düşer); etkin satır yoksa örnek dosyadaki yorumlu satırın (`# ANAHTAR=`, eski adla
- * da) altına, o da yoksa dosyanın sonuna, başlık satırının altına eklenir. BOM ve satır sonu korunur. Yeni adla gelen
- * anahtar dosyada eski adla duruyorsa o satır değişir (`toFileNames`)
+ * (aynı anahtarın sonraki tekrarları düşer); etkin satır yoksa örnek dosyadaki yorumlu satırın (`# ANAHTAR=`, eski ya
+ * da yeni adla) altına, o da yoksa dosyanın sonuna, başlık satırının altına eklenir. BOM ve satır sonu korunur. Yeni
+ * adla gelen anahtar dosyada yeni ad yoksa eski adla yazılır (`toFileNames`)
  */
 export function applyEnvEdits(text: string, requested: Record<string, string | null>): string {
   const bom = text.startsWith('\uFEFF');
@@ -114,7 +114,8 @@ export function applyEnvEdits(text: string, requested: Record<string, string | n
   }
   for (const [key, v] of Object.entries(edits)) {
     if (done.has(key) || v == null) continue;
-    const names = [key, eskiEnvAdi(key)].filter((n): n is string => !!n).join('|');
+    // Örnek dosyanın yorumlu satırı yeni adla (`# ASILPOS_X=`), kurulu kasanınki eski adla durur: ikisi de yer gösterir
+    const names = [...new Set([key, eskiEnvAdi(key), yeniEnvAdi(key)])].filter((n): n is string => !!n).join('|');
     const template = out.findIndex((l) => new RegExp(`^#\\s*(${names})=`).test(l.trim()));
     if (template >= 0) {
       out.splice(template + 1, 0, `${key}=${v}`);

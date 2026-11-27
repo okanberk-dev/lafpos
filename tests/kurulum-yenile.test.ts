@@ -87,6 +87,27 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     expect(syncRootFiles({ appDir: app, installDir: dir }).copied).toEqual([]);
   });
 
+  it('eski kısayolların yönlendiricisi yalnız yenisi kurulumdaysa konur (yoksa eski kasa kısayolu tam hâliyle kalır)', async () => {
+    const { syncRootFiles, ROOT_FILE_NEEDS } = await load('kurulum-yenile.mjs');
+    const eskiBat = `${ESKI_URUN_ADI}-Kasa.bat`;
+    expect(ROOT_FILE_NEEDS).toEqual({ [eskiBat]: 'AsilPOS-Kasa.bat' });
+    // Yeni bat pakette yok (ya da konamadı), kurulumda da yok: yönlendirici konmaz, eski bat yerinde
+    const a = install();
+    rmSync(join(a.app, 'kok', 'AsilPOS-Kasa.bat'));
+    rmSync(join(a.dir, 'AsilPOS-Kasa.bat'));
+    writeFileSync(join(a.app, 'kok', eskiBat), 'yonlendirici');
+    writeFileSync(join(a.dir, eskiBat), 'eski tam bat');
+    expect(syncRootFiles({ appDir: a.app, installDir: a.dir }).copied).not.toContain(eskiBat);
+    expect(readFileSync(join(a.dir, eskiBat), 'utf8')).toBe('eski tam bat');
+    // Yeni bat konunca yönlendirici de (sıra: önce bağlandığı dosya)
+    const b = install();
+    rmSync(join(b.dir, 'AsilPOS-Kasa.bat'));
+    writeFileSync(join(b.app, 'kok', eskiBat), 'yonlendirici');
+    writeFileSync(join(b.dir, eskiBat), 'eski tam bat');
+    expect(syncRootFiles({ appDir: b.app, installDir: b.dir }).copied).toEqual(['AsilPOS-Kasa.bat', 'BENIOKU.txt', eskiBat]);
+    expect(readFileSync(join(b.dir, eskiBat), 'utf8')).toBe('yonlendirici');
+  });
+
   it('siteden kurulumun kaldırıcısı yalnız kurulumda varsa yenilenir (kurulum dosyasıyla kurulanda Kaldir.exe var)', async () => {
     const { syncRootFiles, IF_PRESENT_ROOT_FILES } = await load('kurulum-yenile.mjs');
     const kaldirici = `${ESKI_URUN_ADI}-Kaldir.ps1`;
@@ -134,6 +155,7 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     const { dir, app, home } = install();
     writeFileSync(join(app, 'kisayollar.ps1'), '# deneme');
     const calls: any[] = [];
+    const seenInstall: string[] = [];
     let fail: string | null = 'HATA 3: Erişim engellendi';
     const warnings: (string | null)[] = [];
     const deps = {
@@ -146,12 +168,14 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
       setWarning: (w: string | null) => warnings.push(w),
       runShortcuts: async (o: any) => {
         calls.push(JSON.parse(readFileSync(o.listFile, 'utf8')));
+        seenInstall.push(o.installDir);
         return fail;
       },
     };
     await refreshInstall(deps);
     expect(calls).toHaveLength(1);
     expect(calls[0][0]).toMatchObject({ klasor: 'CommonPrograms', ad: 'AsilPOS\\AsilPOS Kasa.lnk' });
+    expect(seenInstall).toEqual([dir]);
     expect(warnings.at(-1)).toMatch(/^Kurulumu yenileyin/);
     expect(warnings.at(-1)).toContain('baslat.cmd eski kaldı');
     expect(warnings.at(-1)).toContain('kısayollar yenilenemedi (HATA 3: Erişim engellendi)');
@@ -167,6 +191,48 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     // Yeni derleme: yeniden
     await refreshInstall({ ...deps, build: 1_795_200_000 });
     expect(calls).toHaveLength(3);
+  });
+
+  it('kısayol betiği önce Uygulamalar kaydını yeniler: eski Kaldir.exe yerine siteden kurulumun kaldırıcısı, görünen ad AsilPOS', async () => {
+    const { shortcutArgs, UNINSTALL_KEY, IF_PRESENT_ROOT_FILES, MENU } = await load('kurulum-yenile.mjs');
+    // Kayıt anahtarı kurulumların yazdığıyla aynı (kurulum dosyası 32 bit: WOW6432Node)
+    expect(UNINSTALL_KEY).toBe(`HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${KURULUM_KLASORU}`);
+    expect(read('scripts/kasa/windows/kurulum/web-kurucu.ps1')).toContain(`$anahtar = '${UNINSTALL_KEY}'`);
+    expect(read('scripts/kasa/windows/kurulum/web-kaldir.ps1')).toContain(`'${UNINSTALL_KEY}'`);
+    expect(read('scripts/kasa/windows/kurulum/asilpos.nsi')).toContain(`!define UNINST_KEY "${UNINSTALL_KEY.replace('HKLM:\\', '').replace('WOW6432Node\\', '')}"`);
+    const args = shortcutArgs({ appDir: 'C:\\K\\app', installDir: 'C:\\K', listFile: 'C:\\V\\liste.json' });
+    const arg = (n: string) => args[args.indexOf(n) + 1];
+    expect(arg('-Kurulum')).toBe('C:\\K');
+    expect(arg('-Kayit')).toBe(UNINSTALL_KEY);
+    expect(arg('-Kaldirici')).toBe(join('C:\\K\\app', 'kok', IF_PRESENT_ROOT_FILES[0]));
+    expect([arg('-EskiMenu'), arg('-YeniMenu')]).toEqual([MENU.eski, MENU.yeni]);
+    const ps = read('scripts/kasa/windows/kurulum/kisayollar.ps1').replace(/\r\n/g, '\n');
+    const adim = ps.indexOf('if ($Kurulum -and $Kayit -and $YeniMenu)');
+    const dongu = ps.indexOf('foreach ($k in $items)');
+    expect(adim).toBeGreaterThan(0);
+    // Kaldırıcı adımı kısayollardan önce; olmazsa hiçbir kısayol değişmez (eski kaldırıcı eski adları bilir)
+    expect(adim).toBeLessThan(dongu);
+    const kaldirici = ps.slice(adim, dongu);
+    expect(kaldirici).toContain("(Test-Path -LiteralPath $exe) -and $gorunen -ne $YeniMenu");
+    expect(kaldirici).toContain("Set-ItemProperty -LiteralPath $Kayit -Name 'UninstallString'");
+    expect(kaldirici).toContain("Remove-ItemProperty -LiteralPath $Kayit -Name 'QuietUninstallString'");
+    expect(kaldirici).toContain('Remove-Item -LiteralPath $exe -Force');
+    expect(kaldirici).toContain("Set-ItemProperty -LiteralPath $Kayit -Name 'DisplayName' -Value $YeniMenu");
+    expect(kaldirici).toContain("Set-ItemProperty -LiteralPath $Kayit -Name 'DisplayIcon'");
+    expect(kaldirici).toMatch(/HATA kaldirici[^\n]*\n\s*exit 1/);
+    // Kaldır kısayolu yeni kaldırıcıya: Kaldir.exe silinmeden önce, kayıttan önce
+    expect(kaldirici.indexOf('$l.TargetPath = $psExe')).toBeLessThan(kaldirici.indexOf("-Name 'UninstallString'"));
+    expect(kaldirici.indexOf("-Name 'UninstallString'")).toBeLessThan(kaldirici.indexOf('Remove-Item -LiteralPath $exe'));
+    // Hedefi olmayan kısayol yazılmaz, eskisi silinmez
+    const govde = ps.slice(dongu);
+    expect(govde.indexOf("throw ('hedef yok: '")).toBeGreaterThan(0);
+    expect(govde.indexOf("throw ('hedef yok: '")).toBeLessThan(govde.indexOf('$s.Save()'));
+    // Siteden kurulum aynı kuralla: görünen ad AsilPOS değilse Kaldir.exe eskidir, silinir; kaldırıcılar onu da siler
+    const web = read('scripts/kasa/windows/kurulum/web-kurucu.ps1');
+    expect(web).toContain("$kaldirExeYeni = (Test-Path -LiteralPath $kaldirExe) -and ($gorunenAd -eq 'AsilPOS')");
+    expect(web).toContain("if (-not $kaldirExeYeni) { Remove-ItemProperty -LiteralPath $anahtar -Name 'QuietUninstallString'");
+    expect(read('scripts/kasa/windows/kurulum/web-kaldir.ps1')).toContain("'Kaldir.exe', '" + IF_PRESENT_ROOT_FILES[0] + "'");
+    expect(read('scripts/kasa/windows/kurulum/asilpos.nsi')).toContain(`Delete "$INSTDIR\\${IF_PRESENT_ROOT_FILES[0]}"`);
   });
 
   it('Windows dışında kısayola dokunulmaz; kök dosyalar yine yenilenir', async () => {

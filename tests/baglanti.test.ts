@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkConnValue, connField, parseEnvLines } from '@shared/baglanti';
 import { applyEnvEdits, readEnvText } from '../server/lib/ayar-dosyasi';
 import { type Harness, startApp } from './harness';
-import { ALAN_ADI } from '@shared/eski-adlar';
+import { ALAN_ADI, ESKI_ENV_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Yönetim › Bağlantı bilgileri: dış sistemlerin adresleri ve anahtarları panelden ayarlar dosyasına (ayarlar.env)
@@ -30,10 +30,11 @@ describe('ayarlar dosyasının düzenlenmesi', () => {
       'LAFFOGATO_URL=https://laffogato.net',
       '',
       '# Yönetim › Bağlantı bilgileri',
-      `ASILPOS_CLOUD_SECRET=${'x'.repeat(32)}`,
+      `${ESKI_ENV_ONEKI}CLOUD_SECRET=${'x'.repeat(32)}`,
       '',
     ]);
-    expect(readEnvText(out)).toEqual({ ASILPOS_PORT: '4000', LAFFOGATO_URL: 'https://laffogato.net', ASILPOS_CLOUD_SECRET: 'x'.repeat(32) });
+    // Dosyada hiç olmayan kasa ayarı eski adla eklenir (eski sürüme dönülürse eski sunucu da okur; shared/pos-env.ts)
+    expect(readEnvText(out)).toEqual({ ASILPOS_PORT: '4000', LAFFOGATO_URL: 'https://laffogato.net', [`${ESKI_ENV_ONEKI}CLOUD_SECRET`]: 'x'.repeat(32) });
     // İkinci yazımda başlık tekrarlanmaz
     const again = applyEnvEdits(out, { TOKENX_CLIENT_ID: 'abc' });
     expect(again.match(/Yönetim › Bağlantı bilgileri/g)).toHaveLength(1);
@@ -104,7 +105,8 @@ describe('yönetimden yazma', () => {
     expect(v.pending).toBe(true);
     const text = readFileSync(file, 'utf8');
     expect(text.startsWith('﻿# AsilPOS ayarları\r\n')).toBe(true);
-    expect(readEnvText(text)).toEqual({ LAFMALIYET_SYNC_SECRET: secret, LAFMALIYET_URL: 'https://ladmin.laffogato.net', ASILPOS_CLOUD_URL: `https://${ALAN_ADI}`, ASILPOS_CLOUD_SECRET: cloud });
+    // Kasa ayarı dosyada yoksa eski adla yazılır (eski sürüme dönülürse eski sunucu da okur); ekranda yeni adla görünür
+    expect(readEnvText(text)).toEqual({ LAFMALIYET_SYNC_SECRET: secret, LAFMALIYET_URL: 'https://ladmin.laffogato.net', [`${ESKI_ENV_ONEKI}CLOUD_URL`]: `https://${ALAN_ADI}`, [`${ESKI_ENV_ONEKI}CLOUD_SECRET`]: cloud });
     const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=10');
     const row = audit.find((a) => a.action === 'ayar.baglanti')!;
     expect(row.message).toContain('LAFMALIYET_URL=https://ladmin.laffogato.net');

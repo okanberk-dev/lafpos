@@ -201,6 +201,7 @@ describe('siteden kurulum: AsilPOS-Kur.cmd', () => {
     expect(ps51Problems(psBody(text))).toEqual([]);
     expect(ps51Problems(read('scripts/kasa/windows/kurulum/web-kaldir.ps1'))).toEqual([]);
     expect(ps51Problems(read('scripts/kasa/windows/kurulum/yonet.ps1'))).toEqual([]);
+    expect(ps51Problems(read('scripts/kasa/windows/kurulum/kisayollar.ps1'))).toEqual([]);
     // Denetimin kendisi: 7'ye özgü işleçler yakalanır, dizedeki metin yakalanmaz
     expect(ps51Problems('$a = $b ?? 1')).toContain('?? (boş birleştirme)');
     expect(ps51Problems('$a = $b ? 1 : 2')).toContain('? : (üçlü koşul)');

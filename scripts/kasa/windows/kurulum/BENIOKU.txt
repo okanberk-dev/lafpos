@@ -1,5 +1,5 @@
 AsilPOS (Windows)
-================
+=================
 
 NE KURULDU
 - Sunucu: Windows açılınca arka planda kendiliğinden çalışır (Görev Zamanlayıcı: "LafPOS Sunucu").

@@ -39,7 +39,7 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 
 Site şubelidir: sipariş, masa kodu (`cafe_tables`), masa çağrısı ve Satışta bilgisi bir şubenindir (masa siparişi ve
 çağrısı masanın şubesi; gel-al, kurye, kargo ve karaoke Tuzla'nın). AsilPOS'un anahtarı sitenin `LAFPOS_BRANCHES`'teki
-şubeler adına konuşur (varsayılan `marina`; laffogato `docs/ASILPOS.md` "Şube"). AsilPOS her imzalı istekte kendi şubesini
+şubeler adına konuşur (varsayılan `marina`; laffogato `docs/LAFPOS.md` "Şube"). AsilPOS her imzalı istekte kendi şubesini
 söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `branchId`, varsayılan `marina`; `server/sync/laffogato-link.ts`):
 
 - GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke` ve
@@ -196,7 +196,7 @@ Sitenin kendi imza testi 16 Kasım 2026'da kaldırıldı.
 | Uç | AsilPOS kullanımı | Sıklık |
 | --- | --- | --- |
 | `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1); şubenin şu anki fiyatı ve bir sonraki fiyat anı (`nextPriceAt`, §2.1 "Şube fiyatı") | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok), şubenin fiyat anında bir kez (gün açıkken, zorunlu eşitlemeler arası en az 60 sn; gece geçtiyse gün açılınca), kasa yeniden başlayınca bir kez ve elle |
-| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: AsilPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
+| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor`: eski adla "… porsiyon", `shared/eski-adlar.ts` `SITE_AKTOR`; giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version?branch=<id>` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; site veritabanını yalnız genel işaret değişince, şubenin özeti için bir kez okur |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor, branch}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
@@ -425,7 +425,7 @@ Rezervasyonu yalnız site yazar, taşır, iptal eder; AsilPOS hiçbir şey yazma
 (okuma), `shared/karaoke.ts` (kurallar), `server/services/rooms.ts` (ücret).
 
 **Uç:** `GET /api/panel/karaoke?from=<iş günü>&to=<iş günü>`, imzalı, AsilPOS anahtarıyla (laffogato#264; yanıt panelin
-aldığıyla aynı, laffogato `docs/ASILPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
+aldığıyla aynı, laffogato `docs/LAFPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
 kuralı, `from = to`); rezervasyon en geç 24:00'te biter, gece yarısını aşmaz. Site AsilPOS'un anahtarına yalnız dünden
 yarına (İstanbul) açar; daha geniş pencere 403. Hiç istek gitmez: `.env`'de `LAFFOGATO_URL` ya da
 `LAFFOGATO_SYNC_SECRET` yoksa ya da planda oda türünde (`kind: 'oda'`) etkin masa yoksa. Oda Tuzla'nındır: başka şube
@@ -517,8 +517,8 @@ uyarır: aşan süre kasada odanın ücretiyle alınır.
 telefon, ödeme referansı gelmez (sitenin `toPanelReservation` beyaz listesi). AsilPOS listeyi yalnız son okunan iş
 günü için tutar (`sync_state`, yeni gün gelince üzerine yazılır); sayaç oturumunda, adisyon satırında ve denetim
 kaydında ad ve not yoktur, yalnız rezervasyon kodu. AsilPOS Uzaktan'a giden özette site rezervasyonunun adı, notu ve kodu (KRK-…; oda satırının notunda da) yoktur: yalnız
-saat, kişi sayısı ve ödeme durumu. Laffogato `docs/ASILPOS.md` "Kişisel veri" rezervasyonu yalnız kafedeki makineye
-açar.
+saat, kişi sayısı ve ödeme durumu. Sitenin kuralı (laffogato `docs/LAFPOS.md` "Kişisel veri"): rezervasyon yalnız
+kafedeki makineye açılır.
 
 ### 2.5 Sesli uyarılar (20 Kasım 2026)
 
@@ -1355,7 +1355,7 @@ Yeni şube ladmin'de eklenir, kasası kendiliğinden kurulur (ladmin `docs/ASILP
 POST {adres}/api/asilpos/kurulum   { "kod": "…" }   (404: eski panel, aynısı /api/lafpos/kurulum'a)
 200 { "ok": true, "sube": { "id": "kadikoy", "ad": "Kadıköy" },
       "baglanti": { "LAFMALIYET_URL", "LAFMALIYET_SYNC_SECRET", "LAFPOS_CLOUD_URL"?, "LAFPOS_CLOUD_SECRET"?, "LAFFOGATO_URL"?, "LAFFOGATO_SYNC_SECRET"? } }
-      (Uzaktan anahtarları telde eski adla; kasa ASILPOS_CLOUD_* adıyla da kabul eder, dosyada duran adla yazar)
+      (Uzaktan anahtarları telde eski adla; kasa ASILPOS_CLOUD_* adıyla da kabul eder; dosyada yeni ad yoksa eski adla yazar)
 404 kod yok · 410 kullanılmış, iptal ya da süresi dolmuş · 400 biçim · 429 çok deneme
 ```
 
@@ -1370,8 +1370,9 @@ POST {adres}/api/asilpos/kurulum   { "kod": "…" }   (404: eski panel, aynısı
 
 **Anahtar değişimi (26 Kasım 2026).** Kurulu kasalar Uzaktan ve site bağlantısını da ladmin'den alır
 (`server/sync/baglanti-dagitim.ts`): 10 dakikada bir `GET {LAFMALIYET_URL}/api/panel/pos/baglanti?sube=<id>&uygulanan=<sürüm>`
-(lafmaliyet anahtarıyla imzalı) → `{ ok, surum, baglanti: { ASILPOS_CLOUD_URL, ASILPOS_CLOUD_SECRET, LAFFOGATO_URL,
-LAFFOGATO_SYNC_SECRET } }`. Değişen değer bekletilir (`sync_state` `baglanti.bekleyen`) ve **gün kapanınca** (gün açık
+(lafmaliyet anahtarıyla imzalı) → `{ ok, surum, baglanti: { LAFPOS_CLOUD_URL, LAFPOS_CLOUD_SECRET, LAFFOGATO_URL,
+LAFFOGATO_SYNC_SECRET } }` (Uzaktan anahtarları telde eski adla; kasa ASILPOS_CLOUD_* adıyla da kabul eder). Değişen
+değer bekletilir (`sync_state` `baglanti.bekleyen`) ve **gün kapanınca** (gün açık
 değilse hemen) ayarlar dosyasına yazılır, bekçi yeniden başlatır; denetime `settings.connections` (anahtar adları,
 değer değil). Yalnız kasada tanımlı bağlantı (adresi dolu) güncellenir: kapalı tutulan site bağlantısı kendiliğinden
 açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz: ladmin'e yeni değer yazılır, kasalar gece alır, sunucudaki
@@ -1449,8 +1450,9 @@ lafmaliyet Kasa formu AsilPOS gününü geçiş günü olmadan gösterirdi.
 1. **Anahtarlar**
    - lafmaliyet Production (Vercel): `ASILPOS_SYNC_SECRET` (eski adıyla `LAFPOS_SYNC_SECRET`), en az 32 karakter (`openssl rand -base64 48`); paneli
      yeniden yayınlayın.
-   - laffogato Production: `LAFPOS_SYNC_SECRET`, **ayrı bir değer**. İki projede adları aynı, değerleri ayrıdır;
-     ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır (aynıysa site ve panel AsilPOS'u kabul etmez).
+   - laffogato Production: `LAFPOS_SYNC_SECRET`, **ayrı bir değer**. İki projenin değerleri ayrıdır (panelde yeni ad,
+     eski adı da okunur; sitede ad değişikliğinden önceki ad); ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır
+     (aynıysa site ve panel AsilPOS'u kabul etmez).
    - AsilPOS `.env` (Windows kurulumunda Başlat › AsilPOS › AsilPOS ayarları, `ayarlar.env`), şimdilik yalnız
      lafmaliyet satırları: `LAFMALIYET_URL=https://ladmin.laffogato.net`, `LAFMALIYET_SYNC_SECRET` = panelin
      `ASILPOS_SYNC_SECRET`'ı (eski adıyla `LAFPOS_SYNC_SECRET`; `server/env-config.ts`). Kurulum modundayken bunlar güvenlidir: gün gitmez (§4.3),
@@ -1463,7 +1465,7 @@ lafmaliyet Kasa formu AsilPOS gününü geçiş günü olmadan gösterirdi.
      girildiği andan itibaren AsilPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı
      değiştirir, kurulum modunda da. `scripts/vercel/baglanti-kur.sh` anahtarları üretip üç projeye yazar ve kafeye
      girecek satırları bir dosyaya döker; site satırlarını o dosyadan 2. adımda alın.
-   - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/ASILPOS.md`).
+   - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/LAFPOS.md`).
 2. **Deneme gönderimi**
    - Eğitim bitti: AsilPOS'ta "Denemeyi bitir, gerçek kullanıma başla" (§4.3) yapıldı; kurulum modu kapalı, Yönetim ›
      Yazarkasa POS **`kapali`** (eğitim simülatörü değil). ModPOS'la paralel deneme gününde `kapali` kalır, mali fişi ModPOS

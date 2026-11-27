@@ -662,7 +662,8 @@ export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'e
   const offline = !res || res.status >= 500 || res.status === 429;
   if (offline && opts.queueOffline) return 'kuyrukta';
   if (!res) throw new HttpError(502, "Siteye ulaşılamadı; AsilPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
-  // Site kalemi menüden kaldırmış: AsilPOS açamaz, yalnız sitenin paneli menüye geri koyar (laffogato docs/ASILPOS.md)
+  // Site kalemi menüden kaldırmış: AsilPOS açamaz, yalnız sitenin paneli menüye geri koyar (laffogato'nun kasa belgesi,
+  // shared/eski-adlar.ts SITE_BELGESI)
   if (res.status === 409 && (res.json as { error?: unknown } | null)?.error === 'site_closed') {
     throw new HttpError(409, "Site bu ürünü menüden kaldırmış; AsilPOS'tan açılamaz. Sitenin yönetim panelinde menüye geri koyun", 'site_closed');
   }

@@ -397,7 +397,15 @@ try {
   Kisayol (Join-Path $menu 'Kurulum notları.lnk') (Join-Path $Kur 'BENIOKU.txt') '' '' 1
   $kaldirExe = Join-Path $Kur 'Kaldir.exe'
   $kaldirPs = Join-Path $Kur 'LafPOS-Kaldir.ps1'
-  if (Test-Path -LiteralPath $kaldirExe) {
+  $anahtar = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS'
+  # Kurulum dosyasının Kaldir.exe'si yalnız kayıtta görünen ad AsilPOS ise yenidir. Ad değişikliğinden önceki Kaldir.exe
+  # yeni adlı kısayolları bilmez (kaldırınca Başlangıç'taki kasa kısayolu kalır): silinir, kaldırma bu kurulumun
+  # kaldırıcısına geçer (kurulum-yenile.mjs ile aynı kural)
+  $gorunenAd = $null
+  try { $gorunenAd = [string](Get-ItemProperty -LiteralPath $anahtar -ErrorAction Stop).DisplayName } catch { }
+  $kaldirExeYeni = (Test-Path -LiteralPath $kaldirExe) -and ($gorunenAd -eq 'AsilPOS')
+  if ((Test-Path -LiteralPath $kaldirExe) -and -not $kaldirExeYeni) { Remove-Item -LiteralPath $kaldirExe -Force -ErrorAction SilentlyContinue }
+  if ($kaldirExeYeni) {
     Kisayol (Join-Path $menu 'AsilPOS''u kaldır.lnk') $kaldirExe '' '' 1
     $kaldirKomutu = '"' + $kaldirExe + '"'
   } else {
@@ -419,7 +427,6 @@ try {
   [void](Calistir $powercfg @('/setactive', 'SCHEME_CURRENT'))
 
   # Uygulamalar listesi: kurulum dosyasıyla (32 bit NSIS) aynı kayıt
-  $anahtar = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS'
   if (-not (Test-Path -LiteralPath $anahtar)) { New-Item -Path $anahtar | Out-Null }
   $boyut = [int]((Get-ChildItem -LiteralPath $Kur -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1024)
   Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayName' -Value 'AsilPOS'
@@ -428,6 +435,8 @@ try {
   Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayIcon' -Value (Join-Path $Kur 'asilpos.ico')
   Set-ItemProperty -LiteralPath $anahtar -Name 'InstallLocation' -Value $Kur
   Set-ItemProperty -LiteralPath $anahtar -Name 'UninstallString' -Value $kaldirKomutu
+  # Kurulum dosyasının sessiz kaldırma satırı yalnız onun Kaldir.exe'si için (PowerShell kaldırıcısı soru sorar)
+  if (-not $kaldirExeYeni) { Remove-ItemProperty -LiteralPath $anahtar -Name 'QuietUninstallString' -ErrorAction SilentlyContinue }
   New-ItemProperty -LiteralPath $anahtar -Name 'NoModify' -Value 1 -PropertyType DWord -Force | Out-Null
   New-ItemProperty -LiteralPath $anahtar -Name 'NoRepair' -Value 1 -PropertyType DWord -Force | Out-Null
   New-ItemProperty -LiteralPath $anahtar -Name 'EstimatedSize' -Value $boyut -PropertyType DWord -Force | Out-Null

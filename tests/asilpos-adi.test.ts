@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import * as eskiAdlar from '@shared/eski-adlar';
-import { BELGE_ALINTILARI, ESKI_AD_METINLERI, ESKI_AD_NOTU, ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
+import { BELGE_ALINTILARI, ESKI_AD_METINLERI, ESKI_AD_NOTU, ESKI_ENV_ADLARI, ESKI_ENV_ONEKI, ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
+import { ENV_ONEKI } from '@shared/pos-env';
 
 /**
  * Ad değişikliği (26 Kasım 2026, ürün AsilPOS oldu). Eski ad yalnız izinli yerlerde geçer:
@@ -11,6 +12,9 @@ import { BELGE_ALINTILARI, ESKI_AD_METINLERI, ESKI_AD_NOTU, ESKI_URUN_ADI, KURUL
  * - telin altın dosyaları, ladmin ile bayt bayt aynı hesap sözleşmesi ve gönderilmiş göçler (dosyanın tamamı),
  * - TypeScript dışındaki dosyalarda `ESKI_AD_METINLERI` (kurulu kasanın klasörleri, kanal, imzalar...), betikte satır
  *   sonundaki `eski-ad` notuyla işaretli küçük kopya, belgede `BELGE_ALINTILARI` (tırnaktaki tel değeri, eski PR'lar).
+ * - Eski adlı ortam değişkeni yalnız `ESKI_ENV_ADLARI`'ndakiyse ya da aynı satırda yeni adıyla birlikte yazılır.
+ * - baslat.cmd ad değişikliğinden önceki baytlarıyla kalır: kurulu kasada çalışırken değiştirilemez, farklıysa her
+ *   açılışta "Kurulumu yenileyin" uyarısı çıkar (kurulum-yenile.mjs LOCKED_ROOT_FILES).
  * Ayrıca eski adların değerleri ve altın dosyalar sabittir: değişirse kurulu kasa, eski sürüme dönüş ya da ladmin bozulur.
  */
 
@@ -27,6 +31,7 @@ const TAM_DOSYA = new Set([
   'tests/fixtures/lafmaliyet-gun.golden.json',
   'tests/fixtures/lafmaliyet-gun-personel.golden.json',
   'docs/hesap-sozlesmesi.md',
+  'scripts/kasa/windows/kurulum/baslat.cmd',
 ]);
 const tamDosya = (f: string) => TAM_DOSYA.has(f) || f.startsWith('drizzle/');
 /** Adı eski adla kalan dosyalar: macOS kısayolu (kurulu launchd ajanında mutlak yol), eski kısayolların yönlendiricisi */
@@ -38,6 +43,10 @@ const BELGE = /\.(md|txt)$/;
 const NOT = new RegExp(`(?:#|//|;)\\s*${ESKI_AD_NOTU}\\b`);
 
 const cikar = (satir: string, metinler: readonly string[]) => [...metinler].sort((a, b) => b.length - a.length).reduce((s, m) => s.split(m).join(''), satir);
+/** Eski adlı ortam değişkenleri (şablonları da: `<önek>*`, `<önek>${ad}`, `<önek>$2`): izinli tam ad ya da aynı satırda yeni adıyla */
+const ESKI_ENV = new RegExp(`(VITE_)?${ESKI_ENV_ONEKI}([\\w*\${}]*)`, 'g');
+const envCikar = (satir: string) =>
+  satir.replace(ESKI_ENV, (tam, vite: string | undefined, ad: string) => (ESKI_ENV_ADLARI.includes(tam) || (ad && satir.includes(`${vite ?? ''}${ENV_ONEKI}${ad}`)) ? '' : tam));
 
 describe('eski ad (ad değişikliği: ürün AsilPOS)', () => {
   it('eski ad yalnız izinli yerlerde: eski adlar modülü, sabit dosyalar, betikteki işaretli kopya ve belgedeki alıntı', () => {
@@ -55,7 +64,7 @@ describe('eski ad (ad değişikliği: ürün AsilPOS)', () => {
       metin.split('\n').forEach((satir, i) => {
         if (!ESKI_AD.test(satir)) return;
         if (TS.test(f)) return ihlal.push(`${f}:${i + 1}: TypeScript eski adı shared/eski-adlar.ts'ten almalı`);
-        let kalan = cikar(satir, ESKI_AD_METINLERI);
+        let kalan = cikar(envCikar(satir), ESKI_AD_METINLERI);
         if (BELGE.test(f)) kalan = cikar(kalan, BELGE_ALINTILARI);
         if (!ESKI_AD.test(kalan)) return;
         if (BETIK.test(f) && NOT.test(satir)) return;
@@ -65,6 +74,26 @@ describe('eski ad (ad değişikliği: ürün AsilPOS)', () => {
     expect(ihlal).toEqual([]);
   });
 
+  it('eski adlı ortam değişkeni yalnız izinli adla ya da aynı satırda yeni adıyla birlikte geçer', () => {
+    const E = ESKI_ENV_ONEKI;
+    // Yeni bir eski adlı değişken yakalanır (betik, yapılandırma, belge, CI)
+    for (const satir of [`${E}PORT=4000`, `const u = process.env.${E}URL ?? x;`, `\`${E}GUNCELLEME=kapali\``, `  ${E}SURUM: 1.2.3`]) expect(envCikar(satir), satir).toContain(E);
+    // İki adı birden okuyan ya da anlatan satır, şablonlar ve izinli adlar geçer
+    expect(envCikar(`if "%ASILPOS_URL%"=="" set "ASILPOS_URL=%${E}URL%"`)).not.toContain(E);
+    expect(envCikar(`\`ASILPOS_*\`; önceki \`${E}*\` adları da okunur`)).not.toContain(E);
+    expect(envCikar(`vars[\`ASILPOS_\${ad}\`] ?? vars[\`${E}\${ad}\`]`)).not.toContain(E);
+    expect(envCikar(`put "$1" "ASILPOS_$2" "$3" && put "$1" "${E}$2" "$3"`)).not.toContain(E);
+    for (const ad of ESKI_ENV_ADLARI) expect(envCikar(`delete env.${ad};`), ad).not.toContain(E);
+    // Başka adın yeni adı yetmez
+    expect(envCikar(`ASILPOS_URL ve ${E}PORT`)).toContain(`${E}PORT`);
+  });
+
+  it('baslat.cmd ad değişikliğinden önceki baytlarıyla kalır (kurulu kasada çalışırken değiştirilemez; farklıysa her açılışta uyarı)', () => {
+    const metin = readFileSync(new URL('scripts/kasa/windows/kurulum/baslat.cmd', root), 'utf8').replace(/\r\n/g, '\n');
+    // 3017d46 (ad değişikliğinden önceki main) ile aynı; satır sonu çalışma kopyasında CRLF olabilir, pakette CRLF
+    expect(createHash('sha256').update(metin).digest('hex')).toBe('00f018294fce2e0826455b7b11748b6e397d548fca03ce1c3508e57aab46153f');
+  });
+
   it('eski adların değerleri değişmez (kurulu kasa, tel, Pavo, Upstash ve imzalar bunlara bağlı)', () => {
     const degerler = Object.fromEntries(
       Object.entries(eskiAdlar)
@@ -72,7 +101,7 @@ describe('eski ad (ad değişikliği: ürün AsilPOS)', () => {
         .sort(([a], [b]) => (a < b ? -1 : 1)),
     );
     // Yeni bir eski ad eklenince bu özet bilerek güncellenir; var olan bir değer değişmemeli
-    expect(createHash('sha256').update(JSON.stringify(degerler)).digest('hex')).toBe('0c9b3ed3755c275ef0c022f8f5455bf57dd575e86fa79ff26b68bb46e9c69bea');
+    expect(createHash('sha256').update(JSON.stringify(degerler)).digest('hex')).toBe('37b689ec43a1ff56c8846fd766c7e153d8137e6e59ab69fe0d5273978e3fdc8e');
   });
 
   it('tel altın dosyaları ladmin ile bayt bayt aynı kalır', () => {

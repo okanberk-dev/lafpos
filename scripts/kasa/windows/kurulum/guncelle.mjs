@@ -1,6 +1,6 @@
 // AsilPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır; ayar ve anahtar
-// gerekmez. Güncelleme kanalı Vercel'deki proje (adı eski adla kaldı) (kanal.mjs her main derlemesinde yazar): sırayla
-// MANIFEST_URLS'teki surum.json, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 3 dk'da
+// gerekmez. Güncelleme kanalını Vercel'deki proje (adı ad değişikliğinde kaldı) her main derlemesinde yazar (kanal.mjs).
+// Sırayla MANIFEST_URLS'teki surum.json okunur, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 3 dk'da
 // bir (ETag: değişmeyen kanal gövde göndermez). Yeni derleme (`build`, HEAD commit'inin zamanı) varsa uygulama yükünü
 // (lafpos-app-<build>.zip) aynı adresten indirir, boyunu ve SHA-256'sını doğrular; Node ya da better-sqlite3 değiştiyse
 // onları açık kaynaklarından (nodejs.org, WiseLibs'in GitHub sürümü) indirip manifestteki özetle doğrular.

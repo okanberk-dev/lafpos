@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { create } from 'zustand';
 import { COMP_LABEL } from '@shared/comp';
+import { BANKA_KIYAS_BASLIGI } from '@shared/eski-adlar';
 import { tlPlain } from '@shared/money';
 import { lineGross } from '@shared/order-calc';
 import { fmtDateTime } from '@shared/time';
@@ -577,8 +578,9 @@ export function BankEodReceipt({ boot, slip }: { boot: BootstrapDTO; slip: BankE
         <span className="rc-r">{slip.grandTotalKurus != null ? `${tlPlain(slip.grandTotalKurus)} TL` : '-'}</span>
       </div>
       <Hr />
-      {/* Kayıt için kıyas: Pavo'nun (bankanın) kart toplamı ile AsilPOS'ta kartla alınan; fark çıkmamalı */}
-      <div className="rc-caption">PAVO - ASILPOS KARŞILAŞTIRMA</div>
+      {/* Kayıt için kıyas: Pavo'nun (bankanın) kart toplamı ile AsilPOS'ta kartla alınan; fark çıkmamalı. Başlık eski
+          adla: ladmin'in kâğıt okuyucusu banka satırlarını onda bitirir (shared/eski-adlar.ts) */}
+      <div className="rc-caption">{BANKA_KIYAS_BASLIGI}</div>
       <Row l="Pavo kart toplamı" r={slip.grandTotalKurus != null ? tlPlain(slip.grandTotalKurus) : '-'} />
       <Row l="AsilPOS kart toplamı" r={slip.dayCardKurus != null ? tlPlain(slip.dayCardKurus) : '-'} />
       {diff != null ? (

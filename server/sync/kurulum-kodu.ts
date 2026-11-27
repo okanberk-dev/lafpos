@@ -90,6 +90,15 @@ export function readRedeemAnswer(json: unknown): { sube: { id: string; ad: strin
 
 let running = false;
 
+/** Yanıt panelin kendi kurulum yanıtı mı (`{ ok: false, … }` JSON); bilinmeyen yolun 404 sayfası değil. Gövdeyi tüketmez */
+async function panelYaniti(res: Response): Promise<boolean> {
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as { ok?: unknown } | null;
+  return body?.ok === false;
+}
+
 /**
  * Kodu ladmin'e verir (sunucu açılışında ve 5 dakikada bir, kod dosyası durdukça). Başarıda dosya `.kullanildi` olur;
  * kalıcı hatada (kod yok, kullanılmış, süresi dolmuş) da: yeniden denenmez, ekranda neden kalır
@@ -115,8 +124,9 @@ export async function redeemInstallCode(opts: { dataDir?: string; fetchImpl?: ty
     }
     let res: Response;
     try {
-      // Yeni yol; ad değişikliğinden önceki panel onu tanımaz (404): eski yol yeniden denenir. Kod geçersizse yeni panel
-      // iki yolda da 404 der, sonuç aynı
+      // Yeni yol; ad değişikliğinden önceki panel onu tanımaz (404, panelin kendi JSON yanıtı değil): eski yol yeniden
+      // denenir. Panelin kendi 404'ü (`ok: false`: kod ya da şube yok) kalıcı yanıttır, yeniden denenmez: kod o anda
+      // kullanılmış sayılmış olabilir, eski yol "kullanılmış" der ve asıl neden kaybolur
       const post = (yol: string) =>
         (opts.fetchImpl ?? fetch)(new URL(yol, code.adres), {
           method: 'POST',
@@ -125,7 +135,7 @@ export async function redeemInstallCode(opts: { dataDir?: string; fetchImpl?: ty
           signal: AbortSignal.timeout(15_000),
         });
       res = await post(KURULUM_YOLU);
-      if (res.status === 404) res = await post(ESKI_KURULUM_YOLU);
+      if (res.status === 404 && !(await panelYaniti(res))) res = await post(ESKI_KURULUM_YOLU);
     } catch (e) {
       return save({ ok: false, sube: null, at: now, hata: `ladmin’e ulaşılamadı (${e instanceof Error ? e.message : String(e)}); internet gelince yeniden denenir` });
     }

@@ -3,7 +3,8 @@ import { ESKI_ENV_ONEKI } from './eski-adlar.js';
 /**
  * Ortam değişkenlerinin adı (26 Kasım 2026'dan beri `ASILPOS_*`). Kurulu kasaların ayarlar.env'i ve Vercel'deki
  * değişkenler eski adla (shared/eski-adlar.ts `ESKI_ENV_ONEKI`) durur ve yeniden yazılmaz: okuyan her yer önce yeni
- * adı, yoksa eskisini okur. Ayarlar dosyasına yazan, dosyada zaten duran adı korur (`yazilacakEnvAdi`).
+ * adı, yoksa eskisini okur. Ayarlar dosyasına yazan şimdilik eski adı yazar, dosyada yeni ad duruyorsa onu da
+ * (`yazilacakEnvAdi`): eski sürüme dönülürse eski sunucu yalnız eski adı okur.
  */
 export const ENV_ONEKI = 'ASILPOS_';
 
@@ -50,12 +51,15 @@ export function posEnvAdi(vars: Vars, ad: string): string {
 }
 
 /**
- * Ayarlar dosyasına yazılacak ad: dosyada yalnız eski ad duruyorsa o (kurulu kasanın satırı yerinde değişir, yinelenen
- * ya da eskimiş satır kalmaz), değilse verilen ad. `dosyadakiler`: dosyadaki etkin anahtarlar
+ * Ayarlar dosyasına yazılacak ad. Kural (ad değişikliği planı: iki ad okunur, eski ad yazılır; yazım yeni ada sonraki
+ * bir sürümde geçer): dosyada yeni ad etkinse yeni ad (eski ad da duruyorsa ikisi birlikte değişir,
+ * server/lib/ayar-dosyasi.ts), değilse eski ad: kurulu kasanın satırı yerinde değişir, dosyada hiç yoksa eski adla
+ * eklenir. Böylece eski sürüme dönülürse eski sunucu (yalnız eski adı okur) sonradan yazılan bağlantıları da bulur.
+ * `dosyadakiler`: dosyadaki etkin anahtarlar
  */
 export function yazilacakEnvAdi(dosyadakiler: ReadonlySet<string>, tamAd: string): string {
   const eski = eskiEnvAdi(tamAd);
-  if (eski && !dosyadakiler.has(tamAd) && dosyadakiler.has(eski)) return eski;
+  if (eski && !dosyadakiler.has(tamAd)) return eski;
   return tamAd;
 }
 

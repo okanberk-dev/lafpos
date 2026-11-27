@@ -315,9 +315,10 @@ sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
    | `PAVO_FINGERPRINT` | İsteğe bağlı; tanımlıysa her şeyden önce o gider (aşağıda "Program kimliği") |
 
    **Program kimliği** (Pavo'nun `Fingerprint` alanı, eşleştirmede cihaza kaydedilir, her istekte aynısı gider):
-   kuruluma özel ve kalıcıdır. İlk eşleştirmede üretilir ve saklanır (`sync_state` `pavo.fingerprint`): `AsilPOS-` ve 6
-   harf-rakam (ör. `AsilPOS-K7Q2XM`; biçim en çok 32 karakter, harf, rakam ve tire). Geriye uyum: kimlik saklanmadan
-   eşleştirilmiş eski kurulum `AsilPOS` ile devam eder (ilk okunuşta saklanır; yeniden eşleştirme gerekmez).
+   kuruluma özel ve kalıcıdır. İlk eşleştirmede üretilir ve saklanır (`sync_state` `pavo.fingerprint`): ürünün ad
+   değişikliğinden önceki adı (`shared/eski-adlar.ts` `PAVO_KIMLIGI`; cihazlar eşleştirmeyi onunla sakladığı için
+   değişmedi), tire ve 6 harf-rakam (biçim en çok 32 karakter, harf, rakam ve tire). Geriye uyum: kimlik saklanmadan
+   eşleştirilmiş eski kurulum yalnız o eski adla devam eder (ilk okunuşta saklanır; yeniden eşleştirme gerekmez).
    Cihaz değişince (adres ya da seri no) eşleştirme sıfırlanır ama kimlik aynı kalır. Kimlik Yönetim › Yazarkasa POS ›
    Pavo kartında salt okunur görünür. Cihaz başka programla eşleşmişse (73/74) "Son hata" kutusunda doğrudan **Yeniden
    eşleştir** düğmesi çıkar. Testler: `tests/pavo-kimlik.test.ts`, `tests/pavo-panel.test.ts`.
@@ -459,7 +460,7 @@ hiç bağlı olmasa da gün kapalı kalır.
   "basılmadı" yapmaz (kasa ekranları ikinci kez basmaz).
 - **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
   okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
-  sonu yoksa `bos`; uç yanıt verip özet vermezse AsilPOS'un bildiği son batch, `asilpos`). "Özet vermedi" yalnız uç
+  sonu yoksa `bos`; uç yanıt verip özet vermezse AsilPOS'un bildiği son batch, `lafpos`: saklanan değer eski adla). "Özet vermedi" yalnız uç
   yoksa (HTTP 404, 405, 501) ya da başarılı yanıtın gövdesi boşsa (2xx) sayılır (`eodCopyUnavailable`); cihazın iç
   hatası (HTTP 500, 503...) kopya yok sayılmaz. Cihaz bu soruya yanıt vermezse (bağlantı, zaman aşımı) ya da iç hata
   verirse gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden

@@ -94,7 +94,9 @@ describe('kodun ladmin’e verilmesi', () => {
     expect(getSettings().branchId).toBe('kadikoy');
     const text = readFileSync(envFile, 'utf8');
     expect(text).toContain(`LAFMALIYET_SYNC_SECRET=${'s'.repeat(40)}`);
-    expect(text).toContain(`ASILPOS_CLOUD_URL=https://${ALAN_ADI}`);
+    // Dosyada olmayan Uzaktan anahtarları eski adla yazılır: eski sürüme dönülürse eski sunucu da okur
+    expect(text).toContain(`${ESKI_ENV_ONEKI}CLOUD_URL=https://${ALAN_ADI}`);
+    expect(text).not.toContain('ASILPOS_CLOUD_URL=');
     expect(text).not.toContain('TOKENX_CLIENT_SECRET');
     expect(text).toContain('# ayarlar');
     expect(existsSync(join(dir, 'kurulum-kodu.json'))).toBe(false);
@@ -106,7 +108,7 @@ describe('kodun ladmin’e verilmesi', () => {
     expect(await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(500, {}) })).toBeNull();
   });
 
-  it('ad değişikliğinden önceki panel yeni yolu tanımazsa (404) eski yol denenir; iki yolda da 404 kalıcı hatadır', async () => {
+  it('ad değişikliğinden önceki panel yeni yolu tanımazsa (404 sayfası) eski yol denenir; panelin kendi 404\'ü yeniden denenmez', async () => {
     const { redeemInstallCode } = await import('../server/sync/kurulum-kodu');
     writeCode();
     const seen: { url: string; body: unknown }[] = [];
@@ -119,13 +121,34 @@ describe('kodun ladmin’e verilmesi', () => {
     expect(seen.map((s) => new URL(s.url).pathname)).toEqual(['/api/asilpos/kurulum', ESKI_KURULUM_YOLU]);
     expect(seen[1]!.body).toEqual(seen[0]!.body);
     expect(out).toMatchObject({ ok: true, sube: { id: 'kadikoy' } });
-    // Kod geçersiz: yeni panel iki yolda da 404 der, kod kalkar
+    // Kod geçersiz: panelin kendi yanıtı (`ok: false`), eski yol denenmez, kod kalkar
     writeCode();
     seen.length = 0;
-    const out2 = await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(404, { error: 'Kurulum kodu bulunamadı' }, seen) });
-    expect(seen).toHaveLength(2);
-    expect(out2).toMatchObject({ ok: false, kalici: true, hata: expect.stringContaining('bulunamadı') });
+    const out2 = await redeemInstallCode({ dataDir: dir, fetchImpl: fakeFetch(404, { ok: false, error: 'Kurulum kodu bulunamadı' }, seen) });
+    expect(seen).toHaveLength(1);
+    expect(out2).toMatchObject({ ok: false, kalici: true, hata: expect.stringContaining('Kurulum kodu bulunamadı') });
     expect(existsSync(join(dir, 'kurulum-kodu.json'))).toBe(false);
+    // Panel kodu kullanılmış sayıp şubeyi bulamadı: eski yol "kullanılmış" (410) derdi, asıl neden kalır
+    writeCode();
+    seen.length = 0;
+    const subeYok = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      const eskiYol = new URL(String(url)).pathname === ESKI_KURULUM_YOLU;
+      return Response.json(eskiYol ? { ok: false, error: 'Bu kurulum bağlantısı kullanılmış' } : { ok: false, error: 'Şube bulunamadı' }, { status: eskiYol ? 410 : 404 });
+    }) as typeof fetch;
+    const out3 = await redeemInstallCode({ dataDir: dir, fetchImpl: subeYok });
+    expect(seen.map((s) => new URL(s.url).pathname)).toEqual(['/api/asilpos/kurulum']);
+    expect(out3).toMatchObject({ ok: false, kalici: true, hata: expect.stringContaining('Şube bulunamadı') });
+    // İki yolda da 404 sayfası (panel yok ya da adres yanlış): kalıcı hata
+    writeCode();
+    seen.length = 0;
+    const sayfa = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      return new Response('<!doctype html>', { status: 404 });
+    }) as typeof fetch;
+    const out4 = await redeemInstallCode({ dataDir: dir, fetchImpl: sayfa });
+    expect(seen).toHaveLength(2);
+    expect(out4).toMatchObject({ ok: false, kalici: true });
   });
 
   it('kullanılmış ya da süresi dolmuş kod kalıcı hatadır: dosya kalkar, yeniden denenmez', async () => {

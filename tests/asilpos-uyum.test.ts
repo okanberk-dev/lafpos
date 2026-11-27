@@ -4,13 +4,13 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACILIS_KASA, ESKI_DEPO_ONEKI, ESKI_ENV_ONEKI, ESKI_URUN_ADI, TEL_KAYNAK } from '@shared/eski-adlar';
+import { ACILIS_KASA, BANKA_KIYAS_BASLIGI, ESKI_DEPO_ONEKI, ESKI_ENV_ONEKI, ESKI_URUN_ADI, TEL_KAYNAK } from '@shared/eski-adlar';
 import { envDegeri, eskiEnvAdi, posEnv, posEnvAdi, posEnvDolu, yazilacakEnvAdi, yeniAdlarla, yeniEnvAdi } from '@shared/pos-env';
 import { type Harness, startApp } from './harness';
 
 /**
  * Ad değişikliğinde kurulu kasanın çalışmaya devam etmesi (plan A2): ortam değişkenleri iki adla okunur, ayarlar
- * dosyasına dosyada duran adla yazılır, ladmin'in eski adlı anahtarları ve devir kaynağı kabul edilir, bekçi sunucuya
+ * dosyasına dosyada yeni ad yoksa eski adla yazılır, ladmin'in eski adlı anahtarları ve devir kaynağı kabul edilir, bekçi sunucuya
  * iki adı da verir, güncelleyici eski ayarı okur, tarayıcı deposu yeni öneke kopyalanır, kısayollar yenisine taşınır.
  */
 
@@ -43,7 +43,9 @@ describe('ortam değişkeni: önce ASILPOS_*, yoksa eski ad', () => {
     expect(posEnvAdi({}, 'CLOUD_SECRET')).toBe('ASILPOS_CLOUD_SECRET');
     expect(yazilacakEnvAdi(new Set([E('CLOUD_URL')]), 'ASILPOS_CLOUD_URL')).toBe(E('CLOUD_URL'));
     expect(yazilacakEnvAdi(new Set([E('CLOUD_URL'), 'ASILPOS_CLOUD_URL']), 'ASILPOS_CLOUD_URL')).toBe('ASILPOS_CLOUD_URL');
-    expect(yazilacakEnvAdi(new Set(), 'ASILPOS_CLOUD_URL')).toBe('ASILPOS_CLOUD_URL');
+    expect(yazilacakEnvAdi(new Set(['ASILPOS_CLOUD_URL']), 'ASILPOS_CLOUD_URL')).toBe('ASILPOS_CLOUD_URL');
+    expect(yazilacakEnvAdi(new Set(), 'ASILPOS_CLOUD_URL')).toBe(E('CLOUD_URL'));
+    expect(yazilacakEnvAdi(new Set(), 'LAFMALIYET_URL')).toBe('LAFMALIYET_URL');
     expect(yeniAdlarla({ [E('CLOUD_URL')]: 'eski', LAFMALIYET_URL: 'm' })).toEqual({ ASILPOS_CLOUD_URL: 'eski', LAFMALIYET_URL: 'm' });
     expect(yeniAdlarla({ [E('CLOUD_URL')]: 'eski', ASILPOS_CLOUD_URL: 'yeni' })).toEqual({ ASILPOS_CLOUD_URL: 'yeni' });
   });
@@ -57,17 +59,21 @@ describe('ortam değişkeni: önce ASILPOS_*, yoksa eski ad', () => {
   });
 });
 
-describe('ayarlar dosyası: dosyada duran ad korunur', () => {
-  it('yalnız eski ad duruyorsa o satır değişir; ikisi de varsa ikisi; hiçbiri yoksa yeni ad; kaldırmada ikisi kalkar', async () => {
+describe('ayarlar dosyası: eski ad yazılır, dosyada duran yeni ad korunur', () => {
+  it('yalnız eski ad duruyorsa o satır değişir; ikisi de varsa ikisi; yalnız yeni ad varsa o; hiçbiri yoksa eski ad (eski sürüme dönüş); kaldırmada ikisi kalkar', async () => {
     const { applyEnvEdits, readEnvText } = await import('../server/lib/ayar-dosyasi');
     const eskiDosya = `﻿# ayarlar\r\n${E('CLOUD_URL')}=https://eski.example\r\n${E('CLOUD_SECRET')}=${'o'.repeat(40)}\r\n`;
     const a = applyEnvEdits(eskiDosya, { ASILPOS_CLOUD_SECRET: 'n'.repeat(40) });
     expect(a).toBe(`﻿# ayarlar\r\n${E('CLOUD_URL')}=https://eski.example\r\n${E('CLOUD_SECRET')}=${'n'.repeat(40)}\r\n`);
     const ikisi = applyEnvEdits(`ASILPOS_CLOUD_SECRET=a\n${E('CLOUD_SECRET')}=a\n`, { ASILPOS_CLOUD_SECRET: 'b' });
     expect(readEnvText(ikisi)).toEqual({ ASILPOS_CLOUD_SECRET: 'b', [E('CLOUD_SECRET')]: 'b' });
-    expect(applyEnvEdits('# bos\n', { ASILPOS_CLOUD_URL: 'https://y.example' })).toContain('ASILPOS_CLOUD_URL=https://y.example');
-    // Eski örnek dosyanın yorumlu satırının altına
-    expect(applyEnvEdits(`# Uzaktan\n# ${E('CLOUD_URL')}=\n# son\n`, { ASILPOS_CLOUD_URL: 'https://y.example' })).toBe(`# Uzaktan\n# ${E('CLOUD_URL')}=\nASILPOS_CLOUD_URL=https://y.example\n# son\n`);
+    // Dosyada hiç yok (kafenin eski dosyasında yalnız yorumlu satır, yeni kurulumda da): eski adla, eski sunucu da okur
+    const bos = applyEnvEdits('# bos\n', { ASILPOS_CLOUD_URL: 'https://y.example' });
+    expect(readEnvText(bos)).toEqual({ [E('CLOUD_URL')]: 'https://y.example' });
+    expect(applyEnvEdits('ASILPOS_CLOUD_URL=x\n', { ASILPOS_CLOUD_URL: 'https://y.example' })).toBe('ASILPOS_CLOUD_URL=https://y.example\n');
+    // Eski ve yeni örnek dosyanın yorumlu satırının altına
+    expect(applyEnvEdits(`# Uzaktan\n# ${E('CLOUD_URL')}=\n# son\n`, { ASILPOS_CLOUD_URL: 'https://y.example' })).toBe(`# Uzaktan\n# ${E('CLOUD_URL')}=\n${E('CLOUD_URL')}=https://y.example\n# son\n`);
+    expect(applyEnvEdits(`# Uzaktan\n# ASILPOS_CLOUD_URL=\n# son\n`, { ASILPOS_CLOUD_URL: 'https://y.example' })).toBe(`# Uzaktan\n# ASILPOS_CLOUD_URL=\n${E('CLOUD_URL')}=https://y.example\n# son\n`);
     expect(readEnvText(applyEnvEdits(`${E('CLOUD_URL')}=x\nASILPOS_CLOUD_URL=y\nA=1\n`, { ASILPOS_CLOUD_URL: null }))).toEqual({ A: '1' });
   });
 
@@ -205,7 +211,7 @@ describe('tarayıcı deposu: eski önekli anahtarlar yeni öneke kopyalanır', (
   }
 
   it('yeni anahtar yoksa kopyalanır, varsa dokunulmaz; eski anahtarlar silinmez; depo yoksa sessiz geçer', async () => {
-    const { eskiDepoyuTasi, DEPO_ONEKI } = await import('../src/lib/eski-depo');
+    const { eskiDepoyuTasi, DEPO_ONEKI, TASINDI_ISARETI } = await import('../src/lib/eski-depo');
     expect(DEPO_ONEKI).toBe('asilpos.');
     const yerel = new Depo();
     const oturum = new Depo();
@@ -220,24 +226,73 @@ describe('tarayıcı deposu: eski önekli anahtarlar yeni öneke kopyalanır', (
     expect(yerel.getItem(`${ESKI_DEPO_ONEKI}token`)).toBe('t');
     expect(yerel.getItem('asilpos.baska')).toBeNull();
     expect(oturum.getItem('asilpos.counterDraft')).toBe('taslak');
+    expect(yerel.getItem(TASINDI_ISARETI)).toBe('1');
+    expect(oturum.getItem(TASINDI_ISARETI)).toBe('1');
     expect(eskiDepoyuTasi([yerel, oturum])).toBe(0);
-    const bozuk = { get length(): number { throw new Error('kapalı'); } } as unknown as Storage;
+    const bozuk = { getItem: () => null, get length(): number { throw new Error('kapalı'); } } as unknown as Storage;
     expect(eskiDepoyuTasi([bozuk])).toBe(0);
+  });
+
+  it('taşıma her depoda bir kez: uygulamanın sildiği anahtar (çıkış, gösterilen güncelleme işareti) eski kopyadan geri gelmez', async () => {
+    const { eskiDepoyuTasi } = await import('../src/lib/eski-depo');
+    const yerel = new Depo();
+    const oturum = new Depo();
+    yerel.setItem(`${ESKI_DEPO_ONEKI}token`, 't');
+    // Eski sürüm yenilemeden hemen önce "güncellendi" işaretini koyar
+    oturum.setItem(`${ESKI_DEPO_ONEKI}guncellendi`, '1');
+    expect(eskiDepoyuTasi([yerel, oturum])).toBe(2);
+    // Yeni sürüm bildirimi gösterip işareti siler; kullanıcı çıkış yapar
+    oturum.removeItem('asilpos.guncellendi');
+    yerel.removeItem('asilpos.token');
+    // Sonraki açılışlar
+    expect(eskiDepoyuTasi([yerel, oturum])).toBe(0);
+    expect(eskiDepoyuTasi([yerel, oturum])).toBe(0);
+    expect(oturum.getItem('asilpos.guncellendi')).toBeNull();
+    expect(yerel.getItem('asilpos.token')).toBeNull();
+    // Eskiler yerinde (eski sürüme dönüş)
+    expect(yerel.getItem(`${ESKI_DEPO_ONEKI}token`)).toBe('t');
+    // Depo yazılamıyorsa işaret de konmaz: sonraki açılış yeniden dener
+    const dolu = new Depo();
+    dolu.setItem(`${ESKI_DEPO_ONEKI}cart`, 'x');
+    const setItem = dolu.setItem.bind(dolu);
+    dolu.setItem = () => {
+      throw new Error('dolu');
+    };
+    expect(eskiDepoyuTasi([dolu])).toBe(0);
+    dolu.setItem = setItem;
+    expect(eskiDepoyuTasi([dolu])).toBe(1);
     // Uygulamanın ilk içe aktarımı (depoyu okuyan modüllerden önce)
     expect(read('src/main.tsx').split('\n').find((l) => l.startsWith('import '))).toBe("import './lib/eski-depo';");
   });
 });
 
+describe("kâğıt: ladmin'in fotoğraftan okuduğu metin", () => {
+  it('banka gün sonu kâğıdının kıyas başlığı eski adla (eski panelin kodla okuyucusu banka satırlarını onda bitirir)', () => {
+    // lafmaliyet src/lib/photo-read/pavo-ocr.ts: katlanmış satır (büyük harf, Türkçe harfsiz, ayraçlar boşluk)
+    const katla = (s: string) =>
+      s
+        .toLocaleUpperCase('tr')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9 ]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    expect(katla(BANKA_KIYAS_BASLIGI)).toBe(`PAVO ${ESKI_URUN_ADI.toUpperCase()} KARSILASTIRMA`);
+    expect(read('src/lib/print.tsx')).toContain('<div className="rc-caption">{BANKA_KIYAS_BASLIGI}</div>');
+  });
+});
+
 describe('Windows kısayolları ve kaldırma: eski adlar', () => {
-  it('kısayol yenileyici koşulda eski adı da tanır, yenisini yazınca eskisini siler, eski menü klasörünü taşır', () => {
+  it('kısayol yenileyici koşulda eski adı da tanır, yenisini yazınca eskisini siler, eski menü klasörünü taşır', async () => {
     const ps = read('scripts/kasa/windows/kurulum/kisayollar.ps1');
     expect(ps).toContain("[string]$EskiMenu = '', [string]$YeniMenu = ''");
     expect(ps).toContain('foreach ($ad in @($k.kosul))');
     expect(ps).toContain('foreach ($ad in @($k.eski))');
     expect(ps).toContain('$f.Name.Replace($EskiMenu, $YeniMenu)');
     expect(ps.indexOf('$s.Save()')).toBeLessThan(ps.indexOf('foreach ($ad in @($k.eski))'));
-    const yenile = read('scripts/kasa/windows/kurulum/kurulum-yenile.mjs');
-    expect(yenile).toContain("'-EskiMenu', MENU.eski, '-YeniMenu', MENU.yeni");
+    const { shortcutArgs, MENU } = await import(/* @vite-ignore */ new URL('../scripts/kasa/windows/kurulum/kurulum-yenile.mjs', import.meta.url).href);
+    const args: string[] = shortcutArgs({ appDir: 'a', installDir: 'k', listFile: 'l' });
+    expect(args.slice(args.indexOf('-EskiMenu'), args.indexOf('-EskiMenu') + 4)).toEqual(['-EskiMenu', MENU.eski, '-YeniMenu', MENU.yeni]);
   });
 
   it('kasa bekçisi eski adlı kasa ve bekçi kısayolunu da sayar; adres eski değişkenden de', () => {

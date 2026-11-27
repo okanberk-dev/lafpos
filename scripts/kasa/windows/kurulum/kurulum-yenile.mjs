@@ -2,7 +2,9 @@
 // kurulum klasörünün kökündeki dosyalar (kasa kısayolu, yönetim betiği, simge, notlar) ve Başlat menüsü, masaüstü ve
 // Başlangıç kısayolları eski kalırdı. Bekçi (SYSTEM) her açılışta bunu çağırır:
 //   1. app\kok\ içindeki kök dosyalar (paket.mjs yazar) kurulum klasöründekinden farklıysa yerine konur. baslat.cmd hariç:
-//      bekçiyi o açar ve cmd.exe toplu dosyayı çalışırken satır satır okur, üzerine yazmak onu bozar; farklıysa uyarılır.
+//      bekçiyi o açar ve cmd.exe toplu dosyayı çalışırken satır satır okur, üzerine yazmak onu bozar; farklıysa uyarılır
+//      (bu yüzden baslat.cmd'nin baytları ad değişikliğinde de değişmedi, tests/asilpos-adi.test.ts). Eski kısayolların
+//      yönlendiricisi (LafPOS-Kasa.bat) yalnız yönlendirdiği AsilPOS-Kasa.bat kurulumdaysa konur.
 //   2. Kısayollar (kisayollar.ps1, Windows PowerShell) kurulumdakiyle aynı adla, idempotent olarak yeniden yazılır.
 //      SYSTEM ortak klasörlere (Başlat menüsü, Genel masaüstü, ortak Başlangıç) yönetici izni sormadan yazar. Masaüstü ve
 //      Başlangıç'taki kasa kısayolu yalnız varsa yenilenir (kurulumda seçilmemişse eklenmez). Kasa bekçisinin Başlangıç
@@ -10,6 +12,8 @@
 //   Kısayollar derleme başına bir kez yazılır (guncelleme\kurulum-yenileme.json); hata olursa her açılışta yeniden denenir.
 //   Ad değişikliği (26 Kasım 2026): eski adlı kısayollar (masaüstü, Başlangıç) koşulda yeni adla eş sayılır; yenisi
 //   yazılınca eskisi silinir, Başlat menüsünün eski klasöründe kalanlar (kaldırma, tarayıcı kısayolu) yeni klasöre taşınır.
+//   Kısayollardan önce Uygulamalar kaydı: kurulum dosyasının eski kaldırıcısı (Kaldir.exe) yeni adları bilmez, kaldırma
+//   siteden kurulumun kaldırıcısına (iki adı da siler) geçer; kayıtta görünen ad AsilPOS olur (kisayollar.ps1).
 // Yapılamayan bir şey kalırsa güncelleme durumuna (durum.json `kurulumUyari`) yazılır; Merkez nabzıyla patron panelinde
 // "Kurulumu yenileyin" görünür. Bağımlılıksız; pakete girer (paket.mjs). Testi tests/kurulum-yenile.test.ts.
 import { execFile } from 'node:child_process';
@@ -25,6 +29,13 @@ export const LOCKED_ROOT_FILES = ['baslat.cmd'];
  * kurulum dosyasıyla kurulanda Kaldir.exe var, bu dosya yok)
  */
 export const IF_PRESENT_ROOT_FILES = ['LafPOS-Kaldir.ps1'];
+/**
+ * Yalnız bağlı olduğu dosya kurulumdaysa konan kök dosyalar: eski kısayolların yönlendiricisi yenisini çağırır; yenisi
+ * konamadıysa eski kasa kısayolunun tam hâli yerinde kalır
+ */
+export const ROOT_FILE_NEEDS = { 'LafPOS-Kasa.bat': 'AsilPOS-Kasa.bat' };
+/** Uygulamalar listesindeki kayıt (kurulum dosyası 32 bit: WOW6432Node; siteden kurulum da aynı anahtara yazar) */
+export const UNINSTALL_KEY = 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\LafPOS';
 /** Başlat menüsü klasörü ve kısayolların eski adı (shared/eski-adlar.ts; ad değişikliğinden önceki kurulum) */
 export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
 /**
@@ -85,12 +96,16 @@ export function syncRootFiles({ appDir, installDir }) {
   const out = { copied: [], failed: [], stale: [] };
   const src = join(appDir, ROOT_DIR);
   if (!existsSync(src)) return out;
-  for (const name of readdirSync(src).sort()) {
+  // Bağlı dosyalar en sonda: bağlandıkları dosya önce konur
+  const names = readdirSync(src).sort();
+  const ordered = [...names.filter((n) => !ROOT_FILE_NEEDS[n]), ...names.filter((n) => ROOT_FILE_NEEDS[n])];
+  for (const name of ordered) {
     const from = join(src, name);
     const to = join(installDir, name);
     try {
       const data = readFileSync(from);
       if (IF_PRESENT_ROOT_FILES.includes(name) && !existsSync(to)) continue;
+      if (ROOT_FILE_NEEDS[name] && !existsSync(join(installDir, ROOT_FILE_NEEDS[name]))) continue;
       if (existsSync(to) && readFileSync(to).equals(data)) continue;
       if (LOCKED_ROOT_FILES.includes(name)) {
         out.stale.push(name);
@@ -115,13 +130,37 @@ export function warningFor({ failed = [], stale = [], shortcuts = null }) {
   return `Kurulumu yenileyin (AsilPOS-Kur.cmd'yi yeniden çalıştırın): ${parts.join('; ')}`.slice(0, 300);
 }
 
+/** kisayollar.ps1'in argümanları (liste, Başlat menüsü adları, Uygulamalar kaydı ve kaldırıcı) */
+export function shortcutArgs({ appDir, installDir, listFile }) {
+  return [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    join(appDir, 'kisayollar.ps1'),
+    '-Liste',
+    listFile,
+    '-EskiMenu',
+    MENU.eski,
+    '-YeniMenu',
+    MENU.yeni,
+    '-Kurulum',
+    installDir,
+    '-Kayit',
+    UNINSTALL_KEY,
+    '-Kaldirici',
+    join(appDir, ROOT_DIR, IF_PRESENT_ROOT_FILES[0]),
+  ];
+}
+
 /** kisayollar.ps1'i çalıştırır; hata yoksa null, varsa kısa açıklama */
-function runShortcutScript({ appDir, listFile, systemRoot }) {
+function runShortcutScript({ appDir, installDir, listFile, systemRoot }) {
   const ps = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   return new Promise((resolve) => {
     execFile(
       ps,
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(appDir, 'kisayollar.ps1'), '-Liste', listFile, '-EskiMenu', MENU.eski, '-YeniMenu', MENU.yeni],
+      shortcutArgs({ appDir, installDir, listFile }),
       { timeout: 60_000, windowsHide: true },
       (err, stdout) => {
         const lines = String(stdout ?? '')
@@ -138,7 +177,7 @@ function runShortcutScript({ appDir, listFile, systemRoot }) {
  * Kök dosyaları ve kısayolları yeniler, sonucu `setWarning`'e verir (null: sorun yok). Fırlatmaz
  * @param {{ appDir: string, installDir: string, home: string, build: number|null, log: (s: string) => void,
  *   setWarning: (w: string|null) => void, platform?: string, systemRoot?: string,
- *   runShortcuts?: (o: { appDir: string, listFile: string, systemRoot: string }) => Promise<string|null> }} deps
+ *   runShortcuts?: (o: { appDir: string, installDir: string, listFile: string, systemRoot: string }) => Promise<string|null> }} deps
  */
 export async function refreshInstall(deps) {
   const platform = deps.platform ?? process.platform;
@@ -164,7 +203,7 @@ export async function refreshInstall(deps) {
       mkdirSync(dir, { recursive: true });
       const listFile = join(dir, 'kisayollar.json');
       writeFileSync(listFile, JSON.stringify(shortcutSpec(deps.installDir, systemRoot), null, 2));
-      shortcuts = await (deps.runShortcuts ?? runShortcutScript)({ appDir: deps.appDir, listFile, systemRoot });
+      shortcuts = await (deps.runShortcuts ?? runShortcutScript)({ appDir: deps.appDir, installDir: deps.installDir, listFile, systemRoot });
       writeFileSync(marker, JSON.stringify({ build: deps.build, ok: !shortcuts, at: new Date().toISOString() }));
       say(shortcuts ? `kısayollar yenilenemedi: ${shortcuts}` : 'kısayollar yenilendi');
     }
