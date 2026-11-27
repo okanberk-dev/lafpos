@@ -62,6 +62,10 @@ Son güncelleme: 26 Kasım 2026.
   200 döner, Pavo gün sonu ve kasa farkı bildirimi yine çalışır (otomatik gün sonu süreci düşürmez); lafmaliyet günü
   kalıcı reddederse (400/409/413/422) de sessiz kalmaz. İkisinde denetim kaydına alarm ve patrona bir kez telefon
   bildirimi (tür `lafmaliyet`: gün, neden, "Kasa › Geçmiş günler › Z › Gönder"; `docs/03-ENTEGRASYON.md` §4.11).
+- **Bağımlılık açıkları (27 Kasım 2026, Dependabot):** hono 4.13.23, @hono/node-server 2.1.11; drizzle-kit'in eski
+  esbuild'i ve @vercel/blob altındaki eski zod `overrides` ile güncel sürüme bağlı. `npm audit` (üretim ve geliştirme)
+  0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
+  (satır sonlu yolda da çalıştığını ve ters eğik çizgili yolun 400 aldığını `tests/bagimlilik-guvenlik.test.ts` denetler).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
