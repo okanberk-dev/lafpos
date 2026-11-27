@@ -7,6 +7,7 @@ import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState, updateSettings } from '../lib/settings';
 import { db } from '../db/client';
 import { branchLocked } from './lafmaliyet';
+import { subeDegisti } from './sube-degisti';
 import { ESKI_KURULUM_YOLU } from '@shared/eski-adlar';
 import { yeniAdlarla } from '@shared/pos-env';
 
@@ -162,8 +163,9 @@ function save(d: KurulumDurumu): KurulumDurumu {
 function apply(answer: { sube: { id: string; ad: string }; edits: Record<string, string> }, now: number, retire: () => void): KurulumDurumu {
   const before = getSettings().branchId;
   const locked = before !== answer.sube.id && branchLocked();
+  const changed = !locked && before !== answer.sube.id;
   const fx = new Effects();
-  if (!locked && before !== answer.sube.id) updateSettings({ branchId: answer.sube.id });
+  if (changed) updateSettings({ branchId: answer.sube.id });
   const file = settingsFile();
   const written = file && Object.keys(answer.edits).length ? Object.keys(answer.edits) : [];
   if (file && written.length) writeEnvEdits(file, answer.edits);
@@ -180,5 +182,8 @@ function apply(answer: { sube: { id: string; ad: string }; edits: Record<string,
   fx.emit({ topic: 'settings', kind: 'settings.updated' });
   fx.flush();
   retire();
+  // Şube belli oldu ya da değişti: eski şubenin önbellekleri bırakılır, bekleyen günler ve yeni şubenin platform
+  // anahtarları beklemeden (bağlantılar yeni yazıldıysa bekçi sunucuyu yeniden başlatır, açılış da çeker)
+  if (changed) subeDegisti(before);
   return save({ ok: !locked, sube: answer.sube, at: now, hata: locked ? `Şube kimliği kilitli (${before}); ${answer.sube.id} yapılmadı` : null, ...(locked ? { kilitli: true, kalici: true } : {}) });
 }

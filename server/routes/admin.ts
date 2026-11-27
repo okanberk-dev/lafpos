@@ -26,7 +26,7 @@ import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
-import { platformKeysBranchChanged } from '../sync/platform-anahtar';
+import { subeDegisti } from '../sync/sube-degisti';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { acceptedBranch, branchLocked, reservedPosName } from '../sync/lafmaliyet';
 import { assertLinkable, ladminStaff, linkedUsers, STAFF_REF, STAFF_REFRESH_MIN_MS } from '../sync/lafmaliyet-personel';
@@ -1213,9 +1213,9 @@ adminRoutes.put('/settings', async (c) => {
   });
   fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
   fx.flush();
-  // Şube değişti: eski şubenin platform anahtarları hemen bırakılır, yenisininkiler beklemeden çekilir (beklenmez;
-  // çekim olmazsa kayıt yine başarılı, 10 dakikalık çekim yeniden dener)
-  if (patronChanged.includes('branchId')) void platformKeysBranchChanged();
+  // Şube değişti: eski şubenin devri, personel listesi ve platform anahtarları bırakılır, yenisininkiler beklemeden çekilir;
+  // şube retiyle ya da şubesizken bekleyen günler hemen gider (beklenmez; çekim olmazsa kayıt yine başarılı)
+  if (patronChanged.includes('branchId')) subeDegisti(prev.branchId);
   return c.json(getSettings());
 });
 
