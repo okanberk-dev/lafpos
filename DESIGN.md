@@ -241,14 +241,16 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   stable`. Rayda her ekran ikon üstte kısa ad altta (`NavItem.label`), satır 56 px (alçak ekranda 52 ve 44); seçili
   ekran beyaz karoda, ikonu açık nane karede yeşil, adı yeşil ve kalın (panonun seçili rayı); menüde olmayan ekranın
   yeri de seçili görünür (adisyonun geldiği ekran, Eğitim cihazında Kasa; `data-on`). Dipte ince çizginin altında
-  **Araçlar** (kişinin menüsü: tema, tam ekran, ekranlar) ve **Kilitle** (oturumu kapatır; uzaktan görünümde Çıkış).
+  **Yenile** (sayfayı yeniden yükler: kasa programının penceresinde tarayıcının yenile düğmesi yok; gönderilmemiş
+  kalemler cihazda durur, kaydedilmemiş ayarı tarayıcı sorar; sahibin isteği, 28 Kas 2026), **Araçlar** (kişinin
+  menüsü: tema, tam ekran, ekranlar) ve **Kilitle** (oturumu kapatır; uzaktan görünümde Çıkış).
   Ray sığmazsa kendi içinde kayar, dip yerinde kalır. Telefonda ray yok: üst şerit (karo, ekranın adı, arama,
   bağlantı ve gün, kişi) ve alt sekme çubuğu (etkin sekmenin ikonu açık nane hapta, yeşil). Platform siparişi onay
   bekliyorsa üst çubuğun altında ahududu hap şerit.
 - **Araçlar çekmecesi** (`src/components/ToolsDrawer.tsx`): tam ekran gece zemini, üstte yumuşak yeşil ışık, yukarıdan
   perde gibi iner; satırlar ölçülü (18 px yarı kalın, 56 px), sırayla gelir, üstüne gelince ve etkin ekranda küçük ok
-  halkası belirir. İki grup: Ekranlar; Bu cihaz ve oturum (Ekranı kilitle, tema Açık / Koyu / Cihaz ya da bar teması,
-  tam ekran, uzaktan çıkış). Raydaki Araçlar, üst çubuktaki kişinin düğmesi ve telefonda avatar ile "Daha" açar.
+  halkası belirir. İki grup: Ekranlar; Bu cihaz ve oturum (Ekranı kilitle, Ekranı yenile (telefonda ray olmadığı için burada da), tema
+  Açık / Koyu / Cihaz ya da bar teması, tam ekran, uzaktan çıkış). Raydaki Araçlar, üst çubuktaki kişinin düğmesi ve telefonda avatar ile "Daha" açar.
 - **Sahne** (`src/components/ui/Stage.tsx`; panonun içerik alanı): zeminin üstünde **başlık satırı** (panonun "Welcome
   back, Alex" satırı): solda başlık (Inter 700, 28-32 px) ve tek cümle durum, sağda büyük sayılar (`Hero`: küçük beyaz
   kartlar, köşe 12, etiket üstte soluk, sayı kalın) ve eylemler (önce ikincil, en sağda ana eylem). Altında içeriğin
