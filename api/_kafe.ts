@@ -16,14 +16,28 @@
  * Dükkânın (Merkez kurulum kimliği) şubesi: kendi anahtarıyla imzalı istek dükkânın kendisi olduğunu kanıtlarsa
  * (`dukkanKanitiTutar`: kurulumun kendi anahtarıyla imzalı kanıt, Merkez kaydındaki anahtarla doğrulanır) dükkân o şubeye
  * bağlanır. Bağ api/uzaktan.ts'te `${REDIS_ONEKI}surum` hash'inin `sube:<dükkân>` alanında, süresiz.
+ *
+ * Anahtar değişimi (docs/07-UZAKTAN-ERISIM.md §7; 27 Kasım 2026 olayı: Vercel'deki değer kasalardan önce değişince
+ * kasaların bütün istekleri reddedildi): her anahtarın isteğe bağlı önceki değeri de kabul edilir. Ortak anahtarınki
+ * `ASILPOS_CLOUD_SECRET_ONCEKI` (eski adıyla da), şubeninki `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`. Önce şimdiki değer
+ * denenir, karşılaştırmalar sabit zamanlı (`verifyPush`). Önceki değerle tutan istek aynı kimliği alır, `onceki` işaretiyle:
+ * bulutun kasaya imzaladığı (uzaktan yönetim komutu) kasanın kullandığı anahtarla imzalanır (api/_kontrol.ts). Önceki değer
+ * yetki genişletemez: kısa, şimdikiyle aynı ya da başka bir anahtarın (öbür şubenin şimdiki ya da önceki, ortak anahtarın
+ * şimdiki ya da önceki değeri) aynısı olan önceki değer yok sayılır; şubenin önceki değeri yalnız şubenin şimdiki anahtarı
+ * geçerliyken sayılır.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SUBE_ANAHTARI_RE, SUBE_BASLIGI, dukkanKanitMetni, subeAnahtarAdi, subeEtiketi } from '../shared/baglanti.js';
+import { ONCEKI_EKI, SUBE_ANAHTARI_RE, SUBE_BASLIGI, SUBE_ONCEKI_RE, dukkanKanitMetni, subeAnahtarAdi, subeEtiketi, subeOncekiAdi } from '../shared/baglanti.js';
+import { eskiEnvAdi } from '../shared/pos-env.js';
 
-/** İmzalı isteği yapan kasa: söylediği şube (başlıksız istekte null) ve imzanın o şubenin kendi anahtarıyla olup olmadığı */
+/**
+ * İmzalı isteği yapan kasa: söylediği şube (başlıksız istekte null), imzanın o şubenin kendi anahtarıyla olup olmadığı ve
+ * imza önceki değerle tuttuysa `onceki` (anahtar değişimi; kasa yeni değere henüz geçmedi)
+ */
 export interface Kafe {
   sube: string | null;
   kendi: boolean;
+  onceki?: true;
 }
 
 /** İmza doğrulayıcı (api/uzaktan.ts verifyPush) */
@@ -58,6 +72,50 @@ export function subeAnahtariDurumu(sube: string | null, ortak: string, vars: Rea
   return { durum: 'gecerli', anahtar: k };
 }
 
+/** Ortamdaki şube anahtarlarının önceki değerleri: şube etiketi → değer (boşlar atılır) */
+function subeOncekiDegerleri(vars: Readonly<Record<string, string | undefined>>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [name, value] of Object.entries(vars)) {
+    const m = SUBE_ONCEKI_RE.exec(name);
+    const v = (value ?? '').trim();
+    if (m && v) out.set(m[1]!, v);
+  }
+  return out;
+}
+
+const ORTAK_ONCEKI = `ASILPOS_CLOUD_SECRET${ONCEKI_EKI}`;
+/** Ortak anahtarın önceki değeri, denetimsiz (yeni ad boşsa eski adla duran) */
+const ortakOncekiHam = (vars: Readonly<Record<string, string | undefined>>) => (vars[ORTAK_ONCEKI] ?? '').trim() || (vars[eskiEnvAdi(ORTAK_ONCEKI)!] ?? '').trim();
+
+/**
+ * Ortak anahtarın önceki değeri (`ASILPOS_CLOUD_SECRET_ONCEKI`, eski adıyla da): anahtar değişiminde kasalar yeni değere
+ * gece geçene dek bulut bunu da kabul eder. Kısa, şimdikiyle aynı ya da bir şube anahtarıyla (şimdiki ya da önceki) aynıysa
+ * null: o şubenin anahtarıyla imzalı istek başlıksız gelip ortak anahtar sayılmasın
+ */
+export function ortakOnceki(ortak: string, vars: Readonly<Record<string, string | undefined>> = process.env): string | null {
+  const v = ortakOncekiHam(vars);
+  if (v.length < MIN_KEY || v === ortak) return null;
+  for (const k of subeAnahtarlari(vars).values()) if (k === v) return null;
+  for (const k of subeOncekiDegerleri(vars).values()) if (k === v) return null;
+  return v;
+}
+
+/**
+ * Şube anahtarının önceki değeri (`ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`): yalnız şubenin şimdiki anahtarı geçerliyken.
+ * Kısa, şimdikiyle aynı, ortak anahtarın şimdiki ya da önceki değeriyle ya da başka şubenin şimdiki ya da önceki
+ * anahtarıyla aynıysa null: ortak anahtarı bilen (bütün kasalar) ya da başka şube bu şubeyi açamasın
+ */
+export function subeOncekiAnahtari(sube: string | null, ortak: string, vars: Readonly<Record<string, string | undefined>> = process.env): string | null {
+  if (!sube) return null;
+  const d = subeAnahtariDurumu(sube, ortak, vars);
+  if (d.durum !== 'gecerli') return null;
+  const v = (vars[subeOncekiAdi(sube)] ?? '').trim();
+  if (v.length < MIN_KEY || v === d.anahtar || v === ortak || v === ortakOncekiHam(vars)) return null;
+  for (const [s, k] of subeAnahtarlari(vars)) if (s !== sube && k === v) return null;
+  for (const [s, k] of subeOncekiDegerleri(vars)) if (s !== sube && k === v) return null;
+  return v;
+}
+
 /** Şubenin anahtarı tanımlı mı (geçerli ya da geçersiz): tanımlıysa kaynakları yalnız kendi imzasıyla açılır */
 export const subeAnahtariVar = (sube: string | null, ortak: string) => subeAnahtariDurumu(sube, ortak).durum !== 'yok';
 
@@ -71,26 +129,43 @@ export function kafeAnahtari(sube: string | null | undefined, ortak: string): st
 }
 
 /**
+ * `kafeAnahtari`'nın önceki değeri (anahtar değişimi): şubenin kendi geçerli anahtarı varsa onun önceki değeri, yoksa
+ * ortak anahtarınki; tanımlı ya da geçerli değilse null
+ */
+export function kafeOncekiAnahtari(sube: string | null | undefined, ortak: string): string | null {
+  const s = typeof sube === 'string' ? subeEtiketi(sube) : null;
+  return subeAnahtariDurumu(s, ortak).durum === 'gecerli' ? subeOncekiAnahtari(s, ortak) : ortakOnceki(ortak);
+}
+
+/**
  * Kasanın imzalı isteği: `x-laf-sube` başlığı varsa o şubenin kendi anahtarıyla (tanımlıysa; değilse ortak anahtarla),
  * başlık yoksa ortak anahtarla doğrulanır. Tutarsa kasanın kimliği, tutmazsa 401 `bad_signature` (kasa şube anahtarıyla
  * imzaladıysa ortak anahtarla yineler: server/lib/kafe-anahtari.ts), başlık anlaşılmazsa 400 yanıtı döner. Şubenin
  * anahtarı geçersizse 503 yalnız imzası Vercel'deki (geçersiz) değerle ya da ortak anahtarla tutan isteğe: anahtarı
- * olmayan biri başlıkla hangi şubenin anahtarının bozuk olduğunu, neden bozuk olduğunu öğrenemez (düz 401 alır)
+ * olmayan biri başlıkla hangi şubenin anahtarının bozuk olduğunu, neden bozuk olduğunu öğrenemez (düz 401 alır).
+ * Her anahtarın önceki değeri de (`ortakOnceki`, `subeOncekiAnahtari`) tutar: kimlik aynı, `onceki` işaretli
  */
 export function kafeKimligi(req: { method: string; headers: Headers }, url: URL, body: string, ortak: string, dogrula: Dogrula): Kafe | Response {
+  const tutar = (key: string | null) => !!key && key.length >= MIN_KEY && dogrula(key, req, url, body);
+  const red = () => fail(401, 'İmza geçersiz', 'bad_signature');
+  // Önce şimdiki değer, tutmazsa önceki (anahtar değişimi: kasa yeni değere gün kapanınca geçer)
+  const kimlik = (sube: string | null, kendi: boolean, simdiki: string, onceki: () => string | null): Kafe | Response => {
+    if (tutar(simdiki)) return { sube, kendi };
+    if (tutar(onceki())) return { sube, kendi, onceki: true };
+    return red();
+  };
   const baslik = req.headers.get(SUBE_BASLIGI);
-  if (baslik == null) return ortak.length >= MIN_KEY && dogrula(ortak, req, url, body) ? { sube: null, kendi: false } : fail(401, 'İmza geçersiz', 'bad_signature');
+  if (baslik == null) return kimlik(null, false, ortak, () => ortakOnceki(ortak));
   const sube = subeEtiketi(baslik);
   if (!sube) return fail(400, 'Şube başlığı anlaşılamadı', 'bad_branch');
   const d = subeAnahtariDurumu(sube, ortak);
   if (d.durum === 'gecersiz') {
     const ham = subeAnahtarlari().get(sube) ?? '';
-    const imzali = (ham && dogrula(ham, req, url, body)) || (ortak.length >= MIN_KEY && dogrula(ortak, req, url, body));
-    return imzali ? fail(503, `Şube anahtarı geçersiz (${subeAnahtarAdi(sube)} ${d.neden})`, 'branch_key_invalid') : fail(401, 'İmza geçersiz', 'bad_signature');
+    const imzali = (ham && dogrula(ham, req, url, body)) || tutar(ortak) || tutar(ortakOnceki(ortak));
+    return imzali ? fail(503, `Şube anahtarı geçersiz (${subeAnahtarAdi(sube)} ${d.neden})`, 'branch_key_invalid') : red();
   }
-  const key = d.durum === 'gecerli' ? d.anahtar : ortak;
-  if (key.length < MIN_KEY || !dogrula(key, req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
-  return { sube, kendi: d.durum === 'gecerli' };
+  if (d.durum === 'gecerli') return kimlik(sube, true, d.anahtar, () => subeOncekiAnahtari(sube, ortak));
+  return kimlik(sube, false, ortak, () => ortakOnceki(ortak));
 }
 
 /**

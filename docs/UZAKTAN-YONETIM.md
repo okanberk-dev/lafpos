@@ -103,6 +103,12 @@ ikisinde de işler.
   geçer (`server/lib/kafe-anahtari.ts` `kontrolAnahtari`; kabul kasada kalıcı, retle silinir): bulut tanımıyorken
   kasanın 10 dakikada bir yaptığı yeniden deneme özeti ve komut imzasını değiştirmez, iki taraf aynı anahtarda kalır.
   Anahtarın başladığı ya da kaldırıldığı anda kuyrukta bekleyen bir komut reddedilebilir; panelden yeniden gönderilir.
+- Anahtar değişimi (27 Kasım 2026, `docs/07-UZAKTAN-ERISIM.md` §7): Vercel'de önceki değer (`…_ONCEKI`) tanımlıyken
+  bulut komutu kasanın kullandığı anahtarla imzalar: kasanın son özetindeki açık anahtar imzası önceki değerle tutuyorsa
+  önceki değerle, yoksa şimdiki değerle (`api/_kontrol.ts` `kasaninAnahtari`). Kasa gün sonunda yeni değere geçince
+  özetinin imzası, dolayısıyla parmak izi değişir, özet bir sonraki nabızla gider ve bulut yeni değere döner. Geçiş
+  anında kuyrukta kalmış komut reddedilebilir; panelden yeniden gönderilir. Bilinmeyen anahtarla imzalı açık anahtar
+  yine verilmez.
 - Kuyruk dükkân başına en çok `KUYRUK_EN_COK` (son 10 yer sahibe ayrılır), saatte üye başına `SAATLIK_EN_COK` komut:
   bir yönetici sınırı doldurup sahibin acil işlemini (hesabı kapat) bekletemez.
 

@@ -1380,8 +1380,15 @@ LAFFOGATO_SYNC_SECRET } }` (Uzaktan anahtarları telde eski adla; kasa ASILPOS_C
 değer bekletilir (`sync_state` `baglanti.bekleyen`) ve **gün kapanınca** (gün açık
 değilse hemen) ayarlar dosyasına yazılır, bekçi yeniden başlatır; denetime `settings.connections` (anahtar adları,
 değer değil). Yalnız kasada tanımlı bağlantı (adresi dolu) güncellenir: kapalı tutulan site bağlantısı kendiliğinden
-açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz: ladmin'e yeni değer yazılır, kasalar gece alır, sunucudaki
-anahtar sonra değişir (`uygulanan` ladmin'in günlüğünde görünür).
+açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz (`uygulanan` ladmin'in günlüğünde görünür).
+
+**Değişimin sırası (27 Kasım 2026 olayından sonra; `docs/07-UZAKTAN-ERISIM.md` §7).** Eski sıra "ladmin'e yeni değer,
+kasalar gece alır, sunucudaki anahtar sonra değişir" iki anı eşlemeyi sahibe bırakıyordu: 26 Kasım'da kasalar gün sonunda
+geçti, Uzaktan ve site eski değerde kaldı, kasanın bütün istekleri reddedildi. Artık karşı taraf iki değeri birden kabul
+eder: önce Uzaktan'da (Vercel `lafpos`) ve sitede yeni değer şimdiki, eski değer `_ONCEKI` adıyla
+(`ASILPOS_CLOUD_SECRET_ONCEKI` ya da `LAFPOS_CLOUD_SECRET_ONCEKI`; sitede `LAFPOS_SYNC_SECRET` adına `_ONCEKI` eklenmiş
+adla), yeniden yayım; sonra ladmin'de yeni değer; kasalar gün kapanınca geçer; birkaç gün sonra `_ONCEKI` silinir. Önce
+karşı taraf: gün kapalıyken kasa yeni değeri 10 dakika içinde yazar, karşı taraf onu henüz bilmeseydi kasa reddedilirdi.
 
 **Sınır:** lafmaliyet bugün tek AsilPOS şubesinin gününü alır (§4 "Şube"); Marina AsilPOS'tayken ikinci şubenin kasası
 kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler, günde bir yeniden denenir (§4c). Panel şubeyi kasanın

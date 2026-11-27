@@ -25,8 +25,21 @@ export const SUBE_ANAHTARI_ENV = 'ASILPOS_CLOUD_SUBE_SECRET';
 export const SUBE_BASLIGI = 'x-laf-sube';
 /** Şubenin kendi anahtarının Vercel'deki adı: `ASILPOS_CLOUD_SECRET_<ŞUBE>` ('marina' → ASILPOS_CLOUD_SECRET_MARINA) */
 export const subeAnahtarAdi = (sube: string) => `ASILPOS_CLOUD_SECRET_${sube}`;
-/** Vercel ortamında şube anahtarı adının kalıbı; 1. grup şube etiketi */
-export const SUBE_ANAHTARI_RE = /^ASILPOS_CLOUD_SECRET_([A-Z0-9]{1,32})$/;
+/**
+ * Anahtar değişiminde önceki değerin adı (docs/07-UZAKTAN-ERISIM.md §7): `<ad>_ONCEKI`. Bulut birkaç gün yeni değerle
+ * birlikte bunu da kabul eder; kasalar yeni değere gece geçer. Ortak anahtarınki `ASILPOS_CLOUD_SECRET_ONCEKI` (eski
+ * adıyla da), şubeninki `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`
+ */
+export const ONCEKI_EKI = '_ONCEKI';
+/** Şube anahtarının önceki değerinin Vercel'deki adı ('MARINA' → ASILPOS_CLOUD_SECRET_MARINA_ONCEKI) */
+export const subeOncekiAdi = (sube: string) => `${subeAnahtarAdi(sube)}${ONCEKI_EKI}`;
+/**
+ * Vercel ortamında şube anahtarı adının kalıbı; 1. grup şube etiketi. `ONCEKI` şube adı değil: ortak anahtarın önceki
+ * değeri (`ASILPOS_CLOUD_SECRET_ONCEKI`); o adla bir şube kendi anahtarını alamaz, ortak anahtarla çalışır
+ */
+export const SUBE_ANAHTARI_RE = /^ASILPOS_CLOUD_SECRET_(?!ONCEKI$)([A-Z0-9]{1,32})$/;
+/** Şube anahtarının önceki değerinin adının kalıbı; 1. grup şube etiketi */
+export const SUBE_ONCEKI_RE = /^ASILPOS_CLOUD_SECRET_([A-Z0-9]{1,32})_ONCEKI$/;
 /**
  * Dükkânın şubeye bağlanma kanıtı (api/_kafe.ts `dukkanKanitiTutar`): kasa şube anahtarıyla imzalı özet ve rapor
  * itmesine ekler. Değer HMAC-SHA256(kurulumun kendi anahtarı, `dukkanKanitMetni`), base64url: "bu dükkân (Merkez kurulum

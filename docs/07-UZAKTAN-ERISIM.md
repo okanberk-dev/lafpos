@@ -299,6 +299,7 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 | Vercel › `lafpos` projesi › Environment Variables | Ad değişikliğinden önce girilen `LAFPOS_*` adları da okunur (aynı ayar iki adla girilirse `ASILPOS_*` geçer). `ASILPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `ASILPOS_UYE_EPOSTA` ve gizli `ASILPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `ASILPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `ASILPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `ASILPOS_CLOUD_URL=https://lafpos.vercel.app`, `ASILPOS_CLOUD_SECRET` (Vercel'dekiyle aynı); isteğe bağlı şube anahtarı `ASILPOS_CLOUD_SUBE_SECRET` (§6) |
 | Vercel › `lafpos` projesi › Environment Variables (şube anahtarı) | İsteğe bağlı, şube başına `ASILPOS_CLOUD_SECRET_<ŞUBE>` (ör. `ASILPOS_CLOUD_SECRET_MARINA`; en az 32 karakter, ortak anahtardan ve öbür şubelerinkinden farklı); §6 |
+| Vercel › `lafpos` projesi › Environment Variables (anahtar değişimi) | Yalnız değişim süresince, birkaç gün: önceki değerler `ASILPOS_CLOUD_SECRET_ONCEKI` (eski adıyla `LAFPOS_CLOUD_SECRET_ONCEKI`) ve `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`; §7 |
 | Vercel › `lafpos` projesi › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 | Vercel › `lafpos` projesi › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `ASILPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
@@ -336,6 +337,7 @@ adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz
 | AsilPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › `lafpos` projesi › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
 | Bağlantı bilgileri "Şube anahtarı bulutta yok ya da farklı" | Vercel'deki `ASILPOS_CLOUD_SECRET_<ŞUBE>` adı ve değeri kasadaki Şube anahtarıyla aynı mı, yeniden yayımlandı mı (§6) |
 | Platform kartında "Bu şubenin kendi anahtarı var" | Vercel'de şube anahtarı var ama kasada Şube anahtarı boş: aynı değeri kasaya yazın (§6) |
+| Anahtar değiştikten sonra Uzaktan dondu, kasanın istekleri 401 `bad_signature` | Vercel'deki değer kasadakinden önce değişti ve önceki değer `_ONCEKI` adıyla girilmedi: eski değeri `ASILPOS_CLOUD_SECRET_ONCEKI` (ya da `LAFPOS_CLOUD_SECRET_ONCEKI`) olarak ekleyip yeniden yayımlayın (§7) |
 
 Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts`, `server/sync/cloud.ts` ve `server/sync/cloud-reports.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`, `tests/uzaktan-raporlar.test.ts`.
 
@@ -408,6 +410,77 @@ imzası Vercel'deki değerle ya da ortak anahtarla tutan isteğe söylenir; anah
 okunur): ladmin ortak anahtarı değiştirse de şube anahtarına dokunmaz. Ortak anahtar kasada kalır (Uzaktan'ın açık olup
 olmadığı ve geçişteki yineleme ona bakar). Güvencenin sınırı: Vercel ortamını ele geçiren her şubeyi açar; şube anahtarı
 ortak anahtarı bilen başka şubenin kasasına karşıdır. Testler: `tests/sube-anahtari.test.ts`.
+
+## 7. Anahtar değişimi (kasalar koparılmadan)
+
+**Neden (27 Kasım 2026).** Sahip 26 Kasım'da iki bağlantı anahtarını değiştirdi. Panel (ladmin) yeni değerleri kasalara
+dağıttı (`GET /api/panel/pos/baglanti`, `docs/03-ENTEGRASYON.md` §4b), kasa onları gün sonunda uyguladı; ama Uzaktan
+(Vercel `lafpos` projesi, `LAFPOS_CLOUD_SECRET`) ve site (laffogato, `LAFPOS_SYNC_SECRET`) eski değerde kaldı. Kasanın
+bütün istekleri reddedildi, Uzaktan perşembe gününde donup kaldı; değerler elle kopyalanınca düzeldi. Kural artık şu:
+**bir anahtar hiçbir anda yalnız bir tarafta değişmez.** Bulut değişim boyunca iki değeri birden kabul eder: şimdiki ve
+önceki. Kasa hangisiyle gelirse gelsin çalışır.
+
+**Değişkenler (Vercel › `lafpos` projesi › Settings › Environment Variables, Production, "Sensitive"):**
+
+| Anahtar | Şimdiki değer | Önceki değer (yalnız değişim süresince) |
+|---|---|---|
+| Ortak anahtar (bütün kasalar; ladmin dağıtır) | `ASILPOS_CLOUD_SECRET` (bugün Vercel'de eski adıyla `LAFPOS_CLOUD_SECRET`) | `ASILPOS_CLOUD_SECRET_ONCEKI` ya da eski adıyla `LAFPOS_CLOUD_SECRET_ONCEKI` (ikisi birden varsa yeni ad geçer) |
+| Şube anahtarı (§6; kasaya elle yazılır) | `ASILPOS_CLOUD_SECRET_<ŞUBE>` | `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI` |
+
+Şimdiki değer hangi adla duruyorsa onu değiştirin: iki ad birden tanımlıysa yeni ad (`ASILPOS_*`) geçer, eski addaki
+değer önceki değer sayılmaz. Site anahtarı aynı kuralla laffogato projesinde: şimdiki `LAFPOS_SYNC_SECRET`, önceki
+değer aynı adın sonuna `_ONCEKI` eklenmiş adla (ayrıntı laffogato deposunda).
+
+**Ortak anahtarı değiştirmek (sıra önemli):**
+
+1. Yeni değer üretin (Mac'te Terminal'de `openssl rand -hex 32`). Eski değeri bulun: kasanın ayarlar dosyasında
+   (Windows kurulumunda veri klasöründeki `ayarlar.env`, `LAFPOS_CLOUD_SECRET` ya da `ASILPOS_CLOUD_SECRET` satırı) ya da
+   sahibe verilen kurulum dosyasında (`asilpos-kasa-ayarlari.env`). Vercel'deki değer "Sensitive" olduğu için oradan geri
+   okunamaz.
+2. **Önce Uzaktan:** Vercel › `lafpos` projesinde eski değeri `ASILPOS_CLOUD_SECRET_ONCEKI` adıyla ekleyin, şimdiki
+   değişkene (`LAFPOS_CLOUD_SECRET` ya da `ASILPOS_CLOUD_SECRET`) yeni değeri yazın, Deployments › son Production
+   dağıtımı › Redeploy. Bu andan sonra bulut iki değeri de kabul eder; kasalar eskiyle sürer, hiçbir şey kesilmez.
+3. **Sonra panel:** ladmin'de (lafmaliyet projesi) Uzaktan anahtarını yeni değerle güncelleyip yeniden yayımlayın. Kasalar
+   10 dakika içinde yeni değeri görür ve bekletir; gün açıksa **gün kapanınca**, kapalıysa hemen yazar ve yeniden başlar.
+   Sıra bu yüzden önce Uzaktan: gün kapalıyken kasa birkaç dakikada geçer, Uzaktan yeni değeri henüz bilmiyorsa kasa
+   reddedilirdi.
+4. **Birkaç gün sonra** (her kasa en az bir gün sonu aldıktan sonra): `ASILPOS_CLOUD_SECRET_ONCEKI`'yi silip yeniden
+   yayımlayın. Kasanın geçtiği kasada Yönetim › Denetim kaydında "Bağlantı bilgileri ladmin'den güncellendi" satırından,
+   ladmin'de şubenin uygulanan sürümünden görülür. Kapanmamış (hiç gün sonu almamış) kasa silindikten sonra 401 alır;
+   gün sonu alınınca düzelir.
+
+**Şube anahtarını değiştirmek:** Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI` = eski değer,
+`ASILPOS_CLOUD_SECRET_<ŞUBE>` = yeni değer, Redeploy; sonra o şubenin kasasında Yönetim › Bağlantı bilgileri › AsilPOS
+Uzaktan › Şube anahtarı'na yeni değeri yazın (kaydedince sunucu birkaç saniye yeniden başlar: gün sonundan sonra ya da
+sakin bir anda). Kart "Şube anahtarı kullanılıyor" deyince `_ONCEKI`'yi silip yeniden yayımlayın.
+
+**Anahtar sızdıysa:** aynı sıra, ama kafe kapalıyken yapın (gün kapalı kasa yeni değeri 10 dakika içinde yazar) ve kasalar
+geçer geçmez `_ONCEKI`'yi silin. Önceki değer tanımlı oldukça onu bilen herkes de kabul edilir.
+
+**Ne kabul edilir, ne değişmez:**
+- Kasanın imzalı her isteği (özet ve rapor itmesi, platform anahtarları, paket gelen kutusu, bulut yedeği, telefon
+  bildirimi, Merkez kaydı) önce şimdiki, tutmazsa önceki değerle doğrulanır (`api/_kafe.ts` `kafeKimligi`; karşılaştırma
+  sabit zamanlı). Önceki değerle gelen kasa aynı kimliği alır (şube, kendi anahtarı), yalnız `onceki` işaretli.
+- Bulutun kasaya imzaladığı tek şey uzaktan yönetim komutudur: kasanın kullandığı anahtarla imzalanır. Bulut bunu kasanın
+  son özetindeki açık anahtar imzasından (`anahtarImza`) anlar: o imza önceki değerle tutuyorsa komut da önceki değerle,
+  yoksa şimdiki değerle (`api/_kontrol.ts`). Kasa yeni değere geçince özeti değişir ve hemen yeniden gider. Kasa tam geçiş
+  anında (gün sonuyla yeniden başlarken) kuyrukta kalmış eski imzalı komutu reddeder; sonucu panelde görünür, yeniden
+  gönderilir.
+- Uzaktan oturumları (parolalı giriş, üye jetonları) kafe anahtarıyla imzalı: önceki değer tanımlıyken eski jeton da
+  tutar, sahibin telefonu oturumdan düşmez; yeni jeton hep şimdiki değerle verilir. `_ONCEKI` silinince değişimden önce
+  açılmış oturumlar düşer, yeniden girilir.
+- Önceki değer yetki genişletemez: 32 karakterden kısa, şimdikiyle aynı ya da başka bir anahtarın aynısıysa (ortak
+  anahtarınki bir şube anahtarıyla; şubeninki ortak anahtarın şimdiki ya da önceki değeriyle ya da başka şubeninkiyle)
+  yok sayılır. Şubenin önceki değeri yalnız şubenin şimdiki anahtarı geçerliyken sayılır, yalnız o şubeyi açar. `ONCEKI`
+  şube adı olamaz (`ASILPOS_CLOUD_SECRET_ONCEKI` ortak anahtarın önceki değeridir).
+- **Bulut yedeği:** kasa yedeği kafe anahtarıyla şifreler (§6). Değişimden önce alınmış yedekler eski değerle şifreli
+  kalır; kasa geri yüklerken yalnız elindeki (yeni) anahtarları dener. Eski değeri saklayın: değişimden önceki bir yedeği
+  açmak gerekirse lazım olur.
+- `scripts/vercel/baglanti-kur.sh --yenile` bu sırayı izlemez: değerleri Vercel'de hemen değiştirir, kasalar elle
+  güncellenene dek koparılır. Çalışan kafede kullanmayın; yukarıdaki sırayla elle değiştirin.
+
+Testler: `tests/anahtar-degisimi.test.ts` (olayın kendisi: önceki değer yokken eski anahtarlı kasa 401; varken değişimin
+her anında itme, komut ve oturum çalışır).
 
 ## Geçmiş ciro (AsilPOS'tan önceki kasa programı)
 
