@@ -110,7 +110,7 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
       'Start-CustomerDisplay $displayBase',
       'if (-not $acik -and $hazir) { if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi } }',
       'Stop-Splash $splash',
-      'Add-PrepShortcut',
+      'Remove-UserPrepShortcut',
     ];
     const at = order.map((t) => ac.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(at)).toBe(true);
@@ -119,6 +119,46 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(ac.slice(ac.indexOf('} finally {'))).toContain('Stop-Splash $splash');
     // Yazıcı adımı işlev oldu: içinde script'i bitiren exit yok
     expect(between(ps1, 'function Send-Printers', '# Sunucu IPv4 dinler')).not.toMatch(/\bexit\b/);
+  });
+
+  it('eski kasa programı sorusu açılışta çıkmaz (sahibin isteği, 28 Kas 2026); kullanıcı menüsündeki ikinci "Kasa hazırlığı" silinir', async () => {
+    // Kasa programı hazırlık betiğini hiç açmaz: haftalık tetik ve işaret dosyası yok, kısayol yazmaz
+    for (const t of ['SadeceModpos', 'modpos-uyari', 'kasa-hazirla.ps1', 'Add-PrepShortcut']) expect(ps1, t).not.toContain(t);
+    const sil = between(ps1, 'function Remove-UserPrepShortcut', '# Yazicilar:');
+    expect(sil).toContain("foreach ($ad in @('AsilPOS', $EskiAd)) {");
+    expect(sil).toContain("$lnk = Join-Path $menu 'Kasa hazirligi.lnk'");
+    expect(sil).toContain('Remove-Item -LiteralPath $lnk -Force');
+    // Menü klasörü yalnız boşaldıysa silinir; hata kasayı durdurmaz
+    expect(sil).toContain('if (-not @(Get-ChildItem -LiteralPath $menu -Force).Count) { Remove-Item -LiteralPath $menu -Force }');
+    expect(sil).toContain('} catch { }');
+    expect(sil).not.toMatch(/CreateShortcut|Start-Process|\bexit\b/);
+    // Kasa kısayolu (-Ac) ve 27 Kasım öncesinin kısayolu (kipsiz) eski kopyayı temizler
+    expect(ac).toContain('Remove-UserPrepShortcut');
+    expect(ps1.slice(ps1.indexOf('# Kipsiz:'))).toContain('Remove-UserPrepShortcut');
+    // Ortak menüdeki "Kasa hazırlığı" kalır: koşulsuz, her kurulumda ve güncellemede yazılır
+    const { shortcutSpec } = await load('kurulum-yenile.mjs');
+    const kur = `C:\\Program Files\\${KURULUM_KLASORU}`;
+    const hazirlik = shortcutSpec(kur, 'C:\\Windows').filter((k: any) => k.ad === 'AsilPOS\\Kasa hazırlığı.lnk');
+    expect(hazirlik).toHaveLength(1);
+    expect(hazirlik[0].klasor).toBe('CommonPrograms');
+    expect(hazirlik[0].grup).toBeUndefined();
+    expect(hazirlik[0].kosul).toBeUndefined();
+    expect(hazirlik[0].arguman).toBe(`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${kur}\\app\\kasa-hazirla.ps1"`);
+  });
+
+  it('kasa hazırlığı eski kasa programını sormaz; eski sürümün -SadeceModpos çağrısı hiçbir şey yapmadan çıkar', () => {
+    const hazirla = read(`${K}kasa-hazirla.ps1`);
+    // Anahtar kabul edilir (parametre bilinmiyor hatası yok) ve pencere, izin isteği ya da ayardan önce çıkılır
+    expect(hazirla).toContain('param([switch]$SadeceModpos)');
+    const cik = hazirla.indexOf('if ($SadeceModpos) { exit 0 }');
+    expect(cik).toBeGreaterThan(hazirla.indexOf('param([switch]$SadeceModpos)'));
+    for (const t of ['Add-Type', 'MessageBox', '-Verb RunAs', 'powercfg']) expect(cik, t).toBeLessThan(hazirla.indexOf(t));
+    expect(hazirla.match(/\$SadeceModpos/g)).toHaveLength(2);
+    for (const t of ['Get-ModposStartup', 'Uyar-Modpos', 'ms-settings:startupapps', 'gafdigi', 'CurrentVersion\\Run']) expect(hazirla, t).not.toContain(t);
+    // Dört soru ve özet kalır
+    expect(hazirla.match(/if \(Sor "/g)).toHaveLength(4);
+    expect(hazirla).toContain('Bilgi ("Tamamlandi.');
+    expect(/^[\x00-\x7f]*$/.test(readFileSync(new URL(`${K}kasa-hazirla.ps1`, root), 'latin1'))).toBe(true);
   });
 
   it('açılış penceresi kendi iş parçacığında (bekleme onu dondurmaz), Türkçe metin ASCII dosyada', () => {
