@@ -166,14 +166,26 @@ async function login() {
   return (await r.json()).token;
 }
 
-/** Kasa penceresinin bakım arası (Yönetim › Ağ › Bu bilgisayar › 15 dakika bakım arası) */
+/**
+ * Kasa penceresinin bakım arası (Yönetim › Ağ › Bu bilgisayar › 15 dakika bakım arası). Güncellemeden hemen sonra sunucu
+ * bir kez daha yeniden başlar (yeni sürümün deneme açılışı sağlık denetimine yanıt verir, sonra bekçi 75 koduyla yeni
+ * sürümle açılır): bağlantı o arada koparsa (ECONNRESET; 27 Kasım koşusu) birkaç saniye sonra yeniden denenir
+ */
 async function bakim(on) {
-  const r = await fetch(`http://127.0.0.1:${PORT}/api/admin/kasa-bakim`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${await login()}` },
-    body: JSON.stringify({ on }),
-  });
-  if (!r.ok) fail(`bakım arası ${on ? 'açılamadı' : 'bitirilemedi'} (${r.status} ${await r.text()})`);
+  for (let deneme = 1; ; deneme++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/admin/kasa-bakim`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${await login()}` },
+        body: JSON.stringify({ on }),
+      });
+      if (!r.ok) fail(`bakım arası ${on ? 'açılamadı' : 'bitirilemedi'} (${r.status} ${await r.text()})`);
+      return;
+    } catch (e) {
+      if (deneme >= 30) fail(`bakım arası ${on ? 'açılamadı' : 'bitirilemedi'}: sunucuya ulaşılamadı (${e.cause?.code ?? e.message})`);
+      await sleep(2000);
+    }
+  }
 }
 
 /** Kasa kısayolunu (Başlat menüsü) kısayolun yaptığı gibi çalıştırır; pencere vekilden bağlanır */
