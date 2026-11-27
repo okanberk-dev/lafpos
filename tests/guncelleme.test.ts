@@ -413,7 +413,8 @@ describe('güncelleme: kurulum akışı', () => {
     expect(readFileSync(join(t.app, 'bekci.mjs'), 'utf8')).toBe('// yeni');
     // Yerel modül eskisinden taşındı (Node ve better-sqlite3 değişmedi: açık kaynaklara istek yok)
     expect(readFileSync(join(t.app, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), 'utf8')).toBe('ikili');
-    expect(t.requests.some((u) => u.includes('nodejs.org') || u.includes('github.com'))).toBe(false);
+    const disHost = (u: string) => /(^|\.)(nodejs\.org|github\.com)$/.test(new URL(u).hostname);
+    expect(t.requests.some(disHost)).toBe(false);
     expect(readFileSync(join(t.installDir, 'app.eski/bekci.mjs'), 'utf8')).toBe('// eski');
     const backups = readdirSync(join(t.home, 'backups'));
     expect(backups).toHaveLength(1);

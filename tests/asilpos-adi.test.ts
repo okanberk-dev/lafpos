@@ -44,7 +44,7 @@ const NOT = new RegExp(`(?:#|//|;)\\s*${ESKI_AD_NOTU}\\b`);
 
 const cikar = (satir: string, metinler: readonly string[]) => [...metinler].sort((a, b) => b.length - a.length).reduce((s, m) => s.split(m).join(''), satir);
 /** Eski adlı ortam değişkenleri (şablonları da: `<önek>*`, `<önek>${ad}`, `<önek>$2`): izinli tam ad ya da aynı satırda yeni adıyla */
-const ESKI_ENV = new RegExp(`(VITE_)?${ESKI_ENV_ONEKI}([\\w*\${}]*)`, 'g');
+const ESKI_ENV = new RegExp('(VITE_)?' + ESKI_ENV_ONEKI + '([\\w*${}]*)', 'g');
 const envCikar = (satir: string) =>
   satir.replace(ESKI_ENV, (tam, vite: string | undefined, ad: string) => (ESKI_ENV_ADLARI.includes(tam) || (ad && satir.includes(`${vite ?? ''}${ENV_ONEKI}${ad}`)) ? '' : tam));
 

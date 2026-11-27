@@ -51,11 +51,11 @@ beforeAll(async () => {
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const u = String(input);
-    if (u.startsWith('https://redis.test')) {
+    if (new URL(u).origin === 'https://redis.test') {
       redisCalls++;
       return new Response(JSON.stringify({ result: null }), { status: 200 });
     }
-    if (u.startsWith(CLOUD)) {
+    if (new URL(u).origin === new URL(CLOUD).origin) {
       if (offline) throw new TypeError('fetch failed');
       return cloudGet(new Request(u, init));
     }
@@ -430,7 +430,7 @@ describe('kasanın çekimi', () => {
     let calls = 0;
     const prev = globalThis.fetch;
     vi.stubGlobal('fetch', async (...a: Parameters<typeof fetch>) => {
-      if (String(a[0]).startsWith(CLOUD)) calls++;
+      if (new URL(String(a[0] instanceof Request ? a[0].url : a[0])).origin === new URL(CLOUD).origin) calls++;
       return prev(...a);
     });
     env.cloudUrl = '';

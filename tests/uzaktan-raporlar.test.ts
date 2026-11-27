@@ -37,7 +37,7 @@ beforeAll(async () => {
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url === 'https://redis.test') return new Response(JSON.stringify({ result: redis(JSON.parse(String(init!.body)) as string[]) }));
-    if (!url.startsWith(CLOUD)) return realFetch(input, init);
+    if (new URL(url).origin !== new URL(CLOUD).origin) return realFetch(input, init);
     if (offline) throw new TypeError('fetch failed');
     // Kasanın itmesi doğrudan Vercel işlevine (imza, gzip, saklama gerçek)
     const path = new URL(url).pathname.replace(/^\/api\//, '');
