@@ -1,26 +1,31 @@
+import { SUBE_YOK_METNI } from '@shared/sube';
 import { env } from '../env';
 import { conflict } from '../lib/http';
 import { getSettings } from '../lib/settings';
 import { MIN_SECRET_LENGTH } from '../lib/signature';
+import { kasaSubesi } from '../lib/sube';
 
 /**
  * Site bağlantısının iki kapısı (sahibin 26 Ekim kararı: AsilPOS yalnız sahip açınca devreye girer).
  * - `siteLinked`: `LAFFOGATO_URL` .env'de açıkça yazılmış. Değilse siteye hiçbir istek gitmez: menü yoklaması, görsel
  *   indirme, sipariş sürüm sinyali, Tükendi yazımı. Varsayılan adres yoktur (server/env.ts).
- * - `siteSigned`: adres ve en az 32 karakterlik `LAFFOGATO_SYNC_SECRET`; imzalı uçlar (online siparişler, Tükendi
- *   yazımı, panel menüsü) bunu ister.
+ * - `siteSigned`: adres, en az 32 karakterlik `LAFFOGATO_SYNC_SECRET` ve kasanın şubesi; imzalı uçlar (online
+ *   siparişler, Tükendi yazımı, panel menüsü, masa çağrıları, karaoke) bunu ister. Site şubelidir: şube seçilmemiş yeni
+ *   kasa imzalı uçlara hiç gitmez, şube belli olunca başlar (server/lib/sube.ts).
  */
 export const siteLinked = () => env.laffogatoUrl !== '';
-export const siteSigned = () => siteLinked() && env.laffogatoPanelSecret.length >= MIN_SECRET_LENGTH;
+const siteKeyed = () => siteLinked() && env.laffogatoPanelSecret.length >= MIN_SECRET_LENGTH;
+export const siteSigned = () => siteKeyed() && kasaSubesi() !== null;
 
 export const SITE_NOT_LINKED = 'Site bağlantısı kurulmadı';
 
 /**
- * İmzalı isteklerin şubesi: bu kasanın şubesi (Yönetim › Ayarlar ve yedek › Şube kimliği, varsayılan `marina`). Site şubelidir
- * (laffogato #279): GET'te `?branch=`, POST / PUT gövdesinde `branch`; sipariş, çağrı, Satışta ve masa kodları o
- * şubenindir. docs/03-ENTEGRASYON.md §2.3 "Şube"
+ * İmzalı isteklerin şubesi: bu kasanın şubesi (Yönetim › Ayarlar ve yedek › Şube kimliği; ladmin kurulumundan gelir).
+ * Site şubelidir (laffogato #279): GET'te `?branch=`, POST / PUT gövdesinde `branch`; sipariş, çağrı, Satışta ve masa
+ * kodları o şubenindir. docs/03-ENTEGRASYON.md §2.3 "Şube". Yalnız `siteSigned` iken çağrılır (şube varken); şube
+ * yoksa boş metin döner, istek zaten gitmez
  */
-export const siteBranch = () => getSettings().branchId;
+export const siteBranch = (): string => kasaSubesi() ?? '';
 
 /**
  * Yanıtın `branch` alanı bu kasanın şubesi değilse onu döner (liste okunmaz). Alanı göndermeyen eski site ya da
@@ -52,7 +57,8 @@ export function requireSiteLinked() {
 
 export function requireSiteSigned() {
   requireSiteLinked();
-  if (!siteSigned()) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  if (!siteKeyed()) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  if (!siteSigned()) throw conflict(SUBE_YOK_METNI, 'no_branch');
 }
 
 /**

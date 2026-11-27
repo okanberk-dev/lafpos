@@ -26,7 +26,8 @@ import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
-import { platformKeysBranchChanged } from '../sync/platform-anahtar';
+import { subeDegisti } from '../sync/sube-degisti';
+import { kurulumGorunumu } from '../sync/kurulum-kodu';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { acceptedBranch, branchLocked, reservedPosName } from '../sync/lafmaliyet';
 import { assertLinkable, ladminStaff, linkedUsers, STAFF_REF, STAFF_REFRESH_MIN_MS } from '../sync/lafmaliyet-personel';
@@ -1213,9 +1214,9 @@ adminRoutes.put('/settings', async (c) => {
   });
   fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
   fx.flush();
-  // Şube değişti: eski şubenin platform anahtarları hemen bırakılır, yenisininkiler beklemeden çekilir (beklenmez;
-  // çekim olmazsa kayıt yine başarılı, 10 dakikalık çekim yeniden dener)
-  if (patronChanged.includes('branchId')) void platformKeysBranchChanged();
+  // Şube değişti: eski şubenin devri, personel listesi ve platform anahtarları bırakılır, yenisininkiler beklemeden çekilir;
+  // şube retiyle ya da şubesizken bekleyen günler hemen gider (beklenmez; çekim olmazsa kayıt yine başarılı)
+  if (patronChanged.includes('branchId')) subeDegisti(prev.branchId);
   return c.json(getSettings());
 });
 
@@ -1464,6 +1465,8 @@ adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   try {
     await stageRestore(input.pathname, user.id, user.name);
   } catch (e) {
+    // Başka şubenin yedeği (409 wrong_branch) olduğu gibi; gerisi bulut hatası
+    if (e instanceof HttpError) throw e;
     throw new HttpError(502, e instanceof Error ? e.message : 'Yedek indirilemedi', 'cloud');
   }
   const fx = new Effects();
@@ -1507,8 +1510,11 @@ adminRoutes.put('/yazici', async (c) => {
 /** Görünüm: ayar yetkisi; gizli anahtarların değeri hiç dönmez, yalnız tanımlı mı */
 adminRoutes.get('/baglanti', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  return c.json(connectionView());
+  return c.json(baglantiView());
 });
+
+/** Bağlantı bilgileri ve şube kurulumunun durumu (ladmin kurulum kodu, şube, hata; sync/kurulum-kodu.ts) */
+const baglantiView = () => ({ ...connectionView(), kurulum: kurulumGorunumu() });
 
 /**
  * Yazma: yalnız patron (dış sistemin adresi ve anahtarı: yanlış adrese satış verisi gidebilir). Gövdede yalnız
@@ -1530,7 +1536,7 @@ adminRoutes.put('/baglanti', async (c) => {
     if ('error' in r) throw bad(r.error, 'invalid_value');
     edits[key] = r.value;
   }
-  if (!Object.keys(edits).length) return c.json({ ...connectionView(), changed: [] as string[] });
+  if (!Object.keys(edits).length) return c.json({ ...baglantiView(), changed: [] as string[] });
   try {
     writeEnvEdits(file, edits);
   } catch (e) {
@@ -1541,7 +1547,7 @@ adminRoutes.put('/baglanti', async (c) => {
   fx.audit(db, { userId: user.id, action: 'ayar.baglanti', message: `Bağlantı bilgileri: ${said.join(', ')}`, data: { keys: Object.keys(edits) } });
   fx.emit({ topic: 'settings', kind: 'ayar.baglanti', message: 'Bağlantı bilgileri değişti; AsilPOS yeniden başlıyor', byUserId: user.id });
   fx.flush();
-  return c.json({ ...connectionView(), changed: Object.keys(edits) });
+  return c.json({ ...baglantiView(), changed: Object.keys(edits) });
 });
 
 // ─── Deneme modu: "Denemeyi bitir, gerçek kullanıma başla" (services/deneme.ts) ──────────────────────────────

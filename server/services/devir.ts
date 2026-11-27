@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { type DB, schema, type Tx } from '../db/client';
 import { getSyncState } from '../lib/settings';
+import { kasaSubesi } from '../lib/sube';
 import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
@@ -33,6 +34,11 @@ export interface DevirState {
   /** Son başarılı okumanın değeri (null: lafmaliyet'te gün sayılmadı) */
   nextOpening?: NextOpening | null;
   lastError?: string | null;
+  /**
+   * Okumanın şubesi (çok şubeli kasa, §4c). Başka şubeninki kullanılmaz; şube değişince durum silinir. Eski kayıtta yok:
+   * tek şubeli dönemde okundu, kasanın şimdiki şubesi sayılır
+   */
+  sube?: string;
 }
 
 export interface OpeningExpectation {
@@ -93,9 +99,15 @@ function ladminNextOpening(t: Tx | DB, date: string): { value: NextOpening | nul
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, `gun:${date}`), isNotNull(schema.outbox.sentAt)))
     .orderBy(desc(schema.outbox.sentAt), desc(schema.outbox.id))
     .all();
+  // Gönderildiği şubenin yanıtı: kasanın şubesi sonradan değiştiyse (düzeltildi) o devir bu şubenin değildir
+  const sube = kasaSubesi();
+  const ownBranch = (payload: unknown) => {
+    const b = (payload as { sube?: unknown } | null)?.sube;
+    return typeof b !== 'string' || b === sube;
+  };
   const [latest, ...earlier] = sent;
   const answer = latest?.response as { at?: number; nextOpening?: { amount: number; source: NextOpening['source'] } | null } | null | undefined;
-  let fromAnswer = answer && 'nextOpening' in answer && answer.nextOpening !== undefined
+  let fromAnswer = answer && 'nextOpening' in answer && answer.nextOpening !== undefined && ownBranch(latest.payload)
     ? { value: answer.nextOpening ? { amount: kurusOf(answer.nextOpening.amount), source: answer.nextOpening.source } : null, at: answer.at ?? latest?.sentAt ?? 0 }
     : undefined;
   if (fromAnswer?.value?.source === 'kasa_raporu') {
@@ -105,7 +117,7 @@ function ladminNextOpening(t: Tx | DB, date: string): { value: NextOpening | nul
   }
   const devir = getSyncState<DevirState>('lafmaliyet.devir');
   const fromDevir =
-    devir && devir.date === date && devir.okAt != null && devir.okAt > (latest?.sentAt ?? 0) && devir.nextOpening !== undefined ? { value: devir.nextOpening ?? null, at: devir.okAt } : undefined;
+    devir && devir.date === date && (devir.sube ?? sube) === sube && devir.okAt != null && devir.okAt > (latest?.sentAt ?? 0) && devir.nextOpening !== undefined ? { value: devir.nextOpening ?? null, at: devir.okAt } : undefined;
   if (fromAnswer && fromDevir) return fromDevir.at > fromAnswer.at ? fromDevir : fromAnswer;
   return fromAnswer ?? fromDevir;
 }

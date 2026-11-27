@@ -199,7 +199,8 @@ describe('lafmaliyet devri (nextOpening)', () => {
     const before = devirGets().length;
     const date = (await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening!.fromDate!;
     await vi.waitFor(() => expect(devirGets()).toHaveLength(before + 1), { timeout: 5000, interval: 25 });
-    expect(devirGets().at(-1)!.query).toBe(`?date=${date}`);
+    // Kasanın şubesi sorguda (§4c; bugünkü panel görmezden gelir)
+    expect(devirGets().at(-1)!.query).toBe(`?date=${date}&sube=marina`);
     await vi.waitFor(async () => expect((await h.ok<DayResponse>('mudur', 'GET', '/cash/day')).opening).toEqual({ suggested: 125000, source: 'lafmaliyet', ladminSource: 'kasa_raporu', fromDate: date }), { timeout: 5000, interval: 25 });
     // 5 dakika dolmadan yeni istek yok (kör kasiyerin ekranı da sorar)
     await h.ok('mudur', 'GET', '/cash/day');

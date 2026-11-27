@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { cleanRecipientName } from '@shared/teslim';
@@ -27,6 +28,7 @@ import { notify } from './bildirim';
 import { dropPending, land, takeOff } from './outbox-flight';
 import { TEL_KART_ALANI, TEL_KAYNAK } from '@shared/eski-adlar';
 import { PANEL_ANAHTAR_METNI } from '@shared/pos-env';
+import { kasaSubesi, subeGerekli } from '../lib/sube';
 
 /**
  * AsilPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
@@ -482,9 +484,10 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
       const pending = bankPos ? undefined : bankPosPendingOf(day.id, opts.eodAtClose);
       return pending === undefined ? {} : { bankPosPending: pending };
     })(),
-    // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel yalnız kendi şubesinin (marina) gününü alır, başkasına 409
-    // wrong_branch (docs/03-ENTEGRASYON.md §4). Gönderirken güncel ayardan yeniden yazılır (sendDue)
-    sube: getSettings().branchId,
+    // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel günü bu şubeye yazar, başka şubenin anahtarıyla gelene 409
+    // wrong_branch (docs/03-ENTEGRASYON.md §4, §4c). Gönderirken güncel ayardan yeniden yazılır (sendDue); şube seçilmemiş
+    // kasa göndermez (`flushOutbox`)
+    sube: kasaSubesi(),
     date: day.date,
     z: {
       zNo: z.z_no,
@@ -866,9 +869,12 @@ export function enqueueDay(dayId: string, opts: { eodAtClose?: boolean; holdMs?:
  * işi beklemez, "Gönder" de gerçekten gönderilmeden "gönderildi" demez (inceleme, 26 Eki 2026). */
 let running: Promise<{ sent: number; failed: number }> | null = null;
 
-/** Giden kutusunu gönderir; başarısız olan artan beklemeyle tekrar denenir (internet yokken satış durmaz). */
+/**
+ * Giden kutusunu gönderir; başarısız olan artan beklemeyle tekrar denenir (internet yokken satış durmaz). Şube seçilmemiş
+ * kasa göndermez: günler giden kutusunda bekler, şube belli olunca gider (Entegrasyon şubenin seçilmediğini söyler)
+ */
 export function flushOutbox(): Promise<{ sent: number; failed: number }> {
-  if (!configured()) return Promise.resolve({ sent: 0, failed: 0 });
+  if (!configured() || !kasaSubesi()) return Promise.resolve({ sent: 0, failed: 0 });
   if (running) return running.then(() => flushOutbox());
   running = sendDue()
     // Arka planda çağrılır (`void flushOutbox()`): beklenmeyen hata süreci düşürmesin, sonraki tur yine dener
@@ -961,6 +967,15 @@ function errorDetail(json: unknown): string {
 const PERMANENT = new Set([400, 409, 413, 422]);
 /** Kalıcı retteki kaydın bekleme süresi: kendiliğinden yeniden denenmez (elle "Gönder" yerine geçer) */
 const PARKED_MS = 365 * 86400_000;
+/**
+ * 409 `wrong_branch` alan kayıt günde bir kez yeniden denenir (çok şubeli kasa, §4c): panel şubeyi kasanın anahtarından
+ * tanır; şube ladmin'de bu kasaya bağlanınca, kasanın şube kimliği düzeltilince ya da kasa yeni anahtarla açılınca (o an
+ * hemen, `retryWrongBranch`; `subeDegisti`, `lafmaliyetBaglantisiDegisti`) bekleyen günler elle "Gönder"e kalmadan gider
+ */
+export const WRONG_BRANCH_RETRY_MS = 24 * 3600_000;
+/** Şube retiyle bekleyen kaydın işareti (gönderilmemiş kaydın `response` alanı; 200 gelince yanıtla ezilir) */
+const WRONG_BRANCH_MARK = 'wrong_branch';
+const isWrongBranch = (status: number, json: unknown) => status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch';
 const RESEND = 'Kasa › Geçmiş günler › Z › Gönder';
 
 /** HTTP hatasının kısa açıklaması (gün sonu ve maliyet ortak): 401 ve 503'te neden ve ne yapılacağı */
@@ -993,9 +1008,9 @@ export function networkErrorText(e: unknown): string {
  */
 export function pushErrorText(status: number, json: unknown, payload: unknown): string {
   const detail = errorDetail(json);
-  if (status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch') {
+  if (isWrongBranch(status, json)) {
     const b = json as { sube?: unknown; expected?: unknown };
-    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Yönetim › Ayarlar ve yedek › Şube kimliği alanını "${String(b.expected)}" yapıp ${RESEND} ile yeniden gönderin`;
+    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Bu kasa "${String(b.expected)}" şubesininse Yönetim › Ayarlar ve yedek › Şube kimliği'ni düzeltin; "${String(b.sube)}" şubesininse ladmin'de bu şubenin kurulum bağlantısıyla kendi anahtarını alın. Gün günde bir kendiliğinden yeniden denenir; şube ya da anahtar düzelince hemen gider`;
   }
   if (status === 409) {
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
@@ -1056,8 +1071,8 @@ export function pushRejectNotice(status: number, json: unknown, payload: unknown
   const day = date ? `${fmtDateShort(date)}: ` : '';
   const title = `lafmaliyet gün sonunu reddetti${typeof zNo === 'number' ? ` (Z ${zNo})` : ''}`;
   const j = (json && typeof json === 'object' ? json : {}) as { error?: unknown; field?: unknown; zNo?: unknown; sube?: unknown; expected?: unknown };
-  if (status === 409 && j.error === 'wrong_branch') {
-    return { title, body: `${day}kasa "${clip(String(j.sube), 24)}" şubesine ayarlı, lafmaliyet "${clip(String(j.expected), 24)}" bekliyor. Yönetim › Ayarlar ve yedek › Şube kimliğini düzeltip ${RESEND} ile yeniden gönderin` };
+  if (isWrongBranch(status, json)) {
+    return { title, body: `${day}kasa "${clip(String(j.sube), 24)}" şubesinde, lafmaliyet "${clip(String(j.expected), 24)}" bekliyor. Şube kimliğini ya da ladmin'deki anahtarı düzeltin (günde bir denenir) ya da ${RESEND} ile yeniden gönderin` };
   }
   if (status === 409) {
     const known = typeof j.zNo === 'number' ? `Z ${j.zNo}` : 'başka bir Z';
@@ -1154,7 +1169,7 @@ function finalBody(row: typeof schema.outbox.$inferSelect): Record<string, unkno
   const correction = day ? correctionFor(day, row.createdAt) : null;
   const { revision: _revision, correction: _built, ...rest } = row.payload as Record<string, unknown>;
   const body: Record<string, unknown> = { version: rest.version, source: rest.source, revision: revisionOf(date), ...(correction ? { correction } : {}), ...rest };
-  body.sube = getSettings().branchId;
+  body.sube = kasaSubesi();
   // O gün çalışanlar da gönderim anının bağlantısından (gün kapandıktan sonra kurulan bağlantı ve "Bugün çalışanlar"
   // düzeltmesi sonraki gönderimde gider); alan sonda kalır
   if (day) {
@@ -1213,8 +1228,10 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
       if (PERMANENT.has(status)) {
         const text = pushErrorText(status, json, row.payload);
+        // Şube reti günde bir yeniden denenir (işaretle; şube değişince hemen), öbür kalıcı retler park edilir
+        const wrongBranch = isWrongBranch(status, json);
         db.update(schema.outbox)
-          .set({ attempts: row.attempts + 1, lastError: text, nextAttemptAt: Date.now() + PARKED_MS })
+          .set({ attempts: row.attempts + 1, lastError: text, nextAttemptAt: Date.now() + (wrongBranch ? WRONG_BRANCH_RETRY_MS : PARKED_MS), response: wrongBranch ? { parked: WRONG_BRANCH_MARK } : null })
           .where(eq(schema.outbox.id, row.id))
           .run();
         // Park edilen kayıt patrona bildirilir (bir kez); yerine yenisi girdiyse ya da gün yeniden açıldıysa bayattır
@@ -1293,6 +1310,7 @@ function dayRow(key: string) {
 export async function pushDayNow(dayId: string) {
   if (!configured()) throw notConfigured();
   if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  subeGerekli();
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day) throw notFound('Gün');
   if (!realDay(day)) throw conflict(trainingDayMessage(day), 'training_day');
@@ -1326,6 +1344,44 @@ export function branchLocked(): boolean {
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.kind, 'pos.gun'), isNotNull(schema.outbox.sentAt)))
     .get();
+}
+
+/**
+ * Şube retiyle (409 `wrong_branch`) bekleyen günler hemen yeniden denensin: kasanın şubesi değişince (Ayarlar, ladmin
+ * kurulumu) günlük denemeyi beklemezler. Kaç kayıt öne alındıysa onu döner; gönderimi çağıran başlatır (`flushOutbox`)
+ */
+export function retryWrongBranch(now = Date.now()): number {
+  const rows = db
+    .select({ id: schema.outbox.id, response: schema.outbox.response })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), isNull(schema.outbox.sentAt), gt(schema.outbox.nextAttemptAt, now)))
+    .all()
+    .filter((r) => (r.response as { parked?: unknown } | null)?.parked === WRONG_BRANCH_MARK);
+  if (!rows.length) return 0;
+  db.update(schema.outbox)
+    .set({ nextAttemptAt: now })
+    .where(inArray(schema.outbox.id, rows.map((r) => r.id)))
+    .run();
+  return rows.length;
+}
+
+/** lafmaliyet bağlantısının son açılıştaki özeti (`sync_state`): `{ iz, at }`; anahtarın kendisi tutulmaz */
+const BAGLANTI_IZI = 'lafmaliyet.baglantiIzi';
+
+/**
+ * Açılışta: lafmaliyet bağlantısı (adres ya da anahtar) son açılıştan beri değiştiyse şube retiyle bekleyen günler hemen
+ * yeniden denenir (`retryWrongBranch`), günlük denemeyi beklemez. Ör. ladmin'in yeni kurulum bağlantısı aynı şubeye kendi
+ * anahtarını verdi (şube değişmedi, `subeDegisti` çalışmaz) ya da patron anahtarı Bağlantı bilgileri'nden veya ayarlar
+ * dosyasından değiştirdi. Anahtar yalnız açılışta okunur (`env`): yazıldığı anda öne almak eski anahtarla yeniden gönderir,
+ * gün bir gün daha beklerdi; bu yüzden yeni anahtarla açılan sunucu yapar. Kaç kayıt öne alındıysa onu döner; gönderimi
+ * zamanlayıcı başlatır (`flushOutbox`, dakikada bir)
+ */
+export function lafmaliyetBaglantisiDegisti(now = Date.now()): number {
+  if (!configured()) return 0;
+  const iz = createHash('sha256').update(`${env.lafmaliyetUrl}\n${env.lafmaliyetToken}`).digest('hex').slice(0, 16);
+  if (getSyncState<{ iz?: string }>(BAGLANTI_IZI)?.iz === iz) return 0;
+  setSyncState(BAGLANTI_IZI, { iz, at: now });
+  return retryWrongBranch(now);
 }
 
 /**
@@ -1416,6 +1472,7 @@ export const BACKFILL_MAX_DAYS = 400;
 export function backfillDays(input: { from: string; to: string }, actor: { id: string | null; name: string }) {
   if (!configured()) throw notConfigured();
   if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  subeGerekli();
   const today = businessDate(Date.now());
   if (input.from > input.to) throw new HttpError(422, 'Başlangıç günü bitiş gününden sonra olamaz', 'range');
   if (input.to > today) throw new HttpError(422, 'Bitiş günü bugünden sonra olamaz', 'range');
@@ -1443,6 +1500,23 @@ export function backfillDays(input: { from: string; to: string }, actor: { id: s
 }
 
 // ─── Maliyet (lafmaliyet → AsilPOS) ──────────────────────────────────────────
+
+/**
+ * lafmaliyet okuma adresi, şube biliniyorsa `?sube=<şube>` ile (§4c; sorgu imzaya girer). Panel şubeyi anahtardan tanır,
+ * sorgudaki şube yalnız denetimdir: bugünkü panel onu görmezden gelir. Şube seçilmemiş kasada sorgusuz
+ */
+function subeli(path: string): URL {
+  const url = new URL(path, env.lafmaliyetUrl);
+  const sube = kasaSubesi();
+  if (sube) url.searchParams.set('sube', sube);
+  return url;
+}
+
+/** 409 `wrong_branch` metni (devir): lafmaliyet bu kasanın anahtarını başka şubenin sayıyor */
+function wrongBranchText(json: unknown, sube: string): string {
+  const expected = String((json as { expected?: unknown } | null)?.expected ?? '?');
+  return `lafmaliyet bu kasayı "${expected}" şubesinin sayıyor, kasa "${sube}" şubesine ayarlı: Yönetim › Ayarlar ve yedek › Şube kimliği ya da ladmin'deki şube anahtarı düzeltilmeli`;
+}
 
 /** `GET /api/panel/pos/urunler` gövdesi (docs/03-ENTEGRASYON.md §4.1); bozuksa önceki maliyetler kalır */
 const costsBody = z.object({
@@ -1478,7 +1552,7 @@ export async function pullCosts() {
   if (!configured()) throw conflict('lafmaliyet bağlantısı tanımlı değil', 'not_configured');
   let res: { status: number; json: unknown };
   try {
-    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL('/api/panel/pos/urunler', env.lafmaliyetUrl));
+    res = await signedFetch(env.lafmaliyetToken, 'GET', subeli('/api/panel/pos/urunler'));
   } catch (e) {
     costsFailed(`Maliyetler alınamadı: ${networkErrorText(e)}`);
   }
@@ -1561,8 +1635,11 @@ export function lazyErrorText(status: number, json: unknown): string {
   return status === 404 ? "HTTP 404: lafmaliyet bu ucu henüz sunmuyor (eski sürüm)" : httpErrorText(status, json);
 }
 
-/** `GET /api/panel/pos/devir?date=` gövdesi (§4.6); bozuksa ya da başka günse önceki değer kalır */
-const devirBody = z.object({ version: z.literal(1), date: z.string().refine(isCalendarDate), nextOpening: nextOpeningShape.nullable() });
+/**
+ * `GET /api/panel/pos/devir?date=&sube=` gövdesi (§4.6, §4c); bozuksa ya da başka günse önceki değer kalır. `sube`: çok
+ * şubeli panel yanıtın şubesini söyler (bugünkü panel göndermez); başka şubeninse değer alınmaz
+ */
+const devirBody = z.object({ version: z.literal(1), date: z.string().refine(isCalendarDate), sube: z.string().max(40).optional().catch(undefined), nextOpening: nextOpeningShape.nullable() });
 
 let devirRunning: Promise<boolean> | null = null;
 
@@ -1575,14 +1652,19 @@ let devirRunning: Promise<boolean> | null = null;
  */
 export function devirIfStale(now = Date.now()): Promise<boolean> {
   if (!configured() || devirRunning) return Promise.resolve(false);
+  // Devir şubenindir: şube seçilmemiş kasa sormaz (yerel sayım geçer)
+  const sube = kasaSubesi();
+  if (!sube) return Promise.resolve(false);
   if (getOpenDay(db) || closedToday(db)) return Promise.resolve(false);
   const day = lastClosedRealDay(db);
   if (!day || dayPushPending(db, day.date)) return Promise.resolve(false);
-  const prev = getSyncState<DevirState>('lafmaliyet.devir');
+  const raw = getSyncState<DevirState>('lafmaliyet.devir');
+  // Başka şube için okunan devir (şube kimliği değişti) yoktur: bütçesi de, değeri de yeni şubeye geçmez
+  const prev = raw && (raw.sube ?? sube) === sube ? raw : null;
   if (prev && now - prev.attemptAt < LADMIN_LAZY_MIN_MS) return Promise.resolve(false);
   // Deneme anı istekten önce yazılır (aynı anda gelen ikinci ekran ikinci istek açmaz); başka günün değeri atılır
-  setSyncState('lafmaliyet.devir', { ...(prev?.date === day.date ? prev : { okAt: null }), date: day.date, attemptAt: now } satisfies DevirState);
-  devirRunning = pullDevir(day.date)
+  setSyncState('lafmaliyet.devir', { ...(prev?.date === day.date ? prev : { okAt: null }), date: day.date, attemptAt: now, sube } satisfies DevirState);
+  devirRunning = pullDevir(day.date, sube)
     .catch((e) => console.warn('[lafmaliyet] devir alınamadı:', e instanceof Error ? e.message : e))
     .then(() => true)
     .finally(() => {
@@ -1591,20 +1673,33 @@ export function devirIfStale(now = Date.now()): Promise<boolean> {
   return devirRunning;
 }
 
-async function pullDevir(date: string) {
+/**
+ * Devir okuması kasanın şubesiyle (`?sube=`, imzaya girer; bugünkü panel görmezden gelir). Yanıt başka şubeninse (çok şubeli
+ * panel `sube`'yi geri söyler) ya da istek sürerken kasanın şubesi değiştiyse değer alınmaz, önceki kalır
+ */
+async function pullDevir(date: string, sube: string) {
   const state = () => getSyncState<DevirState>('lafmaliyet.devir')!;
-  const fail = (message: string) => setSyncState('lafmaliyet.devir', { ...state(), lastError: message } satisfies DevirState);
+  // Şube istek sürerken değiştiyse (devir durumu silindi ya da yeni şubenin) hiçbir şey yazılmaz
+  const mine = () => {
+    const now = getSyncState<DevirState>('lafmaliyet.devir');
+    return !!now && now.sube === sube && kasaSubesi() === sube;
+  };
+  const fail = (message: string) => mine() && setSyncState('lafmaliyet.devir', { ...state(), lastError: message } satisfies DevirState);
   let res: { status: number; json: unknown };
   try {
     const url = new URL('/api/panel/pos/devir', env.lafmaliyetUrl);
     url.searchParams.set('date', date);
+    url.searchParams.set('sube', sube);
     res = await signedFetch(env.lafmaliyetToken, 'GET', url);
   } catch (e) {
     return fail(`Devir alınamadı: ${networkErrorText(e)}`);
   }
+  if (isWrongBranch(res.status, res.json)) return fail(`Devir alınamadı: ${wrongBranchText(res.json, sube)}`);
   if (res.status !== 200) return fail(`Devir alınamadı (${lazyErrorText(res.status, res.json)})`);
   const parsed = devirBody.safeParse(res.json);
   if (!parsed.success || parsed.data.date !== date) return fail("Devir okunamadı: lafmaliyet'in yanıtı beklenen biçimde değil; önceki değer kaldı");
+  if (parsed.data.sube !== undefined && parsed.data.sube !== sube) return fail(`Devir alınmadı: lafmaliyet "${parsed.data.sube}" şubesinin devrini gönderdi, bu kasa "${sube}"; önceki değer kaldı`);
+  if (!mine()) return;
   const value = parsed.data.nextOpening ? { amount: kurusOf(parsed.data.nextOpening.amount), source: parsed.data.nextOpening.source } : null;
   const before = state();
   setSyncState('lafmaliyet.devir', { ...before, okAt: Date.now(), nextOpening: value, lastError: null } satisfies DevirState);
@@ -1669,7 +1764,7 @@ async function pullExpenseCategories() {
   const fail = (message: string) => setSyncState('lafmaliyet.expenseCategories', { ...categoriesState()!, lastError: message, lastErrorAt: Date.now() } satisfies CategoriesState);
   let res: { status: number; json: unknown };
   try {
-    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL('/api/panel/pos/gider-kategorileri', env.lafmaliyetUrl));
+    res = await signedFetch(env.lafmaliyetToken, 'GET', subeli('/api/panel/pos/gider-kategorileri'));
   } catch (e) {
     return fail(`Gider kategorileri alınamadı: ${networkErrorText(e)}`);
   }
@@ -1699,6 +1794,8 @@ export function lafmaliyetStatus(withCost = false, withCash = false, withStaff =
   return {
     configured: configured(),
     url: env.lafmaliyetUrl || null,
+    /** Kasanın şubesi; null: şube seçilmedi, gün sonu giden kutusunda bekler (ekran `SUBE_YOK_METNI`'ni gösterir) */
+    branch: kasaSubesi(),
     training: trainingMode(),
     pending: pending.length,
     /** Denenip gidemeyenler (hata ya da kalıcı ret); yeni kuyruğa girip sırasını bekleyen gün hata değildir */

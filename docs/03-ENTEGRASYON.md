@@ -40,7 +40,8 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 Site şubelidir: sipariş, masa kodu (`cafe_tables`), masa çağrısı ve Satışta bilgisi bir şubenindir (masa siparişi ve
 çağrısı masanın şubesi; gel-al, kurye, kargo ve karaoke Tuzla'nın). AsilPOS'un anahtarı sitenin `LAFPOS_BRANCHES`'teki
 şubeler adına konuşur (varsayılan `marina`; laffogato `docs/LAFPOS.md` "Şube"). AsilPOS her imzalı istekte kendi şubesini
-söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `branchId`, varsayılan `marina`; `server/sync/laffogato-link.ts`):
+söyler (`siteBranch()` = Yönetim › Ayarlar ve yedek › Şube kimliği `branchId`, ladmin kurulumundan; şube seçilmemiş
+kasa imzalı uçlara hiç gitmez, §4c; `server/sync/laffogato-link.ts`):
 
 - GET'te sorguda `?branch=<id>` (imzanın içinde): `/api/panel/orders`, `/api/panel/menu`, `/api/panel/karaoke` ve
   sürüm sinyali `/api/pos/orders/version`. Sinyal laffogato #298'den beri şubenindir (`version` ve `menu` şubenin
@@ -653,8 +654,9 @@ idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa artan bekl
 gün (eğitim günü) hiç gitmez, kurulum modu sonra kapansa da (§4.3).
 
 **Şube (`sube`, 4 Kasım 2026; 21 Kasım 2026'da güncellendi).** lafmaliyet ciroyu şubeye göre ayırır (lafmaliyet
-`docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId` (varsayılan `marina`),
-lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter). **Sahibin kararı (21 Kasım
+`docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId`, lafmaliyet'teki
+kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter). 27 Kasım 2026'dan beri yeni kurulum şubesiz
+açılır, şubeyi ladmin kurulumu verir; eski kasa `marina` ile sürer ve şube seçilmemiş kasa gün göndermez (§4c). **Sahibin kararı (21 Kasım
 2026): ilk AsilPOS kasası Marina'da, Tuzla ModPOS'ta kalır.** lafmaliyet'te AsilPOS'un şubesi tek sabittir
 (`ASILPOS_BRANCH_ID = "marina"`): gün o şubeye yazılır, geçiş günü yalnız o şubenin kasasınındır, kilit ve Z denetimi
 (gün, şube) başına. Paketin `sube`'si bundan başkaysa gün yazılmaz: 409 `wrong_branch` (kasa bunu kalıcı hata sayar ve
@@ -931,7 +933,7 @@ reddetmez.
 ### 4.1 Ürün maliyetleri (lafmaliyet → AsilPOS)
 
 ```
-GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
+GET {LAFMALIYET_URL}/api/panel/pos/urunler[?sube=<şube>]     (imzalı, aynı anahtar; şube belliyse sorguda, §4c)
 { "version": 1, "now": "…", "items": [
   { "siteMenuId": "mnu-0003", "slot": "M", "name": "Latte", "size": "M", "costMinor": 4210, "active": true }
 ] }
@@ -973,7 +975,7 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
 | 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay, nextOpening, staff }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines`, `nextOpening`, `staff` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
 | 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; AsilPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
 | 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki ASILPOS_SYNC_SECRET (eski adıyla LAFPOS_SYNC_SECRET) ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
-| 409 | `{ error: "wrong_branch", sube, expected }` | Kalıcı: kasanın şubesi (`sube`) lafmaliyet'in AsilPOS şubesi (`expected`, marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği düzeltilip yeniden gönderilir. Şube gönderirken güncel ayardan yazılır |
+| 409 | `{ error: "wrong_branch", sube, expected }` | Kasanın şubesi (`sube`) lafmaliyet'in bu anahtarla beklediği şube (`expected`, bugün marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği ya da ladmin'deki şube anahtarı düzeltilir. Park edilmez: günde bir kendiliğinden, kasanın şubesi ya da lafmaliyet anahtarı değişince hemen yeniden denenir (§4c). Şube gönderirken güncel ayardan yazılır |
 | 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › AsilPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
 | 413 | `{ error: "too_large" }` | Kalıcı (gövde 256 KB'tan büyük) |
 | 422 | (lafmaliyet bugün göndermez) | Kalıcı |
@@ -1134,7 +1136,7 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
   `z.openingDiff`, `z.openingReason` (TL; §4 "Faz 3 alanları").
 - **Tembel devir okuması:**
   ```
-  GET {LAFMALIYET_URL}/api/panel/pos/devir?date=YYYY-MM-DD     (imzalı, aynı anahtar; sorgu imzaya girer)
+  GET {LAFMALIYET_URL}/api/panel/pos/devir?date=YYYY-MM-DD&sube=<şube>     (imzalı, aynı anahtar; sorgu imzaya girer)
   { "version": 1, "date": "2026-11-22", "nextOpening": { "amount": 1279.5, "source": "lafpos" } }
   ```
   `nextOpening` gün sonu yanıtındakiyle aynı nesne. Yalnız bağlantı tanımlıyken, gün kapalıyken (Kasa ekranı
@@ -1142,6 +1144,9 @@ Kural ve hesap `server/services/devir.ts`; açılış `server/services/days.ts` 
   sonra sorulur (`devirIfStale`, sync_state `lafmaliyet.devir`). Bugünün günü kapandıysa sorulmaz: yeni gün 05:00'ten
   önce açılmaz, gece açık kalan Kasa ekranı lafmaliyet'i uyandırmaz; ertesi iş gününde ekran yine sorar. Bozuk yanıt (başka gün, başka sürüm), HTTP hatası ya
   da internet yokken önceki değer kalır, hata saklanır. Değer değişince Kasa ekranı yenilenir (`cash` olayı).
+  Şubeli (27 Kasım 2026, §4c): sorguda kasanın şubesi gider (bugünkü panel görmezden gelir); yanıt isteğe bağlı `sube`
+  taşıyabilir, kasanınkinden farklıysa ya da 409 `wrong_branch` gelirse değer alınmaz, önceki kalır. Durum okunduğu
+  şubeyi tutar; şube değişince silinir. Şube seçilmemiş kasa devir sormaz.
 
 ### 4.7 Kasa hareketleri satır satır ve gider kategorileri (23 Kasım 2026)
 
@@ -1164,7 +1169,7 @@ harcama ve teslimi kendi satırına alır (girişi değil), aynı gün yeniden g
   bunu yazar. Gövdeye yalnız ad gider (`cashMoves[].recipient`, §4 "Faz 3 alanları").
 - **Liste:**
   ```
-  GET {LAFMALIYET_URL}/api/panel/pos/gider-kategorileri     (imzalı, aynı anahtar)
+  GET {LAFMALIYET_URL}/api/panel/pos/gider-kategorileri[?sube=<şube>]     (imzalı, aynı anahtar; şube belliyse sorguda, §4c)
   { "version": 1, "now": "…", "items": [{ "id": 3, "name": "Diğer fatura dışı", "section": "genel" }] }
   ```
   Yalnız personelin kullanabildiği kategoriler; tutar yok. `GET /api/cash/expense-categories` (`kasa.hareket` ya da
@@ -1379,7 +1384,67 @@ açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz: ladmin'e yen
 anahtar sonra değişir (`uygulanan` ladmin'in günlüğünde görünür).
 
 **Sınır:** lafmaliyet bugün tek AsilPOS şubesinin gününü alır (§4 "Şube"); Marina AsilPOS'tayken ikinci şubenin kasası
-kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de çoklu AsilPOS şubesi ayrı iş).
+kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler, günde bir yeniden denenir (§4c). Panel şubeyi kasanın
+anahtarından tanıyınca (ladmin B1) bekleyen günler kendiliğinden gider.
+
+## 4c. Çok şubeli kasa (27 Kasım 2026)
+
+Sahibin kararı (26–27 Kasım 2026): her fiziksel şubenin kendi AsilPOS kasası olabilir. Panel (ladmin) şubeyi kasanın
+kendi imza anahtarından tanır (panelin işi "B1", sonra); bugün yalnız Marina'nın kasası var. Kasanın tarafı
+`server/lib/sube.ts` ve `server/sync/sube-degisti.ts`'te; ekranın ortak metni `shared/sube.ts` `SUBE_YOK_METNI`.
+
+- **Şubesiz yeni kurulum.** Yeni kurulum şube kimliği olmadan açılır (`branchId: null`; eskiden varsayılan `marina`).
+  Şubeyi ladmin'in kurulum bağlantısı verir (§4b) ya da patron Yönetim › Ayarlar ve yedek › Şube kimliği'ne yazar.
+  Tarayıcı demosu Marina'nın kasasıdır.
+- **Eski kasa Marina olarak sürer.** Açılışta, göçlerden hemen sonra, veritabanı başına bir kez: şube satırı yok ama
+  kasanın geçmişi varsa (iş günü, eğitim günü dahil; lafmaliyet'in kabul ettiği gün sonu; gerçek kullanım işareti
+  `liveSince`) `marina` kalıcı yazılır, denetime `settings.branchId` düşer (`eskiKasaSubesiniYaz`). Şube satırı olan
+  kasaya dokunulmaz. Sonuç ne olursa olsun `sync_state` `sube.eskiKasaDenetimi` işareti aynı işlemde yazılır ve denetim
+  bir daha yapılmaz: yalnız çok şubeli sürümden önceki veritabanı (yükseltilen kasa, geri yüklenen eski yedek) denetlenir.
+  Yeni kasa ilk açılışta, veritabanı boşken işaretlenir; sonra açtığı deneme günü ya da gerçek kullanımı onu Marina
+  yapmaz (bağlantılar yazılınca, güncellemede ya da elektrik kesilince yeniden açılsa da), şubesi kurulumdan gelir.
+- **Şube belli olana dek şubeye bağlı senkron bekler**, hata döngüsüne girmez: lafmaliyet gün sonu (gün giden kutusunda
+  bekler), devir, ModPOS dönemi, personel listesi, bağlantı dağıtımı (`/api/panel/pos/baglanti`), sitenin imzalı uçları
+  (siparişler, sürüm sinyali, Tükendi, masa çağrıları, karaoke, panel menüsü) ve platform anahtarları istek atmaz. Elle
+  işlemler (Gönder, Geçmiş günleri gönder, ModPOS dönemini çek, personel listesi, karaokeyi yenile) 409 `no_branch` ile
+  ne yapılacağını söyler; Entegrasyon (`lafmaliyet.branch: null`), Bağlantı bilgileri ve Ayarlar aynı metni gösterir.
+  Maliyet ve gider kategorileri şubeye bağlı değildir, sorulmaya devam eder; herkese açık menü de şubesizdir.
+- **Şube değişince ya da ilk kez belli olunca** (Ayarlar, ladmin kurulumu): eski şubenin devri (`sync_state`
+  `lafmaliyet.devir`) ve personel listesi bırakılır, platform anahtarları yeni şube için hemen çekilir
+  (`platformKeysBranchChanged`; kurulumdan sonra da), şube retiyle bekleyen günler ve şubesizken biriken günler hemen
+  gönderilir.
+- **Devir şubeli** (§4.6): `GET /api/panel/pos/devir?date=…&sube=<şube>`. Bugünkü panel `sube`'yi görmezden gelir ve
+  yanıtında şube yoktur: yanıt alınır. Çok şubeli panel yanıtta `sube`'yi geri söylerse ve kasanınkinden farklıysa değer
+  alınmaz, önceki kalır, hata yazılır; 409 `wrong_branch` da öyle. Devrin durumu okunduğu şubeyi taşır (`sube`); başka
+  şubeninki ve başka şubeyle gönderilmiş günün gün sonu yanıtındaki devir öneride kullanılmaz (yerel sayım geçer).
+- **İsteğe bağlı `?sube`:** `GET /api/panel/pos/urunler` ve `/api/panel/pos/gider-kategorileri` şube belliyse sorguda
+  şubeyi taşır (imzaya girer; panel şubeyi anahtardan tanır, sorgudaki yalnız denetimdir). `modpos-gunler`, `personel`
+  ve `baglanti` zaten taşıyordu.
+- **409 `wrong_branch` günde bir yeniden** (§4.2): gün sonu reti park edilmez; kayıt `response: { "parked":
+  "wrong_branch" }` işaretiyle 24 saat sonra yeniden denenir, kasanın şubesi değişince hemen (`retryWrongBranch`).
+  Şube aynı kalıp lafmaliyet anahtarı (ya da adresi) değişince de hemen: ladmin'in yeni kurulum bağlantısı aynı şubeye
+  kendi anahtarını verir ya da patron anahtarı Bağlantı bilgileri'nden veya ayarlar dosyasından değiştirir. Anahtar
+  yalnız açılışta okunduğu için bunu yeni anahtarla açılan sunucu yapar (`lafmaliyetBaglantisiDegisti`, zamanlayıcılardan
+  önce); `sync_state` `lafmaliyet.baglantiIzi` bağlantının kısa özetini tutar, anahtarın kendisini değil. Panel şubeyi bu
+  kasanın anahtarına bağlayınca bekleyen günler elle "Gönder"e kalmadan gider. Öbür kalıcı retler (400, 409 `z_conflict`,
+  413, 422) eskisi gibi park edilir.
+- **Bildirim ve gün sonu başlığı şubenin adını taşır:** bildirimin `shop`'u ve WhatsApp gün sonu metninin başlığı işletme
+  adı ve şube ("L'Affogato Marina"; işletme adı şubeyi zaten içeriyorsa eklenmez). Şubenin adı ladmin kurulumundan,
+  yoksa kimlikten ("marina" → "Marina"); açılış verisinde `branchName`.
+- **Başka şubenin yedeği yüklenmez:** buluttan geri yüklemede şubesi belli kasa yedeğin şubesini okur (ayar satırı;
+  satır yoksa açılıştaki kuralla: eski kasa denetimi yapılmış yedek şubesiz, denetimsiz eski yedekte geçmiş varsa
+  `marina`); başka şubeninse 409 `wrong_branch`, hazır dosya bırakılmaz. Şubesiz kasa ve
+  şubesi okunamayan yedek serbest (yeni bilgisayara kendi yedeğini yüklemek).
+- **Merkez kapalıyken uyarı:** `ASILPOS_MERKEZ_URL=0` iken Uzaktan özet, rapor ve yedekleri bütün kasaların ortak
+  `default` dükkânına yazar; Marina dışındaki şubenin kasası Yönetim › Bağlantı bilgileri › Şube kurulumu'nda uyarı görür.
+- **Bağlantı bilgileri › Şube kurulumu:** kasanın şubesi, ladmin'e verilmeyi bekleyen kurulum kodu, son denemenin saati
+  ve hatası (kalıcıysa yeni bağlantı gerekir, geçiciyse 5 dakikada bir yeniden denenir) ve Merkez uyarısı.
+  `GET /api/admin/baglanti` `kurulum: { sube, subeAdi, kodBekliyor, durum, merkezUyarisi }` (kod ve anahtar dönmez).
+- **Tel bugünkü panelle aynı:** gövde, alanlar ve anahtar değişmedi; eklenen yalnız sorgudaki `sube` (bugünkü panel
+  görmezden gelir) ve yanıtta isteğe bağlı `sube`. Testler `tests/cok-sube-kasa.test.ts`, `tests/cok-sube-eski-kasa.test.ts`.
+- **Kalan:** isteğe bağlı `x-laf-sube` başlığı yok; ModPOS döneminin önbelleği şube değişince silinmez (yanıtın şubesi
+  zaten denetlenir). Site deposunda: yeni şubenin sitenin şube listesine eklenmesi (`SITE_SUBELER_ENV`,
+  `shared/eski-adlar.ts`) ve herkese açık menünün şubeye göre ayrılması.
 
 ## 5. Sıklık ve bütçe
 
@@ -1395,7 +1460,7 @@ kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de
 | Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk ("Online siparişleri çek" kapalıyken de); oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
 | Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
 | Sesli uyarılar (§2.5) | yeni istek yok: sipariş (masa çağrıları dahil) ve karaoke çekimlerinin listesinden | yok |
-| lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
+| lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç; şube seçilmemiş kasada hiç (gün bekler, §4c); `wrong_branch` alan gün günde bir | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 | lafmaliyet ModPOS dönemi okuma (§4.5) | iş günü başına bir kez (05:00'ten ya da açılıştan sonraki ilk tur); + elle; ikisi de en sık 5 dk; bağlantı yoksa hiç | yok |
 | lafmaliyet devir okuma (§4.6) | yalnız Kasa ekranı gün kapalıyken sorunca (tembel), en sık 5 dakikada bir; gün açıkken, bugünün günü kapandıktan sonra (gece), devrin günü yokken ya da günün gönderilmemiş kaydı varken hiç; bağlantı yoksa hiç | yok |
@@ -1427,6 +1492,7 @@ kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler (ladmin'de
 | Birleşti | lafpos#173 + laffogato#301 (şube fiyatı) | Şubenin satış fiyatı imzalı okumadan, fiyat anında (`nextPriceAt`) tek eşitleme, imzalı okuma yoksa fiyat korunur (§2 "Şube fiyatı"); gün sonunda `lines[].listPrices` (§4) |
 | Birleşti | lafmaliyet#137 (LM-5, şube fiyatı) | lafmaliyet'in şube fiyatı yazımı (Fiyatlar'da şube ve geçerlilik) ve gün sonunun `lines[].listPrices`'ı ("Eski fiyattan satılanlar"); AsilPOS'un `listPrices`'lı sürümünden önce gelen günlerde rapor "Bilinmiyor" der |
 | Birleşti | lafpos#176, #177 + lafmaliyet#144 (teslimin alıcısı) | `cashMoves[].recipient` (§4 "Faz 3 alanları", §4.7): AsilPOS teslimde alıcıyı zorunlu tutar ve gönderir (birleşti); lafmaliyet alanı okur, AsilPOS teslim satırının "Kime"si (`cash_outs.store`) yapar, gün görünümünde teslimi kişi kişi döker, altın kopyası yeni (#144, birleşti). Okumayan sürüm alanı atar, gün reddedilmez |
+| Bu dal | cok-sube-kasa (B2, kasa) | Çok şubeli kasa (§4c): şubesiz yeni kurulum, eski kasa `marina`, şubeye bağlı senkronun beklemesi, devirde `?sube` ve yankı denetimi, `wrong_branch` günde bir; panelin şubeyi anahtardan tanıması lafmaliyet B1'de (sonra) |
 | Faz 2 | laffogato F2 + asilpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı; `paidAtTill` ile AsilPOS onu bara düşürmez) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 

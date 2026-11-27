@@ -2,6 +2,7 @@ import { PaymentBar } from '@/pages/patron/TodayStats';
 import { Check, ClipboardCopy, Download, MessageCircle, Printer, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { dayText } from '@shared/gun-sonu-metni';
+import { isletmeVeSube } from '@shared/sube';
 import { roundHalfUp, tl } from '@shared/money';
 import { fmtDateLong, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import type { BusinessDayDTO, ZSummary } from '@shared/types';
@@ -59,7 +60,8 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
     setTimeout(() => setCopied(false), 2000);
   };
   const copyDay = async () => {
-    const text = dayText({ branch: boot.settings.businessName, date: day.date, zNo: day.zNo, s: summary });
+    // Başlıkta işletme ve şube ("L'Affogato Marina"): iki şubenin gün sonu aynı gruba düşer
+    const text = dayText({ branch: isletmeVeSube(boot.settings.businessName, boot.branchName), date: day.date, zNo: day.zNo, s: summary });
     if (!(await copyText(text))) return;
     setWaCopied(true);
     setTimeout(() => setWaCopied(false), 2000);

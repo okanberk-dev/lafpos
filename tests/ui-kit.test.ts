@@ -422,7 +422,7 @@ describe('ayarlar taslağı', () => {
   it('kilitli şube kimliği: alanın altında not, patron kaydederken onay; onay yalnız bu kayıtla gider (kaynak)', () => {
     const src = readFileSync(join(__dirname, '../src/pages/admin/SettingsAdmin.tsx'), 'utf8');
     const save = src.slice(src.indexOf('const save = async'), src.indexOf('const backupNow'));
-    expect(src).toMatch(/get<\{ locked: boolean; branchId: string; acceptedBranch: string \| null \}>\('\/admin\/settings\/branch-lock'\)/);
+    expect(src).toMatch(/get<\{ locked: boolean; branchId: string \| null; acceptedBranch: string \| null \}>\('\/admin\/settings\/branch-lock'\)/);
     // Onay penceresi istekten önce, yalnız şube lafmaliyet'in kabul ettiğinden başkasına değişirken ve kilit varken;
     // onaylanmazsa istek gitmez. Metin kabul edilen şubeyi söyler, şu anki kimliği değil
     expect(save).toMatch(

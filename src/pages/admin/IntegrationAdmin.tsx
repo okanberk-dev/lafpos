@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CircleAlert, CloudDownload, History, Info, RefreshCw, XCircle } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useState } from 'react';
+import { SUBE_YOK_METNI } from '@shared/sube';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Toggle } from '@/components/ui/Field';
@@ -31,6 +32,8 @@ interface SyncStatus {
   lafmaliyet: {
     configured: boolean;
     url: string | null;
+    /** Kasanın şubesi; null: şube seçilmedi, günler giden kutusunda bekler (eski sunucu göndermez: undefined) */
+    branch?: string | null;
     /** Kurulum modu: günler gönderilmez */
     training: boolean;
     pending: number;
@@ -439,6 +442,7 @@ function LafmaliyetCard({
         ) : (
           <>
             <StatusGroup>
+              {s.branch === null && <Status idle>{SUBE_YOK_METNI}</Status>}
               {s.training && (
                 <Status idle>
                   Kurulum modu: günler lafmaliyet’e gönderilmez (örnek PIN’ler açık ya da yazarkasa eğitim simülatöründe). Bu modda kapanan gün eğitim günüdür, kurulum modu kapansa da hiç gitmez.{canCost ? ' Bağlantıyı denemek için “Maliyetleri çek” yeterli.' : ''} Gerçek ilk gün kurulum modu kapandıktan sonra açılıp kapanınca gider

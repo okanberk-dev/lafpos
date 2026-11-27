@@ -70,6 +70,8 @@ export async function runInternet(browser) {
     await api.call('patron', 'POST', '/admin/deneme/bitir', { pin: PINS.patron, newPin: NEW_PIN });
     api.tokens.patron = (await api.call('', 'POST', '/auth/login', { pin: NEW_PIN })).token;
     await api.call('patron', 'PUT', '/admin/settings', { okcProvider: 'kapali' }).catch(() => null);
+    // Yeni kurulum şubesiz açılır, şubesiz kasa gün göndermez (docs/03-ENTEGRASYON.md §4c): kasa Marina'nınki
+    await api.call('patron', 'PUT', '/admin/settings', { branchId: 'marina' });
 
     let date = '';
     await step('İnternet yokken satış ve gün sonu durmaz; gün giden kutusunda bekler', async () => {

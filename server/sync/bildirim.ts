@@ -10,6 +10,8 @@ import { internetState, onInternetBack } from '../lib/internet';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { isletmeVeSube } from '@shared/sube';
+import { subeAdi } from '../lib/sube';
 import { cloudEnabled } from './cloud';
 
 /**
@@ -74,7 +76,8 @@ export const notifyReady = () => cloudEnabled() && notifySettings().enabled;
 type SendResult = 'gitti' | 'dus' | 'bekle';
 
 async function send(n: Notice): Promise<SendResult> {
-  const shop = getSettings().businessName || null;
+  // Başlıkta işletme ve şube ("L'Affogato Marina"): iki şubenin kasası aynı patrona yazar, bildirim hangisinden belli olsun
+  const shop = isletmeVeSube(getSettings().businessName, subeAdi()) || null;
   const { id: _id, ...notice } = n;
   try {
     const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/uzaktan/bildirim', env.cloudUrl), { ...notice, shop }, 8000);

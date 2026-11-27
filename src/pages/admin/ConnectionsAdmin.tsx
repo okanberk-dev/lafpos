@@ -3,7 +3,8 @@ import { ClipboardPaste, Save, Trash2 } from 'lucide-react';
 import { type ChangeEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { checkConnValue, CLOUD_KEY_GROUPS, CONN_GROUPS, type ConnGroup, connField, parseEnvLines } from '@shared/baglanti';
-import { fmtTime } from '@shared/time';
+import { SUBE_YOK_METNI } from '@shared/sube';
+import { fmtDateTime, fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Textarea } from '@/components/ui/Field';
@@ -25,6 +26,20 @@ interface ConnView {
    * kasanın şube etiketi (Vercel adındaki ŞUBE; geçersizse null) ve AsilPOS Uzaktan'ın kurulu olup olmadığı
    */
   bulut?: { at: number | null; ok: boolean | null; error: string | null; sube: string | null; uzaktan: boolean };
+  /** Şube kurulumu (server/sync/kurulum-kodu.ts `kurulumGorunumu`); eski sunucu göndermez */
+  kurulum?: KurulumView;
+}
+
+/**
+ * Şube kurulumunun durumu: kasanın şubesi (null: seçilmedi), ladmin'e verilmeyi bekleyen kurulum kodu, son denemenin sonucu
+ * (`kalici`: yeniden denenmez, yeni bağlantı gerekir) ve Merkez kapalıyken ikinci şubenin uyarısı
+ */
+interface KurulumView {
+  sube: string | null;
+  subeAdi: string | null;
+  kodBekliyor: boolean;
+  durum: { ok: boolean; sube: { id: string; ad: string } | null; at: number; hata: string | null; kalici: boolean; kilitli: boolean } | null;
+  merkezUyarisi: string | null;
 }
 type FieldState = ConnView['groups'][number]['fields'][number];
 
@@ -189,6 +204,59 @@ function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGrou
   );
 }
 
+/** Şube kurulumu kartının rozeti: kuruldu, kalıcı hata, yeniden denenecek, kod bekliyor ya da elle kurulan kasa */
+function kurulumBadge(k: KurulumView): { tone: 'success' | 'danger' | 'warning' | 'neutral'; text: string } {
+  if (k.durum?.ok) return { tone: 'success', text: 'Kuruldu' };
+  if (k.durum && k.durum.kalici) return { tone: 'danger', text: 'Kurulamadı' };
+  if (k.durum) return { tone: 'warning', text: 'Yeniden denenecek' };
+  if (k.kodBekliyor) return { tone: 'warning', text: 'Bekliyor' };
+  return k.sube ? { tone: 'neutral', text: 'Elle kuruldu' } : { tone: 'warning', text: 'Şube yok' };
+}
+
+/**
+ * Şube kurulumu (ladmin › Şubeler'in şubeye özel kurucusu, docs/03-ENTEGRASYON.md §4b): kasanın şubesi, kodun ladmin'e
+ * verilip verilmediği, son denemenin saati ve hatası. Şube seçilmediyse neyin beklediğini söyler. Yalnız durum: kod ve
+ * anahtar görünmez, yazılacak bir şey yok
+ */
+function KurulumCard({ k }: { k: KurulumView }) {
+  const badge = kurulumBadge(k);
+  const d = k.durum;
+  return (
+    <Card
+      title="Şube kurulumu"
+      subtitle="ladmin’in şubeye özel kurulum bağlantısı: şube ve bağlantılar kendiliğinden gelir"
+      actions={
+        <Badge tone={badge.tone} dot>
+          {badge.text}
+        </Badge>
+      }
+      bodyClassName="space-y-3 text-sm [overflow-wrap:anywhere]"
+    >
+      <p data-kurulum-sube>{k.sube ? `Şube: ${k.subeAdi ?? k.sube} (${k.sube})` : SUBE_YOK_METNI}</p>
+      {d?.ok && d.sube && (
+        <p className="text-[var(--admin-text-soft)]" data-kurulum-durum>
+          ladmin’den kuruldu: {d.sube.ad} ({d.sube.id}) · {fmtDateTime(d.at)}
+        </p>
+      )}
+      {d && !d.ok && (
+        <Notice tone={d.kalici ? 'danger' : 'warn'} title={d.kalici ? 'Kurulum yapılamadı' : 'Kurulum henüz yapılamadı'} className="text-[13px]">
+          <span data-kurulum-hata>
+            {d.hata ?? 'Bilinmeyen hata'} · son deneme {fmtDateTime(d.at)}
+            {d.kalici ? '' : '; kod durdukça 5 dakikada bir yeniden denenir'}
+          </span>
+        </Notice>
+      )}
+      {!d && k.kodBekliyor && <p className="text-[var(--admin-text-soft)]">Kurulum kodu ladmin’e verilmeyi bekliyor: AsilPOS açılınca ve 5 dakikada bir denenir</p>}
+      {!d && !k.kodBekliyor && <p className="text-[var(--admin-text-soft)]">Bu kasa ladmin’in kurulum bağlantısıyla kurulmadı; şube Ayarlar ve yedek › Şube kimliği’nden</p>}
+      {k.merkezUyarisi && (
+        <Notice tone="warn" title="Merkez kapalı" className="text-[13px]">
+          {k.merkezUyarisi}
+        </Notice>
+      )}
+    </Card>
+  );
+}
+
 /**
  * Hazır satırlar: kurulumda sahibe verilen ayar satırları (ANAHTAR=değer) olduğu gibi yapıştırılır. Bilinen anahtarlar
  * ayarlar dosyasına, Pavo'nun adresi ve seri no'su yazarkasa ayarına gider; bilinmeyenler söylenir, yazılmaz
@@ -327,6 +395,7 @@ export default function ConnectionsAdmin() {
       <p className="text-sm text-muted">
         Pavo cihazının adresi ve seri numarası <Link to="/yonetim/yazarkasa" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">Yazarkasa POS</Link>’tan girilir. Gizli anahtarlar burada hiç gösterilmez; yalnız tanımlı olup olmadıkları
       </p>
+      {d.kurulum && <KurulumCard k={d.kurulum} />}
       {editable && <PasteCard onSaved={onSaved} />}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {CONN_GROUPS.map((g) => (

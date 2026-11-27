@@ -7,6 +7,9 @@ import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState, updateSettings } from '../lib/settings';
 import { db } from '../db/client';
 import { branchLocked } from './lafmaliyet';
+import { subeDegisti } from './sube-degisti';
+import { merkezKapaliUyarisi } from './merkez';
+import { kasaSubesi, subeAdi } from '../lib/sube';
 import { ESKI_KURULUM_YOLU } from '@shared/eski-adlar';
 import { yeniAdlarla } from '@shared/pos-env';
 
@@ -44,6 +47,24 @@ export interface KurulumDurumu {
 }
 
 export const kurulumDurumu = () => getSyncState<KurulumDurumu>(STATE);
+
+/**
+ * Yönetim › Bağlantı bilgileri'nin "Şube kurulumu" kartı: kasanın şubesi (yoksa null: şubeye bağlı senkron bekler),
+ * veri klasöründe ladmin'e verilmeyi bekleyen kurulum kodu var mı, son denemenin sonucu ve hatası (kalıcıysa yeni bağlantı
+ * gerekir; geçiciyse 5 dakikada bir yeniden denenir) ve Merkez kapalıyken ikinci şubenin uyarısı. Kod ve anahtar dönmez
+ */
+export function kurulumGorunumu(dataDir = env.dataDir) {
+  const d = kurulumDurumu();
+  return {
+    sube: kasaSubesi(),
+    subeAdi: subeAdi(),
+    kodBekliyor: existsSync(resolve(dataDir, KOD_DOSYASI)),
+    durum: d ? { ok: d.ok, sube: d.sube, at: d.at, hata: d.hata, kalici: !!d.kalici, kilitli: !!d.kilitli } : null,
+    merkezUyarisi: merkezKapaliUyarisi(),
+  };
+}
+export type KurulumGorunumu = ReturnType<typeof kurulumGorunumu>;
+
 /** Kurulumdan gelen şubenin adı (Merkez kaydı ve fiş başlığı için); yoksa null */
 export const kurulumSubeAdi = () => kurulumDurumu()?.sube?.ad ?? null;
 
@@ -162,8 +183,9 @@ function save(d: KurulumDurumu): KurulumDurumu {
 function apply(answer: { sube: { id: string; ad: string }; edits: Record<string, string> }, now: number, retire: () => void): KurulumDurumu {
   const before = getSettings().branchId;
   const locked = before !== answer.sube.id && branchLocked();
+  const changed = !locked && before !== answer.sube.id;
   const fx = new Effects();
-  if (!locked && before !== answer.sube.id) updateSettings({ branchId: answer.sube.id });
+  if (changed) updateSettings({ branchId: answer.sube.id });
   const file = settingsFile();
   const written = file && Object.keys(answer.edits).length ? Object.keys(answer.edits) : [];
   if (file && written.length) writeEnvEdits(file, answer.edits);
@@ -180,5 +202,9 @@ function apply(answer: { sube: { id: string; ad: string }; edits: Record<string,
   fx.emit({ topic: 'settings', kind: 'settings.updated' });
   fx.flush();
   retire();
+  // Şube belli oldu ya da değişti: eski şubenin önbellekleri bırakılır, bekleyen günler ve yeni şubenin platform
+  // anahtarları beklemeden (bağlantılar yeni yazıldıysa bekçi sunucuyu yeniden başlatır, açılış da çeker). Şube aynı kalıp
+  // yalnız anahtar değiştiyse şube retiyle bekleyen günleri yeni anahtarla açılan sunucu öne alır (`lafmaliyetBaglantisiDegisti`)
+  if (changed) subeDegisti(before);
   return save({ ok: !locked, sube: answer.sube, at: now, hata: locked ? `Şube kimliği kilitli (${before}); ${answer.sube.id} yapılmadı` : null, ...(locked ? { kilitli: true, kalici: true } : {}) });
 }

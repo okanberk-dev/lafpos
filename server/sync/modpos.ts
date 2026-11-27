@@ -6,8 +6,9 @@ import { tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { conflict, HttpError } from '../lib/http';
-import { getSettings, getSyncState, setSyncState } from '../lib/settings';
+import { getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
+import { kasaSubesi, subeGerekli } from '../lib/sube';
 import { httpErrorText, networkErrorText } from './lafmaliyet';
 
 /**
@@ -177,7 +178,7 @@ export function pullModposDays(now = Date.now(), actor?: { id: string | null }):
 }
 
 async function pull(now: number, actor?: { id: string | null }): Promise<ModposPullResult> {
-  const sube = getSettings().branchId;
+  const sube = subeGerekli();
   let res: { status: number; json: unknown };
   try {
     res = await signedFetch(env.lafmaliyetToken, 'GET', new URL(`${MODPOS_PATH}?sube=${encodeURIComponent(sube)}`, env.lafmaliyetUrl));
@@ -239,6 +240,8 @@ async function pull(now: number, actor?: { id: string | null }): Promise<ModposP
  */
 export async function modposTick(now = Date.now()): Promise<'off' | 'skip' | 'ok' | 'error'> {
   if (!configured()) return 'off';
+  // Dönem şubenindir: şube seçilmemiş yeni kasa sormaz (durum Entegrasyon'da; hata döngüsü yok)
+  if (!kasaSubesi()) return 'skip';
   const checked = modposState()?.checkedAt ?? 0;
   if (checked && (businessDate(checked) >= businessDate(now) || now - checked < MODPOS_MIN_MS)) return 'skip';
   try {
@@ -253,6 +256,7 @@ export async function modposTick(now = Date.now()): Promise<'off' | 'skip' | 'ok
 /** Yönetim › Entegrasyon › "ModPOS dönemini çek": son denemeden 5 dakika geçmediyse 429 */
 export function pullModposNow(actor: { id: string | null }, now = Date.now()) {
   if (!configured()) throw conflict('lafmaliyet bağlantısı tanımlı değil (LAFMALIYET_URL, LAFMALIYET_SYNC_SECRET)', 'not_configured');
+  subeGerekli();
   const checked = modposState()?.checkedAt ?? 0;
   if (checked && now - checked < MODPOS_MIN_MS) {
     const min = Math.max(1, Math.ceil((MODPOS_MIN_MS - (now - checked)) / 60_000));
