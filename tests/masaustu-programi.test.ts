@@ -513,6 +513,9 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
     expect(diskte).toBeGreaterThan(edgeAc);
     expect(edgeKapat).toBeGreaterThan(diskte);
     expect(ci).toContain('while (!disk.anahtar && Date.now() - tYaz < 30_000)');
+    // Siteden kurulum yerel kanaldan (bu süreçteki sunucu) indirir: olay döngüsünü durduran spawnSync'le değil
+    expect(ci).not.toContain("spawnSync('cmd.exe'");
+    expect(ci).toContain("const child = spawn('cmd.exe', ['/d', '/c', kurucu], {");
     const helper = read(`${K}ci-windows.ps1`);
     expect(helper).toContain('$l = $sh.CreateShortcut($Kisayol)');
     expect(helper).toContain('-ArgumentList $l.Arguments -WorkingDirectory $wd');

@@ -665,7 +665,9 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
 Deneme ortamı kafeye benzetilir: adım pwsh'ta (PowerShell 7) koşar, pwsh'un `PSModulePath`'i oradan açılan Windows
 PowerShell 5.1'e geçince 5.1 kendi modüllerini (`Get-FileHash` gibi) yükleyemez; deneme bu değişkeni siler (kafede
 kısayol, görev ve kurulum 5.1'i temiz ortamla açar). Güncellemeden hemen sonra sunucu bir kez daha yeniden başlar (deneme
-açılışı, sonra 75 koduyla yeni sürüm): denemenin sunucuya istekleri o arada kopan bağlantıyı yeniden dener.
+açılışı, sonra 75 koduyla yeni sürüm): denemenin sunucuya istekleri o arada kopan bağlantıyı yeniden dener. Yerel
+güncelleme kanalı ve vekil denemenin kendi sürecinde çalışır: siteden kurulum (kanaldan indirir) olay döngüsünü durdurmadan
+beklenir.
 
 **Sonraki adım (isteğe bağlı): kendi penceresi olan `AsilPOS.exe`.** Bugün pencere Chrome'un (ya da Edge'in) uygulama
 penceresidir: Görev Yöneticisi'nde tarayıcının altında görünür. WebView2 üzerinde küçük bir `AsilPOS.exe` (kendi süreci,

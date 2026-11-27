@@ -19,7 +19,7 @@
 //      duvarını ve Uygulamalar kaydını yazar.
 // Ekran görüntüleri dist/ci-ekran'a (iş akışı yükler). Başarısızlıkta sunucu ve bekçi günlüğünün sonu, vekilin son
 // kayıtları ve süreçler yazılır.
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -682,12 +682,24 @@ checkUninstalled('bu sürümün kaldırıcısı');
 step('F3. Siteden kurulum (AsilPOS-Kur.cmd, yerel kanaldan, aynı derleme)');
 kanal(BU_DERLEME, null);
 const kurucu = join(KANAL, 'AsilPOS-Kur.cmd');
-const web = spawnSync('cmd.exe', ['/d', '/c', kurucu], {
-  stdio: 'inherit',
-  timeout: 20 * 60_000,
-  env: { ...process.env, ASILPOS_KUR_KANAL: `http://127.0.0.1:${KANAL_PORT}/guncelleme/`, ASILPOS_KUR_SESSIZ: '1' },
+// Kurucu yerel kanaldan indirir: kanal sunucusu bu süreçte çalışır. spawnSync olay döngüsünü durdurur, kanal yanıt
+// veremez (27 Kasım koşusu: surum.json 30 sn, uygulama zip'i 15 dk bekleyip düştü); kurucu ayrı süreçte, beklenerek
+const web = await new Promise((done) => {
+  const child = spawn('cmd.exe', ['/d', '/c', kurucu], {
+    stdio: 'inherit',
+    env: { ...process.env, ASILPOS_KUR_KANAL: `http://127.0.0.1:${KANAL_PORT}/guncelleme/`, ASILPOS_KUR_SESSIZ: '1' },
+  });
+  const timer = setTimeout(() => child.kill(), 20 * 60_000);
+  child.on('error', (e) => {
+    clearTimeout(timer);
+    done({ status: null, hata: e.message });
+  });
+  child.on('exit', (status) => {
+    clearTimeout(timer);
+    done({ status });
+  });
 });
-if (web.status !== 0) fail(`siteden kurulum ${web.status} koduyla bitti`);
+if (web.status !== 0) fail(`siteden kurulum ${web.status} koduyla bitti${web.hata ? ` (${web.hata})` : ''}`);
 await until(
   `siteden kurulum: derleme ${BU_DERLEME} açılmadı`,
   async () => {
