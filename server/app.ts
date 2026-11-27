@@ -30,6 +30,17 @@ import { installedVersion, isLoopback } from './lib/surum';
 import { getSettings, getSyncState, setSyncState } from './lib/settings';
 import { parsePrinters, pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from './lib/yazici';
 
+/**
+ * Arayüz dosyalarının önbellek kuralı (27 Kasım 2026: otomatik güncellemeden sonra sahip kasayı ilk açtığında eski sürümü,
+ * ör. eski yeşil kenar çubuğunu görüyor, elle yenileyince düzeliyordu). Neden: serveStatic index.html'i önbellek başlığı
+ * olmadan, yalnız Last-Modified ile veriyordu; tarayıcı böyle yanıtı "sezgisel" olarak, son değişikliğin yaşının onda biri
+ * kadar (birkaç gün önce kurulmuş sürümde saatlerce) sunucuya sormadan önbellekten açar. Güncellemeden sonraki ilk
+ * açılışta eski index.html eski betiği yüklüyordu. Artık index.html ve adı içerik özeti taşımayan her dosya (sw.js,
+ * manifest, simgeler, arayüz yolları) her açılışta sunucuya sorulur (`no-cache`); adına Vite'ın içerik özetini koyduğu
+ * /assets/ dosyaları değişmez, bir yıl önbellekte kalır
+ */
+export const arayuzOnbellegi = (path: string) => (path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+
 export function createApp() {
   const app = new Hono<AppEnv>();
 
@@ -164,9 +175,15 @@ export function createApp() {
   if (existsSync(env.webDist)) {
     const root = relative(process.cwd(), env.webDist) || '.';
     const indexHtml = readFileSync(resolve(env.webDist, 'index.html'), 'utf8');
+    // Önbellek başlığı dosya bulunmadan önce konur: serveStatic ve arayüz sayfası (index.html) onu taşır
+    app.use('/*', async (c, next) => {
+      c.header('cache-control', arayuzOnbellegi(c.req.path));
+      await next();
+    });
     app.use('/*', serveStatic({ root }));
-    // Olmayan derleme dosyası 404'tür: arayüz sayfası JS yerine dönerse tarayıcı boş ekranda kalır (güncellemeden sonra)
-    app.get('/assets/*', (c) => c.text('Bulunamadı', 404));
+    // Olmayan derleme dosyası 404'tür: arayüz sayfası JS yerine dönerse tarayıcı boş ekranda kalır (güncellemeden sonra).
+    // 404 önbelleğe girmez (bir yıllık başlık yalnız bulunan dosyanın)
+    app.get('/assets/*', (c) => c.text('Bulunamadı', 404, { 'cache-control': 'no-store' }));
     app.get('*', (c) => c.html(indexHtml));
   }
   return app;

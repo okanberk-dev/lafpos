@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { anaBetik } from '@shared/ana-betik';
 import { get } from './api';
 import { useLive } from './live';
 import { toast } from './toast';
@@ -10,6 +11,11 @@ import { toast } from './toast';
  * oturum cihazda saklı, açık ekran adreste. Açık bir pencere (ödeme, onay) varsa kapanana dek beklenir
  */
 const MARK = 'asilpos.guncellendi';
+/**
+ * Açılışta eski bulunup yenilenen sayfanın hedef betiği: yenilemeden sonra da sayfa eskiyse (ara bir önbellek eski
+ * index.html'i vermeyi sürdürüyorsa) ikinci kez yenilenmez, döngüye girmez
+ */
+const ESKI_SAYFA = 'asilpos.eski-sayfa';
 /** İlk görülen derleme (git ile çalışan geliştirme sunucusunda null); `undefined`: henüz sorulmadı */
 let seen: number | null | undefined;
 let reloading = false;
@@ -17,31 +23,80 @@ let reloading = false;
 /** Güncelleme penceresi dışındaki açık pencere: içinde iş yarımken sayfa yenilenmez */
 const modalOpen = () => [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].some((d) => !d.querySelector('[data-guncelleme]'));
 
-/** Sunucunun derlemesini sorar; ilk yanıt "bu sürüm" olarak saklanır, sonra değişirse sayfa yenilenir */
+const oturumOku = (k: string) => {
+  try {
+    return sessionStorage.getItem(k);
+  } catch {
+    return null;
+  }
+};
+const oturumYaz = (k: string, v: string | null) => {
+  try {
+    if (v == null) sessionStorage.removeItem(k);
+    else sessionStorage.setItem(k, v);
+  } catch {
+    /* depolama yoksa yazılmaz */
+  }
+};
+
+/** Sayfayı yeniler: açık pencere (ödeme, onay) kapanana dek beklenir; yenilenen sayfa "Yeni sürüm kuruldu" der */
+function reloadWhenFree(mark: string) {
+  const reload = () => {
+    if (modalOpen()) {
+      setTimeout(reload, 2000);
+      return;
+    }
+    oturumYaz(MARK, mark);
+    window.location.reload();
+  };
+  reload();
+}
+
+/** Sayfanın yüklediği modül betiklerinin yolları */
+const ownScripts = () => [...document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')].map((s) => new URL(s.src, location.href).pathname);
+
+/**
+ * Sunucunun şu an verdiği arayüz bu sayfadan yeni mi: index.html önbelleğe bakılmadan istenir, ana betiği sayfanın
+ * betiklerinde yoksa onun yolu (sayfa eski), varsa ya da anlaşılamazsa null
+ */
+async function newerScript(): Promise<string | null> {
+  const own = ownScripts();
+  if (!own.length) return null;
+  const res = await fetch('/', { cache: 'no-store', headers: { accept: 'text/html' } });
+  if (!res.ok) return null;
+  const latest = anaBetik(await res.text());
+  if (!latest) return null;
+  const path = new URL(latest, location.href).pathname;
+  return own.includes(path) ? null : path;
+}
+
+/**
+ * Sunucunun derlemesini sorar; ilk yanıt "bu sürüm" olarak saklanır, sonra değişirse sayfa yenilenir. İlk bakışta sayfanın
+ * kendisi de denetlenir (27 Kas 2026: güncellemeden sonra kasa ilk açılışta tarayıcı önbelleğindeki eski sürümle
+ * açılıyordu; eski sayfa sunucunun yeni derlemesini "bu sürüm" sanıp hiç yenilenmiyordu): sunucunun verdiği index.html'in
+ * ana betiği sayfanınkinden farklıysa sayfa bir kez yenilenir. Asıl önlem sunucuda (server/app.ts arayuzOnbellegi:
+ * index.html önbellekten açılmaz); bu, ara bir önbellek ya da tarayıcının oturum geri yüklemesi için
+ */
 async function checkBuild() {
   if (reloading) return;
   const h = await get<{ build?: number | null }>('/health');
   const build = typeof h.build === 'number' ? h.build : null;
   if (seen === undefined) {
     seen = build;
+    const yeni = await newerScript().catch(() => null);
+    if (!yeni) {
+      oturumYaz(ESKI_SAYFA, null);
+      return;
+    }
+    if (reloading || oturumOku(ESKI_SAYFA) === yeni) return;
+    oturumYaz(ESKI_SAYFA, yeni);
+    reloading = true;
+    reloadWhenFree(String(build ?? 1));
     return;
   }
   if (build == null || build === seen || reloading) return;
   reloading = true;
-  const reload = () => {
-    // Açık pencere (ödeme, onay) kapanana dek beklenir
-    if (modalOpen()) {
-      setTimeout(reload, 2000);
-      return;
-    }
-    try {
-      sessionStorage.setItem(MARK, String(build));
-    } catch {
-      /* depolama yoksa yine yenile */
-    }
-    window.location.reload();
-  };
-  reload();
+  reloadWhenFree(String(build));
 }
 
 export function useBuildWatch(enabled: boolean) {
@@ -61,34 +116,15 @@ export function useBuildWatch(enabled: boolean) {
   }, [enabled, live]);
 }
 
-/** Uzaktan'da (Vercel) yayımlanan sürüm: index.html'in ana betiği; dosya adı derlemenin özetini taşır */
-const mainScript = (html: string) => /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1] ?? null;
 const REMOTE_POLL_MS = 5 * 60_000;
 let remoteReloading = false;
 
 /** Sayfanın yüklendiği ana betik ile sitedeki son index.html'inki farklıysa (yeni yayın) sayfa yenilenir */
 async function checkRemote() {
   if (remoteReloading || document.visibilityState !== 'visible') return;
-  const own = [...document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')].map((s) => new URL(s.src, location.href).pathname);
-  if (!own.length) return;
-  const res = await fetch('/', { cache: 'no-store', headers: { accept: 'text/html' } });
-  if (!res.ok) return;
-  const latest = mainScript(await res.text());
-  if (!latest || own.includes(new URL(latest, location.href).pathname)) return;
+  if (!(await newerScript())) return;
   remoteReloading = true;
-  const reload = () => {
-    if (modalOpen()) {
-      setTimeout(reload, 2000);
-      return;
-    }
-    try {
-      sessionStorage.setItem(MARK, '1');
-    } catch {
-      /* depolama yoksa yine yenile */
-    }
-    window.location.reload();
-  };
-  reload();
+  reloadWhenFree('1');
 }
 
 /**
