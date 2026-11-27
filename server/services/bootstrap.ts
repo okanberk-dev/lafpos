@@ -8,6 +8,7 @@ import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici
 import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
 import { merkezBranch } from '../sync/merkez';
+import { subeAdi } from '../lib/sube';
 import { dayToDTO } from './days';
 import { getOpenDay } from './orders';
 
@@ -143,6 +144,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       .map((u) => ({ id: u.id, name: u.name, role: u.role, color: u.color, active: u.active })),
     day: dayToDTO(t, getOpenDay(t)),
     branch: merkezBranch(),
+    branchName: subeAdi(),
     integrations: {
       okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode, auto: okcAutoOn(), mealMethods: mealOnDevice(t) },
       receiptPrinter: receiptPrinterKnown(),

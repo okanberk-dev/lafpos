@@ -1465,6 +1465,8 @@ adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   try {
     await stageRestore(input.pathname, user.id, user.name);
   } catch (e) {
+    // Başka şubenin yedeği (409 wrong_branch) olduğu gibi; gerisi bulut hatası
+    if (e instanceof HttpError) throw e;
     throw new HttpError(502, e instanceof Error ? e.message : 'Yedek indirilemedi', 'cloud');
   }
   const fx = new Effects();

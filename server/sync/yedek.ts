@@ -2,10 +2,13 @@ import * as nodeCrypto from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as zlib from 'node:zlib';
+import { sql } from 'drizzle-orm';
 import { db, tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
+import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
+import { ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
 import { signedFetch } from '../lib/signature';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
@@ -129,7 +132,54 @@ export const listCloudBackups = (dukkan?: string) => cloud<{ shop: string; dukka
 export const underBekci = () => posEnv(process.env, 'STDIN_CONTROL') === '1';
 
 /**
- * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar
+ * Yedek dosyasının şubesi (çok şubeli kasa, docs/03-ENTEGRASYON.md §4c): ayarlardaki şube kimliği; satır yoksa yedekte
+ * geçmiş varsa (iş günü ya da gerçek kullanım) eski varsayılan `marina`, yoksa null (şubesiz yeni kurulum). Dosya okunamazsa
+ * undefined: bilinmiyor. Dosya çalışan veritabanına salt okuma için kısa süre eklenir (ATTACH), sonra çıkarılır
+ */
+export function yedekSubesi(file: string): string | null | undefined {
+  try {
+    db.run(sql`ATTACH DATABASE ${file} AS geri_yukle_denetim`);
+  } catch {
+    return undefined;
+  }
+  try {
+    const rows = db.all<{ key: string; value: string }>(sql`SELECT key, value FROM geri_yukle_denetim.settings WHERE key IN ('branchId', 'liveSince')`);
+    const branch = rows.find((r) => r.key === 'branchId');
+    if (branch) {
+      const v = JSON.parse(branch.value) as unknown;
+      return typeof v === 'string' && v ? v : null;
+    }
+    const live = rows.some((r) => r.key === 'liveSince' && JSON.parse(r.value) != null);
+    const days = db.all(sql`SELECT 1 FROM geri_yukle_denetim.business_days LIMIT 1`).length > 0;
+    return live || days ? ESKI_VARSAYILAN_SUBE : null;
+  } catch {
+    return undefined;
+  } finally {
+    try {
+      db.run(sql`DETACH DATABASE geri_yukle_denetim`);
+    } catch {
+      // eklenemediyse çıkarılacak bir şey yok
+    }
+  }
+}
+
+/**
+ * Başka şubenin yedeği şubesi belli kasaya yüklenmez (409 `wrong_branch`): o şubenin satışları, Z zinciri ve şube
+ * kimliği bu kasanın yerine geçer, sonraki gün sonları yanlış şubeye gider. Şubesiz kasada (yeni kurulum) ve şubesi
+ * bilinmeyen yedekte denetim yok: yeni bilgisayara kendi yedeğini yüklemek serbest
+ */
+export function assertSameBranchBackup(file: string): void {
+  const mine = kasaSubesi();
+  if (!mine) return;
+  const theirs = yedekSubesi(file);
+  if (theirs && theirs !== mine) {
+    throw new HttpError(409, `Bu yedek "${theirs}" şubesinin kasasından, bu kasa "${mine}" şubesinin. Başka şubenin yedeği bu kasaya yüklenmez: o şubenin satışları ve Z zinciri bu kasanın yerine geçerdi`, 'wrong_branch');
+  }
+}
+
+/**
+ * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar.
+ * Başka şubenin yedeği bırakılmaz (`assertSameBranchBackup`)
  */
 export async function stageRestore(pathname: string, byUserId: string, byName = ''): Promise<void> {
   const { url } = await cloud<{ url: string }>('indir', { pathname });
@@ -143,6 +193,12 @@ export async function stageRestore(pathname: string, byUserId: string, byName = 
   try {
     writeFileSync(resolve(dir, 'istek.json'), JSON.stringify({ pathname, by: byUserId, byName, at: Date.now() }));
     writeFileSync(resolve(dir, 'hazir.db.part'), db);
+    try {
+      assertSameBranchBackup(resolve(dir, 'hazir.db.part'));
+    } finally {
+      // Okurken SQLite'ın açtığı yan dosyalar yedeğe karışmasın
+      for (const f of ['hazir.db.part-wal', 'hazir.db.part-shm', 'hazir.db.part-journal']) rmSync(resolve(dir, f), { force: true });
+    }
     renameSync(resolve(dir, 'hazir.db.part'), resolve(dir, 'hazir.db'));
   } catch (e) {
     for (const f of ['hazir.db', 'hazir.db.part', 'istek.json']) rmSync(resolve(dir, f), { force: true });

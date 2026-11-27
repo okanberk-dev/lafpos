@@ -302,6 +302,11 @@ export interface BootstrapDTO {
    * Merkez'e bağlı değilse ya da henüz verilmediyse null (eski sunucu göndermez)
    */
   branch?: { name: string | null; code: string | null } | null;
+  /**
+   * Kasanın şubesinin adı (ladmin kurulumundan, yoksa şube kimliğinden: "Marina"); gün sonu metninin ve bildirimin
+   * başlığında işletme adının yanına yazılır. Şube seçilmediyse null (eski sunucu göndermez)
+   */
+  branchName?: string | null;
   integrations: {
     /** `auto`: "Ödemeyi al" sepeti kendiliğinden cihaza yollar (Yönetim › Yazarkasa POS) */
     okc: {
