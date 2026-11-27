@@ -328,6 +328,11 @@ adisyon açıkken kalemler ve tutar, ödemeden sonra teşekkür. İkinci ekranda
 Windows'ta "Genişlet" modunda olduğuna bakın (Win + P › Genişlet) ve kasa kısayolunu kapatıp yeniden açın. Görünüm ve
 metinler Yönetim › Müşteri ekranı'ndan.
 
+Tarayıcı sayfayı çevirmeyi önermez: `index.html` sayfayı çevrilmez diye işaretler (`translate="no"` ve
+`<meta name="google" content="notranslate">`). Pencere `--disable-features=Translate` ile açılsa da tarayıcının dili
+Türkçe olmayan bilgisayarda müşteri ekranında "Google Translate" balonu çıkıyordu (28 Kasım 2026); işaret sayfanın
+kendisinde olduğu için kasa, tablet ve Uzaktan'da da geçerli (`tests/ui-rules.test.ts`).
+
 ## 4. Uygulamanın kasa ayarları
 
 - **Ekran kararmasın** (Yönetim › Ayarlar › Kasa ve gün, varsayılan açık): AsilPOS ekran kilidi ister (Screen

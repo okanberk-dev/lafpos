@@ -16,7 +16,11 @@ function files(dir: string): string[] {
 describe('sayfa kabuğu', () => {
   const html = read('index.html');
   it('Türkçe: tarayıcı büyük harfte i → İ yapsın', () => {
-    expect(html).toMatch(/<html lang="tr">/);
+    expect(html).toMatch(/<html lang="tr"[ >]/);
+  });
+  it('tarayıcı çeviri önermez (müşteri ekranında Google Translate balonu çıkmasın)', () => {
+    expect(html).toMatch(/<html [^>]*translate="no"/);
+    expect(html).toMatch(/<meta name="google" content="notranslate" \/>/);
   });
   it('telefonda çentik alanı kullanılır, yakınlaştırma kapatılmaz', () => {
     expect(html).toMatch(/viewport-fit=cover/);
