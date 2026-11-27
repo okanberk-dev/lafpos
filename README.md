@@ -47,7 +47,10 @@ Windows kasa bilgisayarı için tek dosyalık kurulum (sahibin adımları aşağ
 
 Kafedeki bilgisayara AsilPOS bir kez kurulur; sonraki sürümler kendiliğinden gelir. Komut yazmak, anahtar (token)
 oluşturmak gerekmez. İki yol var: siteden kurulum (en kolayı, GitHub hesabı gerekmez) ya da GitHub'daki kurulum
-dosyası.
+dosyası. **İkisi de aynı programı kurar:** masaüstünde ve Başlat menüsünde **AsilPOS Kasa**, Windows açılınca
+kendiliğinden açılan tam ekran kasa (adres çubuğu yok), aynı otomatik güncellemeler. Kasa ekranı açıkken AsilPOS Kasa'ya
+yeniden basmak aynı pencereyi öne getirir; kapanırsa 15 saniyede kendiliğinden yeniden açılır. Biriyle kurulanı öbürüyle
+onarabilir ya da güncelleyebilirsiniz. Ayrıntı [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §3 ve §9.
 
 ### Siteden kurulum
 
@@ -81,7 +84,9 @@ verilsin mi?" sorusuna **Evet** deyin.
 
 **3. Kurun.** İleri › Kur › Son. AsilPOS arka planda çalışmaya başlar ve bilgisayar her açıldığında kendiliğinden
 açılır. Kasa ekranı masaüstündeki **AsilPOS Kasa** kısayoluyla açılır. Tabletler ve telefonlar için adres ve
-karekod: Yönetim › Ağ ve uzaktan erişim.
+karekod: Yönetim › Ağ ve uzaktan erişim; kurulum gerekmez. iPad ve iPhone'da Safari › Paylaş › **Ana Ekrana Ekle** ile
+uygulama gibi açılır; Android'de kafenin ağında yalnız kısayol eklenir (adres çubuğuyla açılır, tam uygulama için https:
+[docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §5).
 
 **4. Bilgileri girin (programın içinden).** Kasa ekranında patron PIN'inizle girin, **Yönetim › Bağlantı
 bilgileri**'ni açın. Size verilen satırları "Hazır satırları yapıştır" kutusuna yapıştırıp **Satırları kaydet**'e
@@ -118,7 +123,8 @@ Genel bakış › Sistem sağlığı'nda.
 
 **Sorun olursa.**
 
-- Kasa ekranı açılmıyor: Başlat › AsilPOS › **Sunucuyu yeniden başlat**, bir dakika bekleyin.
+- Kasa ekranı açılmıyor: "AsilPOS açılıyor" penceresi bir buçuk dakika bekler; açılmazsa Başlat › AsilPOS ›
+  **Sunucuyu yeniden başlat**, bir dakika bekleyin (sunucu gelince kasa ekranı kendiliğinden açılır).
 - Hâlâ açılmıyor: bilgisayarı yeniden başlatın.
 - "Sorun var" ya da "Eski sürüme dönüldü" yazıyor: satış etkilenmez; sonraki sürüm gelince yeniden denenir.
   İsterseniz elle güncelleyin.
@@ -126,8 +132,9 @@ Genel bakış › Sistem sağlığı'nda.
 - Kaldırmak: Ayarlar › Uygulamalar › AsilPOS › Kaldır. Veriler ve yedekler silinmez
   (`C:\ProgramData\LafPOS`).
 
-**Geliştirici notu.** `main`'e her push'ta GitHub Actions kurulum dosyasını Windows'ta derleyip GitHub Release
-olarak yayımlar (`.github/workflows/windows.yml`). Güncelleme kanalını Vercel'deki `lafpos` projesi (adı değişmedi) her derlemede
+**Geliştirici notu.** `main`'e her push'ta GitHub Actions kurulum dosyasını Windows'ta derler, kafedeki sürümden bu
+sürüme güncellemeyi ve kasa penceresini gerçek Windows'ta dener, sonra GitHub Release olarak yayımlar
+(`.github/workflows/windows.yml`, `scripts/kasa/windows/kurulum/ci-kurulum.mjs`). Güncelleme kanalını Vercel'deki `lafpos` projesi (adı değişmedi) her derlemede
 yazar (`npm run kanal` → `https://lafpos.laffogato.net/guncelleme/surum.json` ve uygulama zip'i; gizli anahtar
 yok). Kasadaki güncelleyici `scripts/kasa/windows/kurulum/guncelle.mjs`; ayrıntı
 [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §6.

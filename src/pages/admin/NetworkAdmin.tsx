@@ -225,7 +225,7 @@ export default function NetworkAdmin() {
         >
           {local ? (
             <Address item={local} off={n.loopbackOnly}>
-              <p className={HINT}>Aynı Wi-Fi’deki tablet ya da telefonun kamerasıyla okutun; Chrome menüsünden “Ana ekrana ekle” ile uygulama gibi açılır</p>
+              <p className={HINT}>Aynı Wi-Fi’deki tablet ya da telefonun kamerasıyla okutun; açılınca kişi menüsündeki “Ana ekrana ekle” cihaza göre yolu söyler</p>
               <p className={HINT}>Adres değişmesin diye modemde bu bilgisayara sabit IP verin (DHCP rezervasyonu)</p>
             </Address>
           ) : (

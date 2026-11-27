@@ -19,6 +19,10 @@ $veri = Join-Path $env:ProgramData 'LafPOS' # eski-ad: kurulu kasanın veri klas
 $sys = Join-Path $env:SystemRoot 'System32'
 $gorev = 'LafPOS Sunucu'
 
+# Kasa penceresi, müşteri ekranı ve kasa bekçisi (oturumdaki kullanıcının süreçleri) kapanır: kaldırınca bekçi ve boş tam
+# ekran kalmasın (kurulum dosyasının Kaldir.exe'si de aynısını yapar)
+Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and ($_.CommandLine -match 'kasa-yazici\.ps1' -or $_.CommandLine -match '\\LafPOS\\(chrome|edge)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 & (Join-Path $sys 'schtasks.exe') /End /TN $gorev 2>&1 | Out-Null
 & (Join-Path $sys 'schtasks.exe') /Delete /TN $gorev /F 2>&1 | Out-Null
 Start-Sleep -Seconds 2

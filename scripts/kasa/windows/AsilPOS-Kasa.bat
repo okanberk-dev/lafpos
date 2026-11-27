@@ -1,20 +1,36 @@
 @echo off
-rem AsilPOS kasa ekrani (Windows): Chrome (yoksa Edge) kiosk (tam ekran, adres cubuksuz) ve sessiz fis yazdirma ile acar.
-rem Ayrinti: docs/05-KASA-BILGISAYARI.md. Kiosktan cikmak icin Alt+F4.
+rem AsilPOS kasa ekrani (Windows). Kurulumun kisayollari 27 Kasim 2026'dan beri bunu degil, konsolsuz
+rem "powershell -WindowStyle Hidden -File app\kasa-yazici.ps1 -Ac"yi acar (kurulum-yenile.mjs shortcutSpec): bu dosya eski,
+rem elle kopyalanmis ya da gorev cubuguna sabitlenmis kisayollar icin ayni programi acip hemen kapanir. Ayrinti:
+rem docs/05-KASA-BILGISAYARI.md. Kapatilan kasa penceresini bekci 15 sn icinde yeniden acar (bakim arasi: Yonetim, Ag ve uzaktan erisim).
 setlocal
 rem Ad degisikligi (26 Kas 2026) oncesinin degiskeni de okunur
 if "%ASILPOS_URL%"=="" set "ASILPOS_URL=%LAFPOS_URL%"
 if "%ASILPOS_URL%"=="" set "ASILPOS_URL=http://localhost:4000/"
-rem Sunucu acilana dek bekle (en cok 90 sn); bilgisayar yeni acildiysa sunucu birkac saniye gec gelir.
-rem Denetim 127.0.0.1'e: sunucu IPv4 dinler, Windows'ta localhost once IPv6 (::1) denenip her seferinde ~2 sn kaybettirir
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+rem Ustteki iki nokta satirlari bos etiket, silmeyin: guncelleme bu dosyayi 27 Kasim oncesinin hali calisirken
+rem degistirebilir. cmd kaldigi bayttan (eski dosyada 881, 1243, 1575) bu dosyada surer, etikete duser ve asagidaki
+rem programi acar; program kasa penceresini ikinci kez acmaz, one getirir (tests/masaustu-programi.test.ts)
+rem Program: betik sunucuyu bekler, yazicilari bildirir, bekciyi ve kasa penceresini acar (zaten aciksa one getirir)
+if not exist "%~dp0app\kasa-yazici.ps1" goto eski
+start "" /min "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1" -Ac
+exit /b 0
+
+:eski
+rem Betik yoksa (git ile gelistirici kurulumu, scripts\kasa\windows\kur.ps1) eski yol: sunucu acilana dek bekle (en cok
+rem 90 sn), sonra Chrome (yoksa Edge). Denetim 127.0.0.1'e: sunucu IPv4 dinler, Windows'ta localhost once IPv6 (::1)
+rem denenip her seferinde ~2 sn kaybettirir
 powershell -NoProfile -Command "$u=($env:ASILPOS_URL -replace '//localhost','//127.0.0.1')+'api/health'; for($i=0;$i -lt 90;$i++){ try { if((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 $u).StatusCode -eq 200){ exit 0 } } catch {}; Start-Sleep 1 }"
-rem Fis yazicisi: bilgisayardaki yazicilari AsilPOS'a bildirir, secilen (ya da tek) fis yazicisini varsayilan yapar;
-rem sessiz yazdirma ona basar. Betik guncellemeyle gelir (app\); yoksa ya da hata verirse kasa yine acilir
-if exist "%~dp0app\kasa-yazici.ps1" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1"
-rem Kasa penceresi: betik acar (zaten aciksa ikincisini acmaz; ayni betigin bekcisi kapanan pencereyi 15 sn'de yeniden
-rem acar). Betik yoksa ya da tarayici bulamazsa asagidaki eski yol
-if exist "%~dp0app\kasa-yazici.ps1" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1" -KasaAc
-if exist "%~dp0app\kasa-yazici.ps1" if not errorlevel 1 exit /b 0
 set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
@@ -33,5 +49,6 @@ start "" "%CHROME%" --kiosk --kiosk-printing --app=%ASILPOS_URL% --user-data-dir
 exit /b 0
 
 :edge
-start "" "%EDGE%" --kiosk %ASILPOS_URL% --edge-kiosk-type=fullscreen --kiosk-printing --user-data-dir="%LocalAppData%\LafPOS\edge" --no-first-run --no-default-browser-check --disable-pinch --overscroll-history-navigation=0 --autoplay-policy=no-user-gesture-required --disable-features=Translate --noerrdialogs
+rem Edge'in kiosk kipi her zaman InPrivate acar (oturum ve sepet her acilista kaybolurdu): tam ekran uygulama penceresi
+start "" "%EDGE%" --app=%ASILPOS_URL% --start-fullscreen --kiosk-printing --user-data-dir="%LocalAppData%\LafPOS\edge" --no-first-run --no-default-browser-check --disable-pinch --overscroll-history-navigation=0 --autoplay-policy=no-user-gesture-required --disable-session-crashed-bubble --disable-features=Translate --noerrdialogs
 exit /b 0

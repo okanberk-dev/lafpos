@@ -3,12 +3,20 @@
   "short_name": "AsilPOS",
   "description": "L'Affogato satış noktası: masa, adisyon, bar ekranı, kasa ve patron paneli",
   "lang": "tr",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#eceef1",
   "theme_color": "#eceef1",
   "icons": [
+    {
+      "src": "/icons/icon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/favicon.svg",
       "sizes": "any",

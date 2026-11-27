@@ -170,7 +170,10 @@ export default function FloorPage() {
                     {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-headline text-[15px] font-bold tracking-[-0.02em]">{o.label}</span>
+                    {/* Platformun kısa kodu ("Trendyol Go 049") kurye ve barın söylediği numara: dar sütunda üç noktayla yutulmaz, alt satıra iner; tam adı ipucunda */}
+                    <span className="line-clamp-2 break-words font-headline text-[15px] font-bold leading-tight tracking-[-0.02em]" title={o.label}>
+                      {o.label}
+                    </span>
                     <span className="text-xs text-muted">{joinMeta([o.itemCount > 0 && `${o.itemCount} ürün`, fmtAgo(o.openedAt, now)])}</span>
                   </span>
                   {o.itemCount === 0 ? (

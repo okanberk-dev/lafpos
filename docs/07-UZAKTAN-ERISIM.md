@@ -25,8 +25,9 @@ işlem içindir.
 2. **Telefon:** App Store ya da Google Play'den Tailscale'i kurun, **aynı hesapla** girin.
 3. Kafede AsilPOS'ta **Yönetim › Ağ ve uzaktan erişim**'i açın. "Dışarıdan (Tailscale)" kartında "Bağlı"
    yazar; adres `http://100.x.y.z:4000` ve karekodu oradadır.
-4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. Tarayıcı menüsünden
-   "Ana ekrana ekle" ile uygulama gibi açılır.
+4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. iPhone'da Safari › Paylaş ›
+   "Ana Ekrana Ekle" ile uygulama gibi açılır; Android'de bu http adresinde yalnız kısayol eklenir (adres çubuğuyla;
+   `docs/05-KASA-BILGISAYARI.md` §5).
 
 AsilPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kafenin ağına ve Tailscale aralığına
 (`100.64.0.0/10`) açar; başka ayar gerekmez. Git ile kurulan bilgisayarda Windows ilk açılışta izin sorar:
@@ -207,10 +208,11 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   PowerShell 5.1 iki dilli tek dosyadır: yönetici izni ister, kanalın surum.json'unu okur (okunamazsa içine gömülü
   derlemeyi kullanır), Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama yükünü
   kanaldan SHA-256 ile doğrulayarak indirir, `asilpos.nsi` ile aynı klasörleri, görevi, güvenlik duvarını,
-  kısayolları ve Uygulamalar kaydını yazar. Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa
-  sorar, önce veritabanının kopyasını alır). Kurulum dosyasının Kaldir.exe'si yoksa kaldırma
-  `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (AsilPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
-  Vercel NSIS derleyemez.
+  kısayolları (aynı listeden aynı betikle: `app\kurulum-yenile.mjs kisayollar`) ve Uygulamalar kaydını yazar: kurulan
+  program kurulum dosyasınınkiyle aynıdır, Windows CI ikisini kurup karşılaştırır (`docs/05-KASA-BILGISAYARI.md` §9).
+  Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa sorar, önce veritabanının kopyasını alır).
+  Kurulum dosyasının Kaldir.exe'si yoksa kaldırma `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (AsilPOS-Kurulum.exe)
+  GitHub Releases'ta kalır: depo özel ve Vercel NSIS derleyemez; İndir sayfası iki yolun aynı programı kurduğunu söyler.
 
 - **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
   kural `shared/lisans.ts`, `tests/merkez.test.ts`, `tests/denetim-merkez.test.ts`). Yalnız sahibin oturumuyla

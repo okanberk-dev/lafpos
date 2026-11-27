@@ -300,11 +300,12 @@ describe('güncelleme: deneme kanalı (Windows CI)', () => {
 
   it('Windows CI gerçek kurulumu dener: sessiz kurulum, güncelleme, geri dönüş (iş akışı ve betik)', () => {
     const wf = readFileSync(join(__dirname, '../.github/workflows/windows.yml'), 'utf8');
-    expect(wf).toMatch(/-ArgumentList '\/S' -Wait/);
     expect(wf).toContain('node scripts/kasa/windows/kurulum/ci-kurulum.mjs');
     // Kurulamayan dosya yayımlanmaz: deneme yayımlamadan önce
     expect(wf.indexOf('ci-kurulum.mjs')).toBeLessThan(wf.indexOf('Sürümü yayımla'));
     const ci = readFileSync(join(__dirname, '../scripts/kasa/windows/kurulum/ci-kurulum.mjs'), 'utf8');
+    // Sessiz kurulum (önceki sürüm ve bu derleme) betikte, bitmesi beklenir
+    expect(ci).toMatch(/-ArgumentList '\/S' -Wait/);
     for (const s of ['ASILPOS_GUNCELLEME_KANAL', 'app.eski', 'node.yeni', 'geri-dondu', 'Güncellendi']) expect(ci).toContain(s);
   });
 });

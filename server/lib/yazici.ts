@@ -1,7 +1,7 @@
 /**
  * Fiş yazıcısı (Windows kurulumu, kablolu/USB ya da ağdaki Windows yazıcısı). Kasa ekranı Chrome'da `--kiosk-printing`
- * ile açılır: fiş, Z ve X önizlemesiz Windows'un varsayılan yazıcısından çıkar. Kasa kısayolu (AsilPOS-Kasa.bat) Chrome'u
- * açmadan önce `app\kasa-yazici.ps1`'i oturumdaki kullanıcı olarak çalıştırır: bilgisayardaki yazıcıları bu sunucuya
+ * ile açılır: fiş, Z ve X önizlemesiz Windows'un varsayılan yazıcısından çıkar. Kasa programı (`app\kasa-yazici.ps1 -Ac`,
+ * kasa kısayolu; oturumdaki kullanıcı) kasa penceresini açmadan önce bilgisayardaki yazıcıları bu sunucuya
  * bildirir (`POST /api/kasa/yazicilar`, yalnız bu bilgisayardan) ve yanıttaki yazıcıyı o kullanıcının varsayılan yazıcısı
  * yapar. Yazıcı yönetimden seçilir (Yönetim › Ayarlar ve yedek › Fiş yazıcısı); seçilmediyse tek fiş yazıcısı
  * kendiliğinden seçilir (`pickReceiptPrinter`). Ayrıntı: docs/05-KASA-BILGISAYARI.md §3.

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink, MonitorDown, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AppWindow, ExternalLink, MonitorDown, RefreshCw, ShieldCheck, TabletSmartphone } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { LafTile } from '@/components/LafMark';
@@ -15,7 +15,7 @@ import { useRemoteSignOut } from '@/lib/remote';
 const STEPS = [
   { title: 'İndirin', text: `${WEB_INSTALLER_NAME} dosyası İndirilenler klasörüne iner. Tarayıcı “sık indirilmiyor” derse Sakla’ya basın.` },
   { title: 'Çift tıklayın', text: 'Windows “Bilgisayarınız korundu” derse Ek bilgi’ye, sonra Yine de çalıştır’a basın. İzin sorusuna Evet deyin.' },
-  { title: 'Bekleyin', text: 'Kurulum programı internetten indirip doğrular ve kurar; birkaç dakika sürer. Bitince kasa ekranı açılır.' },
+  { title: 'Bekleyin', text: 'Kurulum programı internetten indirip doğrular ve kurar; birkaç dakika sürer. Bitince kasa ekranı açılır; sonra masaüstündeki AsilPOS Kasa’yla açılır.' },
   { title: 'Bilgileri girin', text: 'Patron PIN’iyle girin, Yönetim › Bağlantı bilgileri’nde size verilen satırları yapıştırıp kaydedin. Pavo’yu Yönetim › Yazarkasa POS’tan eşleştirin.' },
 ];
 
@@ -33,7 +33,7 @@ export function DownloadContent() {
   const manifest = useQuery({ ...channelVersionQuery, retry: false });
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <Card title="Siteden kurulum" subtitle="Önerilen yol: hesap ya da anahtar gerekmez">
+      <Card title="Siteden kurulum" subtitle="Önerilen yol: hesap ya da anahtar gerekmez. Kurulum dosyasıyla aynı program kurulur">
         <div className="p-5">
           {/* Ana eylem kartın başında: önce indirilir, adımlar sonrasını anlatır */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -62,6 +62,12 @@ export function DownloadContent() {
         <Card title="Bilmeniz gerekenler">
           <ul className="space-y-3 p-5 text-sm">
             <li className="flex gap-2.5">
+              <AppWindow aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
+              <span className="text-pretty">
+                İki yol da aynı programı kurar: masaüstünde ve Başlat menüsünde AsilPOS Kasa, Windows açılınca kendiliğinden açılan tam ekran kasa, aynı otomatik güncellemeler. Kasa ekranı açıkken simgeye yeniden basmak aynı pencereyi öne getirir.
+              </span>
+            </li>
+            <li className="flex gap-2.5">
               <MonitorDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
               <span className="text-pretty">64 bit Windows 10 ya da 11 ve internet bağlantısı gerekir; kurulum yönetici izni ister.</span>
             </li>
@@ -71,13 +77,21 @@ export function DownloadContent() {
             </li>
             <li className="flex gap-2.5">
               <RefreshCw aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
-              <span className="text-pretty">Yeniden çalıştırmak onarır ya da son sürüme günceller. Veriler ve ayarlar kalır.</span>
+              <span className="text-pretty">Yeniden çalıştırmak onarır ya da son sürüme günceller; kurulum dosyasıyla kurulanı da. Veriler ve ayarlar kalır.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <TabletSmartphone aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
+              <span className="text-pretty">
+                Tablet ve telefona kurulum gerekmez: kafenin ağından adresle açılır. iPad ve iPhone’da Safari › Paylaş › Ana Ekrana Ekle ile uygulama gibi açılır; Android’de yalnız kısayol eklenir, adres çubuğu kalır.
+              </span>
             </li>
           </ul>
         </Card>
-        <Card title="Kurulum dosyası (GitHub)" subtitle="Alternatif: depoya erişimi olan GitHub hesabıyla">
+        <Card title="Kurulum dosyası (GitHub)" subtitle="Aynı program tek dosyada: depoya erişimi olan GitHub hesabıyla">
           <div className="p-5">
-            <p className="text-pretty text-sm text-muted">Tek dosyalık AsilPOS-Kurulum.exe, internet beklemeden kurar. GitHub’a girip sayfadaki Assets altından indirin.</p>
+            <p className="text-pretty text-sm text-muted">
+              AsilPOS-Kurulum.exe siteden kurulumla aynı programı kurar; farkı internet beklemeden kurmasıdır. GitHub’a girip sayfadaki Assets altından indirin.
+            </p>
             <a href={RELEASES_URL} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'md', { className: 'mt-4 max-sm:w-full' })}>
               <ExternalLink aria-hidden="true" className="size-4" />
               GitHub’da aç

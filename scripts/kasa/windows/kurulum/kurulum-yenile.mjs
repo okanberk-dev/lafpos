@@ -16,13 +16,25 @@
 //   siteden kurulumun kaldırıcısına (iki adı da siler) geçer; kayıtta görünen ad AsilPOS olur (kisayollar.ps1).
 // Yapılamayan bir şey kalırsa güncelleme durumuna (durum.json `kurulumUyari`) yazılır; Merkez nabzıyla patron panelinde
 // "Kurulumu yenileyin" görünür. Bağımlılıksız; pakete girer (paket.mjs). Testi tests/kurulum-yenile.test.ts.
+//
+// Tek liste (27 Kasım 2026, "exe ve siteden aynı program"): kurulum dosyası (asilpos.nsi) ve siteden kurulum
+// (web-kurucu.ps1) kısayolları elle yazmaz; kurulan app\ içindeki bu dosyayı çalıştırır:
+//   node app\kurulum-yenile.mjs kisayollar --gruplar masaustu,baslangic
+// Aynı shortcutSpec, aynı kisayollar.ps1 (-Kur: seçilen isteğe bağlı gruplar koşulsuz yazılır). Böylece iki kurulum ve
+// güncelleme aynı kısayolları yazar; liste tek yerde değişir. `--yalniz-liste` yalnız listeyi yazar (paket denemesi, CI).
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, win32 } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve, win32 } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** app\ içinde kök dosyaların klasörü */
 export const ROOT_DIR = 'kok';
-/** Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır */
+/**
+ * Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır. AsilPOS-Kasa.bat değiştirilir: 27 Kasım
+ * öncesinin hâli (90 sn'ye kadar çalışır) o an açıksa cmd kaldığı bayttan yenisini okur; yenisinde o baytlar boş etiket,
+ * oradan programı açar (tests/masaustu-programi.test.ts). Yenisi anında kapanır
+ */
 export const LOCKED_ROOT_FILES = ['baslat.cmd'];
 /**
  * Yalnız kurulumda zaten varsa yenilenen kök dosyalar: siteden kurulumun kaldırıcısı (Uygulamalar listesi onu çağırır;
@@ -39,29 +51,39 @@ export const UNINSTALL_KEY = 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\
 /** Başlat menüsü klasörü ve kısayolların eski adı (shared/eski-adlar.ts; ad değişikliğinden önceki kurulum) */
 export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
 /**
- * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betik, asilpos.nsi ve
- * web-kurucu.ps1 ile aynı). 3: müşteri ekranı sunucu cevap verince açılır (inceleme, 23 Kas 2026); kasada çalışan eski
- * bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir. 4: bakım arasında (Yönetim › Ağ) kasa penceresi
- * yeniden açılmaz
+ * Kasa bekçisinin sürümü: kasa-yazici.ps1 eski sürüm bekçiyi bununla tanıyıp yenisiyle değiştirir (betiğin
+ * `$BekciSurumu`'yla aynı; kurulumlar bekçi kısayolunu bu listeden yazar). 3: müşteri ekranı sunucu cevap verince açılır
+ * (inceleme, 23 Kas 2026); kasada çalışan eski bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir. 4: bakım
+ * arasında (Yönetim › Ağ) kasa penceresi yeniden açılmaz. 5: program (27 Kas 2026): Edge InPrivate olmayan tam ekran
+ * pencerede; bekçi diskteki betik değişince (güncelleme) yenisiyle yeniden başlar, sonraki sürümler oturum kapanmayı beklemez
  */
-export const WATCHER_VERSION = 4;
+export const WATCHER_VERSION = 5;
+/** Kurulumların isteğe bağlı kısayol grupları: masaüstündeki kasa ve oturum açılınca kasa (bekçisiyle) */
+export const INSTALL_GROUPS = ['masaustu', 'baslangic'];
+/** Kasa kısayollarının açtığı program kipi (kasa-yazici.ps1) */
+export const KASA_MODE = '-Ac';
 /** Kasa bekçisinin Başlangıç kısayolu (ASCII ad: kasa-yazici.ps1 de arar) */
 export const WATCHER_LINK = 'AsilPOS Kasa Bekcisi.lnk';
 const MARKER = 'kurulum-yenileme.json';
 const errText = (e) => (e instanceof Error ? e.message : String(e));
 
 /**
- * Kurulumun kısayolları (asilpos.nsi ve web-kurucu.ps1 ile aynı adlar). `klasor`: .NET özel klasör adı; `kosul`: aynı
- * klasörde bu dosyalardan hiçbiri yoksa kısayol yazılmaz (yalnız varsa yenilenir); `eski`: kısayol yazılınca aynı
- * klasörden silinen eski adlar
+ * Kurulumun kısayolları: iki kurulum ve güncelleme bunu yazar (kisayollar.ps1). `klasor`: .NET özel klasör adı; `grup`:
+ * isteğe bağlı grup (kurulumda seçilirse yazılır); `kosul`: güncellemede aynı klasörde bu dosyalardan hiçbiri yoksa kısayol
+ * yazılmaz (yalnız varsa yenilenir); `eski`: kısayol yazılınca aynı klasörden silinen eski adlar; `dosya`: kısayolun
+ * çalıştırdığı dosya (yoksa kısayol yazılmaz, eskisi kalır); `url`: .url (İnternet kısayolu).
+ *
+ * Kasa kısayolları (27 Kasım 2026, program): konsolsuz PowerShell kasa-yazici.ps1 -Ac'yi açar (sunucuyu bekler, pencereyi
+ * açar ya da öne getirir). Eskiden AsilPOS-Kasa.bat'ı açardı: görev çubuğunda 90 sn'ye kadar küçültülmüş bir konsol
+ * dururdu. Adlar değişmedi: kurulum dosyasının kurulu kaldırıcısı (Kaldir.exe) sabit adları siler
  */
 export function shortcutSpec(installDir, systemRoot = 'C:\\Windows') {
   const j = win32.join;
   const ps = j(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const psFile = (file, extra = '') => `-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${j(installDir, file)}"${extra}`;
-  const kasa = j(installDir, 'AsilPOS-Kasa.bat');
+  const launcher = 'app\\kasa-yazici.ps1';
   const base = { ikon: `${j(installDir, 'asilpos.ico')},0`, calismaKlasoru: installDir };
-  const kasaLink = { ...base, hedef: kasa, arguman: '', aciklama: 'Kasa ekranı (tam ekran)', pencere: 7 };
+  const kasaLink = { ...base, hedef: ps, dosya: j(installDir, launcher), arguman: psFile(launcher, ` ${KASA_MODE}`), aciklama: 'Kasa ekranı (tam ekran)', pencere: 7 };
   // Masaüstü ve Başlangıç'taki kasa kısayolu eski adla da olabilir: koşulda ikisi, yenisi yazılınca eskisi silinir
   const kasaAdi = `${MENU.yeni} Kasa.lnk`;
   const eskiKasa = `${MENU.eski} Kasa.lnk`;
@@ -72,16 +94,20 @@ export function shortcutSpec(installDir, systemRoot = 'C:\\Windows') {
     { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Sunucu günlüğü.lnk', hedef: ps, arguman: psFile('yonet.ps1', ' gunluk'), aciklama: '', pencere: 7 },
     { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Kasa hazırlığı.lnk', hedef: ps, arguman: psFile('app\\kasa-hazirla.ps1'), aciklama: 'Ekran, Windows Update, ağ kartı, otomatik oturum', pencere: 7 },
     { ...base, klasor: 'CommonPrograms', ad: 'AsilPOS\\Kurulum notları.lnk', hedef: j(installDir, 'BENIOKU.txt'), arguman: '', aciklama: '', pencere: 1 },
-    { ...kasaLink, klasor: 'CommonDesktopDirectory', ad: kasaAdi, kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
-    { ...kasaLink, klasor: 'CommonStartup', ad: kasaAdi, kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
+    // AsilPOS'u bu bilgisayarın kendi tarayıcısında (sekmede) açar; kasa penceresi değil
+    { klasor: 'CommonPrograms', ad: 'AsilPOS\\AsilPOS (tarayıcıda).url', url: 'http://localhost:4000/', ikonDosyasi: j(installDir, 'asilpos.ico') },
+    { ...kasaLink, klasor: 'CommonDesktopDirectory', ad: kasaAdi, grup: 'masaustu', kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
+    { ...kasaLink, klasor: 'CommonStartup', ad: kasaAdi, grup: 'baslangic', kosul: [kasaAdi, eskiKasa], eski: [eskiKasa] },
     {
       ...base,
       klasor: 'CommonStartup',
       ad: WATCHER_LINK,
+      grup: 'baslangic',
       kosul: [kasaAdi, eskiKasa],
       eski: [`${MENU.eski} Kasa Bekcisi.lnk`],
       hedef: ps,
-      arguman: psFile('app\\kasa-yazici.ps1', ` -Bekci -BekciSurum ${WATCHER_VERSION}`),
+      dosya: j(installDir, launcher),
+      arguman: psFile(launcher, ` -Bekci -BekciSurum ${WATCHER_VERSION}`),
       aciklama: 'Kasa ve müşteri ekranı açık kalsın (kapanırsa yeniden açar)',
       pencere: 7,
     },
@@ -217,3 +243,79 @@ export async function refreshInstall(deps) {
     /* durum yazılamadı: günlükte var */
   }
 }
+
+/** Kurulumun kısayol adımının kisayollar.ps1 argümanları: Uygulamalar kaydına ve eski menüye dokunmaz (kurulum kendisi yazar) */
+export function installArgs({ appDir, listFile, groups }) {
+  return ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(appDir, 'kisayollar.ps1'), '-Liste', listFile, '-Kur', '-Gruplar', groups.join(',')];
+}
+
+/** `--gruplar masaustu,baslangic` (boş da olabilir: yalnız Başlat menüsü); bilinmeyen grup hatadır */
+export function parseGroups(text) {
+  const groups = [...new Set(String(text ?? '').split(',').map((g) => g.trim()).filter(Boolean))];
+  const bad = groups.filter((g) => !INSTALL_GROUPS.includes(g));
+  if (bad.length) throw new Error(`bilinmeyen kısayol grubu: ${bad.join(', ')}`);
+  return groups;
+}
+
+/**
+ * Kurulumların kısayol adımı (asilpos.nsi ve web-kurucu.ps1 aynı komutu çalıştırır). Fırlatmaz; hata yoksa null
+ * @param {{ appDir: string, installDir: string, groups: string[], systemRoot?: string,
+ *   run?: (exe: string, args: string[]) => Promise<{ code: number, out: string }> }} o
+ */
+export async function installShortcuts(o) {
+  const systemRoot = o.systemRoot ?? process.env.SystemRoot ?? 'C:\\Windows';
+  const listFile = join(tmpdir(), `asilpos-kisayollar-${process.pid}.json`);
+  try {
+    writeFileSync(listFile, JSON.stringify(shortcutSpec(o.installDir, systemRoot), null, 2));
+    const ps = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const run =
+      o.run ??
+      ((exe, args) =>
+        new Promise((done) => execFile(exe, args, { timeout: 60_000, windowsHide: true }, (err, stdout) => done({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, out: String(stdout ?? '') }))));
+    const r = await run(ps, installArgs({ appDir: o.appDir, listFile, groups: o.groups }));
+    const lines = r.out.split(/\r?\n/).filter((l) => l.startsWith('HATA'));
+    if (r.code === 0 && !lines.length) return null;
+    return (lines.length ? lines.join(' | ') : `kod ${r.code}`).slice(0, 300);
+  } catch (e) {
+    return errText(e).slice(0, 300);
+  } finally {
+    rmSync(listFile, { force: true });
+  }
+}
+
+/** Komut satırı: `node app\\kurulum-yenile.mjs kisayollar --gruplar masaustu,baslangic [--yalniz-liste] [--kurulum <klasör>]` */
+async function cli(argv) {
+  const opt = (name) => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  const appDir = dirname(fileURLToPath(import.meta.url));
+  const installDir = opt('--kurulum') ?? dirname(appDir);
+  let groups;
+  try {
+    groups = parseGroups(opt('--gruplar'));
+  } catch (e) {
+    console.error(errText(e));
+    return 2;
+  }
+  const spec = shortcutSpec(installDir, process.env.SystemRoot ?? 'C:\\Windows');
+  if (argv.includes('--yalniz-liste')) {
+    console.log(JSON.stringify(spec.filter((k) => !k.grup || groups.includes(k.grup)), null, 2));
+    return 0;
+  }
+  const err = await installShortcuts({ appDir, installDir, groups });
+  console.log(err ? `Kısayollar yazılamadı: ${err}` : 'Kısayollar yazıldı');
+  return err ? 1 : 0;
+}
+
+/** Bu dosya doğrudan mı çalıştırıldı (bekçi ve testler içe aktarır): Node ana modülün gerçek yolunu verir */
+function isMain() {
+  try {
+    const a = realpathSync(resolve(process.argv[1] ?? ''));
+    const b = realpathSync(fileURLToPath(import.meta.url));
+    return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+  } catch {
+    return false;
+  }
+}
+if (process.argv[2] === 'kisayollar' && isMain()) process.exitCode = await cli(process.argv.slice(3));

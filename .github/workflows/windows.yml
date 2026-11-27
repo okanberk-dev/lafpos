@@ -7,6 +7,10 @@
 # main'e her push'ta kurulum dosyası GitHub Release olarak yayımlanır (AsilPOS-Kurulum.exe ve .sha256, sabit adlarla;
 # sürüm package.json'ın major.minor'u + çalıştırma no): sahip ilk kurulumu Releases'tan indirir. Sonraki sürümleri
 # kasa kendisi alır (Vercel'deki güncelleme kanalı, scripts/kasa/windows/kurulum/kanal.mjs); bu iş anahtar istemez.
+# Yayımlamadan önce kafedeki yol gerçek Windows'ta yürünür (ci-kurulum.mjs): GitHub'daki son sürüm (kafede kurulu olan)
+# kurulur, kasa penceresi kısayoluyla açılır, bu derlemeye kendiliğinden güncellenir; güncellemeden sonraki ilk açılışta
+# pencerenin yeni sürümü gösterdiği, kasa programı (tek pencere, bekçi, Edge), geri dönüş, kaldırma ve kurulum dosyası
+# ile siteden kurulumun aynı programı kurduğu denetlenir. Ekran görüntüleri iş akışının dosyalarında (ci-ekran).
 name: Windows kurulumu
 
 on:
@@ -19,6 +23,11 @@ on:
       - 'shared/**'
       - 'drizzle/**'
       - '.env.example'
+      # Kasa penceresinin ilk açılışı (simgeler, sayfanın yenilenmesi, CI işareti)
+      - 'index.html'
+      - 'public/**'
+      - 'src/lib/buildWatch.ts'
+      - 'src/main.tsx'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/windows.yml'
@@ -35,7 +44,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     defaults:
       run:
         shell: pwsh
@@ -65,15 +74,30 @@ jobs:
           $v = (Get-Content package.json -Raw | ConvertFrom-Json).version.Split('.')
           "ASILPOS_SURUM=$($v[0]).$($v[1]).${{ github.run_number }}" >> $env:GITHUB_ENV
       - run: npm run kurulum:windows
-      # Gerçek kurulum: sessiz kurulum (/S), görevle açılan sunucunun sağlığı, yerel kanaldan bir sonraki derlemeye
-      # güncelleme (Node değişimi dahil: 75 kodu, app ↔ app.eski, node.yeni) ve bozuk derlemede geri dönüş
-      # (scripts/kasa/windows/kurulum/ci-kurulum.mjs). Yayımlamadan önce: kurulamayan dosya Releases'a çıkmaz
-      - name: Kur, güncelle, geri dön (gerçek Windows)
-        timeout-minutes: 25
+      # Kafede kurulu olan: GitHub'daki son sürümün kurulum dosyası (iş akışının kendi anahtarıyla, depo özel)
+      - name: Önceki sürüm (kafedeki kurulum)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          $p = Start-Process "dist/windows/AsilPOS-Kurulum-$env:ASILPOS_SURUM.exe" -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Kurulum $($p.ExitCode) koduyla bitti" }
-          node scripts/kasa/windows/kurulum/ci-kurulum.mjs
+          New-Item -ItemType Directory -Force dist/onceki | Out-Null
+          gh release download --pattern AsilPOS-Kurulum.exe --dir dist/onceki --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Önceki sürüm indirilemedi" }
+          gh release view --json tagName,createdAt
+      # Gerçek kurulum ve kafedeki yol (scripts/kasa/windows/kurulum/ci-kurulum.mjs): önceki sürüm, kısayolla kasa penceresi,
+      # yerel kanaldan bu derlemeye güncelleme (Node değişimi dahil: 75 kodu, app ↔ app.eski, node.yeni), ilk açılışta yeni
+      # sürüm, kasa programı, bozuk derlemede geri dönüş, bekçinin kendini yenilemesi, kaldırma, iki kurulumun eşitliği.
+      # Yayımlamadan önce: kurulamayan ya da güncellenemeyen dosya Releases'a çıkmaz
+      - name: Kur, güncelle, kasa penceresini dene (gerçek Windows)
+        timeout-minutes: 60
+        run: node scripts/kasa/windows/kurulum/ci-kurulum.mjs
+      - name: Ekran görüntüleri
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-ekran
+          path: dist/ci-ekran
+          if-no-files-found: ignore
       # Yalnız main'e push'ta: sabit adlarla yayımla, son 10 sürüm kalır
       - name: Sürümü yayımla
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
