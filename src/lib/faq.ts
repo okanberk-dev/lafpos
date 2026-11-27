@@ -1,4 +1,5 @@
 import type { Permission } from '@shared/permissions';
+import { ALAN_ADI } from '@shared/eski-adlar';
 
 /**
  * Sık sorulan sorular (`/yardim`): kasadaki kişinin ve yöneticinin gerçekten sorduğu sorular. Yanıtlar yalnız kodun ve
@@ -75,7 +76,7 @@ const ENTRIES: Entry[] = [
     question: 'Gün sonunu (Z) nasıl alırım?',
     // Kör kasada sunucu Z özetini göndermez (server/routes/cash.ts): kasa yalnız "Gün kapandı" bildirimini gösterir
     answer: (c) =>
-      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın. Pencerenin başında [[Kayda geçecekler]] ayrıntılı gün sonunun neyi kaydettiğini söyler (satışlar, ödeme türleri, kasa hareketleri, sayım); sonra [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. Kapanış saati ayarlıysa kapanışa 30 dakika kala sağ altta [[Gün sonu al]] bildirimi çıkar ve bu cihazda bir kez kısa bir uyarı sesi çalar; LafPOS Uzaktan kuruluysa patronun telefonuna da bildirim gider. ${
+      `[[Kasa]] ekranında [[Gün sonu (Z)]]’ye basın. Pencerenin başında [[Kayda geçecekler]] ayrıntılı gün sonunun neyi kaydettiğini söyler (satışlar, ödeme türleri, kasa hareketleri, sayım); sonra [[Gün sonu adımları]]’nı sırayla yapın: açık adisyon kalmasın, banka POS’unun ve yemek kartı cihazlarının slip toplamlarını girin, çekmecedeki nakdi sayın, sonra [[Günü kapat]]. Kapanış saati ayarlıysa kapanışa 30 dakika kala sağ altta [[Gün sonu al]] bildirimi çıkar ve bu cihazda bir kez kısa bir uyarı sesi çalar; AsilPOS Uzaktan kuruluysa patronun telefonuna da bildirim gider. ${
         seesCash(c)
           ? 'Ayrıntılı Z raporu ekranda açılır, özeti üstte; Yazdır ile basılır.'
           : 'Rolünüzde kör kasa açık: gün kapanınca Z numarası bildirimde yazar, Z raporu ve sayım farkı yöneticinin ekranında görünür.'
@@ -95,7 +96,7 @@ const ENTRIES: Entry[] = [
     show: any('kasa.gun'),
     question: 'Pavo’nun banka gün sonunu ayrıca almam gerekir mi?',
     answer: (c) =>
-      `Hayır. Pavo bağlıysa LafPOS’ta günü kapatınca cihaz bankaların gün sonunu kendiliğinden alır ve slibini basar ([[Gün kapanınca cihazda gün sonu al]] açıkken; varsayılan açık). Cihaz yanıt vermese de LafPOS’un günü kapanır. ${
+      `Hayır. Pavo bağlıysa AsilPOS’ta günü kapatınca cihaz bankaların gün sonunu kendiliğinden alır ve slibini basar ([[Gün kapanınca cihazda gün sonu al]] açıkken; varsayılan açık). Cihaz yanıt vermese de AsilPOS’un günü kapanır. ${
         c.can('ayar.yonet')
           ? 'Gerekirse [[Yönetim › Yazarkasa POS › Gün sonu (banka)]]’dan [[Cihazda gün sonu al]] ile elle alınır, kâğıt çıkmadıysa [[Kâğıdı yeniden bas]].'
           : 'Gerekirse yönetici cihazın gün sonunu yönetimden elle alır.'
@@ -261,7 +262,7 @@ const ENTRIES: Entry[] = [
     show: any('odeme.al'),
     question: 'Ödemede yazarkasa ne yapar?',
     answer: () =>
-      'Pavo bağlıysa ödeme yazarkasaya gider: ödemeyi cihazdan alırsınız, mali fişi cihaz keser. Müşteri cihazda vazgeçerse ya da cihaz ödemeyi almazsa LafPOS ödemeyi kaydetmez; [[Yeniden dene]] ya da başka yoldan alın.',
+      'Pavo bağlıysa ödeme yazarkasaya gider: ödemeyi cihazdan alırsınız, mali fişi cihaz keser. Müşteri cihazda vazgeçerse ya da cihaz ödemeyi almazsa AsilPOS ödemeyi kaydetmez; [[Yeniden dene]] ya da başka yoldan alın.',
   },
   {
     id: 'yazici',
@@ -323,7 +324,7 @@ const ENTRIES: Entry[] = [
     show: any('patron.panel'),
     question: 'Kafede değilken rakamlara nasıl bakarım?',
     answer: (c) =>
-      `LafPOS Uzaktan’dan (lafpos.laffogato.net): telefonun tarayıcısından girersiniz; patron paneli, masalar, bar kuyruğu ve raporlar kasadan gelen özetle görünür, işlem yapılmaz.${c.can('rapor.maliyet') ? ' Maliyet ve kâr, PIN’ler ve müşteri telefonları buluta gitmez.' : ' PIN’ler ve müşteri telefonları buluta gitmez.'}`,
+      `AsilPOS Uzaktan’dan (${ALAN_ADI}): telefonun tarayıcısından girersiniz; patron paneli, masalar, bar kuyruğu ve raporlar kasadan gelen özetle görünür, işlem yapılmaz.${c.can('rapor.maliyet') ? ' Maliyet ve kâr, PIN’ler ve müşteri telefonları buluta gitmez.' : ' PIN’ler ve müşteri telefonları buluta gitmez.'}`,
   },
 ];
 

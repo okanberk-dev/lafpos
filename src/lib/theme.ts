@@ -5,7 +5,7 @@ import { readLocalPref, writeLocalPref } from './hooks';
 export { isBootDarkPath, KDS_THEME_PREF, type ForcedTheme, type KdsTheme } from './bootDark';
 
 type Theme = AppTheme;
-const KEY = 'lafpos.theme';
+const KEY = 'asilpos.theme';
 
 /** Bar ekranının bu cihazdaki tercihi (kaydedilmemişse koyu) */
 export const readKdsTheme = (): KdsTheme => (readLocalPref<KdsTheme>(KDS_THEME_PREF, 'koyu') === 'acik' ? 'acik' : 'koyu');

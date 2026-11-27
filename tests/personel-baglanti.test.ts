@@ -7,7 +7,7 @@ import { type Harness, startApp } from './harness';
 
 /**
  * Personel bağlantısı (docs/03-ENTEGRASYON.md §4.8; sahip kararı 2: "ladmin'de hesapları var; doğru hesabı bağladığından
- * emin ol"): LafPOS kullanıcısı lafmaliyet'in personel kaydına (`s:<staff.id>`) yalnız elle ve taze listeye karşı
+ * emin ol"): AsilPOS kullanıcısı lafmaliyet'in personel kaydına (`s:<staff.id>`) yalnız elle ve taze listeye karşı
  * bağlanır (etkin, başka kullanıcıya bağlı değil), bağlantı internet yokken kurulmaz ama kaldırılır, denetime ladmin'deki
  * ad yazılmaz. Gün sonu gövdesinin `workedStaffRefs`'i gönderirken çözülür (bağlantı yoksa alan hiç gitmez), "Bugün
  * çalışanlar" düzeltmesi kayıtlardan çıkan listenin yerine geçer, lafmaliyet'in yanıtındaki `staff` Entegrasyon'da görünür.
@@ -375,7 +375,7 @@ describe('gün sonu gövdesi workedStaffRefs (gönderirken çözülür)', () => 
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
   });
 
-  it("lafmaliyet'in yanıtındaki staff okunur (sayılan, bilinmeyen, başka şube); bozuk alan günü düşürmez; Entegrasyon adları LafPOS'tan çözer", async () => {
+  it("lafmaliyet'in yanıtındaki staff okunur (sayılan, bilinmeyen, başka şube); bozuk alan günü düşürmez; Entegrasyon adları AsilPOS'tan çözer", async () => {
     await setRef('Kasa', 's:12');
     await setRef('Garson', 's:7');
     dayReply = (b) => ({ ok: true, date: b.date, counted: true, staff: { counted: ['s:12'], unknown: ['s:7'], otherBranch: ['s:99'] } });

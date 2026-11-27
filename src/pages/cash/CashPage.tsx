@@ -509,7 +509,7 @@ export default function CashPage() {
               {can('kasa.gun') ? (
                 <>
                   {openingHint && 'suggested' in openingHint && (
-                    // Kasa zinciri: önceki günün devri (lafmaliyet'in kasa raporu ya da LafPOS'un sayımı); sayım yerine geçmez
+                    // Kasa zinciri: önceki günün devri (lafmaliyet'in kasa raporu ya da AsilPOS'un sayımı); sayım yerine geçmez
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-[var(--r-tile)] bg-surface-2 px-4 py-3 text-left">
                       <div className="min-w-0">
                         <p className="text-[13px] text-muted">Beklenen açılış</p>

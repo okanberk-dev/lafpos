@@ -550,10 +550,10 @@ export async function runFlows(ctx) {
             await api.call('kasa', 'POST', `/option-items/${item('Normal').id}/sold-out`, { soldOut: true });
             await page.getByPlaceholder('Ürün ara').fill('Latte');
             const tile = page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).locator('xpath=..');
-            const linesOf = () => page.evaluate((id) => JSON.parse(localStorage.getItem('lafpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? [], seed.tz.id);
+            const linesOf = () => page.evaluate((id) => JSON.parse(localStorage.getItem('asilpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? [], seed.tz.id);
             const before = (await linesOf()).length;
             await tile.getByRole('button', { name: new RegExp(`^${boot.settings.sizeLabels.M}`) }).click();
-            await page.waitForFunction(([id, n]) => (JSON.parse(localStorage.getItem('lafpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? []).length > n, [seed.tz.id, before], { timeout: 8000 });
+            await page.waitForFunction(([id, n]) => (JSON.parse(localStorage.getItem('asilpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? []).length > n, [seed.tz.id, before], { timeout: 8000 });
             assert((await modal.count()) === 0, 'isteğe bağlı grubun varsayılanı tükendi diye hızlı ekleme pencere açtı');
             const added = (await linesOf()).at(-1);
             assert(added.productId === latte.id && added.options.length === 0, `hızlı eklenen satır beklenen gibi değil: ${JSON.stringify(added)}`);
@@ -800,7 +800,7 @@ export async function runFlows(ctx) {
           let thanks = null;
           let plainThanks = null;
           await withPage(ctx, 'tablet', 'kasa', async (page) => {
-            await page.addInitScript((code) => localStorage.setItem('lafpos.pref.display.code', JSON.stringify(code)), display);
+            await page.addInitScript((code) => localStorage.setItem('asilpos.pref.display.code', JSON.stringify(code)), display);
             await go(ctx, page, '/');
             await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
             orderId = new URL(page.url()).pathname.split('/').pop();
@@ -1310,7 +1310,7 @@ export async function runFlows(ctx) {
       // akışın yeniden açtığı gün sayılarak kapanır ve düne alınır (bir tarihe tek Z; saat değiştirilemediği için veritabanında)
       'Tablette günü aç: kör kasiyer farkta nedenini yazar, müdür beklenen açılışı görür; harcamaya kategori seçilir',
       async () => {
-        // Gün sonu açık adisyon bırakmaz (akış tek başına da koşar: LAFPOS_E2E_FLOW)
+        // Gün sonu açık adisyon bırakmaz (akış tek başına da koşar: ASILPOS_E2E_FLOW)
         for (const o of await api.call('mudur', 'GET', '/orders')) {
           if (o.source === 'pos') await api.call('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Uçtan uca test' });
         }
@@ -1516,8 +1516,8 @@ export async function runFlows(ctx) {
   ];
 
   const results = [];
-  // Tek akışı denemek için: LAFPOS_E2E_FLOW='Şimdi güncelle' node e2e/run.mjs --only=akis
-  const wanted = process.env.LAFPOS_E2E_FLOW;
+  // Tek akışı denemek için: ASILPOS_E2E_FLOW='Şimdi güncelle' node e2e/run.mjs --only=akis
+  const wanted = process.env.ASILPOS_E2E_FLOW;
   for (const [name, fn] of flows) {
     if (wanted && !name.includes(wanted)) continue;
     try {

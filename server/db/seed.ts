@@ -7,6 +7,7 @@ import { ulid } from '../lib/ids';
 import { updateSettings } from '../lib/settings';
 import { applyMenu, type SiteMenu } from '../sync/laffogato-menu';
 import { db, runMigrations, schema, tx } from './client';
+import { posEnv } from '@shared/pos-env';
 
 /**
  * Deneme modunda giriş ekranında görünen örnek personel ve PIN'leri: kafede her rolü denemek için. "Denemeyi bitir,
@@ -22,17 +23,17 @@ export const DEMO_USERS = [
 ] as const;
 
 /**
- * Boş veritabanına kurulum verisini yükler. Kafe kurulumunda (`LafPOS-Kurulum.exe`, `npm start`) yalnız işletmenin
+ * Boş veritabanına kurulum verisini yükler. Kafe kurulumunda (`AsilPOS-Kurulum.exe`, `npm start`) yalnız işletmenin
  * başlamak için gerektirdiği kurulum gelir: rol hesapları (örnek PIN'li), istasyonlar, yazıcı, köşkün masa planı ve
  * karaoke odası, ödeme türleri, sitenin menüsü (anlık görüntü; site bağlantısı kurulunca güncellenir) ve kasaya özgü
  * ürünler (karaoke saati, yenilebilir bardak, şeker ve bardak seçimi). Adisyon, ödeme, gün, müşteri, rezervasyon gibi
  * hiçbir hareket yazılmaz (tests/deneme-modu.test.ts). Kurulum deneme modunda açılır (`demoMode`, eğitim yazarkasası).
  *
- * `demo: true` (tarayıcı demosu, `LAFPOS_DEMO_SEED=1`): ayrıca örnek kampanya (kapalı "Öğle kahvesi" happy hour'u).
+ * `demo: true` (tarayıcı demosu, `ASILPOS_DEMO_SEED=1`): ayrıca örnek kampanya (kapalı "Öğle kahvesi" happy hour'u).
  * Demonun ilk gününün satışları ayrıca demo/scenario.ts'ten gerçek uçlarla girilir.
  */
 export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
-  const demo = opts.demo ?? (typeof process !== 'undefined' && process.env?.LAFPOS_DEMO_SEED === '1');
+  const demo = opts.demo ?? (typeof process !== 'undefined' && posEnv(process.env ?? {}, 'DEMO_SEED') === '1');
   const row = db.select({ n: sql<number>`count(*)` }).from(schema.users).get();
   if ((row?.n ?? 0) > 0) return false;
 
@@ -98,7 +99,7 @@ export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
 
     applyMenu(t, snapshot, { barStationId: bar, kitchenStationId: kitchen });
 
-    // LafPOS'a özel: karaoke saati (HİZMET, KDV %20). Oda sayacı durunca bu ürünle satır açılır.
+    // AsilPOS'a özel: karaoke saati (HİZMET, KDV %20). Oda sayacı durunca bu ürünle satır açılır.
     const serviceCat = ulid();
     t.insert(schema.categories).values({ id: serviceCat, name: 'Karaoke ve etkinlik', color: '#6b1a2b', sort: 99, customizable: false, active: true, stationId: null }).run();
     t.insert(schema.products)

@@ -4,6 +4,7 @@ import { environmentManager, QueryClient, QueryObserver } from '@tanstack/react-
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { remoteAutoEnters, type RemoteSetup, remoteSignOutFor } from '../src/lib/remote';
 import { upstashFetch } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Tasarım geçişinin incelemesi (4 Kas 2026): giriş ve kilit ekranı, uygulama kabuğu, komut paleti, uzaktan giriş.
@@ -13,12 +14,12 @@ const src = (file: string) => readFileSync(join(__dirname, '../src', file), 'utf
 
 describe('uzaktan görünüm: "Çıkış" yalnız parola soran girişte', () => {
   const store = new Map<string, string>();
-  const ENV = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'LAFPOS_UZAKTAN_DEMO', 'KV_REST_API_URL', 'KV_REST_API_TOKEN'];
+  const ENV = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_PAROLA', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'ASILPOS_UZAKTAN_DEMO', 'KV_REST_API_URL', 'KV_REST_API_TOKEN'];
   const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
   const set = (k: string, v: string | null) => (v == null ? delete process.env[k] : (process.env[k] = v));
 
   beforeAll(() => {
-    Object.assign(process.env, { LAFPOS_CLOUD_SECRET: 'u'.repeat(40), LAFPOS_UZAKTAN_PAROLA: 'kahve-parola-123', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+    Object.assign(process.env, { ASILPOS_CLOUD_SECRET: 'u'.repeat(40), ASILPOS_UZAKTAN_PAROLA: 'kahve-parola-123', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
     vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input) !== 'https://redis.test') throw new Error(`beklenmeyen istek: ${String(input)}`);
       return upstashFetch(store)(init);
@@ -29,7 +30,7 @@ describe('uzaktan görünüm: "Çıkış" yalnız parola soran girişte', () => 
     for (const k of ENV) set(k, saved[k] ?? null);
   });
 
-  const req = (path: string, init: RequestInit = {}) => new Request(`https://lafpos.vercel.app/api/uzaktan?yol=${path}`, init);
+  const req = (path: string, init: RequestInit = {}) => new Request(`https://${VERCEL_ALANI}/api/uzaktan?yol=${path}`, init);
 
   it.each([
     ['parolasız görünüm, kafe bağlı (varsayılan)', { password: false, cafe: true, demo: true }, true],
@@ -39,10 +40,10 @@ describe('uzaktan görünüm: "Çıkış" yalnız parola soran girişte', () => 
     ['demo kapalı, kafe bağlanmadı, parolalı', { password: true, cafe: false, demo: false }, false],
   ])('%s', async (_, c, auto) => {
     const { GET, POST } = await import('../api/uzaktan');
-    set('LAFPOS_UZAKTAN_PAROLA_GEREKLI', c.password ? '1' : null);
-    set('LAFPOS_UZAKTAN_DEMO', c.demo ? null : '0');
-    if (c.cafe) store.set('lafpos:snapshot', JSON.stringify({ v: 1, at: Date.now(), bootstrap: {}, patron: {}, floor: {}, kitchen: [], board: {}, orders: {} }));
-    else store.delete('lafpos:snapshot');
+    set('ASILPOS_UZAKTAN_PAROLA_GEREKLI', c.password ? '1' : null);
+    set('ASILPOS_UZAKTAN_DEMO', c.demo ? null : '0');
+    if (c.cafe) store.set(`${REDIS_ONEKI}snapshot`, JSON.stringify({ v: 1, at: Date.now(), bootstrap: {}, patron: {}, floor: {}, kitchen: [], board: {}, orders: {} }));
+    else store.delete(`${REDIS_ONEKI}snapshot`);
     const setup = (await (await GET(req('uzaktan/kurulum'))).json()) as RemoteSetup;
     // Giriş ekranının kendi kendine girdiği her kurulumda boş gövdeli giriş gerçekten oturum açar: çıkış aynı oturumu
     // yeniden açardı, kabuk "Çıkış"ı göstermez. Parola soran kurulumda boş giriş reddedilir, "Çıkış" anlamlıdır

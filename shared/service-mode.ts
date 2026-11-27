@@ -7,7 +7,7 @@
  * - `yari_self`: sipariş ve ödeme kasada; kasiyer masa no ya da numaratör girer, personel masaya götürür.
  * - `self`: sipariş ve ödeme kasada; müşteri numarasını çağrı ekranında görünce tezgâhtan alır.
  * - `qr_self`: self gibi kasada sipariş ve ödeme; ama masalar görünür, çünkü masadaki QR'ı okutan müşteri uygulamadan
- *   masaya sipariş verir ve sipariş masaya düşer (QR'ı LafPOS üretir: shared/table-qr.ts, Yönetim › Masa planı).
+ *   masaya sipariş verir ve sipariş masaya düşer (QR'ı AsilPOS üretir: shared/table-qr.ts, Yönetim › Masa planı).
  */
 export const SERVICE_MODES = ['masa', 'yari_self', 'self', 'qr_self'] as const;
 export type ServiceMode = (typeof SERVICE_MODES)[number];

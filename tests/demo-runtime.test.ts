@@ -8,6 +8,7 @@ import * as crypto from '../demo/shims/crypto';
 import { EventEmitter } from '../demo/shims/events';
 import * as fs from '../demo/shims/fs';
 import * as path from '../demo/shims/path';
+import { PIN_IMZA_ONEKI } from '@shared/eski-adlar';
 
 /** Tarayıcı demosunun Node karşılıkları ve sql.js istemcisi: sunucu kodu demoda kasadakiyle aynı sonucu vermeli */
 const root = join(__dirname, '..');
@@ -15,12 +16,12 @@ const root = join(__dirname, '..');
 describe('demo: node:crypto karşılığı', () => {
   it('özet ve HMAC Node ile aynı', () => {
     for (const algo of ['sha256', 'sha1']) {
-      for (const input of ['', 'lafpos', 'Türk kahvesi ☕ şekerli']) {
+      for (const input of ['', 'asilpos', 'Türk kahvesi ☕ şekerli']) {
         expect(crypto.createHash(algo).update(input).digest('hex')).toBe(nodeCrypto.createHash(algo).update(input).digest('hex'));
       }
     }
     expect(crypto.createHash('sha256').update('a').update('b').digest('hex')).toBe(nodeCrypto.createHash('sha256').update('ab').digest('hex'));
-    expect(crypto.createHmac('sha256', 'gizli').update('lafpos-pin:1897').digest('hex')).toBe(nodeCrypto.createHmac('sha256', 'gizli').update('lafpos-pin:1897').digest('hex'));
+    expect(crypto.createHmac('sha256', 'gizli').update(`${PIN_IMZA_ONEKI}1897`).digest('hex')).toBe(nodeCrypto.createHmac('sha256', 'gizli').update(`${PIN_IMZA_ONEKI}1897`).digest('hex'));
   });
   it('rastgele baytlar Buffer gibi kodlanır', () => {
     const token = crypto.randomBytes(32).toString('base64url');

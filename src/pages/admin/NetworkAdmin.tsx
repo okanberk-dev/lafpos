@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 
 /**
- * Karekod ve adres yan yana; telefonda alt alta. `off`: sunucu bu adresi dinlemiyor (LAFPOS_HOST): karekod çizilmez,
+ * Karekod ve adres yan yana; telefonda alt alta. `off`: sunucu bu adresi dinlemiyor (ASILPOS_HOST): karekod çizilmez,
  * adres soluk (okutulan adres açılmazdı); yerine ne zaman çalışacağı yazar
  */
 function Address({ item, off, children }: { item: NetAddressDTO; off?: boolean; children: React.ReactNode }) {
@@ -25,7 +25,7 @@ function Address({ item, off, children }: { item: NetAddressDTO; off?: boolean; 
       <div className="min-w-0 space-y-2">
         <p className="tabular break-all text-lg font-semibold text-[var(--admin-text-mute)]">{item.url}</p>
         <p className={HINT}>
-          Bu adres, <code className={CODE}>LAFPOS_HOST</code> düzelip LafPOS yeniden başlayınca çalışır; karekod o zaman burada çıkar
+          Bu adres, <code className={CODE}>ASILPOS_HOST</code> düzelip AsilPOS yeniden başlayınca çalışır; karekod o zaman burada çıkar
         </p>
       </div>
     );
@@ -64,7 +64,7 @@ interface AuditRow {
 const isRemoteAudit = (a: AuditRow) => a.userId === 'uzaktan' || a.action.startsWith('uzaktan.') || a.message.startsWith('Uzaktan (');
 
 /**
- * Uzaktan yönetim anahtarı (docs/UZAKTAN-YONETIM.md): LafPOS Uzaktan'dan gelen personel, PIN, rol, Tükendi ve servis modu
+ * Uzaktan yönetim anahtarı (docs/UZAKTAN-YONETIM.md): AsilPOS Uzaktan'dan gelen personel, PIN, rol, Tükendi ve servis modu
  * işlemleri. Yalnız patron değiştirir (sunucuda da patrona özel ayar); kapalıyken kasa uzaktan gelen her işlemi reddeder.
  * Altında son uzaktan işlem (denetim kaydından, son iki hafta)
  */
@@ -109,7 +109,7 @@ function RemoteControlCard() {
         checked={checked}
         disabled={!patron || change.isPending}
         onChange={(v) => change.mutate(v)}
-        label="LafPOS Uzaktan’dan personel, PIN, roller, Tükendi ve servis modu değişikliklerine izin ver"
+        label="AsilPOS Uzaktan’dan personel, PIN, roller, Tükendi ve servis modu değişikliklerine izin ver"
         hint="Kapalıyken kasa uzaktan gelen her işlemi reddeder"
       />
       {!patron && <p className={cn(HINT, 'mt-2')}>Yalnız patron değiştirir</p>}
@@ -201,7 +201,7 @@ export default function NetworkAdmin() {
       {/* Sorunun yanında çaresi: ayar Kurulum adımları'nın kapalı açılırında kalmasın */}
       {n.loopbackOnly && (
         <Notice tone="warn" role="status" title="Tablet ve telefonlar bağlanamaz">
-          Sunucu yalnız bu bilgisayarı dinliyor. Kasa bilgisayarının ayarında <code className={CODE}>LAFPOS_HOST</code> değerini <code className={CODE}>0.0.0.0</code> yapıp LafPOS’u yeniden başlatın
+          Sunucu yalnız bu bilgisayarı dinliyor. Kasa bilgisayarının ayarında <code className={CODE}>ASILPOS_HOST</code> değerini <code className={CODE}>0.0.0.0</code> yapıp AsilPOS’u yeniden başlatın
         </Notice>
       )}
       {/* Üç kartın rozeti aynı dil: yeşil yalnız gerçekten açık ya da bağlıyken */}
@@ -284,7 +284,7 @@ export default function NetworkAdmin() {
           {/* Güvenlik notu kartın dibinde ayraçlı satırda, kalkan ikonuyla: ipuçlarından ayrı okunur */}
           <p className={cn(HINT, 'mt-4 flex gap-2 border-t border-[var(--admin-divider)] pt-3')}>
             <ShieldAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            <span className="min-w-0">LafPOS’u modemden port açarak internete açmayın; dışarıdan yalnız Tailscale ile</span>
+            <span className="min-w-0">AsilPOS’u modemden port açarak internete açmayın; dışarıdan yalnız Tailscale ile</span>
           </p>
         </Card>
       </div>
@@ -292,7 +292,7 @@ export default function NetworkAdmin() {
       {/* Etiket ve değer satırlı iki kart genişte yan yana (tam genişlikte etiketle değer kartın iki ucuna kaçıyordu) */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card
-          title="LafPOS Uzaktan (Vercel)"
+          title="AsilPOS Uzaktan (Vercel)"
           subtitle="Kurulum gerektirmeyen salt okunur görünüm: patron paneli, masalar, bar"
           actions={
             // Açık ancak bir gönderim gittiyse; anahtar tanımlı ama henüz gönderilmediyse bekliyor
@@ -360,10 +360,10 @@ export default function NetworkAdmin() {
 
       <SetupNotes>
         <p>
-          Sunucunun dinlediği adres <code className={CODE}>LAFPOS_HOST</code> ayarıyla değişir; ağdaki cihazların bağlanması için <code className={CODE}>0.0.0.0</code> (varsayılan) kalmalı.
+          Sunucunun dinlediği adres <code className={CODE}>ASILPOS_HOST</code> ayarıyla değişir; ağdaki cihazların bağlanması için <code className={CODE}>0.0.0.0</code> (varsayılan) kalmalı.
         </p>
         <p>
-          LafPOS Uzaktan: kasa bilgisayarının ayarlarına <code className={CODE}>LAFPOS_CLOUD_URL</code> ve <code className={CODE}>LAFPOS_CLOUD_SECRET</code> yazın; Vercel’de aynı anahtar ve bir parola tanımlanır.
+          AsilPOS Uzaktan: kasa bilgisayarının ayarlarına <code className={CODE}>ASILPOS_CLOUD_URL</code> ve <code className={CODE}>ASILPOS_CLOUD_SECRET</code> yazın; Vercel’de aynı anahtar ve bir parola tanımlanır.
         </p>
         <p>
           Ayrıntı: <code className={CODE}>docs/07-UZAKTAN-ERISIM.md</code>

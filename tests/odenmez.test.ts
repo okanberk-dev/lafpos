@@ -88,7 +88,7 @@ describe('adisyonu ciro dışı kapatma', () => {
     const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${device.id}/send`, {});
     const r4 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'ikram', reason: 'Tadım' });
     expect(r4.status).toBe(409);
-    // Cihaz fişi kesti ama ödeme LafPOS'a işlenmedi (ödemesiz kapanış): kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
+    // Cihaz fişi kesti ama ödeme AsilPOS'a işlenmedi (ödemesiz kapanış): kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 9, amount: sent.receipt.amount }] });
     const r5 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Zayi' });
     expect([r5.status, r5.json.code]).toEqual([409, 'okc_unresolved']);

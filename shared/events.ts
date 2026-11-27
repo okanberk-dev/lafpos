@@ -25,14 +25,14 @@ export type LiveTopic =
  *
  * - `orders` › `online.new`: yeni online sipariş, `message` "Online sipariş: Masa 4 · Ayşe" (bar için ayrıca
  *   `kitchen` › `ticket.new`, `message: 'online'`). `online.updated`: aşaması ya da masası sitede değişti.
- *   `online.stage`: LafPOS aşamayı siteye yazdı. `online.done`: siteden kalktı, `message` "Online sipariş #N siteden
- *   kalktı". `online.till`: sitede kasada ödendi işaretlenen sipariş (LafPOS'a yazılmaz, bara düşmez), `message`
+ *   `online.stage`: AsilPOS aşamayı siteye yazdı. `online.done`: siteden kalktı, `message` "Online sipariş #N siteden
+ *   kalktı". `online.till`: sitede kasada ödendi işaretlenen sipariş (AsilPOS'a yazılmaz, bara düşmez), `message`
  *   "Online sipariş #N kasada ödendi; adisyon olarak çalın".
  * - `reservations` › `site.karaoke.new`, `site.karaoke.cancelled`, `site.karaoke.moved`: bugünün site karaoke
  *   listesinde yeni, iptal edilen, saati değişen ya da günden kalkan rezervasyon, `message` "Karaoke 20:00 · 2 sa ·
  *   4 kişi". Listenin değiştiğini söyleyen `site.karaoke` de yayılır (ekranlar yenilenir).
  * - `tables` › `site.call.new`: masadan yeni çağrı (uygulamada "Garson çağır", su, peçete; sipariş listesinin `calls`
- *   alanı), `message` "Masa 4 · Su istiyor", `tableId` eşlenen masa. `site.call.done`: çağrı yanıtlandı (LafPOS'ta
+ *   alanı), `message` "Masa 4 · Su istiyor", `tableId` eşlenen masa. `site.call.done`: çağrı yanıtlandı (AsilPOS'ta
  *   "Gördüm", sitede ya da köşkün panelinde) ya da süresi geçip listeden düştü; ses yok, ekranlar yenilenir.
  */
 export const SITE_EVENT = {

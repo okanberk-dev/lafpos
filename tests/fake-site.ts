@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { sign } from '../server/lib/signature';
 
 /**
- * Testler için sahte laffogato: LafPOS'un konuştuğu uçlar, sitenin yanıt biçimleriyle. Gövdeler sitenin kendi
+ * Testler için sahte laffogato: AsilPOS'un konuştuğu uçlar, sitenin yanıt biçimleriyle. Gövdeler sitenin kendi
  * kodundan üretilmiş fikstürlerdir (laffogato d1de10f): `site-panel-orders.json` `toPanelOrder` ve `sortForPanelOrders`
  * çıktısı (src/lib/panel/orders-feed-core.ts), `site-panel-menu.json` `toPanelMenuItem` ve `sortForPanelMenu` çıktısı
- * (src/lib/panel/menu-link-core.ts); herkese açık menü LafPOS'un `server/db/menu-snapshot.json`'u (sitenin
+ * (src/lib/panel/menu-link-core.ts); herkese açık menü AsilPOS'un `server/db/menu-snapshot.json`'u (sitenin
  * `GET /api/mobile/v1/menu` yanıtının kopyası). `site-panel-karaoke.json` laffogato cc0e40a'nın (F1, #264)
  * `toPanelReservation` ve `sortForPanel` çıktısıdır (src/lib/panel/karaoke-sync-core.ts): beş satır, sitenin
  * okuma kurallarının her biri için bir tane (ödenmiş, köşkte ödenecek, ücretsiz telafi, iptal, ödemesi süren).
@@ -109,7 +109,7 @@ export function karaokeOn(day: string, rows: PanelKaraokeFixture[]): PanelKaraok
 export interface FakeSite {
   url: string;
   close: () => Promise<void>;
-  /** İnternet yok: her istek yanıtsız kapanır (fetch "fetch failed" verir, LafPOS ağ hatası sayar) */
+  /** İnternet yok: her istek yanıtsız kapanır (fetch "fetch failed" verir, AsilPOS ağ hatası sayar) */
   offline: boolean;
   /** İnternet yokken gelen, yanıtsız kapanan istekler: "POST /api/panel/menu" gibi */
   dropped: string[];
@@ -252,7 +252,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     const expected = `v1=${sign(secret, { timestamp: ts, method: req.method ?? 'GET', url, body: raw })}`;
     if (req.headers['x-laf-signature'] !== expected) return send(401, { error: 'unauthorized' });
     if (req.method === 'GET') site.queries.push(`${call}${url.search}`);
-    // Yanıttaki şube: eski site göndermez, şubeli site isteğinkini (yoksa LafPOS'un varsayılanı marina) söyler
+    // Yanıttaki şube: eski site göndermez, şubeli site isteğinkini (yoksa AsilPOS'un varsayılanı marina) söyler
     const branchField = () =>
       site.answerBranch === undefined ? {} : { branch: site.answerBranch ?? url.searchParams.get('branch') ?? 'marina' };
 
@@ -265,7 +265,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       if (code !== 200) return send(code, { error: code === 403 ? 'forbidden' : code === 401 ? 'unauthorized' : 'unavailable' });
       const from = url.searchParams.get('from') ?? '';
       const to = url.searchParams.get('to') ?? '';
-      // LafPOS'un anahtarı yalnız dünden yarına (sitenin `withinLafposKaraokeReach`'i; burada pencere tek gün mü)
+      // AsilPOS'un anahtarı yalnız dünden yarına (sitenin `withinAsilposKaraokeReach`'i; burada pencere tek gün mü)
       if (!from || from !== to) return send(403, { error: 'forbidden' });
       return send(200, { now: new Date().toISOString(), from, to, complete: true, reservations: karaokeOn(from, site.karaoke) });
     }

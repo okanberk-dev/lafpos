@@ -12,7 +12,7 @@ beforeAll(async () => {
   h = await startApp();
 });
 afterAll(() => {
-  delete process.env.LAFPOS_STDIN_CONTROL;
+  delete process.env.ASILPOS_STDIN_CONTROL;
   h.cleanup();
 });
 
@@ -32,10 +32,10 @@ describe('kasa penceresinin bakım arası', () => {
 
   it('yalnız ayar yetkisi ve Windows kurulumu; 15 dakika, Bitir hemen; denetim kaydına yazılır', async () => {
     expect((await h.call('kasa', 'POST', '/admin/kasa-bakim', { on: true })).status).toBe(403);
-    delete process.env.LAFPOS_STDIN_CONTROL;
+    delete process.env.ASILPOS_STDIN_CONTROL;
     expect((await h.call<{ code: string }>('patron', 'POST', '/admin/kasa-bakim', { on: true })).json).toMatchObject({ code: 'not_installed' });
 
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     const t0 = Date.now();
     const on = await h.ok<{ kasaBakim: number }>('mudur', 'POST', '/admin/kasa-bakim', { on: true });
     expect(on.kasaBakim).toBeGreaterThanOrEqual(t0 + 15 * 60_000);

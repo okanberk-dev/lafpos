@@ -7,10 +7,11 @@ import { businessDayStartMs } from '@shared/time';
 import { COMPARE_LABELS, type PatronStats, statsDates, statsSource, summaryCompares, todayStats } from '@shared/today-stats';
 import { signedHeaders } from '../server/lib/signature';
 import { type UpstashCall, upstashCommand } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Patron panelinin Kıyas kartı üç yoldan beslenir (shared/today-stats.ts `StatsSource`): `kasa` (yeni kasa girdiyi
- * gönderir), `rapor` (eski kasa göndermez; LafPOS Uzaktan bulutta duran gün raporlarından kurar) ve `ozet` (ikisi de
+ * gönderir), `rapor` (eski kasa göndermez; AsilPOS Uzaktan bulutta duran gün raporlarından kurar) ve `ozet` (ikisi de
  * yok; özetin kendi iki rakamı). Burada `rapor` ve `ozet` yolları: hangi duyarlılıkla (dakika, saat, gün sonu) ne
  * yazıldığı, Uzaktan'ın yanıtı ve Upstash komutu. Kasayla kuruşu kuruşuna eşitlik tests/patron-kiyas.test.ts'te.
  */
@@ -127,13 +128,13 @@ describe('özetin kendi rakamlarıyla (girdi hiç yok)', () => {
   });
 });
 
-describe('LafPOS Uzaktan: eski kasanın özetine kıyas girdisi eklenir', () => {
-  const CLOUD = 'https://lafpos.vercel.app';
+describe('AsilPOS Uzaktan: eski kasanın özetine kıyas girdisi eklenir', () => {
+  const CLOUD = `https://${VERCEL_ALANI}`;
   const SECRET = 'k'.repeat(40);
   const REDIS = 'https://redis.test';
   const store = new Map<string, string>();
   const log: UpstashCall[] = [];
-  const ENV = ['LAFPOS_CLOUD_SECRET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA'];
+  const ENV = ['ASILPOS_CLOUD_SECRET', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA'];
   const saved: Record<string, string | undefined> = {};
   const BASE = JSON.parse(readFileSync(join(__dirname, '../api/demo-ozet.json'), 'utf8')) as { at: number; bootstrap: Record<string, unknown>; patron: Record<string, unknown> & { date: string } };
   const api = () => import('../api/uzaktan');
@@ -142,11 +143,11 @@ describe('LafPOS Uzaktan: eski kasanın özetine kıyas girdisi eklenir', () => 
   beforeAll(() => {
     for (const k of ENV) saved[k] = process.env[k];
     for (const k of ENV) delete process.env[k];
-    Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: REDIS, KV_REST_API_TOKEN: 't' });
+    Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: REDIS, KV_REST_API_TOKEN: 't' });
     vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input) !== REDIS) throw new Error(`beklenmeyen istek: ${String(input)}`);
       const cmd = JSON.parse(String(init!.body)) as string[];
-      if (failReads && cmd[0] === 'MGET' && String(cmd[1]).startsWith('lafpos:rapor:')) return new Response('{"error":"down"}', { status: 500 });
+      if (failReads && cmd[0] === 'MGET' && String(cmd[1]).startsWith(`${REDIS_ONEKI}rapor:`)) return new Response('{"error":"down"}', { status: 500 });
       return new Response(JSON.stringify({ result: upstashCommand(store, cmd, log) }));
     });
   });
@@ -199,8 +200,8 @@ describe('LafPOS Uzaktan: eski kasanın özetine kıyas girdisi eklenir', () => 
   const cmds = () => log.map((c) => c.cmd);
 
   it('stats göndermeyen kasa: girdi gün raporlarından, src "rapor"; okuma yalnız özet okunurken ve bellekte tutulur', async () => {
-    store.set(`lafpos:rapor:default:gun:${prev(1)}`, JSON.stringify(dayReport(prev(1), [[60, 40_000, 2], [900, 60_000, 3]])));
-    store.set(`lafpos:rapor:default:gun:${prev(7)}`, JSON.stringify(dayReport(prev(7), [[30, 25_000, 1]])));
+    store.set(`${REDIS_ONEKI}rapor:default:gun:${prev(1)}`, JSON.stringify(dayReport(prev(1), [[60, 40_000, 2], [900, 60_000, 3]])));
+    store.set(`${REDIS_ONEKI}rapor:default:gun:${prev(7)}`, JSON.stringify(dayReport(prev(7), [[30, 25_000, 1]])));
     await push(snap(BASE.at, 100_000));
     const token = await login();
     log.length = 0;
@@ -232,7 +233,7 @@ describe('LafPOS Uzaktan: eski kasanın özetine kıyas girdisi eklenir', () => 
 
   it('stats gönderen kasa (yeni derleme): özete dokunulmaz, gün raporu okunmaz', async () => {
     const stats = { v: 1, guests: 4, days: {}, daily: [], topPrev: [] };
-    store.set(`lafpos:rapor:default:gun:${prev(1)}`, JSON.stringify(dayReport(prev(1), [[60, 40_000, 2]])));
+    store.set(`${REDIS_ONEKI}rapor:default:gun:${prev(1)}`, JSON.stringify(dayReport(prev(1), [[60, 40_000, 2]])));
     await push(snap(BASE.at, 100_000, stats));
     const token = await login();
     log.length = 0;

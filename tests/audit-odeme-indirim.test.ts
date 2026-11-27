@@ -478,9 +478,9 @@ describe('ödeme', () => {
       o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/payments/${first.id}/refund`, { reason: 'Yanlış kart', approverPin: MUDUR });
 
       // Ödeme ekranı bu adet için 14000 der; cihaz sepeti de aynı tutarı ister (13999 değil)
-      const lafpos = amountForItems(o.totals, itemPayLines(o.items, o.payments), [{ lineId: a!.id, qty: 1 }]);
+      const asilpos = amountForItems(o.totals, itemPayLines(o.items, o.payments), [{ lineId: a!.id, qty: 1 }]);
       const sent = await h.ok<{ receipt: { id: string; amount: number; items: { itemId: string; qty: number; amount?: number }[] } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: a!.id, qty: 1 }] });
-      expect([lafpos, sent.receipt.amount]).toEqual([14000, 14000]);
+      expect([asilpos, sent.receipt.amount]).toEqual([14000, 14000]);
       expect(sent.receipt.items).toEqual([{ itemId: a!.id, qty: 1, amount: 14000 }]);
       await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
       o = await getOrder(o.id);

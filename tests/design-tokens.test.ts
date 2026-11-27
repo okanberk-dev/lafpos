@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı ve odak halkası 3:1.
- * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sahne değerlerini kullanır (gnbsite'ın
+ * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı AsilPOS Sahne değerlerini kullanır (gnbsite'ın
  * Area Board kiti, L'Affogato kimliğinde; açık `:root`, koyu `.dark`; DESIGN.md); ortak adlar (`--bg`, `--ink`...)
  * `--admin-*`'e bağlanır. Test düşerse değeri düzelt, eşiği gevşetme.
  */
@@ -49,7 +49,7 @@ const posDark = resolver(block('.dark'), block(':root'));
 const adminLight = posLight;
 const adminDark = posDark;
 
-describe('kasa ekranları (LafPOS Sahne)', () => {
+describe('kasa ekranları (AsilPOS Sahne)', () => {
   for (const [name, get] of [
     ['açık', posLight],
     ['koyu', posDark],
@@ -63,7 +63,7 @@ describe('kasa ekranları (LafPOS Sahne)', () => {
   }
 });
 
-describe('yönetim paneli (LafPOS Sahne)', () => {
+describe('yönetim paneli (AsilPOS Sahne)', () => {
   const tones = [
     ['primary', 'primary-soft'],
     ['blue', 'blue-soft'],
@@ -145,12 +145,12 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     expect(adminLight('admin-text-soft')).toBe('#3b3f4c');
     expect(adminLight('admin-text-mute')).toBe('#5f6371');
     // Eylem ve seçim dolgusu markanın rengi (panonun mavisinin yerine ev yeşili); halka açık nane
-    // LafPOS Keel (22 Kas 2026): ana eylem mürekkep dolgu (Keel'in koyu düğmesi); bağlantı ve seçim ev yeşili kalır
+    // AsilPOS Keel (22 Kas 2026): ana eylem mürekkep dolgu (Keel'in koyu düğmesi); bağlantı ve seçim ev yeşili kalır
     expect(adminLight('admin-ink-fill')).toBe('#171a26');
     expect(adminLight('ok-ring')).toBe('#4fdc86');
     expect(posDark('admin-ink-fill')).toBe('#fbfaf9');
     // Marka rayı ev yeşilinin degradesi
-    // Sade yan menü (LafPOS Keel, 22 Kas 2026): ray kartla aynı beyaz yüzey, degrade yok
+    // Sade yan menü (AsilPOS Keel, 22 Kas 2026): ray kartla aynı beyaz yüzey, degrade yok
     expect(css).toMatch(/--rail-bg:\s*#ffffff;/);
     // Zamanı daralan: canlı ahududu (kitin magentası)
     expect(adminLight('admin-signal')).toBe('#c8175d');
@@ -244,7 +244,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     });
     expect(block('@theme')).toMatchObject({ 'radius-lg': '0.5rem', 'radius-xl': '0.625rem', 'radius-2xl': '0.875rem', 'radius-3xl': '1.125rem' });
     // Zeminde yüzen kartın yumuşak gölgesi: ev yeşilinin gecesi
-    // LafPOS Keel (DESIGN.md §0): kart gölgesiz, zeminden ton farkıyla ayrılır
+    // AsilPOS Keel (DESIGN.md §0): kart gölgesiz, zeminden ton farkıyla ayrılır
     expect(block('@theme')['shadow-card']).toBe('none');
   });
 

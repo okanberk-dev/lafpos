@@ -15,7 +15,7 @@ import { AnimatedCounter } from './AnimatedCounter';
 import { BELL_BADGE, BELL_CIRCLE, BELL_FILL, BELL_MAX, BELL_RING, type BellTone, badgeText, bellCount, bellLabel, shouldRing } from './bell';
 
 /**
- * Sallanan zil ve kayan rakamlı rozet (rare-ui notification-bell'den). LafPOS uyarlaması:
+ * Sallanan zil ve kayan rakamlı rozet (rare-ui notification-bell'den). AsilPOS uyarlaması:
  * - Gelen işin şeritlerinde (platform siparişi, sitenin uyarıları) başlangıçtaki dairenin yerine; şeridin kendisi düğme,
  *   davranışı, sesi ve yazısı aynı. Zil yalnız görünümü ve hareketi değiştirir.
  * - Sayı artınca (yeni sipariş, masa çağrısı) ve şerit ilk belirdiğinde bir kez sallanır, dil (tokmak) gecikerek izler;

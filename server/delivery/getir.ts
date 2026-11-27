@@ -6,7 +6,7 @@ import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNot
 /**
  * Getir Yemek bağdaştırıcısı (GetirFood API 1.5.8; belgeler calisma/arastirma/paket-platformlari/getir/* ve README,
  * calisma-notlari dalı). Getir siparişi bizim verdiğimiz iki adrese iter (yeni sipariş, iptal; başlıkta bizim
- * ürettiğimiz `x-api-key`): LafPOS Uzaktan (Vercel, api/uzaktan.ts `getir/*`) kaydı Redis'teki gelen kutusuna koyar,
+ * ürettiğimiz `x-api-key`): AsilPOS Uzaktan (Vercel, api/uzaktan.ts `getir/*`) kaydı Redis'teki gelen kutusuna koyar,
  * kasa gelen kutusunu imzalı olarak 20 saniyede bir çeker, işler ve siler. Yedek: kasa doğrudan Getir'in onaysız
  * (`/food-orders/periodic/unapproved`), iptal (`/periodic/cancelled`) ve onaylı (`/food-orders/active`) listelerini
  * de okur (en sık dakikada bir; aktarıcı düşmüşse hemen); iki yoldan gelen aynı sipariş tekilleşir.
@@ -369,7 +369,7 @@ export const approvedOnGetir = (o: GetirOrder) =>
   !cancelledOnGetir(o);
 
 /**
- * Getir siparişi → LafPOS'un tek biçimi. Satırın birim fiyatı ürün + seçenekler (`priceWithOption`); adet toplamı
+ * Getir siparişi → AsilPOS'un tek biçimi. Satırın birim fiyatı ürün + seçenekler (`priceWithOption`); adet toplamı
  * (`totalPriceWithOption`) tutmuyorsa birim ona göre düzeltilir. Getir ücret satırı (teslimat, ambalaj) göndermez:
  * Getir kuryesinin ücretini Getir müşteriden kendisi alır. İndirim Getir'in kendi alanlarından okunur (`totalPrice` −
  * `totalDiscountedPrice`, satırda `totalDiscountedPriceWithOption`; büyük olan) ve kimin karşıladığını belge yazmaz:
@@ -662,7 +662,7 @@ export class GetirClient {
   }
 }
 
-// ─── Aktarıcı (LafPOS Uzaktan) ───────────────────────────────────────────────
+// ─── Aktarıcı (AsilPOS Uzaktan) ───────────────────────────────────────────────
 
 /**
  * Aktarıcının adresi; restoranın kimliği (girişte öğrenilen ya da son girişteki) imzalı sorguda (`?restoran=`):

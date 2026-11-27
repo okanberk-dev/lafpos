@@ -201,7 +201,7 @@ describe('Trendyol Go gözden geçirme bulguları', () => {
     const { setAdapter, adapterFor } = await import('../server/delivery/registry');
     const { trendyolAdapter } = await import('../server/delivery/trendyol');
     const real = adapterFor('trendyol')!;
-    setAdapter('trendyol', trendyolAdapter({ ...KEYS, apiUrl: 'http://127.0.0.1:9', agentName: 'LafPOS' }));
+    setAdapter('trendyol', trendyolAdapter({ ...KEYS, apiUrl: 'http://127.0.0.1:9', agentName: 'AsilPOS' }));
     const r = await h.call<{ code: string; error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
     setAdapter('trendyol', real);
     expect([r.status, r.json.code]).toEqual([502, 'platform_unreachable']);
@@ -342,7 +342,7 @@ describe('Trendyol Go gözden geçirme bulguları', () => {
     const { setAdapter, adapterFor } = await import('../server/delivery/registry');
     const { trendyolAdapter } = await import('../server/delivery/trendyol');
     const real = adapterFor('trendyol')!;
-    setAdapter('trendyol', trendyolAdapter({ ...KEYS, apiUrl: 'adres-yok', agentName: 'LafPOS' }));
+    setAdapter('trendyol', trendyolAdapter({ ...KEYS, apiUrl: 'adres-yok', agentName: 'AsilPOS' }));
     const r = await h.call<{ error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
     setAdapter('trendyol', real);
     expect(r.status).toBe(502);

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type Harness, startApp } from './harness';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Getir aktarıcısı (api/uzaktan.ts `getir/*`): Getir'in `x-api-key` başlıklı itmesi (yeni sipariş, iptal) Redis
@@ -16,11 +17,11 @@ const lists = new Map<string, string[]>();
 const expires = new Map<string, number>();
 let h: Harness;
 /** Restoranın kendi listesi: adda kimliğin SHA-256 özetinin ilk 16 hanesi (api/uzaktan.ts restaurantLists) */
-const own = (list: 'inbox' | 'status', id = 'rest-1') => `lafpos:getir:${list}:r:${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16)}`;
+const own = (list: 'inbox' | 'status', id = 'rest-1') => `${REDIS_ONEKI}getir:${list}:r:${createHash('sha256').update(id, 'utf8').digest('hex').slice(0, 16)}`;
 
 beforeAll(async () => {
   h = await startApp();
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, GETIR_WEBHOOK_SECRET: WEBHOOK_SECRET, GETIR_RESTAURANT_ID: 'rest-1', LAFPOS_UZAKTAN_DEMO: '0', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, GETIR_WEBHOOK_SECRET: WEBHOOK_SECRET, GETIR_RESTAURANT_ID: 'rest-1', ASILPOS_UZAKTAN_DEMO: '0', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input) !== 'https://redis.test') return realFetch(input, init);
@@ -57,7 +58,7 @@ afterAll(() => {
 });
 
 const api = () => import('../api/uzaktan');
-const req = (path: string, init: RequestInit = {}) => new Request(`https://lafpos.vercel.app/api/uzaktan?yol=${path}`, init);
+const req = (path: string, init: RequestInit = {}) => new Request(`https://${VERCEL_ALANI}/api/uzaktan?yol=${path}`, init);
 const auth = { 'x-api-key': WEBHOOK_SECRET, 'content-type': 'application/json' };
 const order = { id: 'ord-1', status: 400, confirmationId: '1042', deliveryType: 1, paymentMethod: 1, products: [{ product: 'prd-latte', count: 1, name: { tr: 'Latte' }, priceWithOption: 190, totalPriceWithOption: 190 }], totalPrice: 190, totalDiscountedPrice: 190, restaurant: { id: 'rest-1' } };
 
@@ -92,7 +93,7 @@ describe('Getir aktarıcısı', () => {
     // Restoran ortamda tanımlı (eski öneksiz GETIR_RESTAURANT_ID): kendi listeleri, ortak liste boş
     expect(lists.get(own('inbox'))).toHaveLength(1);
     expect(lists.get(own('status'))).toHaveLength(1);
-    expect(lists.get('lafpos:getir:inbox') ?? []).toHaveLength(0);
+    expect(lists.get(`${REDIS_ONEKI}getir:inbox`) ?? []).toHaveLength(0);
     const item = JSON.parse(lists.get(own('status'))![0]!) as Record<string, unknown>;
     // İptal kaydında restoran kimliği de var: ortak kutuda kasa başka restoranın iptalini ayırır
     expect(item).toMatchObject({ kind: 'cancel', orderId: 'ord-1', reason: 'Müşteri iptal etti', restaurantId: 'rest-1' });
@@ -122,21 +123,21 @@ describe('Getir aktarıcısı', () => {
     const { signedHeaders } = await import('../server/lib/signature');
     const { GET, POST } = await api();
     expect((await GET(req('getir/inbox'))).status).toBe(401);
-    const url = new URL('https://lafpos.vercel.app/api/getir/inbox?restoran=rest-1');
+    const url = new URL(`https://${VERCEL_ALANI}/api/getir/inbox?restoran=rest-1`);
     const got = await GET(req('getir/inbox&restoran=rest-1', { headers: signedHeaders(SECRET, 'GET', url, '') }));
     expect(got.status).toBe(200);
     const body = (await got.json()) as { items: { id: string; kind: string; orderId?: string; order?: { id: string } }[]; total: number };
     expect(body.total).toBe(2);
     expect(body.items[0]).toMatchObject({ kind: 'cancel', orderId: 'ord-1' });
     expect(body.items[1]).toMatchObject({ kind: 'order', order: { id: 'ord-1', confirmationId: '1042' } });
-    const ackUrl = new URL('https://lafpos.vercel.app/api/getir/inbox/ack?restoran=rest-1');
+    const ackUrl = new URL(`https://${VERCEL_ALANI}/api/getir/inbox/ack?restoran=rest-1`);
     const ackBody = JSON.stringify({ ids: body.items.map((i) => i.id) });
     const ack = await POST(req('getir/inbox/ack&restoran=rest-1', { method: 'POST', body: ackBody, headers: { ...signedHeaders(SECRET, 'POST', ackUrl, ackBody), 'content-type': 'application/json' } }));
     expect(await ack.json()).toEqual({ ok: true, removed: 2 });
     const empty = (await (await GET(req('getir/inbox&restoran=rest-1', { headers: signedHeaders(SECRET, 'GET', url, '') }))).json()) as { items: unknown[] };
     expect(empty.items).toHaveLength(0);
     // Yemeksepeti kutusu ayrı: Getir çekimi oraya dokunmaz
-    expect(lists.get('lafpos:ys:inbox') ?? []).toHaveLength(0);
+    expect(lists.get(`${REDIS_ONEKI}ys:inbox`) ?? []).toHaveLength(0);
   });
 
   it('anahtar tanımsızken aktarıcı kurulmamış (503); kurulum durumu getir: false', async () => {
@@ -201,7 +202,7 @@ describe('Getir aktarıcısı', () => {
     // Çekimde de: kutuda kalmış (Kapalı modda kimse çekmedi) eski kayıt verilmez ve silinir
     const l = lists.get(own('inbox'))!;
     l.push(JSON.stringify({ id: 'eski-2', kind: 'order', receivedAt: Date.now() - 1.5 * 86400_000, order: { id: 'ord-eski-2' } }));
-    const url = new URL('https://lafpos.vercel.app/api/getir/inbox?restoran=rest-1');
+    const url = new URL(`https://${VERCEL_ALANI}/api/getir/inbox?restoran=rest-1`);
     const body = (await (await GET(req('getir/inbox&restoran=rest-1', { headers: signedHeaders(SECRET, 'GET', url, '') }))).json()) as { items: { id: string }[] };
     expect(body.items.map((i) => i.id)).toEqual(stored.map((x) => x.id));
     expect(lists.get(own('inbox'))).toHaveLength(2);
@@ -215,7 +216,7 @@ describe('Getir gelen kutusu şubeye ayrılır', () => {
     const { signedHeaders } = await import('../server/lib/signature');
     const { GET } = await api();
     const q = restoran == null ? '' : `?restoran=${encodeURIComponent(restoran)}`;
-    const url = new URL(`https://lafpos.vercel.app/api/getir/inbox${q}`);
+    const url = new URL(`https://${VERCEL_ALANI}/api/getir/inbox${q}`);
     const res = await GET(req(`getir/inbox${q.replace('?', '&')}`, { headers: signedHeaders(SECRET, 'GET', url, '') }));
     expect(res.status).toBe(200);
     return (await res.json()) as { items: { id: string; kind: string; orderId?: string; restaurantId?: string; order?: { id: string; restaurant?: { id: string } } }[]; total: number };
@@ -224,7 +225,7 @@ describe('Getir gelen kutusu şubeye ayrılır', () => {
     const { signedHeaders } = await import('../server/lib/signature');
     const { POST } = await api();
     const q = restoran == null ? '' : `?restoran=${encodeURIComponent(restoran)}`;
-    const url = new URL(`https://lafpos.vercel.app/api/getir/inbox/ack${q}`);
+    const url = new URL(`https://${VERCEL_ALANI}/api/getir/inbox/ack${q}`);
     const body = JSON.stringify({ ids });
     return (await (await POST(req(`getir/inbox/ack${q.replace('?', '&')}`, { method: 'POST', body, headers: { ...signedHeaders(SECRET, 'POST', url, body), 'content-type': 'application/json' } }))).json()) as { removed: number };
   }
@@ -247,8 +248,8 @@ describe('Getir gelen kutusu şubeye ayrılır', () => {
       expect(lists.get(own('inbox', 'rest-marina'))).toHaveLength(1);
       expect(lists.get(own('status', 'rest-marina'))).toHaveLength(1);
       expect(lists.get(own('inbox'))).toHaveLength(1);
-      expect(lists.get('lafpos:getir:inbox') ?? []).toHaveLength(0);
-      expect(lists.get('lafpos:getir:status') ?? []).toHaveLength(0);
+      expect(lists.get(`${REDIS_ONEKI}getir:inbox`) ?? []).toHaveLength(0);
+      expect(lists.get(`${REDIS_ONEKI}getir:status`) ?? []).toHaveLength(0);
       const marina = await pull('rest-marina');
       expect(marina.items.map((i) => i.kind)).toEqual(['cancel', 'order']);
       expect(marina.items.map((i) => i.orderId ?? i.order?.id)).toEqual(['ord-m', 'ord-m']);
@@ -277,8 +278,8 @@ describe('Getir gelen kutusu şubeye ayrılır', () => {
     delete process.env.GETIR_RESTAURANT_ID;
     try {
       await push('rest-herhangi', 'ord-h');
-      expect(lists.get('lafpos:getir:inbox')).toHaveLength(1);
-      expect(lists.get('lafpos:getir:status')).toHaveLength(1);
+      expect(lists.get(`${REDIS_ONEKI}getir:inbox`)).toHaveLength(1);
+      expect(lists.get(`${REDIS_ONEKI}getir:status`)).toHaveLength(1);
       expect((await pull('rest-herhangi')).total).toBe(2);
       expect((await pull()).total).toBe(2);
     } finally {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { signedHeaders } from '../server/lib/signature';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Oturum denetiminin Merkez ve uzaktan oturum bulguları (api/_merkez.ts, api/uzaktan.ts):
@@ -14,7 +15,7 @@ const ORIGIN = 'https://denetim.test';
 const PASSWORD = 'denetim-parola-12';
 const store = new Map<string, string>();
 const sets = new Map<string, Set<string>>();
-const KEYS = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'];
+const KEYS = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_PAROLA', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'];
 const before: Record<string, string | undefined> = {};
 const pushed: { title: string; body: string }[] = [];
 
@@ -45,7 +46,7 @@ function redisCmd(cmd: string, key: string, rest: string[]): unknown {
 beforeAll(async () => {
   for (const k of KEYS) before[k] = process.env[k];
   for (const k of KEYS) delete process.env[k];
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0', VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0', VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' });
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url === 'https://redis.test') {
@@ -69,7 +70,7 @@ beforeEach(() => {
   store.clear();
   sets.clear();
   pushed.length = 0;
-  delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
+  delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
 });
 
 const api = () => import('../api/uzaktan');
@@ -97,7 +98,7 @@ async function beat(key: string, payload: unknown) {
 }
 
 async function adminToken() {
-  process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
+  process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI = '1';
   const res = await call('POST', 'uzaktan/giris', { body: JSON.stringify({ parola: PASSWORD }) });
   return ((await res.json()) as { token: string }).token;
 }
@@ -115,7 +116,7 @@ describe('Merkez kaydı: yalnız kasadan, kimlik anahtarın özeti, sınırlı',
     const unsigned = await call('POST', 'merkez/kayit', { body: JSON.stringify({ id: installIdFor(key), anahtar: key }) });
     expect(unsigned.status).toBe(401);
     expect((await register(key, undefined, 'x'.repeat(40))).status).toBe(401);
-    expect(sets.get('lafpos:merkez:kurulumlar')?.size ?? 0).toBe(0);
+    expect(sets.get(`${REDIS_ONEKI}merkez:kurulumlar`)?.size ?? 0).toBe(0);
     const ok = await register(key);
     expect(ok.status).toBe(200);
     expect(await ok.json()).toMatchObject({ ok: true, yeni: true });
@@ -134,7 +135,7 @@ describe('Merkez kaydı: yalnız kasadan, kimlik anahtarın özeti, sınırlı',
   it('IP başına saatte en çok 10 kayıt; onay bekleyen en çok 50', async () => {
     for (let i = 0; i < 10; i++) expect((await register(`a${i}`.padEnd(40, 'x'), undefined, SECRET, '8.8.8.8')).status).toBe(200);
     expect((await register('b'.repeat(40), undefined, SECRET, '8.8.8.8')).status).toBe(429);
-    for (let i = 0; i < 40; i++) sets.get('lafpos:merkez:bekleyen')!.add(`dolgu${i}`);
+    for (let i = 0; i < 40; i++) sets.get(`${REDIS_ONEKI}merkez:bekleyen`)!.add(`dolgu${i}`);
     const full = await register('c'.repeat(40), undefined, SECRET, '9.9.9.9');
     expect(full.status).toBe(429);
     expect(((await full.json()) as { code: string }).code).toBe('too_many_pending');
@@ -150,7 +151,7 @@ describe('Merkez kaydı: yalnız kasadan, kimlik anahtarın özeti, sınırlı',
     const token = await adminToken();
     const { installIdFor } = await merkezApi();
     expect((await call('POST', 'merkez/sil', { body: JSON.stringify({ id: installIdFor(key) }), token })).status).toBe(200);
-    expect(sets.get('lafpos:merkez:kurulumlar')?.has(installIdFor(key))).toBe(false);
+    expect(sets.get(`${REDIS_ONEKI}merkez:kurulumlar`)?.has(installIdFor(key))).toBe(false);
     expect((await beat(key, {})).status).toBe(404);
     expect((await register(key)).status).toBe(200);
   });
@@ -203,8 +204,8 @@ describe('Merkez nabzı: bildirim ve durum', () => {
     const token = await adminToken();
     for (let i = 0; i < 230; i++) {
       const id = `x${String(i).padStart(23, '0')}`;
-      store.set(`lafpos:merkez:kurulum:${id}`, JSON.stringify({ id, key: 'k', ad: null, createdAt: 0, lastSeen: null, surum: null, build: null, guncelleme: null, gunAcik: null, lisans: { durum: 'bekliyor' }, mod: 'elle', hedef: null, gonderildi: null }));
-      (sets.get('lafpos:merkez:kurulumlar') ?? sets.set('lafpos:merkez:kurulumlar', new Set()).get('lafpos:merkez:kurulumlar')!).add(id);
+      store.set(`${REDIS_ONEKI}merkez:kurulum:${id}`, JSON.stringify({ id, key: 'k', ad: null, createdAt: 0, lastSeen: null, surum: null, build: null, guncelleme: null, gunAcik: null, lisans: { durum: 'bekliyor' }, mod: 'elle', hedef: null, gonderildi: null }));
+      (sets.get(`${REDIS_ONEKI}merkez:kurulumlar`) ?? sets.set(`${REDIS_ONEKI}merkez:kurulumlar`, new Set()).get(`${REDIS_ONEKI}merkez:kurulumlar`)!).add(id);
     }
     const res = await call('GET', 'merkez/kurulumlar', { token });
     expect(((await res.json()) as { kurulumlar: unknown[] }).kurulumlar).toHaveLength(230);
@@ -238,10 +239,10 @@ describe('Merkez nabzı: bildirim ve durum', () => {
     const res = (await (await beating).json()) as { lisans: { durum: string }; hedef: number };
     expect(res.lisans.durum).toBe('aktif');
     expect(res.hedef).toBe(2000);
-    const saved = JSON.parse(store.get(`lafpos:merkez:kurulum:${id}`)!) as { lisans: { durum: string }; hedef: number };
+    const saved = JSON.parse(store.get(`${REDIS_ONEKI}merkez:kurulum:${id}`)!) as { lisans: { durum: string }; hedef: number };
     expect(saved).toMatchObject({ lisans: { durum: 'aktif' }, hedef: 2000 });
     // Nabzın kendi alanı da yerinde
-    expect(JSON.parse(store.get(`lafpos:merkez:durum:${id}`)!)).toMatchObject({ surum: '0.2.1' });
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}merkez:durum:${id}`)!)).toMatchObject({ surum: '0.2.1' });
   });
 
   it('elle dükkânda gönderilen hedef kurulu derlemeden yeniyse "gönderilmedi" görünmez', async () => {
@@ -260,19 +261,19 @@ describe('Uzaktan oturumları', () => {
   it('parolasız görünümün jetonu parola zorunlu olunca geçersiz (Merkez ve özet 401)', async () => {
     const open = ((await (await call('POST', 'uzaktan/giris', { body: '{}' })).json()) as { token: string }).token;
     expect(open).toBeTruthy();
-    process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
+    process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     expect((await call('GET', 'merkez/kurulumlar', { token: open })).status).toBe(401);
     expect((await call('GET', 'bootstrap', { token: open })).status).toBe(401);
     expect((await call('POST', 'merkez/kurulum', { body: JSON.stringify({ id: 'a'.repeat(24), lisans: 'aktif' }), token: open })).status).toBe(401);
     // Parolalı giriş çalışır; parola kalkınca o jeton da düşer
     const real = await adminToken();
     expect((await call('GET', 'merkez/kurulumlar', { token: real })).status).toBe(200);
-    delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
+    delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
     expect((await call('GET', 'merkez/kurulumlar', { token: real })).status).toBe(401);
   });
 
   it('parolasız görünümde Merkez ve bildirim aboneliği 403 der (oturum düşürülmez)', async () => {
-    store.set('lafpos:dukkanlar', JSON.stringify({ marina: Date.now() }));
+    store.set(`${REDIS_ONEKI}dukkanlar`, JSON.stringify({ marina: Date.now() }));
     const open = ((await (await call('POST', 'uzaktan/giris', { body: '{}' })).json()) as { token: string }).token;
     const list = await call('GET', 'merkez/kurulumlar', { token: open });
     expect(list.status).toBe(403);
@@ -312,10 +313,10 @@ describe('#71 dönemindeki kasa (rastgele kimlik, tek anahtardaki kayıt, eski n
   const KEY = 'k'.repeat(43);
   const seed = (extra: object) => {
     store.set(
-      `lafpos:merkez:kurulum:${ID}`,
+      `${REDIS_ONEKI}merkez:kurulum:${ID}`,
       JSON.stringify({ id: ID, key: KEY, ad: 'Marina', kod: 'MRN', createdAt: 1, lastSeen: 2, surum: '0.2.0', build: 1000, gunAcik: true, lisans: { durum: 'aktif' }, mod: 'elle', hedef: null, gonderildi: null, guncelleme: null, ...extra }),
     );
-    sets.set('lafpos:merkez:kurulumlar', new Set([ID]));
+    sets.set(`${REDIS_ONEKI}merkez:kurulumlar`, new Set([ID]));
   };
   const oldBeat = (key = KEY) => {
     const body = JSON.stringify({ surum: '0.2.0', build: 1000, gunAcik: true, guncelleme: { durum: 'bekliyor', mesaj: 'Yeni sürüm hazır; gün sonundan sonra kendiliğinden kurulacak', yeni: { surum: '0.2.0', build: 1500 } } });
@@ -329,8 +330,8 @@ describe('#71 dönemindeki kasa (rastgele kimlik, tek anahtardaki kayıt, eski n
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, ad: 'Marina', kod: 'MRN', lisans: { durum: 'aktif' }, mod: 'elle', hedef: 2000 });
     // Panelin kaydı yerinde; nabzın alanları ayrı anahtarda ve eski kasa `kesinHedef` taşımıyor
-    expect(JSON.parse(store.get(`lafpos:merkez:kurulum:${ID}`)!)).toMatchObject({ key: KEY, hedef: 1500, lisans: { durum: 'aktif' } });
-    expect(JSON.parse(store.get(`lafpos:merkez:durum:${ID}`)!)).toMatchObject({ build: 1000, gunAcik: true, kesinHedef: false, guncelleme: { durum: 'bekliyor', yeni: { build: 1500 } } });
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}merkez:kurulum:${ID}`)!)).toMatchObject({ key: KEY, hedef: 1500, lisans: { durum: 'aktif' } });
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}merkez:durum:${ID}`)!)).toMatchObject({ build: 1000, gunAcik: true, kesinHedef: false, guncelleme: { durum: 'bekliyor', yeni: { build: 1500 } } });
     // Sonraki nabızlar da aynı yanıtı alır (ayrı anahtardan birleşen kayıtla)
     expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: 2000 });
   });
@@ -339,7 +340,7 @@ describe('#71 dönemindeki kasa (rastgele kimlik, tek anahtardaki kayıt, eski n
     seed({ hedef: 2000, gonderildi: 5 });
     expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: 2000 });
     seed({ hedef: null });
-    store.delete(`lafpos:merkez:durum:${ID}`);
+    store.delete(`${REDIS_ONEKI}merkez:durum:${ID}`);
     expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: null });
     expect((await oldBeat('y'.repeat(43))).status).toBe(401);
   });
@@ -370,16 +371,16 @@ describe('Şimdi güncelle: en güncel sürüm kuruluysa yeniden gönderilmez (s
     const redis = async (...cmd: (string | number)[]) => redisCmd(String(cmd[0]), String(cmd[1]), cmd.slice(2).map(String));
     const deps = { redis, verify: () => true, signedShared: () => true, admin: async () => true, demo: false, fetchRelease: async () => rel };
     const post = async (path: string) => (await merkez(new Request(`${ORIGIN}/api/${path}`, { method: 'POST', body: JSON.stringify({ ids: [id] }) }), new URL(`${ORIGIN}/api/${path}`), path, deps)).json();
-    const saved = () => JSON.parse(store.get(`lafpos:merkez:kurulum:${id}`)!) as { guncelleIstek?: number | null; hedef: number | null; gonderildi: number | null };
+    const saved = () => JSON.parse(store.get(`${REDIS_ONEKI}merkez:kurulum:${id}`)!) as { guncelleIstek?: number | null; hedef: number | null; gonderildi: number | null };
 
     // Kayıtta derleme 1000: eski, istenir
     expect(await post('merkez/simdi-guncelle')).toMatchObject({ ok: true, istenen: 1, guncel: 0, surum: '0.3.0' });
     expect(saved()).toMatchObject({ hedef: 2000 });
 
     // Kasa en güncel derlemeyi kurdu (nabız): ne istek ne hedef yeniden yazılır, yanıt "güncel" der
-    store.set(`lafpos:merkez:durum:${id}`, JSON.stringify({ build: 2000, surum: '0.3.0' }));
+    store.set(`${REDIS_ONEKI}merkez:durum:${id}`, JSON.stringify({ build: 2000, surum: '0.3.0' }));
     const before = saved();
-    store.set(`lafpos:merkez:kurulum:${id}`, JSON.stringify({ ...before, guncelleIstek: null, gonderildi: 1 }));
+    store.set(`${REDIS_ONEKI}merkez:kurulum:${id}`, JSON.stringify({ ...before, guncelleIstek: null, gonderildi: 1 }));
     expect(await post('merkez/simdi-guncelle')).toMatchObject({ ok: true, istenen: 0, guncel: 1, build: 2000, surum: '0.3.0' });
     expect(saved()).toMatchObject({ guncelleIstek: null, gonderildi: 1 });
     expect(await post('merkez/gonder')).toMatchObject({ ok: true, gonderilen: 0, guncel: 1 });

@@ -69,7 +69,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `lafpos-z-${day.date}.json`;
+    a.download = `asilpos-z-${day.date}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -169,7 +169,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
                   <Group>Yazarkasadan geçmeyen</Group>
                   <Line l="Kart" k={summary.offDevice.card} />
                   <Line l="Nakit" k={summary.offDevice.cash} />
-                  <li className="text-pretty px-4 py-2 text-xs text-muted">Cihaza gitmeden LafPOS’a yazılan ödemeler, bahşiş hariç; mali fişi yazarkasada ayrıca kesilir</li>
+                  <li className="text-pretty px-4 py-2 text-xs text-muted">Cihaza gitmeden AsilPOS’a yazılan ödemeler, bahşiş hariç; mali fişi yazarkasada ayrıca kesilir</li>
                 </>
               )}
             </ul>

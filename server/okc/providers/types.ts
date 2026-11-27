@@ -10,7 +10,7 @@ import type { TokenxBasket } from '../tokenx';
 export type ProviderId = 'tokenx' | 'tokenkablo' | 'pavo' | 'hugin' | 'simulator';
 
 /**
- * LafPOS'un cihaz sepeti. Biçim TokenX sepetiyle aynıdır: birim fiyat kuruş, adet x1000, KDV oranı x100, kısım no,
+ * AsilPOS'un cihaz sepeti. Biçim TokenX sepetiyle aynıdır: birim fiyat kuruş, adet x1000, KDV oranı x100, kısım no,
  * kalemin indirim payı `adjust.totalValue`. Diğer sağlayıcılar bu biçimden kendi biçimlerine çevirir.
  */
 /**
@@ -25,7 +25,7 @@ export type DocKind = 'okc_fis' | 'bilgi_fisi' | 'e_arsiv' | 'e_fatura';
 export interface FiscalPayment {
   kind: MethodKind;
   amount: number;
-  /** Yemek kartı operatörü (Multinet, Pluxee...) cihazın verdiği kimlikle; LafPOS ödeme türüne eşlenir */
+  /** Yemek kartı operatörü (Multinet, Pluxee...) cihazın verdiği kimlikle; AsilPOS ödeme türüne eşlenir */
   operatorId: number | null;
   description: string | null;
 }
@@ -96,7 +96,7 @@ export interface FiscalProvider {
    */
   validate?(basket: FiscalBasket): void;
   /**
-   * Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet LafPOS'ta bekler, cihaz kendisi alır. Hata
+   * Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet AsilPOS'ta bekler, cihaz kendisi alır. Hata
    * `uncertain: true` taşıyorsa (zaman aşımı, bağlantı koptu) sepet cihaza ulaşmış olabilir: bekleyen kalır ve
    * `poll` ile sorgulanır; diğer hatalarda sepet cihazda yok sayılır.
    */

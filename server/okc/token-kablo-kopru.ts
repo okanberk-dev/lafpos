@@ -1,7 +1,8 @@
+import { TOKEN_FIRMA } from '@shared/eski-adlar';
 /**
  * Token kablolu bağlantının köprüsü: Windows PowerShell'de (32 bit; Token'ın IntegrationHub.dll'i içindeki yerel
  * kütüphane x86) çalışan küçük bir program. Token'ın C# kütüphanesini yükler, cihazla USB/RS232 üzerinden konuşur,
- * LafPOS sunucusuyla standart giriş ve çıkıştan satır satır anlaşır. Ek program kurulmaz: Windows'ta hazır gelen
+ * AsilPOS sunucusuyla standart giriş ve çıkıştan satır satır anlaşır. Ek program kurulmaz: Windows'ta hazır gelen
  * PowerShell, C# kaynağını açılışta kendisi derler (Add-Type). Kütüphanenin uçları ve geri çağrıları Token'ın belgesi
  * ("Token X Connect Wire › Geliştirici Dokümanı") ve örnek projesinden (hizlisepet-clienttemplate). Ayrıntı:
  * docs/04-YAZARKASA.md §9.
@@ -14,15 +15,15 @@
  * işlenemedi, 1 ve 10 300TR'de parçalı ödeme), `{"t":"res","id":"…","ok":true,"value":"…"}` (komutun yanıtı),
  * `{"t":"fatal","message":"…"}` (kütüphane yüklenemedi).
  */
-export const KOPRU_PS1 = String.raw`# LafPOS - Token kablolu baglanti koprusu (LafPOS sunucusu yazar; elle degistirmeyin)
-param([Parameter(Mandatory = $true)][string]$Dll, [string]$Firma = 'LafPOS')
+export const KOPRU_PS1 = String.raw`# AsilPOS - Token kablolu baglanti koprusu (AsilPOS sunucusu yazar; elle degistirmeyin)
+param([Parameter(Mandatory = $true)][string]$Dll, [string]$Firma = '${TOKEN_FIRMA}')
 $ErrorActionPreference = 'Stop'
 # Kutuphane adiyla istendiginde diskteki DLL verilir (derlenen kopru onu adiyla arar)
 $yukleyici = @'
 using System;
 using System.Reflection;
 
-public static class LafposKopruYukle {
+public static class AsilposKopruYukle {
   static Assembly asm;
   public static void Hazirla(string yol) {
     asm = Assembly.LoadFrom(yol);
@@ -38,7 +39,7 @@ using System;
 using System.IO;
 using System.Text;
 
-public static class LafposKopru {
+public static class AsilposKopru {
   static readonly object kilit = new object();
   static TextWriter cikis;
   static IntegrationHub.POSCommunication.SerialInCallback seri;
@@ -121,9 +122,9 @@ public static class LafposKopru {
 '@
 try {
   Add-Type -TypeDefinition $yukleyici
-  [LafposKopruYukle]::Hazirla($Dll)
+  [AsilposKopruYukle]::Hazirla($Dll)
   Add-Type -TypeDefinition $kaynak -ReferencedAssemblies @($Dll)
-  [LafposKopru]::Calistir($Firma)
+  [AsilposKopru]::Calistir($Firma)
 } catch {
   $m = ($_.Exception.Message -replace '[\r\n"\\]', ' ')
   [Console]::Out.WriteLine('{"t":"fatal","message":"' + $m + '"}')

@@ -131,7 +131,7 @@ describe('lafmaliyet geçişi', () => {
     expect((await status()).training).toBe(false);
     const training = db.select().from(schema.businessDays).all().find((d) => d.date === today && d.closedAt)!;
     expect(training.trainingDay).toBe(true);
-    // İşaretten önce kapanan gün (LafPOS o zaman canlıda değildi) de eğitim günü sayılır
+    // İşaretten önce kapanan gün (AsilPOS o zaman canlıda değildi) de eğitim günü sayılır
     const legacy = insertDay(day(65), 90, { training: null });
 
     const back = await h.ok<{ queued: number; days: string[]; training: number }>('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(70), to: today });
@@ -235,7 +235,7 @@ describe('lafmaliyet geçişi', () => {
     dayReplies.push({ status: 401, body: { error: 'unauthorized' } });
     const unauthorized = await h.call<{ error: string }>('kasa', 'POST', `/sync/lafmaliyet/gun/${d4}/push`);
     expect(unauthorized.status).toBe(502);
-    expect(unauthorized.json.error).toMatch(/LAFMALIYET_SYNC_SECRET.*LAFPOS_SYNC_SECRET.*±5 dk/);
+    expect(unauthorized.json.error).toMatch(/LAFMALIYET_SYNC_SECRET.*ASILPOS_SYNC_SECRET.*±5 dk/);
     expect(unauthorized.json.error).toMatch(/Giden kutusunda bekliyor, sonra tekrar denenecek$/);
     expect(outbox().find((o) => o.dedupeKey === `gun:${day(17)}`)!.nextAttemptAt).toBeLessThan(Date.now() + 86400_000);
 
@@ -298,7 +298,7 @@ describe('lafmaliyet geçişi', () => {
       expect(s.costsAt).toBe(firstAt);
       expect(s.costsError?.message).toBe(r.json.error);
     }
-    expect((await status()).costsError?.message).toMatch(/LAFPOS_SYNC_SECRET tanımlı değil/);
+    expect((await status()).costsError?.message).toMatch(/ASILPOS_SYNC_SECRET.*tanımlı değil/);
 
     // Her gün sonu: aynı iş gününde (05:00 kuralı) yeniden çekilmez; ertesi gün kapanış öncekinden erken olsa da çekilir
     const { setSyncState } = await mod();

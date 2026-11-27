@@ -340,7 +340,7 @@ describe('seçenek ek fiyatı denetim kaydında', () => {
     expect(await free.changed()).toHaveLength(0);
   });
 
-  it('site grubu LafPOS’ta düzenlenmez; mesaj nereden değiştiğini söyler, ürünlere bağlanabilir', async () => {
+  it('site grubu AsilPOS’ta düzenlenmez; mesaj nereden değiştiğini söyler, ürünlere bağlanabilir', async () => {
     const m = await menu();
     const site = m.optionGroups.find((g) => g.extSource)!;
     const r = await h.call<{ error?: string; message?: string; code: string }>('patron', 'PUT', `/admin/option-groups/${site.id}`, { name: 'X', kind: 'single', items: [] });

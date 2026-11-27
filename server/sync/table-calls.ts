@@ -7,6 +7,7 @@ import { Effects } from '../lib/effects';
 import { HttpError, notFound } from '../lib/http';
 import { signedFetch } from '../lib/signature';
 import { requireSiteSigned, siteBranch, siteSigned } from './laffogato-link';
+import { SITE_AKTOR } from '@shared/eski-adlar';
 
 /**
  * Masadan çağrılar (uygulamada "Garson çağır", su, peçete; laffogato `src/lib/admin/table-calls-core.ts`). Site açık
@@ -37,7 +38,7 @@ interface StoredCall extends PanelCall {
 
 interface CallsState {
   calls: StoredCall[];
-  /** LafPOS'ta yanıtlanan çağrılar (kimlik → an): yanıttan önce istenmiş bir liste onları geri getirmesin */
+  /** AsilPOS'ta yanıtlanan çağrılar (kimlik → an): yanıttan önce istenmiş bir liste onları geri getirmesin */
   acked: Record<string, number>;
   /**
    * Son işlenen listenin istendiği an: ondan önce istenmiş (ağda gecikmiş) liste yenisini ezmez. İleride görünüyorsa
@@ -95,7 +96,7 @@ const toDTO = (c: StoredCall): TableCallDTO => ({ id: c.id, label: c.tableName ?
 /**
  * Çekilen listeyi işler (sipariş çekiminin işleminde, `upsertOnlineOrders`). Yeni çağrı cihazlarda çalar
  * (`tables` › `site.call.new`, "Masa 4 · Su istiyor"); listeden düşen `site.call.done`. `mapTable`: siparişlerin masa
- * kuralı (önce QR kodu, sonra etiket). LafPOS'ta yanıtlanmış çağrı, eski bir listede gelse de geri gelmez.
+ * kuralı (önce QR kodu, sonra etiket). AsilPOS'ta yanıtlanmış çağrı, eski bir listede gelse de geri gelmez.
  */
 export function applyTableCalls(
   t: Tx,
@@ -155,7 +156,7 @@ export function tableCallsView(now = Date.now(), t: Tx | DB = db): TableCallDTO[
 }
 
 /**
- * "Gördüm": çağrıyı sitede yanıtlar (`POST /api/panel/calls/ack`, gövde `{id, actor}`; site `lafpos:<ad>` yazar),
+ * "Gördüm": çağrıyı sitede yanıtlar (`POST /api/panel/calls/ack`, gövde `{id, actor}`; site adı kasanın önekiyle yazar),
  * sonra yerelde düşürür, denetim kaydına yazar ve cihazlara yayar. Site 404 derse (çağrı sitede yok) yine düşer.
  * Siteye ulaşılamazsa ya da site kabul etmezse 502: çağrı açık kalır, yeniden denenir. Aynı çağrıya ikinci "Gördüm"
  * (başka cihazdan, aynı anda) siteye gitmeden tamam döner.
@@ -166,7 +167,7 @@ export async function ackTableCall(id: string, actor: { id: string; name: string
   if (state.acked[id]) return { ok: true, already: true };
   const call = state.calls.find((c) => c.id === id);
   if (!call) throw notFound('Çağrı');
-  const name = actor.name.trim().slice(0, ACTOR_MAX).trim() || 'LafPOS';
+  const name = actor.name.trim().slice(0, ACTOR_MAX).trim() || SITE_AKTOR;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/calls/ack`), { id, actor: name, branch: siteBranch() }).catch(() => {
     throw new HttpError(502, 'Siteye ulaşılamadı; çağrı sitede açık kaldı. İnternet gelince yeniden deneyin', 'site_call');
   });

@@ -1,3 +1,5 @@
+// İlk içe aktarım: eski önekli tarayıcı deposunu yeni öneke kopyalar (ad değişikliği), sepet ve oturum okunmadan önce
+import './lib/eski-depo';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -21,13 +23,13 @@ const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
 // Bar ekranı (/mutfak) ilk karede de koyu: sayfa kendi koyusunu kurana dek beyaz flaş olmasın
 initTheme(basename && window.location.pathname.startsWith(basename) ? window.location.pathname.slice(basename.length) || '/' : window.location.pathname);
 
-// LafPOS güncellenince açık kalan tabletin istediği eski parça dosyası artık yoktur: sayfa bir kez yenilenip yeni
+// AsilPOS güncellenince açık kalan tabletin istediği eski parça dosyası artık yoktur: sayfa bir kez yenilenip yeni
 // sürümü alır (aynı dakikada ikinci kez yenilemez, döngüye girmez)
 window.addEventListener('vite:preloadError', (e) => {
   try {
-    const last = Number(sessionStorage.getItem('lafpos.reloadedAt') ?? 0);
+    const last = Number(sessionStorage.getItem('asilpos.reloadedAt') ?? 0);
     if (Date.now() - last < 60_000) return;
-    sessionStorage.setItem('lafpos.reloadedAt', String(Date.now()));
+    sessionStorage.setItem('asilpos.reloadedAt', String(Date.now()));
   } catch {
     /* depolama yoksa da bir kez yenile */
   }
@@ -77,14 +79,14 @@ function render() {
 }
 
 if (DEMO) {
-  // Tarayıcı demosu: önce sayfanın içindeki LafPOS sunucusu açılır (ilk açılışta örnek gün kurulur)
-  root.render(<PageLoading label="LafPOS demosu hazırlanıyor…" delay={0} />);
+  // Tarayıcı demosu: önce sayfanın içindeki AsilPOS sunucusu açılır (ilk açılışta örnek gün kurulur)
+  root.render(<PageLoading label="AsilPOS demosu hazırlanıyor…" delay={0} />);
   startDemo().then(render, (e: unknown) => root.render(<DemoFailed error={e} />));
 } else if (REMOTE && !new URLSearchParams(window.location.search).has('uzaktan')) {
-  // LafPOS Uzaktan: kafe henüz bağlanmadıysa (yalnız örnek özet var) site tam etkileşimli demoyu açar. Kafe
+  // AsilPOS Uzaktan: kafe henüz bağlanmadıysa (yalnız örnek özet var) site tam etkileşimli demoyu açar. Kafe
   // bağlanınca uzaktan görünüm açılır; ?uzaktan=1 örnek özetle uzaktan görünümde kalır. Üyelik açıksa demoya
   // dönülmez: üye girişi görünür (program buradan indirilir), demo giriş ekranında bağlantı olarak durur
-  root.render(<PageLoading label="LafPOS açılıyor…" />);
+  root.render(<PageLoading label="AsilPOS açılıyor…" />);
   fetch('/api/uzaktan/kurulum')
     .then((r) => r.json() as Promise<{ demo?: boolean; member?: string }>)
     .then((s) => (s.demo && !s.member ? window.location.replace('/demo/') : render()), render);

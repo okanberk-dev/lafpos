@@ -4,9 +4,10 @@ import type { RemoteDayReport } from '@shared/remote-reports';
 import { addDays } from '@shared/time';
 import { upstashCommand } from './fake-upstash';
 import { type Harness, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
- * Sahibin bildirdiği hata (23 Kasım 2026): LafPOS Uzaktan › Raporlar › "Geçen hafta" Marina'nın ModPOS günlerini (16-21)
+ * Sahibin bildirdiği hata (23 Kasım 2026): AsilPOS Uzaktan › Raporlar › "Geçen hafta" Marina'nın ModPOS günlerini (16-21)
  * hiç göstermiyor. Elle yüklenen geçmiş bulutta başka bir dükkân anahtarında (ya da hiç yok), eski deneme raporları da
  * duruyor olabilir; buluttaki durumu okuyamayız. Çözüm kasada: ModPOS günleri lafmaliyet'ten (ladmin) gelir
  * (`GET /api/panel/pos/modpos-gunler`), kasa onları kendi dükkân kimliğiyle gün raporu olarak Uzaktan'a iter ve kendi
@@ -70,8 +71,8 @@ beforeAll(async () => {
   h = await startApp();
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET, merkezUrl: '', lafmaliyetUrl: '', lafmaliyetToken: SYNC });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
-  delete process.env.LAFPOS_UYE_EPOSTA;
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
+  delete process.env.ASILPOS_UYE_EPOSTA;
   const { sign } = await import('../server/lib/signature');
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -162,7 +163,7 @@ describe('sahibin bildirdiği hata: Uzaktan "Geçen hafta" ModPOS günlerini gö
     setSyncState(GECMIS_KEY, { at: 7, kaynak: 'ModPOS', gunler: manualDays() });
     store.set(historyKey('a'.repeat(24)), JSON.stringify({ v: 1, kaynak: 'ModPOS', at: 7, gunler: manualDays() }));
     // Tablonun ilk günü için bulutta "Denemeyi bitir"den önce itilmiş 880 TL'lik deneme raporu
-    store.set(`lafpos:rapor:default:gun:${dateOf(0)}`, JSON.stringify(staleTraining(dateOf(0))));
+    store.set(`${REDIS_ONEKI}rapor:default:gun:${dateOf(0)}`, JSON.stringify(staleTraining(dateOf(0))));
     const week = `reports/summary?from=${dateOf(3)}&to=${dateOf(8)}`;
     const before = await remote<{ byDay: { date: string }[] }>(week);
     // Hata: 6 ModPOS günü yok
@@ -326,7 +327,7 @@ describe('yalnız föyden gelen gün ve karaoke KDV\'si (CONTRACT §9)', () => {
       expect(only.history).toEqual({ kaynak: 'ModPOS', days: 1, amount: 0, indirimBilinmiyor: 1 });
       // Uzaktan da aynı: gün raporu bilinmiyor işaretiyle gider
       await reportTick({ backfill: true });
-      expect(JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(7)}`)!)).toMatchObject({ indirimBilinmiyor: true, s: { disc: 0, gross: 400800 } });
+      expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${dateOf(7)}`)!)).toMatchObject({ indirimBilinmiyor: true, s: { disc: 0, gross: 400800 } });
       const remoteSum = await remote<any>(`reports/summary?from=${dateOf(7)}&to=${dateOf(8)}`);
       expect(remoteSum.history).toEqual({ kaynak: 'ModPOS', days: 2, from: dateOf(7), to: dateOf(8), indirimBilinmiyor: 1 });
       expect(remoteSum.kdv).toEqual(s.kdv);
@@ -379,7 +380,7 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
     expect(ipt.history).toEqual({ kaynak: 'ModPOS', days: 9 });
     const chk = await h.ok<any>('patron', 'GET', `/reports/checks?${range()}`);
     expect(chk.history).toEqual({ kaynak: 'ModPOS', days: 9, receipts: 135 });
-    // lafmaliyet'ten gelen gün kapanış dakikası taşımaz: saatlik yalnız LafPOS'un (boş)
+    // lafmaliyet'ten gelen gün kapanış dakikası taşımaz: saatlik yalnız AsilPOS'un (boş)
     const hr = await h.ok<any>('patron', 'GET', `/reports/hourly?${range()}`);
     expect(hr.total).toBe(0);
   });
@@ -394,7 +395,7 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
     expect(p.stats.daily).toContainEqual([dateOf(8), 462050, 17]);
   });
 
-  it('gerçek LafPOS günü geçmişi ezer; gerçek kullanımda deneme günü geçmişe yer bırakır (adisyonları okunmaz)', async () => {
+  it('gerçek AsilPOS günü geçmişi ezer; gerçek kullanımda deneme günü geçmişe yer bırakır (adisyonları okunmaz)', async () => {
     const { db, schema } = await import('../server/db/client');
     const { updateSettings } = await import('../server/lib/settings');
     const base = { openedAt: Date.parse(`${dateOf(1)}T09:00:00+03:00`), closedAt: Date.parse(`${dateOf(1)}T23:00:00+03:00`), openingCash: 0 };
@@ -406,7 +407,7 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
       expect(setup.byDay.map((d: { kaynak?: string }) => d.kaynak ?? null)).toEqual([null, null]);
       updateSettings({ demoMode: false, okcProvider: 'kapali', liveSince: Date.now() });
       const s = await h.ok<any>('patron', 'GET', `/reports/summary?from=${dateOf(1)}&to=${dateOf(2)}`);
-      // 14'ü ModPOS (deneme günü yerine), 15'i LafPOS'un gerçek günü (satışsız)
+      // 14'ü ModPOS (deneme günü yerine), 15'i AsilPOS'un gerçek günü (satışsız)
       expect(s.byDay).toEqual([
         { date: dateOf(1), netSales: 331100, receipts: 14, kaynak: 'ModPOS', zText: 'Z-2026-003' },
         { date: dateOf(2), netSales: 0, receipts: 0 },
@@ -476,11 +477,11 @@ describe('kasadaki Raporlar ModPOS günlerini gösterir (Z ve iş günü hariç)
     const { buildDayReport } = await import('../server/sync/cloud-reports');
     expect(db.select().from(schema.businessDays).all()).toEqual([]);
     expect(db.select().from(schema.outbox).all().filter((o) => o.target === 'lafmaliyet')).toEqual([]);
-    // Gün raporu (Uzaktan'a giden LafPOS günü) geçmişi bilmez: o tarihte LafPOS günü yok
+    // Gün raporu (Uzaktan'a giden AsilPOS günü) geçmişi bilmez: o tarihte AsilPOS günü yok
     expect(buildDayReport(dateOf(4))).toBeNull();
     const days = await h.ok<{ days?: unknown[] } | unknown[]>('patron', 'GET', '/cash/days');
     expect(JSON.stringify(days)).not.toMatch(/Z-2026/);
-    // Yeni gün LafPOS'un kendi Z sırasıyla açılır (ModPOS'un Z'si sayılmaz)
+    // Yeni gün AsilPOS'un kendi Z sırasıyla açılır (ModPOS'un Z'si sayılmaz)
     const opened = await h.ok<{ zNo: number }>('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
     expect(opened.zNo).toBe(1);
   });
@@ -490,7 +491,7 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
   it('lafmaliyet\'ten gelen günler kaynak ve Z ile gider; değişmeyen gün yeniden gitmez, değişen gün gider', async () => {
     const { reportTick } = await import('../server/sync/cloud-reports');
     await reportTick({ backfill: true });
-    const day = JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(2)}`)!) as RemoteDayReport;
+    const day = JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${dateOf(2)}`)!) as RemoteDayReport;
     expect(day).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-004', s: { rev: 575300, disc: 51700, comp: 19000, odenmez: 19000 } });
     expect(day.kdv).toEqual([[10, 575300, 523000, 52300]]);
     const sent: string[] = [];
@@ -543,7 +544,7 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
     expect(partSum.itemsSold).toBe(0);
     // Satırlar bulutta bir kez durur (bloğun son geçmiş gününde); öbür günler yalnız dönemi ve gün sayısını taşır. Böylece
     // 400 günlük ModPOS dönemi ve 500 satırlık liste her gün anahtarında kopyalanmaz, uzun dönemin MGET'i şişmez
-    const pushed = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(i)}`)!) as RemoteDayReport).urunler);
+    const pushed = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${dateOf(i)}`)!) as RemoteDayReport).urunler);
     expect(pushed.slice(0, 8)).toEqual(Array(8).fill({ from: dateOf(0), to: dateOf(8), n: 9 }));
     expect(pushed[8]).toMatchObject({ from: dateOf(0), to: dateOf(8), n: 9 });
     expect(pushed[8]!.rows).toHaveLength(31);
@@ -553,7 +554,7 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
     // Bloğun bir günü bulutta yoksa (gidemedi ya da başka kaynak) blok o günü de sayardı: tam değil, not. Satırları taşıyan
     // gün yoksa da not
     for (const i of [4, 8]) {
-      const key = `lafpos:rapor:default:gun:${dateOf(i)}`;
+      const key = `${REDIS_ONEKI}rapor:default:gun:${dateOf(i)}`;
       const missing = store.get(key)!;
       store.delete(key);
       try {
@@ -588,7 +589,7 @@ describe('Uzaktan\'a giden ModPOS günleri', () => {
       expect(s.byDay.map((d: { date: string }) => d.date)).not.toContain(dateOf(6));
       expect(s.netSales).toBe(2734875 - 253575);
       expect(s.history).toMatchObject({ days: 8 });
-      expect(JSON.parse(store.get(`lafpos:rapor:default:gun:${dateOf(6)}`)!)).toMatchObject({ n: 0, s: { rev: 0 } });
+      expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:default:gun:${dateOf(6)}`)!)).toMatchObject({ n: 0, s: { rev: 0 } });
     } finally {
       ladminAnswer = () => Response.json(ladminBody());
       await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
@@ -619,7 +620,7 @@ describe('Uzaktan\'a giden ModPOS günleri: kurulum modundan çıkış', () => {
     const { eq } = await import('drizzle-orm');
     const { getSettings, updateSettings } = await import('../server/lib/settings');
     const before = getSettings().demoMode;
-    const key = `lafpos:rapor:default:gun:${dateOf(2)}`;
+    const key = `${REDIS_ONEKI}rapor:default:gun:${dateOf(2)}`;
     // Kurulum modu: o tarihte kasada kapanmış bir deneme günü var, deneme günleri kendi aralarında sayılır
     updateSettings({ demoMode: true });
     db.insert(schema.businessDays)
@@ -639,12 +640,12 @@ describe('Uzaktan\'a giden ModPOS günleri: kurulum modundan çıkış', () => {
   });
 });
 
-describe('kabul: Uzaktan Kasım raporu kasanın ittiği günlerden (§6, 13-22 Kasım: 9 ModPOS günü ve LafPOS kabul günü)', () => {
+describe('kabul: Uzaktan Kasım raporu kasanın ittiği günlerden (§6, 13-22 Kasım: 9 ModPOS günü ve AsilPOS kabul günü)', () => {
   it('Ciro dökümü, ödemeler, KDV, adisyon ve ürün bloğu sözleşmenin rakamlarını kuruşu kuruşuna verir; "Geçen hafta" 7 günün hepsini gösterir', async () => {
     const { reportTick } = await import('../server/sync/cloud-reports');
     const { pullModposNow, modposState } = await import('../server/sync/modpos');
     const { getSyncState, setSyncState } = await import('../server/lib/settings');
-    // ModPOS dönemi bir gün geride: 9 ModPOS günü bugünden 10-2 gün önce, dün LafPOS'a geçiş (kabul) günü
+    // ModPOS dönemi bir gün geride: 9 ModPOS günü bugünden 10-2 gün önce, dün AsilPOS'a geçiş (kabul) günü
     const yesterday = addDays(today, -1);
     const shift = (i: number) => addDays(today, -(10 - i));
     const manual = getSyncState(GECMIS_KEY);
@@ -659,7 +660,7 @@ describe('kabul: Uzaktan Kasım raporu kasanın ittiği günlerden (§6, 13-22 K
       await pullModposNow({ id: null }, modposState()!.checkedAt + 6 * 60_000);
       await reportTick({ backfill: true });
       // Kabul günü kasanın kendi gün raporu (tests/fixtures/kabul-gunu-2026-11-22.json'un Uzaktan özeti; o günün kendisi LP-A'da)
-      const lafpos: RemoteDayReport = {
+      const asilpos: RemoteDayReport = {
         ...staleTraining(yesterday),
         at: Date.now(),
         z: [1],
@@ -672,7 +673,7 @@ describe('kabul: Uzaktan Kasım raporu kasanın ittiği günlerden (§6, 13-22 K
         closes: [[600, 628500, 26]],
         prod: [['latte|M', 'LATTE', 'M', 'Kahve', 58, 628500, 0, 0]],
       };
-      store.set(`lafpos:rapor:default:gun:${yesterday}`, JSON.stringify(lafpos));
+      store.set(`${REDIS_ONEKI}rapor:default:gun:${yesterday}`, JSON.stringify(asilpos));
       const s = await remote<any>(`reports/summary?from=${shift(0)}&to=${yesterday}`);
       expect(s.waterfall).toEqual({ list: 3835500, complimentary: 256500, discounts: 215625, service: 0, revenue: 3363375, kdv: 305760, netExKdv: 3057615 });
       expect(s.receipts).toBe(161);

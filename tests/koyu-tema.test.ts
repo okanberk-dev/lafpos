@@ -112,7 +112,7 @@ describe('koyu tema: gece', () => {
 
   it('rozet ve etiket yazısı kendi zemininde 4.5:1; beyaz metin yumuşak zeminlerde de okunur', () => {
     for (const [fg, bg] of BADGES) expect(contrast(get(fg), get(bg)), `${fg} / ${bg}`).toBeGreaterThanOrEqual(4.5);
-    // Seçili hap (LafPOS Keel) yumuşak zemin değil dolgudur: üstünde yalnız kendi yazısı (menu-active-ink) durur
+    // Seçili hap (AsilPOS Keel) yumuşak zemin değil dolgudur: üstünde yalnız kendi yazısı (menu-active-ink) durur
     for (const [, bg] of BADGES) if (bg !== 'menu-active-bg') expect(contrast(get('admin-text'), get(bg)), `admin-text / ${bg}`).toBeGreaterThanOrEqual(4.5);
   });
 
@@ -146,7 +146,7 @@ describe('koyu tema: gece', () => {
     expect(contrast(get('focus'), get('admin-ink-fill')), 'odak / ana eylem').toBeGreaterThanOrEqual(3);
   });
 
-  it('LafPOS Keel (DESIGN.md §0): ray nötr yüzey, seçili ekran ve ana eylem ters dolgu; bağlantı ve seçim ev yeşili, bordo yok', () => {
+  it('AsilPOS Keel (DESIGN.md §0): ray nötr yüzey, seçili ekran ve ana eylem ters dolgu; bağlantı ve seçim ev yeşili, bordo yok', () => {
     for (const t of ['rail-text', 'rail-soft', 'rail-mute']) expect(contrast(get(t), get('rail')), `${t} / ray`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-bg')), 'seçili karo').toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-icon')), 'seçili karonun ikonu').toBeGreaterThanOrEqual(3);
@@ -203,7 +203,7 @@ describe('koyu tema: gece', () => {
     expect(success).not.toMatch(/dark:[\w:-]*bg-success-\d/);
   });
 
-  it('açık temanın kimliği yerinde (zemin ve mürekkep LafPOS Keel: DESIGN.md §0)', () => {
+  it('açık temanın kimliği yerinde (zemin ve mürekkep AsilPOS Keel: DESIGN.md §0)', () => {
     expect(light['admin-bg']).toBe('#eceef1');
     expect(light['admin-surface']).toBe('#ffffff');
     expect(light['admin-primary']).toBe('#0a6e52');

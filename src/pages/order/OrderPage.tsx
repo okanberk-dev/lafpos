@@ -840,7 +840,7 @@ export default function OrderPage() {
             }}
             label="Bu cihazdaki adisyonlar müşteri ekranına yansısın"
           />
-          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open(appUrl('/musteri-ekrani?ekran=kasa'), 'lafpos-musteri')}>
+          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open(appUrl('/musteri-ekrani?ekran=kasa'), 'asilpos-musteri')}>
             Ekranı yeni pencerede aç
           </Button>
           {/* Adres uygulamanın kökünden (demoda /demo öneki korunur); tablete elle yazılacağı için koyu ve kırılabilir */}

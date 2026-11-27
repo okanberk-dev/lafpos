@@ -110,7 +110,7 @@ export default function ReportsPage() {
   const today = currentBusinessDate(boot.day?.date);
   const [custom, setCustom] = useState(() => periodRange('hafta', today));
   const range = period === 'ozel' ? custom : periodRange(period, today);
-  // Uzaktan (LafPOS Uzaktan): yalnız günlük özetlerden toplanan sekmeler; Personel orada maliyetsiz satış tablosu
+  // Uzaktan (AsilPOS Uzaktan): yalnız günlük özetlerden toplanan sekmeler; Personel orada maliyetsiz satış tablosu
   // (patronun görünümü), maliyet ve kâr hiçbir sekmede yok
   const visible = REMOTE ? REPORTS.filter((r) => (REMOTE_REPORTS as readonly string[]).includes(r.key)) : REPORTS.filter((r) => !r.perm || can(r.perm));
   const current = visible.find((r) => r.key === report) ?? visible[0];
@@ -138,7 +138,7 @@ export default function ReportsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = (res.headers.get('content-disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? `lafpos-${key}.csv`;
+      a.download = (res.headers.get('content-disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? `asilpos-${key}.csv`;
       // Belgeye bağlı bağlantı (Safari ve iOS bağsız bağlantının tıklamasını yok sayabilir); adres indirme başladıktan
       // sonra geri alınır, hemen alınırsa iOS'ta dosya inmez
       document.body.append(a);
@@ -415,7 +415,7 @@ interface Summary {
    */
   offDevice?: OffDeviceTotals;
   days: number;
-  /** Geçmiş ciro günü (LafPOS öncesi, ModPOS): kaynağın adı ve önceki programın Z numarası */
+  /** Geçmiş ciro günü (AsilPOS öncesi, ModPOS): kaynağın adı ve önceki programın Z numarası */
   byDay: { date: string; netSales: number; receipts: number; kaynak?: string; zText?: string | null }[];
   /** Dönemde geçmiş ciro günü varsa: kaynak, gün sayısı, ilk ve son gün (sayfanın notu) */
   history?: HistorySpan;
@@ -599,7 +599,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   ) : (
                     <ErrorState compact title="Saatlik ciro alınamadı" error={hourly.error} onRetry={() => void hourly.refetch()} retrying={hourly.isFetching} />
                   )}
-                  {/* LafPOS öncesi günler (ModPOS): gün toplamlarıyla; saat, ürün ve personel kırılımı yok */}
+                  {/* AsilPOS öncesi günler (ModPOS): gün toplamlarıyla; saat, ürün ve personel kırılımı yok */}
                   {s.history && (
                     <p className="mt-3 text-pretty text-xs text-muted">
                       {historyText(s.history)}: önceki kasa programının gün toplamları; saat ve personel kırılımı yok, Z’ye girmez
@@ -621,7 +621,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   {s.offDevice && s.payments.length > 0 && (
                     <p className={cn('text-pretty text-xs text-muted', s.tips > 0 ? 'mt-1.5' : 'mt-3')}>
                       Yazarkasadan geçmeyen: kart <span className="tabular font-medium text-ink-2">{tl(s.offDevice.card)}</span>, nakit{' '}
-                      <span className="tabular font-medium text-ink-2">{tl(s.offDevice.cash)}</span> (cihaza gitmeden LafPOS’a yazılan, bahşiş hariç)
+                      <span className="tabular font-medium text-ink-2">{tl(s.offDevice.cash)}</span> (cihaza gitmeden AsilPOS’a yazılan, bahşiş hariç)
                     </p>
                   )}
                 </div>
@@ -670,8 +670,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                     ) : s.history ? null : (
                       <EmptyState compact icon={<ShoppingBag />} title={noSales} />
                     )}
-                    {/* ModPOS günlerinin satış türü bilinmez (yalnız gün toplamı): liste LafPOS günlerinin */}
-                    {s.history && <p className={cn('text-pretty text-xs text-muted', s.types.length > 0 && 'mt-3')}>{s.history.kaynak} günlerinin satış türü bilinmiyor; liste yalnız LafPOS günlerinin</p>}
+                    {/* ModPOS günlerinin satış türü bilinmez (yalnız gün toplamı): liste AsilPOS günlerinin */}
+                    {s.history && <p className={cn('text-pretty text-xs text-muted', s.types.length > 0 && 'mt-3')}>{s.history.kaynak} günlerinin satış türü bilinmiyor; liste yalnız AsilPOS günlerinin</p>}
                   </div>
                 </Card>
                 <Card flush title="KDV oranlarına göre" subtitle="KDV dahil ciro, oranlara göre" className="overflow-hidden">
@@ -726,7 +726,7 @@ interface ProductsData {
   /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir */
   costsAt?: number | null;
   /**
-   * LafPOS öncesi dönemin (ModPOS) ürün listesi: indirim öncesi tutarlar, ürün cirosuna eklenmez. Dönem listenin bütün
+   * AsilPOS öncesi dönemin (ModPOS) ürün listesi: indirim öncesi tutarlar, ürün cirosuna eklenmez. Dönem listenin bütün
    * günlerini kapsıyorsa satırlarıyla (`covered`), yalnız bir kısmını kapsıyorsa yalnız dönemi (liste günlere bölünemez)
    */
   history?: { kaynak: string; from: string; to: string; covered: true; qty: number; amount: number; rows: HistoryProductRow[] } | { kaynak: string; from: string; to: string; covered: false };
@@ -739,7 +739,7 @@ interface HistoryProductRow {
   amount: number;
 }
 
-/** Önceki kasa programının dönem ürün listesi (indirim öncesi), LafPOS ürünlerinden ayrı kart; kısmi dönemde not */
+/** Önceki kasa programının dönem ürün listesi (indirim öncesi), AsilPOS ürünlerinden ayrı kart; kısmi dönemde not */
 function HistoryProducts({ h }: { h: NonNullable<ProductsData['history']> }) {
   const sizeName = useSizeName();
   if (!h.covered)
@@ -778,7 +778,7 @@ function HistoryProducts({ h }: { h: NonNullable<ProductsData['history']> }) {
         phoneAside={(r) => tl(r.amount)}
       />
       <p className="border-t border-[var(--admin-divider)] px-4 py-3 text-xs text-muted sm:px-5">
-        Önceki kasa programının listesi, indirimden önceki tutarlarla; LafPOS ürün cirosuna eklenmez (ciro {h.kaynak} gün toplamlarında)
+        Önceki kasa programının listesi, indirimden önceki tutarlarla; AsilPOS ürün cirosuna eklenmez (ciro {h.kaynak} gün toplamlarında)
       </p>
     </Card>
   );
@@ -903,7 +903,7 @@ function ProductsReport({
             { key: 'ort', header: 'Ort. fiyat', align: 'right', hideBelow: 'xl', className: 'whitespace-nowrap', cell: (p) => (p.qty ? tl(p.avgPrice) : <Dash />) },
             ...(withCost ? [costCol] : []),
           ];
-          // Dönem yalnız LafPOS öncesi günlerse (ModPOS) LafPOS'un boş kartı "satış yok" demez: yalnız geçmişin listesi
+          // Dönem yalnız AsilPOS öncesi günlerse (ModPOS) AsilPOS'un boş kartı "satış yok" demez: yalnız geçmişin listesi
           if (!d.products.length && d.history) return <HistoryProducts h={d.history} />;
           return (
             <div className="space-y-3">
@@ -1338,7 +1338,7 @@ interface ChecksData {
   /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (sayı tam) */
   truncated?: boolean;
   rows: { id: string; no: number; status: string; type: string; place: string | null; openedAt: number; closedAt: number | null; waiter: string | null; qty: number; total: number; methods: string[] }[];
-  /** Dönemde LafPOS öncesi günler (ModPOS) varsa: o günlerin adisyonu listede yok, yalnız sayısı */
+  /** Dönemde AsilPOS öncesi günler (ModPOS) varsa: o günlerin adisyonu listede yok, yalnız sayısı */
   history?: { kaynak: string; days: number; receipts: number };
 }
 type CheckRow = ChecksData['rows'][number];
@@ -1603,7 +1603,7 @@ interface ItemsData {
   /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (toplam ve sayı tam) */
   truncated?: boolean;
   /**
-   * Dönemde LafPOS öncesi günler (ModPOS) varsa: kalem kaydı yok. İndirim ve İkram listesinde o günlerin toplamı (Ciro
+   * Dönemde AsilPOS öncesi günler (ModPOS) varsa: kalem kaydı yok. İndirim ve İkram listesinde o günlerin toplamı (Ciro
    * dökümüyle aynı), öbürlerinde tutarsız
    */
   history?: { kaynak: string; days: number; amount?: number; indirimBilinmiyor?: number };

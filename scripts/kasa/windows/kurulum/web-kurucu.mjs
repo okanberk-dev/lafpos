@@ -1,7 +1,7 @@
-// Siteden kurulum: LafPOS-Kur.cmd. Anahtarsız küçük bir web kurucusudur; kanal derlemesi (kanal.mjs) her main
-// derlemesinde dist/web/guncelleme/LafPOS-Kur.cmd'ye yazar, LafPOS Uzaktan'ın İndir sayfası (girişten sonra) ona
-// bağlanır. Depo özel ve Vercel NSIS kurulumunu derleyemediği için tam kurulum dosyası (LafPOS-Kurulum.exe) GitHub
-// Releases'ta kalır; bu dosya aynı düzeni (lafpos.nsi) PowerShell ile kurar.
+// Siteden kurulum: AsilPOS-Kur.cmd. Anahtarsız küçük bir web kurucusudur; kanal derlemesi (kanal.mjs) her main
+// derlemesinde dist/web/guncelleme/AsilPOS-Kur.cmd'ye yazar, AsilPOS Uzaktan'ın İndir sayfası (girişten sonra) ona
+// bağlanır. Depo özel ve Vercel NSIS kurulumunu derleyemediği için tam kurulum dosyası (AsilPOS-Kurulum.exe) GitHub
+// Releases'ta kalır; bu dosya aynı düzeni (asilpos.nsi) PowerShell ile kurar.
 //
 // Dosya iki dilli tek dosyadır: başındaki birkaç satır cmd.exe için (PowerShell'de yorum bloğu), gerisi PowerShell
 // gövdesidir (web-kurucu.ps1). Çift tıklayınca cmd 64 bit Windows PowerShell'i açar, o da dosyanın kendisini UTF-8
@@ -19,7 +19,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../../../..');
 
 /** Kurucunun yayın adı ve adresi (güncelleme kanalının yanında) */
-export const WEB_INSTALLER_NAME = 'LafPOS-Kur.cmd';
+export const WEB_INSTALLER_NAME = 'AsilPOS-Kur.cmd';
+/**
+ * Ad değişikliğinden (26 Kasım 2026) önceki adı: kanal aynı dosyayı bu adla da yayımlar. ladmin şube kurucusunu bu
+ * adresten alıp iki boş satırını doldurur; eski bağlantılar da buna gider (shared/eski-adlar.ts ESKI_WEB_KURUCU)
+ */
+export const OLD_WEB_INSTALLER_NAME = 'LafPOS-Kur.cmd';
 export const WEB_INSTALLER_URL = `https://lafpos.laffogato.net/guncelleme/${WEB_INSTALLER_NAME}`;
 
 const crlf = (s) => s.replace(/\r?\n/g, '\r\n');
@@ -28,14 +33,14 @@ const SEMVER_RE = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
 
 /** cmd.exe başlığı: PowerShell için `<#` ile başlayan yorum bloğu, cmd için etiket satırı (`:` ile) */
 const CMD_HEADER = [
-  '<# : LafPOS siteden kurulum. Cift tiklayin; Windows izin sorunca Evet deyin.',
+  '<# : AsilPOS siteden kurulum. Cift tiklayin; Windows izin sorunca Evet deyin.',
   '@echo off',
   'setlocal',
-  'set "LAFPOS_KUR=%~f0"',
+  'set "ASILPOS_KUR=%~f0"',
   'rem 32 bit cmd.exe acildiysa 64 bit PowerShell Sysnative uzerinden bulunur',
-  'set "LAFPOS_PS=%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"',
-  'if exist "%SystemRoot%\\Sysnative\\WindowsPowerShell\\v1.0\\powershell.exe" set "LAFPOS_PS=%SystemRoot%\\Sysnative\\WindowsPowerShell\\v1.0\\powershell.exe"',
-  '"%LAFPOS_PS%" -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllText($env:LAFPOS_KUR,[Text.Encoding]::UTF8); & ([ScriptBlock]::Create($t))"',
+  'set "ASILPOS_PS=%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"',
+  'if exist "%SystemRoot%\\Sysnative\\WindowsPowerShell\\v1.0\\powershell.exe" set "ASILPOS_PS=%SystemRoot%\\Sysnative\\WindowsPowerShell\\v1.0\\powershell.exe"',
+  '"%ASILPOS_PS%" -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllText($env:ASILPOS_KUR,[Text.Encoding]::UTF8); & ([ScriptBlock]::Create($t))"',
   'set "KOD=%ERRORLEVEL%"',
   'endlocal & exit /b %KOD%',
   '#>',
@@ -51,9 +56,13 @@ export function shellFiles(root = ROOT) {
   const bom = (s) => Buffer.from(`﻿${crlf(s)}`, 'utf8');
   return {
     'baslat.cmd': Buffer.from(crlf(text('scripts/kasa/windows/kurulum/baslat.cmd'))),
+    'AsilPOS-Kasa.bat': Buffer.from(crlf(text('scripts/kasa/windows/AsilPOS-Kasa.bat'))),
+    // Ad değişikliğinden (26 Kasım 2026) önceki kısayollar eski adı çağırır: yenisine yönlendirir
     'LafPOS-Kasa.bat': Buffer.from(crlf(text('scripts/kasa/windows/LafPOS-Kasa.bat'))),
     'yonet.ps1': Buffer.from(crlf(text('scripts/kasa/windows/kurulum/yonet.ps1'))),
-    'lafpos.ico': readFileSync(join(root, 'scripts/kasa/windows/kurulum/lafpos.ico')),
+    'asilpos.ico': readFileSync(join(root, 'scripts/kasa/windows/kurulum/asilpos.ico')),
+    // Eski kurulumun Uygulamalar kaydı (DisplayIcon) ve kısayolları eski adlı simgeyi gösterir
+    'lafpos.ico': readFileSync(join(root, 'scripts/kasa/windows/kurulum/asilpos.ico')),
     // Eski Not Defteri ve Windows PowerShell 5.1 UTF-8'i BOM'la tanır
     'BENIOKU.txt': bom(text('scripts/kasa/windows/kurulum/BENIOKU.txt')),
     'ayarlar.env.ornek': bom(envSample(text('.env.example'))),
@@ -65,7 +74,7 @@ export function shellFiles(root = ROOT) {
 const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 /**
- * surum.json'dan (kanal.mjs manifestFor) LafPOS-Kur.cmd'nin metni. Saf: aynı girdi aynı dosyayı verir
+ * surum.json'dan (kanal.mjs manifestFor) AsilPOS-Kur.cmd'nin metni. Saf: aynı girdi aynı dosyayı verir
  * @param {{ manifest: any, files?: Record<string, Buffer>, template?: string }} opts
  */
 export function webInstaller({ manifest: m, files = shellFiles(), template = readFileSync(join(HERE, 'web-kurucu.ps1'), 'utf8') }) {

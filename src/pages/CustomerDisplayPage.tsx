@@ -23,7 +23,7 @@ const CONFIG_KEY = DISPLAY_CONFIG_KEY;
 const STALE_RELOAD_MS = 90_000;
 /** Yenilemeler arası en az süre (kasa yanıt verdiği halde ekranın sorguları düzelmiyorsa ekran sürekli yanıp sönmesin) */
 const RELOAD_GAP_MS = 5 * 60_000;
-const RELOAD_KEY = 'lafpos.musteri.yenileme';
+const RELOAD_KEY = 'asilpos.musteri.yenileme';
 
 function reloadPage() {
   try {

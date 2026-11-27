@@ -1,10 +1,10 @@
 # Innex (Filllo) — Admin Paneli Tasarım Tarifi
 
-> **17 Kasım 2026'dan beri:** görünüm ve yerleşim LafPOS Sahne'dir (`DESIGN.md`: gnbsite'ın Area Board kiti
+> **17 Kasım 2026'dan beri:** görünüm ve yerleşim AsilPOS Sahne'dir (`DESIGN.md`: gnbsite'ın Area Board kiti
 > L'Affogato kimliğinde; sahne, yaprak, shadcn'in Sidebar'ı gibi sade yan menü). Bu tarif yalnız başlık şeridi, KPI
 > şeridi, tablo ve çekmece ölçüleri için okunur; aşağıdaki hex değerleri, Inter ve kenar çubuğu tarihsel kayıttır.
 >
-> **LafPOS'ta:** yönetim paneli (`/yonetim/*`, `/raporlar`) bu tarifi 26 Ekim
+> **AsilPOS'ta:** yönetim paneli (`/yonetim/*`, `/raporlar`) bu tarifi 26 Ekim
 > 2026'dan beri izler (operatör: _"laffogato admindeki innex admin skills
 > md'yi çek, ona göre yap panel tasarımını ve biraz daha geliştir"_). Metin
 > `RiosenBeq/laffogato` `docs/ADMIN-INNEX.md` @ `ab5c0ae`'den alındı.
@@ -13,7 +13,7 @@
 > koyulaştırılmış yeşil ve turuncu rozet metni (§4), bilgi tonu camgöbeği,
 > vurgu tonu mor. Değerler `src/index.css` `[data-area='admin']` içinde
 > `--admin-*` adlarıyla (laffogato'yla aynı adlar), bileşenler
-> `src/components/admin/`. LafPOS'un tarife ve laffogato'ya göre
+> `src/components/admin/`. AsilPOS'un tarife ve laffogato'ya göre
 > eklemeleri `DESIGN.md` "Yönetim paneli"nde: koyu tema, ⌘K komut paleti,
 > daraltılabilen kenar çubuğu, sıkı görünüm, telefonda kartsız düzen ve satır
 > kartları, Genel bakış'ta sistem sağlığı (§3 fikir 5).

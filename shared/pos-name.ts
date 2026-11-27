@@ -1,6 +1,6 @@
 /**
  * lafmaliyet'e giden POS adı (satış satırı, ikram, CSV). lafmaliyet adı `trim` + boşluk sadeleştirmesiyle okur ve
- * bir günde bir ada bir satır ister (`src/lib/lafpos/day.ts`); eşleştirme büyük / küçük harf ve I / İ farkını yok
+ * bir günde bir ada bir satır ister (`src/lib/asilpos/day.ts`); eşleştirme büyük / küçük harf ve I / İ farkını yok
  * sayar (`posMatchKey`). Kural burada tek yerde: sunucunun adisyon kalemi, oda satırı, gün paketi ve yönetimin çakışma
  * denetimi aynı işlevleri kullanır. docs/03-ENTEGRASYON.md §3.1
  */

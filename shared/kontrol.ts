@@ -1,10 +1,10 @@
 /**
- * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): LafPOS Uzaktan'dan (lafpos.laffogato.net) kasaya giden yönetim komutları ve
+ * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): AsilPOS Uzaktan'dan kasaya giden yönetim komutları ve
  * kasanın buluta bildirdiği yönetim özeti. Tek sözleşme: bulut (api/_kontrol.ts, api/_merkez.ts nabzı), kasa
  * (server/sync/kontrol.ts) ve arayüz (src/pages/kontrol) yalnız bu dosyadaki türleri, doğrulamayı ve imza metnini kullanır.
  *
  * Akış: patron Uzaktan'da bir değişiklik ister → bulut komutu doğrular, sahibin adıyla özetler, kafenin ortak anahtarıyla
- * (LAFPOS_CLOUD_SECRET) imzalar ve kasanın kuyruğuna koyar → kasa Merkez nabzının yanıtında alır (yeni yoklama yok),
+ * (ASILPOS_CLOUD_SECRET) imzalar ve kasanın kuyruğuna koyar → kasa Merkez nabzının yanıtında alır (yeni yoklama yok),
  * imzayı ve süresini denetler, kasadaki yönetim ekranının kullandığı uçla ve aynı kurallarla uygular → sonucu bir sonraki
  * nabızda bildirir; Uzaktan "bekliyor / uygulandı / reddedildi" gösterir.
  *
@@ -15,6 +15,7 @@
 // (Vite, tsx ve vitest `.js`'i `.ts`'e çözer; tests/kontrol-sozlesme.test.ts derleyip Node'la yükler)
 import { ALL_PERMISSIONS, type Permission, ROLE_LABELS, ROLES, type Role } from './permissions.js';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-mode.js';
+import { KONTROL_IMZA_ONEKI } from './eski-adlar.js';
 
 /** Sözleşmenin sürümü: kasa özetinde `v`; bulut bilmediği sürümdeki kasaya komut göndermez */
 export const KONTROL_SURUM = 1;
@@ -40,7 +41,7 @@ export const KOMUT_ETIKET: Record<KomutTuru, string> = {
 };
 
 /**
- * Uzaktan üyesinin rolü: `sahip` ortamdaki (LAFPOS_UYE_EPOSTA) ya da parolalı giriş, her şeyi yapar ve panele kimin
+ * Uzaktan üyesinin rolü: `sahip` ortamdaki (ASILPOS_UYE_EPOSTA) ya da parolalı giriş, her şeyi yapar ve panele kimin
  * gireceğini belirler; `yonetici` patron olmayan personeli, menünün Tükendi'sini ve servis modunu yönetir; `izleyici`
  * yalnız görür (bugünkü salt okunur görünüm). Kasadaki `patron.panel` yetkisinden ayrıdır: o, kasadaki ekranı açar
  */
@@ -154,7 +155,7 @@ export interface KomutVerileri {
 }
 export type KomutVerisi = KomutVerileri[KomutTuru];
 
-/** Kuyruktaki komut (bulut yazar, kasa nabızda alır). `imza` = HMAC-SHA256(LAFPOS_CLOUD_SECRET, imzaMetni(...)), base64url */
+/** Kuyruktaki komut (bulut yazar, kasa nabızda alır). `imza` = HMAC-SHA256(ASILPOS_CLOUD_SECRET, imzaMetni(...)), base64url */
 export interface KomutKaydi<T extends KomutTuru = KomutTuru> {
   id: string;
   tur: T;
@@ -242,7 +243,7 @@ export interface KontrolDurumu {
   /** PIN şifrelemesi için kasanın açık anahtarı (RSA-OAEP 2048, SHA-256; SPKI, base64) */
   anahtar: string;
   /**
-   * Açık anahtarın imzası: HMAC-SHA256(LAFPOS_CLOUD_SECRET, anahtarImzaMetni(kurulum, anahtar)), base64url. Bulut panele
+   * Açık anahtarın imzası: HMAC-SHA256(ASILPOS_CLOUD_SECRET, anahtarImzaMetni(kurulum, anahtar)), base64url. Bulut panele
    * anahtarı yalnız imza tutarsa verir: Redis'e yazabilen biri anahtarı kendininkiyle değiştirip PIN'i okuyamaz
    */
   anahtarImza?: string;
@@ -309,7 +310,7 @@ export interface UzaktanUye {
   rol: UyeRolu;
   /** `aktif`: parolasını belirlemiş; `davet`: davet kodu verildi, henüz girmedi */
   durum: 'aktif' | 'davet';
-  /** Vercel ortamında tanımlı sahip (LAFPOS_UYE_EPOSTA): panelden değiştirilmez, kaldırılmaz */
+  /** Vercel ortamında tanımlı sahip (ASILPOS_UYE_EPOSTA): panelden değiştirilmez, kaldırılmaz */
   sabit: boolean;
   /** Üyeliğin ya da davetin açıldığı an */
   at: number | null;
@@ -498,11 +499,11 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
  * kurulumu kendi kimliğiyle kurar (başka şubenin komutu tutmaz), rolü kayıttan okur (değiştirilirse imza tutmaz)
  */
 export function imzaMetni(k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>): string {
-  return `lafpos-kontrol:v${KONTROL_SURUM}:${k.kurulum}:${k.id}:${k.tur}:${k.at}:${k.kim}:${k.rol}:${JSON.stringify(k.veri)}`;
+  return `${KONTROL_IMZA_ONEKI}:v${KONTROL_SURUM}:${k.kurulum}:${k.id}:${k.tur}:${k.at}:${k.kim}:${k.rol}:${JSON.stringify(k.veri)}`;
 }
 
 /** Kasanın açık anahtarının imzalanan metni (`KontrolDurumu.anahtarImza`): kuruluma bağlı, başka şubeye taşınmaz */
-export const anahtarImzaMetni = (kurulum: string, anahtar: string) => `lafpos-kontrol-anahtar:v${KONTROL_SURUM}:${kurulum}:${anahtar}`;
+export const anahtarImzaMetni = (kurulum: string, anahtar: string) => `${KONTROL_IMZA_ONEKI}-anahtar:v${KONTROL_SURUM}:${kurulum}:${anahtar}`;
 
 /**
  * Üye rolü bu komutu verebilir mi. `hedefRol`: komutun dokunduğu personelin kasadaki rolü (düzenleme ve PIN'de) ya da

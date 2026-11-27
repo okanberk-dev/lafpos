@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ALAN_ADI, KURULUM_KLASORU, UYGULAMA_ZIP_ONEKI, VERCEL_ALANI, VERITABANI_DOSYASI, YEDEK_DOSYA_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Kasanın otomatik güncellemesi (scripts/kasa/windows/kurulum/guncelle.mjs, kanal.mjs, arsiv.mjs): manifestin
@@ -26,7 +27,7 @@ function manifest(over: Record<string, any> = {}) {
     build: BUILD_NEW,
     version: '0.2.0',
     commit: 'abc',
-    app: { file: `lafpos-app-${BUILD_NEW}.zip`, sha256: SHA0, size: 1000 },
+    app: { file: `${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`, sha256: SHA0, size: 1000 },
     node: { version: '24.22.3', abi: '137', sha256: SHA0 },
     sqlite: { version: '12.11.1', sha256: SHA0 },
     ...over,
@@ -34,17 +35,17 @@ function manifest(over: Record<string, any> = {}) {
 }
 
 describe('güncelleme: saf kurallar', () => {
-  it('LAFPOS_GUNCELLEME yalnız açıkça kapatılınca kapalı', async () => {
+  it('ASILPOS_GUNCELLEME yalnız açıkça kapatılınca kapalı', async () => {
     const { updateMode } = await load('guncelle.mjs');
     expect(updateMode({})).toBe('otomatik');
-    expect(updateMode({ LAFPOS_GUNCELLEME: 'otomatik' })).toBe('otomatik');
-    for (const v of ['kapali', 'KAPALI', ' kapalı ', 'off', 'hayır', '0', 'false']) expect(updateMode({ LAFPOS_GUNCELLEME: v })).toBe('kapali');
+    expect(updateMode({ ASILPOS_GUNCELLEME: 'otomatik' })).toBe('otomatik');
+    for (const v of ['kapali', 'KAPALI', ' kapalı ', 'off', 'hayır', '0', 'false']) expect(updateMode({ ASILPOS_GUNCELLEME: v })).toBe('kapali');
   });
 
   it('manifest: yük aynı hosttan, Node ve better-sqlite3 sabit kalıptan; bozuk alan reddedilir', async () => {
     const { parseManifest } = await load('guncelle.mjs');
-    const m = parseManifest(manifest(), 'https://lafpos.laffogato.net/guncelleme/surum.json');
-    expect(m.app.url).toBe(`https://lafpos.laffogato.net/guncelleme/lafpos-app-${BUILD_NEW}.zip`);
+    const m = parseManifest(manifest(), `https://${ALAN_ADI}/guncelleme/surum.json`);
+    expect(m.app.url).toBe(`https://${ALAN_ADI}/guncelleme/${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`);
     expect(m.node.url).toBe('https://nodejs.org/dist/v24.22.3/node-v24.22.3-win-x64.zip');
     expect(m.sqlite.url).toBe('https://github.com/WiseLibs/better-sqlite3/releases/download/v12.11.1/better-sqlite3-v12.11.1-node-v137-win32-x64.tar.gz');
     const bad = [
@@ -53,23 +54,23 @@ describe('güncelleme: saf kurallar', () => {
       { build: 1.5e9 + 0.5 },
       { version: '1.2' },
       { app: { file: 'https://evil.example/x.zip', sha256: SHA0, size: 10 } },
-      { app: { file: '../lafpos-app-1.zip', sha256: SHA0, size: 10 } },
-      { app: { file: `lafpos-app-${BUILD_NEW}.zip`, sha256: 'xyz', size: 10 } },
-      { app: { file: `lafpos-app-${BUILD_NEW}.zip`, sha256: SHA0, size: 0 } },
+      { app: { file: `../${UYGULAMA_ZIP_ONEKI}1.zip`, sha256: SHA0, size: 10 } },
+      { app: { file: `${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`, sha256: 'xyz', size: 10 } },
+      { app: { file: `${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`, sha256: SHA0, size: 0 } },
       { node: { version: '24', abi: '137', sha256: SHA0 } },
       { sqlite: { version: '12.11.1', sha256: 'kısa' } },
     ];
-    for (const over of bad) expect(() => parseManifest(manifest(over), 'https://lafpos.laffogato.net/guncelleme/surum.json')).toThrow();
+    for (const over of bad) expect(() => parseManifest(manifest(over), `https://${ALAN_ADI}/guncelleme/surum.json`)).toThrow();
     expect(() => parseManifest(null, 'https://x.test/a')).toThrow();
   });
 
   it('yönlendirme: yalnız HTTPS ve aynı host (GitHub dosyası için izinli depolama hostu)', async () => {
     const { redirectAllowed, SQLITE_REDIRECT_HOSTS } = await load('guncelle.mjs');
-    const from = 'https://lafpos.laffogato.net/guncelleme/surum.json';
+    const from = `https://${ALAN_ADI}/guncelleme/surum.json`;
     expect(redirectAllowed(from, '/guncelleme/surum2.json')).toBe(true);
-    expect(redirectAllowed(from, 'https://lafpos.laffogato.net/x')).toBe(true);
+    expect(redirectAllowed(from, `https://${ALAN_ADI}/x`)).toBe(true);
     expect(redirectAllowed(from, 'https://evil.example/surum.json')).toBe(false);
-    expect(redirectAllowed(from, 'http://lafpos.laffogato.net/x')).toBe(false);
+    expect(redirectAllowed(from, `http://${ALAN_ADI}/x`)).toBe(false);
     const gh = 'https://github.com/WiseLibs/better-sqlite3/releases/download/v1/x.tar.gz';
     expect(redirectAllowed(gh, 'https://release-assets.githubusercontent.com/a', SQLITE_REDIRECT_HOSTS)).toBe(true);
     expect(redirectAllowed(gh, 'https://evil.example/a', SQLITE_REDIRECT_HOSTS)).toBe(false);
@@ -120,10 +121,10 @@ describe('güncelleme: saf kurallar', () => {
 
   it('indirme klasörü ve güncelleme kopyaları seyreltilir', async () => {
     const { staleDownloads, oldUpdateBackups, backupName } = await load('guncelle.mjs');
-    expect(staleDownloads(['lafpos-app-1.zip', 'lafpos-app-2.zip', 'x.part', 'node-v1-win-x64.zip'], 2)).toEqual(['lafpos-app-1.zip', 'x.part']);
-    const files = Array.from({ length: 7 }, (_, i) => ({ name: `lafpos-guncelleme-${i}.db`, at: i }));
-    expect(oldUpdateBackups([...files, { name: 'lafpos-2026-11-20.db', at: 0 }], 5)).toEqual(['lafpos-guncelleme-1.db', 'lafpos-guncelleme-1.db-wal', 'lafpos-guncelleme-0.db', 'lafpos-guncelleme-0.db-wal']);
-    expect(backupName(BUILD_NEW, new Date(2026, 10, 21, 3, 4, 5).getTime())).toBe(`lafpos-guncelleme-${BUILD_NEW}-2026-11-21-030405.db`);
+    expect(staleDownloads([`${UYGULAMA_ZIP_ONEKI}1.zip`, `${UYGULAMA_ZIP_ONEKI}2.zip`, 'x.part', 'node-v1-win-x64.zip'], 2)).toEqual([`${UYGULAMA_ZIP_ONEKI}1.zip`, 'x.part']);
+    const files = Array.from({ length: 7 }, (_, i) => ({ name: `${YEDEK_DOSYA_ONEKI}guncelleme-${i}.db`, at: i }));
+    expect(oldUpdateBackups([...files, { name: `${YEDEK_DOSYA_ONEKI}2026-11-20.db`, at: 0 }], 5)).toEqual([`${YEDEK_DOSYA_ONEKI}guncelleme-1.db`, `${YEDEK_DOSYA_ONEKI}guncelleme-1.db-wal`, `${YEDEK_DOSYA_ONEKI}guncelleme-0.db`, `${YEDEK_DOSYA_ONEKI}guncelleme-0.db-wal`]);
+    expect(backupName(BUILD_NEW, new Date(2026, 10, 21, 3, 4, 5).getTime())).toBe(`${YEDEK_DOSYA_ONEKI}guncelleme-${BUILD_NEW}-2026-11-21-030405.db`);
   });
 });
 
@@ -135,7 +136,7 @@ describe('güncelleme: arşiv ve kanal', () => {
       { name: 'alt/b.bin', data: Buffer.alloc(5000, 7) },
     ]);
     expect(readZip(zip).map((e: any) => e.name)).toEqual(['a.txt', 'alt/b.bin']);
-    const dir = mkdtempSync(join(tmpdir(), 'lafpos-zip-'));
+    const dir = mkdtempSync(join(tmpdir(), 'asilpos-zip-'));
     try {
       expect(extractZip(zip, dir)).toEqual(['a.txt', 'alt/b.bin']);
       expect(readFileSync(join(dir, 'alt/b.bin')).equals(Buffer.alloc(5000, 7))).toBe(true);
@@ -148,7 +149,7 @@ describe('güncelleme: arşiv ve kanal', () => {
 
   it('.tar.gz okunur (better-sqlite3 arşivi biçimi)', async () => {
     const { readTarGz } = await load('arsiv.mjs');
-    const dir = mkdtempSync(join(tmpdir(), 'lafpos-tar-'));
+    const dir = mkdtempSync(join(tmpdir(), 'asilpos-tar-'));
     try {
       mkdirSync(join(dir, 'build/Release'), { recursive: true });
       writeFileSync(join(dir, 'build/Release/better_sqlite3.node'), Buffer.from('MZikili'));
@@ -168,7 +169,7 @@ describe('güncelleme: arşiv ve kanal', () => {
     const { NODE_VERSION, NODE_SHA256, sqliteSha256 } = await load('surumler.mjs');
     const zip = Buffer.from('zip');
     const m = manifestFor({ build: BUILD_NEW, commit: 'abc', version: '0.2.0', zip, sqlite: '12.11.1' });
-    const p = parseManifest(m, 'https://lafpos.vercel.app/guncelleme/surum.json');
+    const p = parseManifest(m, `https://${VERCEL_ALANI}/guncelleme/surum.json`);
     expect(p).toMatchObject({ build: BUILD_NEW, app: { sha256: sha(zip), size: 3 }, node: { version: NODE_VERSION, sha256: NODE_SHA256 }, sqlite: { sha256: sqliteSha256('12.11.1') } });
     expect(() => sqliteSha256('0.0.1')).toThrow(/SQLITE_SHA256/);
     // Kurulu better-sqlite3'ün özeti tabloda olmalı: yoksa kurulum ve kanal derlenmez
@@ -178,7 +179,7 @@ describe('güncelleme: arşiv ve kanal', () => {
 
   it('kanal sabit adreslerde; Vercel /guncelleme/ altını sayfaya çevirmez', async () => {
     const { MANIFEST_URLS } = await load('guncelle.mjs');
-    expect(MANIFEST_URLS).toEqual(['https://lafpos.laffogato.net/guncelleme/surum.json', 'https://lafpos.vercel.app/guncelleme/surum.json']);
+    expect(MANIFEST_URLS).toEqual([`https://${ALAN_ADI}/guncelleme/surum.json`, `https://${VERCEL_ALANI}/guncelleme/surum.json`]);
     const vercel = JSON.parse(readFileSync(new URL('vercel.json', root), 'utf8'));
     expect(vercel.buildCommand).toMatch(/npm run kanal$/);
     const spa = vercel.rewrites.find((r: any) => r.destination === '/index.html');
@@ -200,12 +201,12 @@ async function setup(
 ) {
   const { zipFiles } = await load('arsiv.mjs');
   const { createUpdater } = await load('guncelle.mjs');
-  const base = mkdtempSync(join(tmpdir(), 'lafpos-guncelleme-'));
+  const base = mkdtempSync(join(tmpdir(), `${YEDEK_DOSYA_ONEKI}guncelleme-`));
   dirs.push(base);
-  const installDir = join(base, 'Program Files', 'LafPOS');
-  const home = join(base, 'ProgramData', 'LafPOS');
+  const installDir = join(base, 'Program Files', KURULUM_KLASORU);
+  const home = join(base, 'ProgramData', KURULUM_KLASORU);
   const app = join(installDir, 'app');
-  const pkg = (build: number) => JSON.stringify({ name: 'lafpos', version: '0.2.0', build, node: '24.22.3', nodeAbi: '137', sqlite: '12.11.1' });
+  const pkg = (build: number) => JSON.stringify({ name: 'asilpos', version: '0.2.0', build, node: '24.22.3', nodeAbi: '137', sqlite: '12.11.1' });
   mkdirSync(join(app, 'server'), { recursive: true });
   mkdirSync(join(app, 'node_modules/better-sqlite3/build/Release'), { recursive: true });
   writeFileSync(join(app, 'package.json'), pkg(BUILD_OLD));
@@ -213,14 +214,14 @@ async function setup(
   writeFileSync(join(app, 'server/index.mjs'), '// eski');
   writeFileSync(join(app, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), 'ikili');
   mkdirSync(home, { recursive: true });
-  writeFileSync(join(home, 'lafpos.db'), 'veritabanı');
+  writeFileSync(join(home, `${VERITABANI_DOSYASI}`), 'veritabanı');
 
   const zip = zipFiles([
     { name: 'package.json', data: Buffer.from(pkg(BUILD_NEW)) },
     { name: 'bekci.mjs', data: Buffer.from('// yeni') },
     { name: 'server/index.mjs', data: Buffer.from('// yeni') },
   ]);
-  const surum = manifest({ app: { file: `lafpos-app-${BUILD_NEW}.zip`, sha256: opts.zipSha ?? sha(zip), size: zip.length } });
+  const surum = manifest({ app: { file: `${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`, sha256: opts.zipSha ?? sha(zip), size: zip.length } });
   const requests: string[] = [];
   let trialRunning = false;
   const fetchImpl = async (url: string) => {
@@ -235,9 +236,9 @@ async function setup(
     }
     if (url === 'https://kanal.test/guncelleme/surum.json') {
       if (opts.redirect) return new Response(null, { status: 302, headers: { location: opts.redirect } });
-      return Response.json(opts.channelBuild ? { ...surum, build: opts.channelBuild, app: { ...surum.app, file: `lafpos-app-${opts.channelBuild}.zip` } } : surum, { headers: { etag: '"1"' } });
+      return Response.json(opts.channelBuild ? { ...surum, build: opts.channelBuild, app: { ...surum.app, file: `${UYGULAMA_ZIP_ONEKI}${opts.channelBuild}.zip` } } : surum, { headers: { etag: '"1"' } });
     }
-    if (url === `https://kanal.test/guncelleme/lafpos-app-${BUILD_NEW}.zip`) return new Response(new Uint8Array(zip));
+    if (url === `https://kanal.test/guncelleme/${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`) return new Response(new Uint8Array(zip));
     return new Response('yok', { status: 404 });
   };
   const log: string[] = [];
@@ -289,12 +290,12 @@ async function setup(
 }
 
 describe('güncelleme: deneme kanalı (Windows CI)', () => {
-  it('LAFPOS_GUNCELLEME_KANAL: HTTPS ya da yalnız bu bilgisayar; geçersizse sitenin kanalı', async () => {
+  it('ASILPOS_GUNCELLEME_KANAL: HTTPS ya da yalnız bu bilgisayar; geçersizse sitenin kanalı', async () => {
     const { channelUrls, MANIFEST_URLS } = await load('guncelle.mjs');
     expect(channelUrls({})).toEqual(MANIFEST_URLS);
-    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'http://127.0.0.1:8765/guncelleme/surum.json' })).toEqual(['http://127.0.0.1:8765/guncelleme/surum.json']);
-    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'https://a.test/s.json, http://kotu.test/s.json, javascript:1' })).toEqual(['https://a.test/s.json']);
-    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'http://192.168.1.5/s.json' })).toEqual(MANIFEST_URLS);
+    expect(channelUrls({ ASILPOS_GUNCELLEME_KANAL: 'http://127.0.0.1:8765/guncelleme/surum.json' })).toEqual(['http://127.0.0.1:8765/guncelleme/surum.json']);
+    expect(channelUrls({ ASILPOS_GUNCELLEME_KANAL: 'https://a.test/s.json, http://kotu.test/s.json, javascript:1' })).toEqual(['https://a.test/s.json']);
+    expect(channelUrls({ ASILPOS_GUNCELLEME_KANAL: 'http://192.168.1.5/s.json' })).toEqual(MANIFEST_URLS);
   });
 
   it('Windows CI gerçek kurulumu dener: sessiz kurulum, güncelleme, geri dönüş (iş akışı ve betik)', () => {
@@ -304,7 +305,7 @@ describe('güncelleme: deneme kanalı (Windows CI)', () => {
     // Kurulamayan dosya yayımlanmaz: deneme yayımlamadan önce
     expect(wf.indexOf('ci-kurulum.mjs')).toBeLessThan(wf.indexOf('Sürümü yayımla'));
     const ci = readFileSync(join(__dirname, '../scripts/kasa/windows/kurulum/ci-kurulum.mjs'), 'utf8');
-    for (const s of ['LAFPOS_GUNCELLEME_KANAL', 'app.eski', 'node.yeni', 'geri-dondu', 'Güncellendi']) expect(ci).toContain(s);
+    for (const s of ['ASILPOS_GUNCELLEME_KANAL', 'app.eski', 'node.yeni', 'geri-dondu', 'Güncellendi']) expect(ci).toContain(s);
   });
 });
 
@@ -339,7 +340,7 @@ describe('güncelleme: Merkez hedefi', () => {
     t.opts.channelBuild = BUILD_NEW + 1;
     t.opts.dayOpen = false;
     await t.updater.check();
-    expect(t.requests.some((u) => u.endsWith(`lafpos-app-${BUILD_NEW + 1}.zip`))).toBe(false);
+    expect(t.requests.some((u) => u.endsWith(`${UYGULAMA_ZIP_ONEKI}${BUILD_NEW + 1}.zip`))).toBe(false);
     expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_NEW);
   });
 
@@ -412,11 +413,12 @@ describe('güncelleme: kurulum akışı', () => {
     expect(readFileSync(join(t.app, 'bekci.mjs'), 'utf8')).toBe('// yeni');
     // Yerel modül eskisinden taşındı (Node ve better-sqlite3 değişmedi: açık kaynaklara istek yok)
     expect(readFileSync(join(t.app, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), 'utf8')).toBe('ikili');
-    expect(t.requests.some((u) => u.includes('nodejs.org') || u.includes('github.com'))).toBe(false);
+    const disHost = (u: string) => /(^|\.)(nodejs\.org|github\.com)$/.test(new URL(u).hostname);
+    expect(t.requests.some(disHost)).toBe(false);
     expect(readFileSync(join(t.installDir, 'app.eski/bekci.mjs'), 'utf8')).toBe('// eski');
     const backups = readdirSync(join(t.home, 'backups'));
     expect(backups).toHaveLength(1);
-    expect(backups[0]).toMatch(new RegExp(`^lafpos-guncelleme-${BUILD_NEW}-.*\\.db$`));
+    expect(backups[0]).toMatch(new RegExp(`^${YEDEK_DOSYA_ONEKI}guncelleme-${BUILD_NEW}-.*\\.db$`));
     expect(t.events).toEqual(['durdur', 'deneme']);
     expect(t.exits).toEqual([75]);
     expect(t.status()).toMatchObject({ durum: 'guncel', mesaj: 'Güncellendi', kurulu: { build: BUILD_NEW } });
@@ -471,7 +473,7 @@ describe('güncelleme: kurulum akışı', () => {
     expect(t.events).toEqual([]);
     expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_OLD);
     expect(t.status()).toMatchObject({ durum: 'bekliyor', yeni: { build: BUILD_NEW } });
-    expect(existsSync(join(t.home, `guncelleme/indirilen/lafpos-app-${BUILD_NEW}.zip`))).toBe(true);
+    expect(existsSync(join(t.home, `guncelleme/indirilen/${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`))).toBe(true);
   });
 
   it('"Şimdi güncelle" gün açıkken hemen kurar (patron onayladı); onaysız istek gün kapanınca kurar', async () => {
@@ -532,7 +534,7 @@ describe('güncelleme: kurulum akışı', () => {
     await t.updater.check();
     expect(t.events).toEqual([]);
     expect(t.status().durum).toBe('hata');
-    expect(existsSync(join(t.home, `guncelleme/indirilen/lafpos-app-${BUILD_NEW}.zip`))).toBe(false);
+    expect(existsSync(join(t.home, `guncelleme/indirilen/${UYGULAMA_ZIP_ONEKI}${BUILD_NEW}.zip`))).toBe(false);
   });
 
   it('başka hosta yönlendirme reddedilir; kanala ulaşılamaması kasayı durdurmaz', async () => {

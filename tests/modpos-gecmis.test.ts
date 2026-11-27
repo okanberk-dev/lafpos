@@ -2,11 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fillHistory, type HistoryDay, type HistoryProducts, historyKey, historyProductsShown, historyReport, mergeHistory, parseHistory, readHistory, readHistoryStore, validProducts } from '@shared/gecmis';
 import type { RemoteDayExtra, RemoteDayReport } from '@shared/remote-reports';
 import { upstashFetch } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
- * Faz 4: ModPOS geçiş günleri (Marina, 13-21 Kasım 2026) LafPOS Uzaktan raporlarında. Geçmiş gün indirimi, ödenmezi, KDV
+ * Faz 4: ModPOS geçiş günleri (Marina, 13-21 Kasım 2026) AsilPOS Uzaktan raporlarında. Geçmiş gün indirimi, ödenmezi, KDV
  * kırılımını ve ModPOS Z numarasını taşır; dönemin ürün listesi (indirim öncesi) ayrı blok. Kasım raporu (13-22, 22'si
- * LafPOS'un kabul günü) sözleşmenin rakamlarını kuruşu kuruşuna verir: indirim 2.156,25, ciro dışı 2.565,00, ciro
+ * AsilPOS'un kabul günü) sözleşmenin rakamlarını kuruşu kuruşuna verir: indirim 2.156,25, ciro dışı 2.565,00, ciro
  * 33.633,75, KDV hariç 30.576,15, fiş 161 (hesap sözleşmesi §6).
  */
 
@@ -34,8 +35,8 @@ const URUNLER: HistoryProducts = {
   rows: Array.from({ length: 31 }, (_, i): [string, string, number, number] => [`ÜRÜN ${String(i + 1).padStart(2, '0')}`, i % 2 ? 'L' : 'M', i < 23 ? 8 : 7, i < 30 ? 95000 : 91500]),
 };
 
-/** LafPOS'un 22.11 kabul günü (tests/fixtures/kabul-gunu-2026-11-22.json'un Uzaktan özeti) */
-const LAFPOS_22: RemoteDayReport = {
+/** AsilPOS'un 22.11 kabul günü (tests/fixtures/kabul-gunu-2026-11-22.json'un Uzaktan özeti) */
+const ASILPOS_22: RemoteDayReport = {
   v: 1,
   date: '2026-11-22',
   at: Date.parse('2026-11-23T01:10:00+03:00'),
@@ -112,7 +113,7 @@ describe('geçmiş ciro: ModPOS gününün yeni alanları', () => {
     expect(historyProductsShown(URUNLER, { from: '2026-11-01', to: '2026-11-30' })).toBe('tam');
     expect(historyProductsShown(URUNLER, { from: '2026-11-16', to: '2026-11-22' })).toBe('kismi');
     expect(historyProductsShown(URUNLER, { from: '2026-11-22', to: '2026-11-22' })).toBeNull();
-    // Bloğun bir günü raporda LafPOS günüyle değiştiyse (geçmişten gelmedi) blok gösterilmez: o günü iki kez sayardı
+    // Bloğun bir günü raporda AsilPOS günüyle değiştiyse (geçmişten gelmedi) blok gösterilmez: o günü iki kez sayardı
     const used = days().filter((d) => d.date !== '2026-11-15').map((d) => ({ date: d.date, kaynak: 'ModPOS' }));
     expect(historyProductsShown(URUNLER, { from: '2026-11-13', to: '2026-11-22' }, days(), used)).toBe('kismi');
   });
@@ -139,11 +140,11 @@ describe('geçmiş ciro: ModPOS gününün yeni alanları', () => {
   });
 });
 
-describe('Uzaktan Kasım raporu (13-22 Kasım): ModPOS günleri + LafPOS kabul günü', () => {
+describe('Uzaktan Kasım raporu (13-22 Kasım): ModPOS günleri + AsilPOS kabul günü', () => {
   it('Ciro dökümü sözleşmenin rakamlarını verir (sumSummary)', async () => {
     const { sumSummary } = await import('../api/uzaktan');
     const dates = Array.from({ length: 10 }, (_, i) => `2026-11-${String(13 + i).padStart(2, '0')}`);
-    const reps = fillHistory(dates, [LAFPOS_22], days(), '2026-11-23', (d) => historyReport(d, 'ModPOS')).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const reps = fillHistory(dates, [ASILPOS_22], days(), '2026-11-23', (d) => historyReport(d, 'ModPOS')).sort((a, b) => (a.date < b.date ? -1 : 1));
     const s = sumSummary({ from: '2026-11-13', to: '2026-11-22' }, reps, [], Date.parse('2026-11-23T12:00:00+03:00'), '2026-11-23');
     expect(s.waterfall).toEqual({ list: 3835500, complimentary: 256500, discounts: 215625, service: 0, revenue: 3363375, kdv: 305760, netExKdv: 3057615 });
     expect(s.receipts).toBe(161);
@@ -162,23 +163,23 @@ describe('Uzaktan Kasım raporu (13-22 Kasım): ModPOS günleri + LafPOS kabul g
 
 describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
   const SHOP = 'b'.repeat(24);
-  const CLOUD = 'https://lafpos.vercel.app';
+  const CLOUD = `https://${VERCEL_ALANI}`;
   const PASSWORD = 'modpos-parola-123';
   const store = new Map<string, string>();
-  const KEYS = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA'];
+  const KEYS = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_PAROLA', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA'];
   const before: Record<string, string | undefined> = {};
 
   beforeAll(() => {
     for (const k of KEYS) before[k] = process.env[k];
-    delete process.env.LAFPOS_UYE_EPOSTA;
-    Object.assign(process.env, { LAFPOS_CLOUD_SECRET: 'g'.repeat(40), LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+    delete process.env.ASILPOS_UYE_EPOSTA;
+    Object.assign(process.env, { ASILPOS_CLOUD_SECRET: 'g'.repeat(40), ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
     const redis = upstashFetch(store);
     vi.stubGlobal('fetch', async (_i: string, init?: RequestInit) => redis(init));
-    // Kasanın bugünü 23.11 (gün açık); 22.11 LafPOS'un, 13-21 ModPOS'un (sahibin Merkez'den yüklediği kayıt)
-    store.set('lafpos:surum', JSON.stringify({ [SHOP]: JSON.stringify({ at: Date.parse('2026-11-23T12:00:00+03:00'), o: true, d: '2026-11-23' }), [`gecmis:${SHOP}`]: '5' }));
-    store.set(`lafpos:rapor:${SHOP}:son`, JSON.stringify({ today: '2026-11-23', at: Date.parse('2026-11-23T12:00:00+03:00') }));
-    store.set(`lafpos:rapor:${SHOP}:gun:2026-11-22`, JSON.stringify(LAFPOS_22));
-    store.set(`lafpos:rapor:${SHOP}:ek:2026-11-22`, JSON.stringify(EXTRA_22));
+    // Kasanın bugünü 23.11 (gün açık); 22.11 AsilPOS'un, 13-21 ModPOS'un (sahibin Merkez'den yüklediği kayıt)
+    store.set(`${REDIS_ONEKI}surum`, JSON.stringify({ [SHOP]: JSON.stringify({ at: Date.parse('2026-11-23T12:00:00+03:00'), o: true, d: '2026-11-23' }), [`gecmis:${SHOP}`]: '5' }));
+    store.set(`${REDIS_ONEKI}rapor:${SHOP}:son`, JSON.stringify({ today: '2026-11-23', at: Date.parse('2026-11-23T12:00:00+03:00') }));
+    store.set(`${REDIS_ONEKI}rapor:${SHOP}:gun:2026-11-22`, JSON.stringify(ASILPOS_22));
+    store.set(`${REDIS_ONEKI}rapor:${SHOP}:ek:2026-11-22`, JSON.stringify(EXTRA_22));
     store.set(historyKey(SHOP), JSON.stringify({ v: 1, kaynak: 'ModPOS', at: 5, gunler: days(), urunler: URUNLER }));
   });
   afterAll(() => {
@@ -223,7 +224,7 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     expect(h.week.find((w: { days: number }) => w.days === 1).hours[15]).toBe(628500);
   });
 
-  it('Ürünler: ModPOS listesi kendi bloğunda (indirim öncesi), LafPOS ürün cirosuna karışmaz', async () => {
+  it('Ürünler: ModPOS listesi kendi bloğunda (indirim öncesi), AsilPOS ürün cirosuna karışmaz', async () => {
     const p = await view('reports/products?from=2026-11-13&to=2026-11-22');
     expect(p.total).toBe(57000);
     expect(p.products).toHaveLength(1);
@@ -248,12 +249,12 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-23', at: 10, days: [good, bad, withBlock, badBlock, marker, badMarker] })).toString('base64') });
     const res = await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/rapor`, { method: 'POST', body, headers: signedHeaders('g'.repeat(40), 'POST', new URL(`${CLOUD}/api/uzaktan/rapor`), body) }));
     expect(await res.json()).toMatchObject({ ok: true, stored: 3 });
-    expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-17`)!).urunler).toEqual({ from: '2026-11-13', to: '2026-11-21', n: 9 });
-    expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-18`)).toBe(false);
-    expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-13`)!)).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-002', s: { rev: 39000 } });
-    expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-14`)).toBe(false);
-    expect(JSON.parse(store.get(`lafpos:rapor:${shop}:gun:2026-11-15`)!).urunler).toMatchObject({ from: '2026-11-13', to: '2026-11-21', n: 9 });
-    expect(store.has(`lafpos:rapor:${shop}:gun:2026-11-16`)).toBe(false);
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-17`)!).urunler).toEqual({ from: '2026-11-13', to: '2026-11-21', n: 9 });
+    expect(store.has(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-18`)).toBe(false);
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-13`)!)).toMatchObject({ kaynak: 'ModPOS', zText: 'Z-2026-002', s: { rev: 39000 } });
+    expect(store.has(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-14`)).toBe(false);
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-15`)!).urunler).toMatchObject({ from: '2026-11-13', to: '2026-11-21', n: 9 });
+    expect(store.has(`${REDIS_ONEKI}rapor:${shop}:gun:2026-11-16`)).toBe(false);
   });
 
   it('ek sekmeler: İndirim ve ikram listesi ModPOS günlerinin toplamını, öbür listeler ve Adisyonlar ModPOS notunu taşır', async () => {
@@ -263,7 +264,7 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     const k = await view('reports/items?kind=ikram&from=2026-11-13&to=2026-11-22');
     expect(k.total).toBe(13000);
     expect(k.history).toEqual({ kaynak: 'ModPOS', days: 9, amount: 150000 });
-    // İptal ve happy hour: ModPOS'tan kalem kaydı gelmez, tutar yok; liste yalnız LafPOS günlerinin
+    // İptal ve happy hour: ModPOS'tan kalem kaydı gelmez, tutar yok; liste yalnız AsilPOS günlerinin
     const v = await view('reports/items?kind=iptal&from=2026-11-13&to=2026-11-22');
     expect(v.history).toEqual({ kaynak: 'ModPOS', days: 9 });
     expect((await view('reports/items?kind=happy&from=2026-11-13&to=2026-11-22')).history).toEqual({ kaynak: 'ModPOS', days: 9 });
@@ -275,7 +276,7 @@ describe('Uzaktan Raporlar uçları (Redis\'te geçmiş ciro)', () => {
     expect(await view('reports/checks?from=2026-11-22&to=2026-11-22')).not.toHaveProperty('history');
   });
 
-  it('Paket platformları: platformun payı LafPOS günlerinin cirosundan (ModPOS günlerinin platform kaydı yok; kasadaki gibi)', async () => {
+  it('Paket platformları: platformun payı AsilPOS günlerinin cirosundan (ModPOS günlerinin platform kaydı yok; kasadaki gibi)', async () => {
     const p = await view('reports/platforms?from=2026-11-13&to=2026-11-22');
     expect(p.netSales).toBe(628500);
   });

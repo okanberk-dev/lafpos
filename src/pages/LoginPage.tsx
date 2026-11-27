@@ -95,7 +95,7 @@ export function LoginPage() {
             <LafTile className="shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]" />
             <span className="min-w-0">
               <span className="block truncate font-headline text-lg font-bold tracking-[-0.025em]">{info.data?.businessName ?? "L'Affogato"}</span>
-              <span className="block text-xs text-[var(--band-muted)]">LafPOS · kasa</span>
+              <span className="block text-xs text-[var(--band-muted)]">AsilPOS · kasa</span>
             </span>
           </div>
           <div className="shrink-0 text-right lg:text-left">
@@ -139,7 +139,7 @@ export function LoginPage() {
                   </Button>
                 }
               >
-                Kasa sunucusuna ulaşılamıyor; LafPOS bilgisayarının açık ve aynı ağda olduğunu kontrol edin
+                Kasa sunucusuna ulaşılamıyor; AsilPOS bilgisayarının açık ve aynı ağda olduğunu kontrol edin
               </Notice>
             )}
             <div className="mb-5">

@@ -1,6 +1,7 @@
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { PAVO_DEFAULT_PORT, PavoClient, PavoError, type PavoStore } from './pavo';
+import { PAVO_KIMLIGI } from '@shared/eski-adlar';
 
 /**
  * Yönetim › Yazarkasa POS › Pavo › "Cihazı ağda ara": kasa bilgisayarının bağlı olduğu yerel ağda (yalnız özel adres
@@ -108,7 +109,7 @@ async function pingPavo(host: string, port: number, serial: string, timeoutMs: n
     for (const scheme of ['https', 'http']) {
       const url = `${scheme}://${host}:${port}`;
       try {
-        const res = await new PavoClient({ url, serial, fingerprint: 'LafPOS' }, noStore).ping(timeoutMs);
+        const res = await new PavoClient({ url, serial, fingerprint: PAVO_KIMLIGI }, noStore).ping(timeoutMs);
         return { url, ok: !res.HasError, message: typeof res.Message === 'string' ? res.Message.slice(0, 120) : null };
       } catch (e) {
         const code = e instanceof PavoError ? e.code : null;

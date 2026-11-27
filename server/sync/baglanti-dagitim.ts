@@ -7,6 +7,7 @@ import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { envDegeri, yeniAdlarla } from '@shared/pos-env';
 
 /**
  * Kasanın Uzaktan ve site bağlantısı ladmin'den (docs/03-ENTEGRASYON.md §4b "Anahtar değişimi"): kasa 10 dakikada bir
@@ -17,10 +18,12 @@ import { getOpenDay } from '../services/orders';
  * açılmaz; yeni kasa bağlantılarını kurulum kodundan alır (kurulum-kodu.ts).
  */
 
-export const DAGITILAN_ANAHTARLAR = ['LAFPOS_CLOUD_URL', 'LAFPOS_CLOUD_SECRET', 'LAFFOGATO_URL', 'LAFFOGATO_SYNC_SECRET'] as const;
+/** Dağıtılan anahtarlar. ladmin Uzaktan'ınkileri bugün eski adla gönderir: yanıt `yeniAdlarla` çevrilir, ayarlar dosyasına
+ * dosyada yeni ad yoksa eski adla yazılır (server/lib/ayar-dosyasi.ts) */
+export const DAGITILAN_ANAHTARLAR = ['ASILPOS_CLOUD_URL', 'ASILPOS_CLOUD_SECRET', 'LAFFOGATO_URL', 'LAFFOGATO_SYNC_SECRET'] as const;
 /** Adres anahtarı → onunla birlikte giden gizli anahtar (çift ya hep birlikte yazılır ya hiç) */
 const CIFTLER: [string, string][] = [
-  ['LAFPOS_CLOUD_URL', 'LAFPOS_CLOUD_SECRET'],
+  ['ASILPOS_CLOUD_URL', 'ASILPOS_CLOUD_SECRET'],
   ['LAFFOGATO_URL', 'LAFFOGATO_SYNC_SECRET'],
 ];
 
@@ -42,7 +45,7 @@ export function dagitimFarki(json: unknown, current: Record<string, string | und
   if (!json || typeof json !== 'object') return null;
   const o = json as { ok?: unknown; surum?: unknown; baglanti?: unknown };
   if (o.ok !== true || typeof o.surum !== 'string' || !/^[0-9a-f]{0,16}$/.test(o.surum)) return null;
-  const raw = (o.baglanti && typeof o.baglanti === 'object' ? o.baglanti : {}) as Record<string, unknown>;
+  const raw = yeniAdlarla((o.baglanti && typeof o.baglanti === 'object' ? o.baglanti : {}) as Record<string, unknown>);
   const valid: Record<string, string> = {};
   for (const key of DAGITILAN_ANAHTARLAR) {
     const field = connField(key);
@@ -53,10 +56,12 @@ export function dagitimFarki(json: unknown, current: Record<string, string | und
   }
   const edits: Record<string, string> = {};
   for (const [urlKey, secretKey] of CIFTLER) {
+    // Kasadaki değer yeni ya da eski adla (kurulu kasanın ayarlar.env'i)
+    const nowUrl = envDegeri(current, urlKey)?.trim();
     // Kasada bu bağlantı yoksa (adres boş) dokunulmaz; ladmin'de çift tam değilse de
-    if (!current[urlKey]?.trim() || !valid[urlKey] || !valid[secretKey]) continue;
-    if (current[urlKey]?.trim().replace(/\/+$/, '') !== valid[urlKey].replace(/\/+$/, '')) edits[urlKey] = valid[urlKey];
-    if (current[secretKey]?.trim() !== valid[secretKey]) edits[secretKey] = valid[secretKey];
+    if (!nowUrl || !valid[urlKey] || !valid[secretKey]) continue;
+    if (nowUrl.replace(/\/+$/, '') !== valid[urlKey].replace(/\/+$/, '')) edits[urlKey] = valid[urlKey];
+    if (envDegeri(current, secretKey)?.trim() !== valid[secretKey]) edits[secretKey] = valid[secretKey];
   }
   return { surum: o.surum, edits };
 }

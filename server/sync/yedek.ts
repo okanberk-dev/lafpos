@@ -9,16 +9,18 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
+import { posEnv } from '@shared/pos-env';
+import { YEDEK_SIFRE_BILGISI } from '@shared/eski-adlar';
 
 /**
  * Otomatik bulut yedeği (docs/05-KASA-BILGISAYARI.md §6 "Bulut yedeği"): günlük veritabanı yedeği kasada sıkıştırılıp
- * şifrelenir (AES-256-GCM; anahtar LAFPOS_CLOUD_SECRET'ten türetilir, buluta hiç gitmez) ve LafPOS Uzaktan'ın verdiği
+ * şifrelenir (AES-256-GCM; anahtar ASILPOS_CLOUD_SECRET'ten türetilir, buluta hiç gitmez) ve AsilPOS Uzaktan'ın verdiği
  * kısa süreli imzalı adrese yüklenir (Vercel Blob, özel depo; api/_yedek.ts). Blob anahtarı yalnız buluttadır.
  *
  * Geri yükleme (Yönetim › Ayarlar ve yedek › Bulut yedeği): seçilen yedek indirilir, şifresi çözülür, SQLite olduğu
  * doğrulanır ve veri klasöründe `geri-yukle/hazir.db` olarak bekler. Sunucu kapanır; bekçi (Windows kurulumu) yeniden
  * açmadan önce mevcut veritabanının kopyasını alır ve hazır yedeği yerine koyar (scripts/kasa/windows/kurulum/geri-yukle.mjs).
- * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazılınca eski yedekler
+ * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı ASILPOS_CLOUD_URL ve ASILPOS_CLOUD_SECRET yazılınca eski yedekler
  * görünür (dükkân kimliği yedeklerin klasörüdür; listede kurulumun eski kimliği de seçilebilir).
  */
 /** Dosyanın imzası; yükleme anında kurulur (tarayıcı demosunda Buffer yok, modül yine yüklenir) */
@@ -37,7 +39,7 @@ export interface CloudBackupState {
 export const cloudBackupState = (): CloudBackupState => ({ lastAt: null, lastName: null, lastSize: null, lastError: null, lastDay: null, ...(getSyncState<Partial<CloudBackupState>>(STATE) ?? {}) });
 const saveState = (patch: Partial<CloudBackupState>) => setSyncState(STATE, { ...cloudBackupState(), ...patch });
 
-const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, 'lafpos-yedek-v1', 32));
+const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, YEDEK_SIFRE_BILGISI, 32));
 
 /** Veritabanını sıkıştırıp şifreler: LPY1 | tuz (16) | iv (12) | etiket (16) | şifreli gzip */
 export function sealBackup(db: Buffer, secret: string): Buffer {
@@ -73,7 +75,7 @@ export function openBackup(buf: Buffer, secret: string): Buffer {
     decipher.setAuthTag(tag);
     db = zlib.gunzipSync(Buffer.concat([decipher.update(buf.subarray(48)), decipher.final()]));
   } catch {
-    throw new Error('Yedeğin şifresi çözülemedi: bu yedek başka bir anahtarla alınmış (LAFPOS_CLOUD_SECRET) ya da bozuk');
+    throw new Error('Yedeğin şifresi çözülemedi: bu yedek başka bir anahtarla alınmış (ASILPOS_CLOUD_SECRET) ya da bozuk');
   }
   if (!db.subarray(0, 16).equals(Buffer.from('SQLite format 3\0'))) throw new Error('Yedeğin içinden veritabanı çıkmadı');
   return db;
@@ -88,7 +90,7 @@ async function cloud<T>(path: string, body: unknown): Promise<T> {
 
 /** Yerel yedek dosyasını şifreleyip buluta yükler */
 export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
-  if (!cloudEnabled()) throw new Error('LafPOS Uzaktan kurulu değil');
+  if (!cloudEnabled()) throw new Error('AsilPOS Uzaktan kurulu değil');
   try {
     const sealed = await sealBackupAsync(readFileSync(file), env.cloudSecret);
     const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });
@@ -124,7 +126,7 @@ export interface CloudBackup {
 export const listCloudBackups = (dukkan?: string) => cloud<{ shop: string; dukkanlar: string[]; yedekler: CloudBackup[] }>('liste', dukkan ? { dukkan } : {});
 
 /** Kurulum Windows bekçisiyle mi çalışıyor (geri yükleme ancak onunla: veritabanı sunucu dururken değişir) */
-export const underBekci = () => process.env.LAFPOS_STDIN_CONTROL === '1';
+export const underBekci = () => posEnv(process.env, 'STDIN_CONTROL') === '1';
 
 /**
  * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar

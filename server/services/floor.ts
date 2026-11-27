@@ -92,7 +92,7 @@ export const KITCHEN_READY_MS = 30 * 60_000;
  * Çağrı ekranı: tezgâh ve gel-al siparişleri ile sitenin gel-al siparişleri. Bar "Hazır"a basınca sipariş
  * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez. Masa no / numaratör
  * girilmiş tezgâh siparişi (yarı self servis) numara yerine masasıyla görünür: müşteri kalkmaz, personel getirir.
- * Paket platformunun gel-al siparişi LafPOS numarasıyla değil platformun kısa koduyla görünür (müşteri uygulamada
+ * Paket platformunun gel-al siparişi AsilPOS numarasıyla değil platformun kısa koduyla görünür (müşteri uygulamada
  * onu görür). "Teslim edildi" siparişi hemen düşürür: kasanın siparişinde kalemlerin durumu (teslimden sonra eklenen
  * kalem yeniden "Hazırlanıyor"), platform siparişinde teslim aşaması (teslimi platformun akışında, kalemler hazırda kalır).
  * Sitenin planlı siparişi (geceden ödenmiş sabah gel-al'ı) ödeme anına değil planlı saatine göre pencerede: açık ve

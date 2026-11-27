@@ -5,11 +5,11 @@ import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
- * LafPOS Uzaktan demo özeti (api/demo-ozet.json): kafe bağlanana kadar lafpos.vercel.app'te parolasız gösterilen
- * örnek gün. Üretmek için: LAFPOS_DEMO_OZET=1 npx vitest run tests/demo-ozet.test.ts. Normal koşuda yalnız
+ * AsilPOS Uzaktan demo özeti (api/demo-ozet.json): kafe bağlanana kadar Uzaktan'ın adresinde parolasız gösterilen
+ * örnek gün. Üretmek için: ASILPOS_DEMO_OZET=1 npx vitest run tests/demo-ozet.test.ts. Normal koşuda yalnız
  * dosyanın kişisel veri, PIN ve maliyet taşımadığı denetlenir.
  */
-const GEN = process.env.LAFPOS_DEMO_OZET === '1';
+const GEN = process.env.ASILPOS_DEMO_OZET === '1';
 let h: Harness;
 
 beforeAll(async () => {

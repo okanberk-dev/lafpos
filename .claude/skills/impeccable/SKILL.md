@@ -8,11 +8,11 @@ allowed-tools:
   - Bash(.agent/skills/impeccable/scripts/impeccable *)
 ---
 
-> **Kaynak:** [pbakaus/impeccable](https://github.com/pbakaus/impeccable) `.agent/skills/impeccable` @ `3671d50` (25 Eki 2026, Apache-2.0, `LICENSE`, `NOTICE.md`). Kopyalanan: bu dosya ve `reference/` altından `adapt`, `audit`, `polish`, `harden`, `layout`, `operate`, `mode-operate`, `craft-floor`. Alınmayan: `scripts/` (başlatıcı, canlı tarayıcı, yazı dizini) ve diğer komut rehberleri; bağlantısı kırık kalan rehberler LafPOS'ta kullanılmaz. Değişiklik (Apache-2.0 §4b): yalnız aşağıdaki "Bu projede" bölümü eklendi.
+> **Kaynak:** [pbakaus/impeccable](https://github.com/pbakaus/impeccable) `.agent/skills/impeccable` @ `3671d50` (25 Eki 2026, Apache-2.0, `LICENSE`, `NOTICE.md`). Kopyalanan: bu dosya ve `reference/` altından `adapt`, `audit`, `polish`, `harden`, `layout`, `operate`, `mode-operate`, `craft-floor`. Alınmayan: `scripts/` (başlatıcı, canlı tarayıcı, yazı dizini) ve diğer komut rehberleri; bağlantısı kırık kalan rehberler AsilPOS'ta kullanılmaz. Değişiklik (Apache-2.0 §4b): yalnız aşağıdaki "Bu projede" bölümü eklendi.
 
-## Bu projede (LafPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
+## Bu projede (AsilPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
 
-LafPOS'ta bu skill **telefon ve tablet uyarlaması** içindir: ana rehber `adapt`, teslimden önce `audit` ve `polish`, kenar durumları için `harden`. Yüzey modu her ekranda **Operate**'tir (iş gören ekran); yönetim ekranlarının görünümü Innex tarifinden gelir (`DESIGN.md`, `build-admin-panel`; ui-ux-pro-max denendi, bırakıldı: `docs/SKILLS.md`).
+AsilPOS'ta bu skill **telefon ve tablet uyarlaması** içindir: ana rehber `adapt`, teslimden önce `audit` ve `polish`, kenar durumları için `harden`. Yüzey modu her ekranda **Operate**'tir (iş gören ekran); yönetim ekranlarının görünümü Innex tarifinden gelir (`DESIGN.md`, `build-admin-panel`; ui-ux-pro-max denendi, bırakıldı: `docs/SKILLS.md`).
 
 - **Başlatıcı yok:** `scripts/impeccable` depoya alınmadı. Aşağıdaki "Launcher unavailable" yolunu izle: kökteki `PRODUCT.md` (kim, nerede, hangi ışıkta) ve `DESIGN.md`'yi doğrudan oku, eksik bağlamı uydurma.
 - **Kullanım sahnesi:** garson telefonda tek elle sipariş alır, kasiyer tablette ya da dokunmatik ekranda öder, bar ekranı tablette durur, patron telefondan canlı panele bakar. Bu yüzden dokunma hedefi en az 44 px (`pointer-coarse:`), birincil eylem başparmak bölgesinde, telefonda modal yerine alt sayfa, tablo yerine satır kartı, yatay kaydırma yalnız bilinçli şeritlerde.

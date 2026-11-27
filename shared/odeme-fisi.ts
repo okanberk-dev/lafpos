@@ -24,7 +24,7 @@ export interface DeviceRouteInput {
   amount: number;
   remaining: number;
   pickedCount: number;
-  /** Adisyonda LafPOS'ta tutar olarak alınmış (cihazdan gelmemiş) ödeme var: hesabın bütünü cihaza gidemez */
+  /** Adisyonda AsilPOS'ta tutar olarak alınmış (cihazdan gelmemiş) ödeme var: hesabın bütünü cihaza gidemez */
   amountPaidHere: boolean;
   /** Adisyona hiç ödeme alınmamış (`order.paid === 0`): bölünmüş hesabın bütünü cihaza gidebilir */
   nothingPaid?: boolean;
@@ -37,7 +37,7 @@ export interface DeviceRouteInput {
 
 /**
  * `on`: otomatik gönderim bu kurulumda açık (kapalıysa ödeme penceresi bugünkü gibi çalışır). `send`: bu ödeme cihaza
- * gider. Gitmiyorsa `reason` kasiyere bir cümleyle neden LafPOS'a yazılacağını söyler.
+ * gider. Gitmiyorsa `reason` kasiyere bir cümleyle neden AsilPOS'a yazılacağını söyler.
  */
 export function deviceRoute(i: DeviceRouteInput): { on: boolean; send: boolean; reason: string | null; block?: true } {
   const on = i.provider !== 'kapali' && i.mode === 'anlik' && i.auto && i.canSend;
@@ -47,17 +47,17 @@ export function deviceRoute(i: DeviceRouteInput): { on: boolean; send: boolean; 
   // ödeme aracına eşlenmişse (§8.6)
   const meal = i.mealOnDevice ?? i.provider !== 'pavo';
   const kinds = meal ? ['nakit', 'kart', 'yemek'] : ['nakit', 'kart'];
-  if (i.methodKind === 'yemek' && !meal && i.provider === 'pavo') return { on, send: false, reason: 'Bu yemek kartı cihazın ödeme aracına eşlenmedi, LafPOS’a yazılır (Yönetim › Yazarkasa POS)' };
+  if (i.methodKind === 'yemek' && !meal && i.provider === 'pavo') return { on, send: false, reason: 'Bu yemek kartı cihazın ödeme aracına eşlenmedi, AsilPOS’a yazılır (Yönetim › Yazarkasa POS)' };
   const no = (reason: string) => ({ on, send: false, reason });
-  if (!kinds.includes(i.methodKind)) return no('Bu ödeme türü yazarkasaya gitmez, LafPOS’a yazılır');
+  if (!kinds.includes(i.methodKind)) return no('Bu ödeme türü yazarkasaya gitmez, AsilPOS’a yazılır');
   // Hiç pay alınmamış bölünmüş hesap cihaza bütün olarak gider (Yazarkasa bölümü: cihazda N ayrı ödeme, tek fiş)
-  if (i.payMode === 'paylas' || i.splitActive) return no(i.nothingPaid ? 'Paylaşımlı hesap: aşağıdaki Yazarkasa bölümünden bütün hesabı cihaza gönderin' : 'Paylaşımlı hesapta pay LafPOS’a yazılır');
-  // Bahşişli ödeme cihaza gitmez; hesabın tamamı sessizce LafPOS'a yazılmasın (kart çekilmez, fiş kesilmez): ödeme
+  if (i.payMode === 'paylas' || i.splitActive) return no(i.nothingPaid ? 'Paylaşımlı hesap: aşağıdaki Yazarkasa bölümünden bütün hesabı cihaza gönderin' : 'Paylaşımlı hesapta pay AsilPOS’a yazılır');
+  // Bahşişli ödeme cihaza gitmez; hesabın tamamı sessizce AsilPOS'a yazılmasın (kart çekilmez, fiş kesilmez): ödeme
   // düğmesi kapanır, hesap bahşişsiz cihazdan alınır
   if (i.tip > 0) return { on, send: false, reason: 'Bahşişi ayrı alın: önce hesabı bahşişsiz cihazdan alın', block: true };
   if (i.payMode === 'kalem') return i.pickedCount > 0 ? { on, send: true, reason: null } : { on, send: false, reason: null };
-  if (i.amountPaidHere) return no('Adisyonda LafPOS’ta alınmış ödeme var: kalan LafPOS’a yazılır ya da kalemleri seçin');
-  if (i.amount < i.remaining) return no('Kısmi tutar yazarkasaya gitmez, LafPOS’a yazılır; tamamı ya da kalem seçerek cihaza gider');
+  if (i.amountPaidHere) return no('Adisyonda AsilPOS’ta alınmış ödeme var: kalan AsilPOS’a yazılır ya da kalemleri seçin');
+  if (i.amount < i.remaining) return no('Kısmi tutar yazarkasaya gitmez, AsilPOS’a yazılır; tamamı ya da kalem seçerek cihaza gider');
   return { on, send: true, reason: null };
 }
 
@@ -75,7 +75,7 @@ export function okcPanelAuto(routeOn: boolean, split: { shares: unknown[] } | nu
  */
 export function offDeviceLabel(route: { on: boolean; send: boolean }, method: { kind: string; name: string } | null, total: number): { label: string; confirm: boolean } | null {
   if (!route.on || route.send || !method) return null;
-  if (method.kind === 'nakit') return { label: `${tl(total)} ${method.name}: LafPOS’a yaz (fiş ayrıca)`, confirm: false };
+  if (method.kind === 'nakit') return { label: `${tl(total)} ${method.name}: AsilPOS’a yaz (fiş ayrıca)`, confirm: false };
   if (method.kind === 'kart' || method.kind === 'yemek') return { label: `${tl(total)} ${method.name}: cihazsız kaydet`, confirm: true };
   return null;
 }
@@ -88,7 +88,7 @@ export interface DevicePaid {
 }
 
 /**
- * Cihaz ödemesinin sonuç ekranı: para üstü cihazın gerçek ödemelerinden çıkar, LafPOS'taki seçimden değil (kasiyer
+ * Cihaz ödemesinin sonuç ekranı: para üstü cihazın gerçek ödemelerinden çıkar, AsilPOS'taki seçimden değil (kasiyer
  * Nakit 500 seçip müşteri kartla öderse para üstü yoktur). Yalnız bütün ödeme nakit, toplamı gönderilen tutara eşit
  * ve verilen yeterliyse verilen − tutar. Cihazın ödemeleri bilinmiyorsa (eski sunucu) `change` null: ekran para üstünü
  * cihazın fişinden vermeyi söyler
@@ -111,7 +111,7 @@ export function isKasaHost(host: string): boolean {
 /**
  * Ödemeden sonra kendiliğinden basılacaklar. Yalnız kasa ekranında ve fiş yazıcısı bulunmuşken (yoksa sessizce atlanır),
  * her kâğıt kendi ayarıyla (ikisi de varsayılan açık): müşteri nüshası (sipariş no büyük, kalemler, "mali değeri
- * yoktur") ve işyeri nüshası (bar ve hazırlık için kalemli kâğıt). Ödeme LafPOS'ta da alınsa cihazda da aynı
+ * yoktur") ve işyeri nüshası (bar ve hazırlık için kalemli kâğıt). Ödeme AsilPOS'ta da alınsa cihazda da aynı
  */
 export function afterPaymentPrints(i: {
   settings: Pick<PublicSettings, 'receiptStoreCopy' | 'receiptInfoSlip'>;
@@ -134,7 +134,7 @@ export function afterPaymentParts(plan: { storeCopy: boolean; infoSlip: boolean 
 }
 
 /**
- * Pavo'nun banka gün sonu kâğıdını (Z ve Pavo - LafPOS kıyası) bu ekran basar mı: kasa ekranı, fiş yazıcısı ve Pavo
+ * Pavo'nun banka gün sonu kâğıdını (Z ve Pavo - AsilPOS kıyası) bu ekran basar mı: kasa ekranı, fiş yazıcısı ve Pavo
  * bağlantısı. Kendi ayarını (Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın") sunucu denetler
  * (`takeEodSlip`). Ödeme sonrası nüsha ayarlarına bağlı değil: eskiden işyeri nüshası kapalıyken gün sonu kâğıdı da hiç
  * çıkmıyordu (inceleme, 23 Kas 2026)

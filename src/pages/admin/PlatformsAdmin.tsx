@@ -31,7 +31,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
-/** Anahtarların girildiği yer: Yönetim › Bağlantı bilgileri (ayarlar dosyasına yazılır, LafPOS kendiliğinden yeniden başlar) */
+/** Anahtarların girildiği yer: Yönetim › Bağlantı bilgileri (ayarlar dosyasına yazılır, AsilPOS kendiliğinden yeniden başlar) */
 const KEYS_LINK = (
   <Link to="/yonetim/baglanti-bilgileri" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">
     Yönetim › Bağlantı bilgileri
@@ -49,19 +49,19 @@ const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
   yemeksepeti: (
     <>
       Delivery Hero’dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola ve restoranın POS kimliği {KEYS_LINK}’ne, JWT anahtarı Vercel’e (<Env name="YEMEKSEPETI_PLUGIN_SECRET" />) yazılır;
-      LafPOS yeniden açılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
+      AsilPOS yeniden açılınca Canlı seçilir. Siparişler AsilPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
     </>
   ),
   getir: (
     <>
       Getir’den POS entegrasyonu: test ve canlı için uygulama anahtarı ve restoran anahtarı {KEYS_LINK}’ne (test ortamı için API adresi de), Vercel’e bizim ürettiğimiz{' '}
-      <Env name="GETIR_WEBHOOK_SECRET" /> yazılır; Getir’e sipariş ve iptal adresleri bu anahtarla verilir. LafPOS yeniden açılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a
+      <Env name="GETIR_WEBHOOK_SECRET" /> yazılır; Getir’e sipariş ve iptal adresleri bu anahtarla verilir. AsilPOS yeniden açılınca Canlı seçilir. Siparişler AsilPOS Uzaktan’a
       gelir, kasa 20 saniyede bir çeker, yedek olarak Getir’den de okur. Getir’in yemek işi Uber’e geçti: siparişler ileride Trendyol Go’dan da gelebilir.
     </>
   ),
   trendyol: (
     <>
-      Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar {KEYS_LINK}’ne yazılır; LafPOS yeniden açılınca Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir, kasa
+      Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar {KEYS_LINK}’ne yazılır; AsilPOS yeniden açılınca Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir, kasa
       20 saniyede bir yoklar.
     </>
   ),
@@ -313,7 +313,7 @@ function PlatformCard({
             options={modes}
           />
         ) : (
-          <p className="text-sm text-[var(--admin-text-mute)]">{keysMissing ? 'Kapalı: canlı bağlantının anahtarları bu kasada tanımlı değil' : 'Kapalı: LafPOS’ta bu platformun canlı bağlantısı henüz yok'}</p>
+          <p className="text-sm text-[var(--admin-text-mute)]">{keysMissing ? 'Kapalı: canlı bağlantının anahtarları bu kasada tanımlı değil' : 'Kapalı: AsilPOS’ta bu platformun canlı bağlantısı henüz yok'}</p>
         )}
         {/* Modun notları tek blokta, sıkı aralıkla. Eksik anahtar yalnız Canlı seçiliyken engeldir (kırmızı), öteki
             modlarda bilgi */}

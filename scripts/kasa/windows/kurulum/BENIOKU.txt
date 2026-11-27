@@ -1,10 +1,10 @@
-LafPOS (Windows)
-================
+AsilPOS (Windows)
+=================
 
 NE KURULDU
 - Sunucu: Windows açılınca arka planda kendiliğinden çalışır (Görev Zamanlayıcı: "LafPOS Sunucu").
   Kimse oturum açmasa da tabletler bağlanabilir. Düşerse birkaç saniye içinde yeniden başlar.
-- Kasa ekranı: masaüstündeki "LafPOS Kasa". Chrome (yoksa Edge) tam ekran açılır, fişler önizlemesiz
+- Kasa ekranı: masaüstündeki "AsilPOS Kasa". Chrome (yoksa Edge) tam ekran açılır, fişler önizlemesiz
   varsayılan yazıcıdan çıkar. Kiosktan çıkmak için Alt+F4.
 - Veriler: C:\ProgramData\LafPOS (veritabanı, günlük yedekler, ayarlar, sunucu günlüğü). Güncelleme ve
   kaldırma bu klasöre dokunmaz. Klasörü yalnız yöneticiler açabilir.
@@ -30,24 +30,24 @@ DIŞARIDAN (İNTERNETTEN) CANLI ERİŞİM
   https://tailscale.com/download
 - Telefonda Yönetim › Ağ ve uzaktan erişim'deki "Uzaktan" adresini açın. Masalar, adisyonlar, kasa ve
   patron paneli kafedeki ekranlarla aynı anda güncellenir.
-- LafPOS'u modemden port açarak internete açmayın.
+- AsilPOS'u modemden port açarak internete açmayın.
 
 AYARLAR (site, lafmaliyet, yazarkasa POS)
-- Başlat › LafPOS › LafPOS ayarları: ayarlar.env Not Defteri'nde açılır. Kaydedin (Ctrl+S); sunucu birkaç
+- Başlat › AsilPOS › AsilPOS ayarları: ayarlar.env Not Defteri'nde açılır. Kaydedin (Ctrl+S); sunucu birkaç
   saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
-- Sunucu günlüğü: Başlat › LafPOS › Sunucu günlüğü.
+- Sunucu günlüğü: Başlat › AsilPOS › Sunucu günlüğü.
 
 GÜNCELLEME
-- Kendiliğinden: LafPOS yarım saatte bir yeni sürüm var mı diye bakar, indirir ve yalnız gün kapalıyken
+- Kendiliğinden: AsilPOS yarım saatte bir yeni sürüm var mı diye bakar, indirir ve yalnız gün kapalıyken
   (gün sonundan sonra) kurar. Önce veritabanının bir kopyası alınır
   (C:\ProgramData\LafPOS\backups\lafpos-guncelleme-...). Yeni sürüm açılmazsa eski sürüme dönülür.
   Durum: Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme.
-- Kapatmak için LafPOS ayarları'na LAFPOS_GUNCELLEME=kapali satırını ekleyin.
-- Elle: GitHub › okanberk-dev/lafpos › Releases'tan son LafPOS-Kurulum.exe'yi indirip çalıştırın. Önce
+- Kapatmak için AsilPOS ayarları'na ASILPOS_GUNCELLEME=kapali satırını ekleyin.
+- Elle: GitHub › okanberk-dev/lafpos › Releases'tan son AsilPOS-Kurulum.exe'yi indirip çalıştırın. Önce
   veritabanının bir kopyası alınır, sonra sunucu yeni sürümle başlar.
 
 İNTERNET YOKKEN
-- Kasa, masalar, ödeme ve yazarkasa internetsiz çalışır. lafmaliyet'e, siteye ve LafPOS Uzaktan'a
+- Kasa, masalar, ödeme ve yazarkasa internetsiz çalışır. lafmaliyet'e, siteye ve AsilPOS Uzaktan'a
   gidecek kayıtlar bekler ("İnternet yok · N kayıt bekliyor"); internet gelince bir kez gönderilir
   ("Bekleyenler gönderildi").
 
@@ -57,7 +57,7 @@ KURULUM AÇILMIYORSA
   dosyalar engellenir; kapatmak ya da imzalı sürüm beklemek gerekir.
 
 KALDIRMA
-- Ayarlar › Uygulamalar › LafPOS › Kaldır. Veriler ve yedekler silinmez.
+- Ayarlar › Uygulamalar › AsilPOS › Kaldır. Veriler ve yedekler silinmez.
 
 DAHA ÖNCE GIT İLE KURDUYSANIZ
 - git ile kurulum (kur.ps1) yalnız geliştirici içindir; kafede bu kurulum kullanılır.

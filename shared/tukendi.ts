@@ -8,7 +8,7 @@
 
 /**
  * Sitenin durumu: `guncellendi` site ve uygulama da güncellendi; `kuyrukta` siteye ulaşılamadı, yazım giden kutusunda;
- * `bagli_degil` LafPOS'un yerel ürünü; `baglanti_yok` site adresi yok; `anahtar_yok` site anahtarı yok (yalnız LafPOS)
+ * `bagli_degil` AsilPOS'un yerel ürünü; `baglanti_yok` site adresi yok; `anahtar_yok` site anahtarı yok (yalnız AsilPOS)
  */
 export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' | 'kuyrukta';
 
@@ -38,7 +38,7 @@ export function availabilityNotice(name: string, active: boolean, r: Availabilit
   const done = `${name} ${active ? 'satışa açıldı' : 'tükendi'}`;
   if (r.site === 'kuyrukta') return { tone: 'warn', text: `${done}. ${r.neden === 'site' ? QUEUED_SITE_DOWN_TEXT : QUEUED_OFFLINE_TEXT}` };
   if (r.site === 'guncellendi') return { tone: 'ok', text: `${done}; site ve uygulama da güncellendi` };
-  if (opts.admin && r.site === 'anahtar_yok') return { tone: 'ok', text: `${done}; site anahtarı yok, yalnız LafPOS` };
-  if (opts.admin && r.site === 'baglanti_yok') return { tone: 'ok', text: `${done}; site bağlantısı kurulmadı, yalnız LafPOS` };
+  if (opts.admin && r.site === 'anahtar_yok') return { tone: 'ok', text: `${done}; site anahtarı yok, yalnız AsilPOS` };
+  if (opts.admin && r.site === 'baglanti_yok') return { tone: 'ok', text: `${done}; site bağlantısı kurulmadı, yalnız AsilPOS` };
   return { tone: 'ok', text: done };
 }

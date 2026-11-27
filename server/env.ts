@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VERITABANI_DOSYASI } from '@shared/eski-adlar';
+import { posEnv, posEnvDolu } from '@shared/pos-env';
 import { configFrom } from './env-config';
 
 /** Proje kökü (server/ klasörünün bir üstü) */
@@ -25,7 +27,7 @@ function loadDotEnv() {
 }
 loadDotEnv();
 
-const dataDir = resolve(ROOT, process.env.LAFPOS_DATA_DIR ?? 'data');
+const dataDir = resolve(ROOT, posEnv(process.env, 'DATA_DIR') ?? 'data');
 mkdirSync(dataDir, { recursive: true });
 
 /**
@@ -33,7 +35,8 @@ mkdirSync(dataDir, { recursive: true });
  * dosyası tek başına sızarsa PIN'ler bu anahtar olmadan çözülemez.
  */
 function loadSecret(): string {
-  if (process.env.LAFPOS_SECRET) return process.env.LAFPOS_SECRET;
+  const fromEnv = posEnvDolu(process.env, 'SECRET');
+  if (fromEnv) return fromEnv;
   const file = resolve(dataDir, 'secret.key');
   if (existsSync(file)) return readFileSync(file, 'utf8').trim();
   const secret = randomBytes(32).toString('base64url');
@@ -44,7 +47,7 @@ function loadSecret(): string {
 export const env = {
   ...configFrom(process.env),
   dataDir,
-  dbFile: resolve(dataDir, process.env.LAFPOS_DB_FILE ?? 'lafpos.db'),
+  dbFile: resolve(dataDir, posEnv(process.env, 'DB_FILE') ?? VERITABANI_DOSYASI),
   uploadsDir: resolve(dataDir, 'uploads'),
   webDist: resolve(ROOT, 'dist/web'),
   secret: loadSecret(),

@@ -1,4 +1,4 @@
-# LafPOS: çalışma kuralları
+# AsilPOS: çalışma kuralları
 
 Bu repoda çalışan her ajan ve geliştirici için.
 
@@ -6,7 +6,7 @@ Bu repoda çalışan her ajan ve geliştirici için.
 
 1. `docs/02-PLAN.md`: mimari, veri modeli, dalgalar.
 2. `docs/03-ENTEGRASYON.md`: laffogato ve lafmaliyet ile sözleşme. Burada olmayan alan sistemler arasında gitmez.
-3. Arayüze dokunacaksan `DESIGN.md` (LafPOS Pano: finans panosu ölçüleri L'Affogato kimliğinde; Inter, yeşil marka rayı ve ortalı sekmeler, zeminde yüzen beyaz kartlar, ev yeşili ana eylem ve ok halkası, kasa ekranları, yönetim paneli, telefon ve tablet) ve `PRODUCT.md`.
+3. Arayüze dokunacaksan `DESIGN.md` (AsilPOS Pano: finans panosu ölçüleri L'Affogato kimliğinde; Inter, yeşil marka rayı ve ortalı sekmeler, zeminde yüzen beyaz kartlar, ev yeşili ana eylem ve ok halkası, kasa ekranları, yönetim paneli, telefon ve tablet) ve `PRODUCT.md`.
    Yönetim paneline alan eklerken `build-admin-panel`, telefona uyarlarken `impeccable` skill'i
    (`docs/SKILLS.md`).
 

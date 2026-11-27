@@ -4,7 +4,7 @@ import { type Harness, startApp } from './harness';
 
 /**
  * Menü yoklamasının takvimi (L3 madde 6 ve 8, S8): gün açıkken 15 dk'da bir, açık iş günü yokken (gece) hiç, gün
- * açılınca bir kez (online siparişler de hemen); LafPOS'un siteye kendi Tükendi yazımından birkaç saniye sonra bir kez (site o an uyanık).
+ * açılınca bir kez (online siparişler de hemen); AsilPOS'un siteye kendi Tükendi yazımından birkaç saniye sonra bir kez (site o an uyanık).
  * Site isteği sahte `fetch`'e gider, ağ yok; zamanlayıcı gerçek (`startJobs`), saat sahte.
  */
 let h: Harness;
@@ -36,7 +36,7 @@ describe('menü yoklaması', () => {
   it('gece yok, gün açılınca bir kez, sonra 15 dakikada bir; kendi Tükendi yazımından sonra bir kez', async () => {
     const jobs = await import('../server/jobs');
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
-    process.env.LAFPOS_NO_JOBS = '0';
+    process.env.ASILPOS_NO_JOBS = '0';
     try {
       jobs.startJobs();
       // Hiç iş günü yok (ilk kurulum): bir saat boyunca siteye hiç istek gitmez; menü sorulmaz, sipariş yazılacak gün
@@ -58,7 +58,7 @@ describe('menü yoklaması', () => {
       await settle();
       expect(calls('/api/mobile/v1/menu')).toBe(2);
 
-      // LafPOS siteye Tükendi yazar: birkaç saniye sonra bir eşitleme, sıradaki yoklamayı beklemeden
+      // AsilPOS siteye Tükendi yazar: birkaç saniye sonra bir eşitleme, sıradaki yoklamayı beklemeden
       const boot = await h.ok<BootstrapDTO>('mudur', 'GET', '/bootstrap');
       const latte = boot.products.find((p) => p.name === 'Latte' && p.extSource === 'laffogato')!;
       expect((await h.ok<{ site: string }>('mudur', 'POST', `/sync/products/${latte.id}/availability`, { active: false })).site).toBe('guncellendi');
@@ -67,7 +67,7 @@ describe('menü yoklaması', () => {
       expect(calls('/api/mobile/v1/menu')).toBe(3);
     } finally {
       jobs.stopJobs();
-      process.env.LAFPOS_NO_JOBS = '1';
+      process.env.ASILPOS_NO_JOBS = '1';
       vi.useRealTimers();
     }
   });

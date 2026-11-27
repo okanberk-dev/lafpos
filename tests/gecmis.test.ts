@@ -3,9 +3,10 @@ import { fillHistory, type HistoryDay, historyKey, historyReport, historyStatsDa
 import { reportCloses, statsFromReports } from '@shared/remote-calc';
 import { type PatronStats, todayStats } from '@shared/today-stats';
 import { merkez, type MerkezDeps } from '../api/_merkez';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
- * Geçmiş ciro: dükkânın LafPOS'tan önceki kasa programında kalan günleri (Marina'nın ModPOS günleri, 13-21 Kas 2026).
+ * Geçmiş ciro: dükkânın AsilPOS'tan önceki kasa programında kalan günleri (Marina'nın ModPOS günleri, 13-21 Kas 2026).
  * Sahip Merkez'den yükler; Uzaktan'ın kıyasları ve raporları o günleri de görür. Aynı gün iki kaynakta varsa cirosu
  * büyük olan geçer, toplanmaz.
  */
@@ -74,7 +75,7 @@ describe('geçmiş ciro: raporlar ve kıyas', () => {
     expect(by['2026-11-21']).toMatchObject({ own: false, s: { rev: 462050 } });
     expect(by['2026-11-15']).toMatchObject({ own: false, s: { rev: 575300 } });
     expect(by['2026-11-22']).toMatchObject({ own: true });
-    // LafPOS'un günü daha büyükse o kalır (gerçek satış LafPOS'ta)
+    // AsilPOS'un günü daha büyükse o kalır (gerçek satış AsilPOS'ta)
     expect(fillHistory(['2026-11-21'], [rep('2026-11-21', 999999)], days, '2026-11-22', make)[0]).toMatchObject({ own: true });
     // Dönemde olmayan gün eklenmez
     expect(fillHistory(['2026-11-20'], [], days, '2026-11-22', make)).toEqual([]);
@@ -127,7 +128,7 @@ describe('geçmiş ciro: raporlar ve kıyas', () => {
 
 describe('Merkez: geçmiş ciro yükleme', () => {
   const ID = 'a'.repeat(24);
-  const store = new Map<string, string>([[`lafpos:merkez:kurulum:${ID}`, JSON.stringify({ id: ID, ad: 'Marina', createdAt: 1, lisans: { durum: 'aktif', bitis: null }, mod: 'otomatik' })]]);
+  const store = new Map<string, string>([[`${REDIS_ONEKI}merkez:kurulum:${ID}`, JSON.stringify({ id: ID, ad: 'Marina', createdAt: 1, lisans: { durum: 'aktif', bitis: null }, mod: 'otomatik' })]]);
   const deps = (admin: boolean): MerkezDeps =>
     ({
       redis: async (cmd: string, ...rest: (string | number)[]) => {

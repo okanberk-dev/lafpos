@@ -1,6 +1,8 @@
+import { ALAN_ADI, SITE_ANAHTAR_ENV } from './eski-adlar.js';
+import { PANEL_ANAHTAR_METNI, yeniEnvAdi } from './pos-env.js';
 /**
  * Yönetim › Bağlantı bilgileri: kasa bilgisayarının ayarlar dosyasındaki (Windows kurulumunda
- * C:\ProgramData\LafPOS\ayarlar.env) dış sistem adresleri ve anahtarları, panelden girilir. Sunucu yalnız bu listedeki
+ * veri klasöründeki ayarlar.env) dış sistem adresleri ve anahtarları, panelden girilir. Sunucu yalnız bu listedeki
  * anahtarları yazar (server/lib/ayar-dosyasi.ts); gizli değerler arayüze hiç dönmez, yalnız "tanımlı" bilgisi.
  * Kaydedince bekçi dosyanın değiştiğini görüp sunucuyu yeni ayarlarla yeniden başlatır (birkaç saniye).
  * Pavo'nun adresi ve seri no'su burada değil: Yönetim › Yazarkasa POS'tan girilir, yeniden başlatma gerekmez.
@@ -39,16 +41,16 @@ export const CONN_GROUPS: ConnGroup[] = [
     desc: 'Gün sonu, ürün satış listesi ve maliyetler maliyet paneline gider',
     fields: [
       { key: 'LAFMALIYET_URL', label: 'Adres', kind: 'url', placeholder: 'https://ladmin.laffogato.net', originOnly: true },
-      { key: 'LAFMALIYET_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Paneldeki LAFPOS_SYNC_SECRET ile aynı, en az 32 karakter' },
+      { key: 'LAFMALIYET_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: `Paneldeki ${PANEL_ANAHTAR_METNI} ile aynı, en az 32 karakter` },
     ],
   },
   {
     id: 'uzaktan',
-    title: 'LafPOS Uzaktan',
+    title: 'AsilPOS Uzaktan',
     desc: 'Uzaktan raporlar, bulut yedeği, lisans, güncelleme seçimi ve telefon bildirimleri',
     fields: [
-      { key: 'LAFPOS_CLOUD_URL', label: 'Adres', kind: 'url', placeholder: 'https://lafpos.laffogato.net' },
-      { key: 'LAFPOS_CLOUD_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Vercel’deki LAFPOS_CLOUD_SECRET ile aynı, en az 32 karakter' },
+      { key: 'ASILPOS_CLOUD_URL', label: 'Adres', kind: 'url', placeholder: `https://${ALAN_ADI}` },
+      { key: 'ASILPOS_CLOUD_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Vercel’deki ASILPOS_CLOUD_SECRET ile aynı, en az 32 karakter' },
     ],
   },
   {
@@ -57,7 +59,7 @@ export const CONN_GROUPS: ConnGroup[] = [
     desc: 'Menü ve fiyatlar, online siparişler, Tükendi, karaoke rezervasyonları. Deneme bittikten sonra açın; adres boşken siteye hiç bağlanılmaz',
     fields: [
       { key: 'LAFFOGATO_URL', label: 'Adres', kind: 'url', placeholder: 'https://laffogato.net', originOnly: true },
-      { key: 'LAFFOGATO_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Sitedeki LAFPOS_SYNC_SECRET ile aynı, en az 32 karakter' },
+      { key: 'LAFFOGATO_SYNC_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: `Sitedeki ${SITE_ANAHTAR_ENV} ile aynı, en az 32 karakter` },
     ],
   },
   {
@@ -73,14 +75,14 @@ export const CONN_GROUPS: ConnGroup[] = [
       { key: 'TOKENX_TERMINAL_ID', label: 'Terminal', kind: 'text', hint: 'Cihazdaki karekodda, AV ya da AT ile başlar' },
       { key: 'TOKENX_BRANCH_ID', label: 'Şube', kind: 'text', hint: 'Masada ödeme için', optional: true },
       { key: 'TOKENX_APP_RESOURCE', label: 'Uygulama kaynağı', kind: 'text', hint: 'Token isterse', optional: true },
-      { key: 'LAFPOS_PUBLIC_URL', label: 'LafPOS’un internet adresi', kind: 'url', hint: 'Webhook için; boşsa durum sorulur', optional: true },
+      { key: 'ASILPOS_PUBLIC_URL', label: 'AsilPOS’un internet adresi', kind: 'url', hint: 'Webhook için; boşsa durum sorulur', optional: true },
       { key: 'TOKENX_WEBHOOK_SECRET', label: 'Webhook anahtarı', kind: 'secret', minLength: 16, optional: true },
     ],
   },
   {
     id: 'yemeksepeti',
     title: 'Yemeksepeti',
-    desc: 'Delivery Hero’nun verdiği bilgiler; LafPOS Uzaktan da tanımlı olmalı',
+    desc: 'Delivery Hero’nun verdiği bilgiler; AsilPOS Uzaktan da tanımlı olmalı',
     fields: [
       { key: 'YEMEKSEPETI_MW_URL', label: 'Middleware adresi', kind: 'url' },
       { key: 'YEMEKSEPETI_USERNAME', label: 'Kullanıcı adı', kind: 'text' },
@@ -91,7 +93,7 @@ export const CONN_GROUPS: ConnGroup[] = [
   {
     id: 'getir',
     title: 'Getir Yemek',
-    desc: 'Getir’in verdiği anahtarlar; LafPOS Uzaktan da tanımlı olmalı',
+    desc: 'Getir’in verdiği anahtarlar; AsilPOS Uzaktan da tanımlı olmalı',
     fields: [
       { key: 'GETIR_APP_SECRET_KEY', label: 'Uygulama anahtarı', kind: 'secret' },
       { key: 'GETIR_RESTAURANT_SECRET_KEY', label: 'Restoran anahtarı', kind: 'secret' },
@@ -117,7 +119,7 @@ const BY_KEY = new Map(CONN_FIELDS.map((f) => [f.key, f]));
 export const connField = (key: string): ConnField | undefined => BY_KEY.get(key);
 
 /**
- * Buluttan gelen platform anahtarları (#75 İş 2): sahip bunları bir kez Vercel'deki LafPOS Uzaktan projesine girer, kasa
+ * Buluttan gelen platform anahtarları (#75 İş 2): sahip bunları bir kez Vercel'deki AsilPOS Uzaktan projesine girer, kasa
  * imzalı uçtan (`GET /api/uzaktan/anahtarlar`) açılışta ve 10 dakikada bir çeker (server/sync/platform-anahtar.ts).
  * Bulutta dolu olan yerel değeri ezer, bulutta boşsa yerel kalır. Ad listesi sabit: uç yalnız bunları verir
  */
@@ -220,9 +222,9 @@ export function checkConnValue(field: ConnField, raw: string): { value: string |
 
 /**
  * Yapıştırılan ayar satırları (ANAHTAR=değer; # yorum) → anahtarlar. Sahibe verilen kurulum dosyası
- * (lafpos-kasa-ayarlari.env) olduğu gibi yapıştırılabilir; bilinmeyen anahtarlar ayrı listelenir. Satır sonundaki not
+ * (asilpos-kasa-ayarlari.env) olduğu gibi yapıştırılabilir; bilinmeyen anahtarlar ayrı listelenir. Satır sonundaki not
  * değer değildir; notu "(deneme bittikten sonra)" olan satır şimdi yazılmaz (`later`: site bağlantısı deneme bitince
- * açılır, docs/03-ENTEGRASYON.md §8)
+ * açılır, docs/03-ENTEGRASYON.md §8). Eski adla yazılmış satır (ad değişikliğinden önceki dosya) yeni adla okunur
  */
 export function parseEnvLines(text: string): { values: Record<string, string>; unknown: string[]; later: string[] } {
   const values: Record<string, string> = {};
@@ -233,7 +235,7 @@ export function parseEnvLines(text: string): { values: Record<string, string>; u
     if (!line || line.startsWith('#')) continue;
     const eq = line.indexOf('=');
     if (eq < 1) continue;
-    const key = line.slice(0, eq).trim();
+    const key = yeniEnvAdi(line.slice(0, eq).trim());
     let value = line.slice(eq + 1).trim();
     const note = /\s+\(([^()]*)\)$/.exec(value);
     if (note) value = value.slice(0, note.index).trim();

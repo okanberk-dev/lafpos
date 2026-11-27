@@ -1,9 +1,9 @@
 # POS araştırması: adisyon, hesap bölme, ikram, seçenekler ve yönetim paneli
 
-4 Kasım 2026 · LafPOS için araştırma notu (operatör: _"Narpos, robotpos, modpos vs. gibi yerellere bak yurt dışındakilere
+4 Kasım 2026 · AsilPOS için araştırma notu (operatör: _"Narpos, robotpos, modpos vs. gibi yerellere bak yurt dışındakilere
 bak gelişmiş sistem yap, tasarım olarak da her şey olarak ama basit olsun ve UI UX gelişmiş olsun"_).
 
-> **Durum notu:** "LafPOS'ta bugün olanlar" bölümü bu araştırma yazılırken (aynı günün işleri birleşmeden önce) geçerliydi.
+> **Durum notu:** "AsilPOS'ta bugün olanlar" bölümü bu araştırma yazılırken (aynı günün işleri birleşmeden önce) geçerliydi.
 > Sonradan uygulananlar: Paylaş'ta 2-6 kişi çipleri ve elle paylar, ödenmezde zorunlu "kimin adına" (personel ya da
 > müşteri) ve raporlarda kişi kişi döküm, seçenek profili ve tek boylu üründe tek dokunuş, adisyon ekranının yeni
 > düzeni. Ayrıntı `docs/02-PLAN.md`. Bağlantılar aramadan alınan resmî sayfalara gider; sayfalar bu oturumdan doğrudan
@@ -11,22 +11,22 @@ bak gelişmiş sistem yap, tasarım olarak da her şey olarak ama basit olsun ve
 
 Soru: yerli (NarPOS, robotPOS, ModPOS, SambaPOS, Adisyo, Simpra, Menulux) ve yabancı (Toast, Square for Restaurants,
 Lightspeed Restaurant K-Series, TouchBistro, Clover, Loyverse, Revel, SpotOn, Odoo) sistemler beş konuda ne yapıyor ve
-LafPOS bundan sade kalarak ne almalı: adisyon ekranı, hesap bölme, ikram ve personel yemeği, seçenek sormama kuralları,
+AsilPOS bundan sade kalarak ne almalı: adisyon ekranı, hesap bölme, ikram ve personel yemeği, seçenek sormama kuralları,
 yönetim panelinin görsel dili.
 
 ## Kısa sonuç
 
 - Büyük yabancı sistemler adisyonu aynı iskelette kuruyor: hesap bir yanda, menü öbür yanda, eylem şeridi altta sabit
-  (Gönder, Öde), kalem eylemleri kaleme dokununca açılan tek bir menüde. LafPOS'un iki kartlı adisyonu ve telefondaki alt
+  (Gönder, Öde), kalem eylemleri kaleme dokununca açılan tek bir menüde. AsilPOS'un iki kartlı adisyonu ve telefondaki alt
   şeridi bu iskeletle örtüşüyor. Eksik olan küçük hız araçları: "Bir daha" (tekrarla), karta uzun basınca Tükendi,
   aramanın altında son eklenenler.
 - Eşit bölmede herkes "kaç kişi" diye soruyor. Hazır 2 · 3 · 4 çipini belgelerinde açıkça gösteren bir sistem
   bulunamadı. Toast sayıyı bir listeden seçtiriyordu (en çok dokuz), 2025'te serbest sayı girişi ekledi; Lightspeed kişi
   (cover) sayısıyla tek dokunuşta bölüyor; Loyverse ± ile seçtiriyor ve sonra parça tutarını elle değiştirmeye izin
-  veriyor. LafPOS'un "kalan, ödenmemiş paylara yeniden bölünür" kuralı belgelenen sistemlerin çoğundan öngörülebilir.
+  veriyor. AsilPOS'un "kalan, ödenmemiş paylara yeniden bölünür" kuralı belgelenen sistemlerin çoğundan öngörülebilir.
 - İkramı ya da personel yemeğini kişiye bağlamak çoğu sistemde yamalı: Toast'ta gerekçe ve zorunlu yorum (yorum fişe
   basılmıyor), Square'de yalnız hazır gerekçe listesi, TouchBistro'da personele özel indirim, Lightspeed'de indirimi
-  "zayi" işaretleme. "Personel yemeği → hangi personel" alanını düzgün bir alan olarak belgeleyen sistem bulunamadı. LafPOS
+  "zayi" işaretleme. "Personel yemeği → hangi personel" alanını düzgün bir alan olarak belgeleyen sistem bulunamadı. AsilPOS
   ödenmez kapanışa yapılandırılmış bir "Kim için" alanı ekleyerek bunu sade biçimde çözebilir.
 - "Ne zaman sorma" sorusunda yabancılar aynı yerde buluşuyor: Toast isteğe bağlı grubu kendiliğinden açmıyor (ancak
   "zorla göster" denirse açıyor), Square ürün başına "mümkünse özelleştirmeyi atla" ve "ilk varyasyonu önseç" sunuyor,
@@ -47,9 +47,9 @@ yönetim panelinin görsel dili.
 - Yerli sistemlerin (NarPOS, Adisyo, Simpra, Menulux) kamuya açık kullanım belgesi az; bulguların çoğu tanıtım
   sayfasından. robotPOS ve SambaPOS belgeleri daha ayrıntılı. ModPOS için kamuya açık belge bulunamadı; kafedeki kurulumun
   26 Ekim 2026 incelemesi kullanıldı (`docs/01-ANALIZ.md`).
-- LafPOS'un bugünkü davranışı koddan okundu; yanında dosya yolu var.
+- AsilPOS'un bugünkü davranışı koddan okundu; yanında dosya yolu var.
 
-## LafPOS'ta bugün olanlar (kıyas için)
+## AsilPOS'ta bugün olanlar (kıyas için)
 
 - Adisyon iki kart (ürünler | hesap); telefonda önce ürünler, altta Gönder ve tutarı yazan "Öde" şeridi; tezgâhta "Öde"
   kalemleri bara gönderip ödemeyi açıyor (`DESIGN.md` §3, `src/pages/order/OrderPage.tsx`).
@@ -143,7 +143,7 @@ yönetim panelinin görsel dili.
   ([Square, Manage seats](https://squareup.com/help/us/en/article/8583-manage-seats-in-your-restaurant)).
 - **Lightspeed K-Series:** özette görünüm (kurs ya da koltuk), "Covers" (kişi; hesabı eşit böler) ve sipariş profili
   (paket, kurye) düğmeleri ([Lightspeed, Understanding the Register screen](https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328394-Understanding-the-Register-screen)).
-- **LafPOS:** künye (tür, kişi, garson, açılış saati, müşteri, not) Toast'un başlığının kafeye gereken kısmını zaten
+- **AsilPOS:** künye (tür, kişi, garson, açılış saati, müşteri, not) Toast'un başlığının kafeye gereken kısmını zaten
   taşıyor; masa kartında süre ve garson var (`OrderPage.tsx`, `DESIGN.md` §3).
 
 ### Kalemleri duruma ve kursa göre gruplama
@@ -164,7 +164,7 @@ yönetim panelinin görsel dili.
 - **SambaPOS:** masa rengi durumu söylüyor (turuncu: sipariş gönderildi, masa dolu; koyu kırmızı: hesap yazdırıldı ama
   ödenmedi); gönderilmiş kalem "Void" ile iptal edilip stoğa dönüyor
   ([SambaPOS Staff Training Manual](https://forum.sambapos.com/uploads/short-url/d3FCrHF3Iuf5aOL7F2WAeEoNBd8.pdf)).
-- **Kafe için anlamı:** kurs ve beklet masa servisli restoranın aracı; Toast'ta bile ayarla kapatılıyor. LafPOS'un
+- **Kafe için anlamı:** kurs ve beklet masa servisli restoranın aracı; Toast'ta bile ayarla kapatılıyor. AsilPOS'un
   "Gönderilmedi" bloğu ve kalem durumu kafenin ihtiyacını karşılıyor.
 
 ### Kalem eylemleri ve dokunuş sayısı
@@ -186,7 +186,7 @@ yönetim panelinin görsel dili.
   kilitli indirim yönetici onayı istiyor ([SpotOn, Apply Discounts](https://help.spoton.com/space/SK/2666627613)).
 - **Lightspeed K-Series:** tuş takımının yan düğmelerinde "Edit" (indirim ve kalem aktarımı) ve "Quickpay"
   ([Lightspeed, Understanding the Register screen](https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328394-Understanding-the-Register-screen)).
-- **LafPOS:** gönderilmiş kaleme dokun, İkram et, gerekçe, "1 adet ikram" (gerekirse PIN): Square'le aynı, dört dokunuş
+- **AsilPOS:** gönderilmiş kaleme dokun, İkram et, gerekçe, "1 adet ikram" (gerekirse PIN): Square'le aynı, dört dokunuş
   (`CartPanel.tsx`). Toast ve SpotOn'daki "Tekrarla" yok.
 
 ### Öde ve Gönder
@@ -199,7 +199,7 @@ yönetim panelinin görsel dili.
 - **TouchBistro** hızlı ödeme düğmeleri ([TouchBistro, The Register Screen](https://cdn.touchbistro.com/help/articles/the-register-screen)),
   **Loyverse** sağ altta "Charge" ([Loyverse, How to Make Sales](https://help.loyverse.com/help/make-sales)), **Odoo**
   "Order" ve "Payment" ([Odoo 18](https://www.odoo.com/documentation/18.0/applications/sales/point_of_sale/restaurant.html)).
-- **LafPOS:** altta Gönder ve tutarı yazan "Öde"; tezgâhta Öde hem gönderiyor hem ödemeyi açıyor (`OrderPage.tsx`). Bu,
+- **AsilPOS:** altta Gönder ve tutarı yazan "Öde"; tezgâhta Öde hem gönderiyor hem ödemeyi açıyor (`OrderPage.tsx`). Bu,
   Toast'un "ödemeden sonra gönder" ayarının tezgâh karşılığı.
 
 ### Ürün ızgarası: arama, kategori, boy, tükendi
@@ -247,7 +247,7 @@ yönetim panelinin görsel dili.
   ([App Store, Menulux Garson](https://apps.apple.com/us/app/-/id6742921152)).
 - NarPOS, Adisyo, Simpra ve Menulux'un adisyon ekranı yerleşimini anlatan kamuya açık kullanım belgesi bulunamadı.
 
-### LafPOS için öneri
+### AsilPOS için öneri
 
 1. **Koruyun:** iki kartlı adisyon; telefonda önce ürünler, altta Gönder ve "Öde · tutar". Kurs, beklet ve koltuk
    eklemeyin; bar tek istasyon ve Toast'ta bile kurs ayarla kapanıyor.
@@ -362,7 +362,7 @@ yönetim panelinin görsel dili.
   bölünmüş ödeme tamamlanmazsa alınmış ödemeler iptal olabiliyor ([Square 5097](https://squareup.com/help/us/en/article/5097)).
 - Toast'un Mart 2026 düzeltmesi, kalan yerine toplamdan bölmenin gerçek bir hata sınıfı olduğunu gösteriyor
   ([Toast duyurusu](https://updates.toasttab.com/announcements/split-payment-amounts-now-include-all-payment-types)).
-- LafPOS'ta kalan, ödenmemiş paylara yeniden bölünüyor; bütün paylar ödendiği hâlde kalan varsa pencere "kişi ekleyin ya
+- AsilPOS'ta kalan, ödenmemiş paylara yeniden bölünüyor; bütün paylar ödendiği hâlde kalan varsa pencere "kişi ekleyin ya
   da Tutar ile alın" diyor (`shared/order-calc.ts`, `PaymentModal.tsx`).
 
 ### Özet tablo
@@ -377,9 +377,9 @@ yönetim panelinin görsel dili.
 | Loyverse | ± ile ödeme sayısı | Parça tutarı elle | Açık adisyonu bölme |
 | SambaPOS | Payment Sense: kişi, çift, özel | Özel bölme (F3) | Move ile ayrı adisyon |
 | Odoo | Kişi sayısı yalnız öneri | Belgede doğrulanamadı | Alt sipariş |
-| LafPOS | ± (başlangıç kişi sayısı) | Pay açıkken yok; Tutar yolu ayrı | Kalem yolu |
+| AsilPOS | ± (başlangıç kişi sayısı) | Pay açıkken yok; Tutar yolu ayrı | Kalem yolu |
 
-### LafPOS için öneri
+### AsilPOS için öneri
 
 1. **Koruyun:** Paylaş'ın kuralı (sunucu kalanı ödenmemiş paylara böler, hesap değişince paylar kendiliğinden
    güncellenir). Bunu sınayan test kalsın; Toast'un Mart 2026 hatası tam bu noktadaydı.
@@ -416,7 +416,7 @@ yönetim panelinin görsel dili.
   indirim ve gerekçe öneriyor ([Toast topluluğu, How to track employee meals](https://community.toasttab.com/t5/restaurant-operations/how-to-track-employee-meals/m-p/3708));
   gerekçe ayarının adı "indirim ve gıda zayi gerekçeleri" ([Toast, Report on Discounts and Promo Codes](https://support.toasttab.com/en/article/Reporting-for-Discounts-Promo-Codes)).
 - **Lightspeed'in "on the house"u:** K-Series belgelerinde bu adla bir ödeme yöntemi ya da indirim bulunamadı.
-- LafPOS'un üçlüsü (ikram, ödenmez, zayi) bunlarla örtüşüyor. "Ödenmez" (personel, patron) yabancı sistemlerde ayrı tür
+- AsilPOS'un üçlüsü (ikram, ödenmez, zayi) bunlarla örtüşüyor. "Ödenmez" (personel, patron) yabancı sistemlerde ayrı tür
   olarak yok; orada ya indirim ya ikram gerekçesi. Bir üçüncü taraf muhasebe firması Toast için ikram gerekçelerini
   personel, sahip, işi geliştirme ve müşteri sorunu diye ayırmayı öneriyor
   ([Restaurant Accounting, Toast Best Practices](https://restacct.zendesk.com/hc/en-us/articles/4415064404883-Toast-Best-Practices)).
@@ -474,7 +474,7 @@ yönetim panelinin görsel dili.
   ([Square House Accounts for restaurants](https://squareup.com/us/en/house-accounts/restaurants),
   [Square topluluğu, Square house accounts](https://community.squareup.com/t5/Product-Updates/Square-house-accounts/ba-p/679122)).
 - **Patron hesabı** için belgelenmiş özel bir kavram yok: ya açık hesap (sonra ödenecek) ya ikram gerekçesi ("sahip").
-  LafPOS'ta ikisi de var: açık hesap (cari) ve "Ödenmez: Patron / ortak" (`server/lib/settings.ts`).
+  AsilPOS'ta ikisi de var: açık hesap (cari) ve "Ödenmez: Patron / ortak" (`server/lib/settings.ts`).
 
 ### Raporlar: kişi ve gerekçe kırılımı
 
@@ -498,7 +498,7 @@ yönetim panelinin görsel dili.
   stok ve maliyet için POS'a kaydedilmeli ([robotPOS blog, ÖKC 2026](https://www.robotpos.com/blog_new/restoranda-yazarkasa-okc-entegrasyonu-2026-mevzuat-rehberi)).
   Bu mali bir yorum; mali müşavirle doğrulanmalı.
 
-### LafPOS için öneri
+### AsilPOS için öneri
 
 1. **Koruyun:** üç tür (ikram, ödenmez, zayi), her birinde hazır gerekçe listesi, gerekçe zorunlu; serbest metin listenin
    altında.
@@ -577,13 +577,13 @@ yönetim panelinin görsel dili.
 - Üçüncü taraf: MarginEdge, boyların raporda okunması için boyu seçenek değil boy fiyatıyla tutmayı öneriyor
   ([MarginEdge, Best Practices for Toast](https://help.marginedge.com/hc/en-us/articles/37454938773523-Best-Practices-for-Toast-me-PMIX)).
 
-### L'Affogato'nun menüsü ve LafPOS'un bugünkü davranışı
+### L'Affogato'nun menüsü ve AsilPOS'un bugünkü davranışı
 
 - Sitenin seçenekleri kodda sabit: süt (Normal ve Laktozsuz ücretsiz, Yulaf ve Badem 25 ₺), kavrum (Yoğun, Hafif),
   şurup (Yok, Vanilya, Karamel, Fındık: 50 ₺), ekstra shot 50 ₺, şeker 0-3; tatlı, atıştırmalık ve ekstralar
   kategorilerinde seçenek yok (`docs/01-ANALIZ.md` §3). ModPOS'ta bardak seçimi, Türk kahvesi bardağı ve şekeri (4
   seviye), çay bardağı, şurup (10), süt (3) var (`docs/01-ANALIZ.md` §1).
-- LafPOS: zorunlu grupta önseçim yok ve Ekle kapalı; isteğe bağlı tek seçimlik grupta varsayılan önseçili; boş kalan
+- AsilPOS: zorunlu grupta önseçim yok ve Ekle kapalı; isteğe bağlı tek seçimlik grupta varsayılan önseçili; boş kalan
   isteğe bağlı gruba sunucu varsayılanı yazıyor; iki boylu üründe karta ya da M/L düğmesine dokunmak doğrudan ekliyor;
   tek boylu seçenekli ürün ise her seferinde pencereyle ekleniyor (`src/lib/boot.ts`, `OptionsModal.tsx`,
   `ProductPanel.tsx`).
@@ -617,7 +617,7 @@ Ek kurallar:
 4. Seçenek ekranı ürün başına değil grup başına "her seferinde göster" ile açılır; varsayılan kapalı (Toast'un isteğe
    bağlı ve zorla göster ayrımı).
 
-### LafPOS için öneri
+### AsilPOS için öneri
 
 1. **Şimdi:** "Seçenekleri sor: zorunlu" kipinde tek boylu ve yalnız isteğe bağlı grubu olan ürün de tek dokunuşla
    eklensin; değişiklik kartın köşesindeki seçenek düğmesinden ya da Gönderilmedi satırından. Bugün bu ürünler her
@@ -629,7 +629,7 @@ Ek kurallar:
    ve L.
 4. **Sonra, gerçek bir ürün isterse:** grup başına "her seferinde göster" işareti (Toast'un zorla göster'i); genel
    "hep" ayarı ancak o zaman kalkar.
-5. **Yapmayın:** her boyu ayrı ürün yapmak (Toast'un kahveci önerisi). LafPOS'ta boy ve fiyat sitenin tek kaynağından
+5. **Yapmayın:** her boyu ayrı ürün yapmak (Toast'un kahveci önerisi). AsilPOS'ta boy ve fiyat sitenin tek kaynağından
    geliyor; ayrı ürün üçüncü kopya sorununu geri getirir.
 
 ## 5. Yönetim paneli ve raporların görsel dili
@@ -707,13 +707,13 @@ Aşağısı yukarıdaki belgelerden çıkarım; görsel ölçüler (köşe, göl
 4. **Sabit ve sığ gezinme:** Square örneği, menüleri birleştirip derinleştirmenin "sade" değil "yavaş" algılandığını
    gösteriyor.
 
-### LafPOS için öneri
+### AsilPOS için öneri
 
 1. **Şimdi:** her rapor sayfasında aynı üst şerit: dönem segmenti (Bugün, Dün, Bu hafta, Bu ay, Özel), "Karşılaştır"
    (Geçen haftanın aynı günü, Önceki dönem, Geçen yıl), sağda "CSV indir". Hazır dönem hemen uygulanır, özel aralık
    "Uygula" ister (Toast).
 2. **Koruyun:** KPI şeridinde her rakamın yanında fark ve referans ("geçen salıya göre, 14:20 itibarıyla"); Lightspeed'in
-   aynı gün kuralı LafPOS'un genel bakışında zaten var (`DESIGN.md` §4).
+   aynı gün kuralı AsilPOS'un genel bakışında zaten var (`DESIGN.md` §4).
 3. **Şimdi:** "Karşılaştır" açıkken tablolarda üç sütun: dönem, kıyas, fark yüzdesi (Lightspeed); rakamlar sağa hizalı
    ve eşit genişlikte (Gabarito tablo rakamı), en altta toplam satırı.
 4. **Koruyun:** kenar çubuğu grupları ve ⌘K; sık sayfaya en çok iki tık; gezinmeyi derinleştirmeyin (Square'in tepkisi).
@@ -747,7 +747,7 @@ Aşağısı yukarıdaki belgelerden çıkarım; görsel ölçüler (köşe, göl
   süresi verip yazılı bildirim ya da ebelge.gib.gov.tr duyurusuyla e-Adisyon zorunluluğu getirebiliyor; bildirim alan
   işletme süresi içinde geçmek zorunda ([GİB, 509 sıra no.lu Tebliğ'in güncel metni](https://ebelge.gib.gov.tr/dosyalar/tebligler/Guncel_Sekli_ile_509_Sira_No'lu_VUK_Genel_Tebligi.pdf)).
   Teknik kılavuz 30 Temmuz 2021'de yayımlandı ([Sovos](https://sovos.com/tr/blog/kdv/e-adisyon-donemi-basliyor-beklenen-kilavuz-yayimlandi/)).
-- LafPOS belgelerinde e-Adisyon geçmiyor. L'Affogato'ya bir bildirim gelip gelmediği mali müşavirle doğrulanmalı;
+- AsilPOS belgelerinde e-Adisyon geçmiyor. L'Affogato'ya bir bildirim gelip gelmediği mali müşavirle doğrulanmalı;
   Menulux ve GoPOS e-Adisyon çözümü sunduklarını söylüyor ([Menulux, LinkedIn](https://linkedin.com/company/menulux),
   [DonanımHaber, GoPOS incelemesi](https://www.donanimhaber.com/gopos-inceleme--205943)).
 

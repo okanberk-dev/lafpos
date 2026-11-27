@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { CONFIRM_MS, GRACE_DAYS, licenseState, normalizeBranchCode, TRIAL_DAYS } from '@shared/lisans';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Merkez: kasanın kaydı (ilk görüşte güven), imzalı nabız, lisans süreleri (deneme, uyarı, kapanma; internetsiz kasada
@@ -49,7 +50,7 @@ async function redisCmd(cmd: string, key: string, rest: string[]): Promise<unkno
 beforeAll(async () => {
   h = await startApp();
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   const { env } = await import('../server/env');
   Object.assign(env, { merkezUrl: CLOUD, cloudSecret: SECRET });
   const realFetch = globalThis.fetch;
@@ -191,14 +192,14 @@ describe('Merkez: kayıt, nabız, panel', () => {
 
   it('panel yalnız gerçek oturumla: jetonsuz 401, parolasız görünümde 403 (oturum düşmez)', async () => {
     expect((await panel('GET', 'merkez/kurulumlar', undefined, 'yok')).status).toBe(401);
-    delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
+    delete process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI;
     try {
       const { POST } = await api();
       const open = (await (await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/giris`, { method: 'POST' }))).json()) as { token: string };
       expect((await panel('GET', 'merkez/kurulumlar', undefined, open.token)).status).toBe(403);
       expect((await panel('POST', 'merkez/gonder', { ids: ['a'.repeat(24)] }, open.token)).status).toBe(403);
     } finally {
-      process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
+      process.env.ASILPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     }
   });
 
@@ -326,7 +327,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const id = identity().id;
     const file = join(env.dataDir, 'guncelleme', 'durum.json');
     mkdirSync(join(env.dataDir, 'guncelleme'), { recursive: true });
-    const uyari = "Kurulumu yenileyin (LafPOS-Kur.cmd'yi yeniden çalıştırın): baslat.cmd eski kaldı";
+    const uyari = "Kurulumu yenileyin (AsilPOS-Kur.cmd'yi yeniden çalıştırın): baslat.cmd eski kaldı";
     try {
       writeFileSync(file, JSON.stringify({ durum: 'guncel', mesaj: 'Güncel', kurulumUyari: uyari }));
       await merkezBeat();
@@ -350,8 +351,8 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const audits = async () => (await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=50')).filter((a) => a.action === 'guncelleme' && a.message.includes("Merkez'den"));
     expect((await panel('POST', 'merkez/simdi-guncelle', { ids: [] })).status).toBe(400);
     const before = (await audits()).length;
-    const prevBekci = process.env.LAFPOS_STDIN_CONTROL;
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    const prevBekci = process.env.ASILPOS_STDIN_CONTROL;
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     try {
       const asked = await panel('POST', 'merkez/simdi-guncelle', { ids: [id] });
       expect(asked.json).toMatchObject({ ok: true, istenen: 1 });
@@ -368,7 +369,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
       expect((await audits()).length).toBe(before + 1);
       expect((await panel('GET', 'merkez/kurulumlar')).json.kurulumlar[0].istekBekliyor).toBe(false);
     } finally {
-      process.env.LAFPOS_STDIN_CONTROL = prevBekci ?? '';
+      process.env.ASILPOS_STDIN_CONTROL = prevBekci ?? '';
       rmSync(file, { force: true });
     }
     // Windows güncelleyicisi olmayan kurulumda istek yazılmaz, denetim kaydı söyler
@@ -444,7 +445,7 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(deliveryStatus({ ...base, guncelleme: { durum: 'hata', mesaj: 'Yeni sürüm indirilemedi: ağ yok', yeni: null } })).toEqual({ etiket: 'Kurulamadı: Yeni sürüm indirilemedi: ağ yok', ton: 'warning' });
   });
 
-  it('geçmiş ciro (LafPOS öncesi günler) nabızla kasaya gelir; kasanın kendi patron panelinin kıyasına girer, silinince düşer', async () => {
+  it('geçmiş ciro (AsilPOS öncesi günler) nabızla kasaya gelir; kasanın kendi patron panelinin kıyasına girer, silinince düşer', async () => {
     const { merkezBeat, identity } = await import('../server/sync/merkez');
     const { addDays } = await import('@shared/time');
     const id = identity().id;
@@ -484,11 +485,11 @@ describe('Merkez: kayıt, nabız, panel', () => {
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {
     const { merkezBeat, identity } = await import('../server/sync/merkez');
     const id = identity().id;
-    store.delete(`lafpos:merkez:kurulum:${id}`);
+    store.delete(`${REDIS_ONEKI}merkez:kurulum:${id}`);
     expect(await merkezBeat()).toBe(false);
     expect(identity().registered).toBe(false);
     expect(await merkezBeat()).toBe(true);
-    expect(store.has(`lafpos:merkez:kurulum:${id}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}merkez:kurulum:${id}`)).toBe(true);
   });
 
   it('kayıtlı eski (rastgele) kimlik: kayıt silinse de aynı kimlikle, adı ve lisansıyla döner; dükkân kimliği değişmez', async () => {
@@ -500,12 +501,12 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const createdAt = Date.now() - 30 * DAY;
     setSyncState('merkez.kimlik', { id: oldId, key, createdAt, registered: true });
     const inst = { id: oldId, key, ad: 'Marina', createdAt, lastSeen: null, surum: null, build: null, guncelleme: null, gunAcik: null, lisans: { durum: 'aktif', bitis: null }, mod: 'elle', hedef: null, gonderildi: null, kod: 'MRN' };
-    store.set(`lafpos:merkez:kurulum:${oldId}`, JSON.stringify(inst));
+    store.set(`${REDIS_ONEKI}merkez:kurulum:${oldId}`, JSON.stringify(inst));
     expect(await merkezBeat()).toBe(true);
     expect(remoteShop()).toBe(oldId);
     // Lisansı aktif kurulum silinmez
     expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(400);
-    expect(store.has(`lafpos:merkez:kurulum:${oldId}`)).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}merkez:kurulum:${oldId}`)).toBe(true);
     // Pasife alınıp silinir: kasa sonraki nabızlarda aynı kimlikle, adı, kodu ve lisansıyla döner
     expect((await panel('POST', 'merkez/kurulum', { id: oldId, lisans: 'pasif' })).status).toBe(200);
     expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(200);

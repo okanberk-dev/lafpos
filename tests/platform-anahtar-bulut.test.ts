@@ -5,15 +5,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Harness, startApp } from './harness';
 
 /**
- * Platform anahtarları buluttan (#75 İş 2): sahip Trendyol ve Yemeksepeti değerlerini bir kez Vercel'deki LafPOS Uzaktan
- * projesine girer; kasa `GET /api/uzaktan/anahtarlar` ucundan (LAFPOS_CLOUD_SECRET imzası) çeker. Değişince yerel
+ * Platform anahtarları buluttan (#75 İş 2): sahip Trendyol ve Yemeksepeti değerlerini bir kez Vercel'deki AsilPOS Uzaktan
+ * projesine girer; kasa `GET /api/uzaktan/anahtarlar` ucundan (ASILPOS_CLOUD_SECRET imzası) çeker. Değişince yerel
  * kopyaya yazar, bağdaştırıcıyı yeniden kurar, denetim kaydına değersiz satır düşer. Bulutta dolu olan yereli ezer.
  * Değerler arayüze, günlüğe, denetim kaydına, veritabanına ve bulut özetine hiç girmez. Uç Redis'e dokunmaz.
  * Şubeye göre: bulutta adlar `<PLATFORM>_<ŞUBE>_<ALAN>` (TRENDYOL_TUZLA_API_KEY); kasa kendi şubesininkileri alır, öneksiz
  * eski adlar ve şubesiz istek hiçbir anahtar almaz (Marina'da Trendyol yok, Tuzla'nınki Marina'ya gitmez). Değerler
  * hangi şube için çekildiyse onunla saklanır; şube değişince eskisininkiler kullanılmaz, kasa hemen yeniden çeker.
  */
-const CLOUD = 'https://lafpos-uzak.test';
+const CLOUD = 'https://asilpos-uzak.test';
 const SECRET = 'k'.repeat(40);
 const API_KEY = 'GIZLI-trendyol-api-anahtari-9f3a';
 const API_SECRET = 'GIZLI-trendyol-sir-7c21';
@@ -29,11 +29,11 @@ let dataDir = '';
 type Api = typeof import('../api/uzaktan');
 let api: Api;
 
-/** Vercel'deki LafPOS Uzaktan'ın ortamı: kasanın süreç ortamından ayrı (uç çağrılırken yerine konur) */
+/** Vercel'deki AsilPOS Uzaktan'ın ortamı: kasanın süreç ortamından ayrı (uç çağrılırken yerine konur) */
 const vercel: Record<string, string> = {};
 async function asVercel<T>(fn: () => Promise<T>): Promise<T> {
   const saved = process.env;
-  process.env = { LAFPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0', ...vercel };
+  process.env = { ASILPOS_CLOUD_SECRET: SECRET, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0', ...vercel };
   try {
     return await fn();
   } finally {
@@ -44,18 +44,18 @@ const cloudGet = (req: Request) => asVercel(() => api.GET(req));
 
 beforeAll(async () => {
   h = await startApp();
-  dataDir = process.env.LAFPOS_DATA_DIR!;
+  dataDir = process.env.ASILPOS_DATA_DIR!;
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET });
   api = await import('../api/uzaktan');
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const u = String(input);
-    if (u.startsWith('https://redis.test')) {
+    if (new URL(u).origin === 'https://redis.test') {
       redisCalls++;
       return new Response(JSON.stringify({ result: null }), { status: 200 });
     }
-    if (u.startsWith(CLOUD)) {
+    if (new URL(u).origin === new URL(CLOUD).origin) {
       if (offline) throw new TypeError('fetch failed');
       return cloudGet(new Request(u, init));
     }
@@ -157,7 +157,7 @@ describe('şubeye göre: Trendyol yalnız Tuzla’nın', () => {
     for (const bad of ['', '   ', '---', null, undefined, 42]) expect(subeEtiketi(bad)).toBeNull();
     expect(subeKeyName('TRENDYOL_API_KEY', 'TUZLA')).toBe('TRENDYOL_TUZLA_API_KEY');
     expect(subeKeyName('YEMEKSEPETI_REMOTE_ID', 'MARINA')).toBe('YEMEKSEPETI_MARINA_REMOTE_ID');
-    expect(() => subeKeyName('LAFPOS_CLOUD_SECRET', 'MARINA')).toThrow();
+    expect(() => subeKeyName('ASILPOS_CLOUD_SECRET', 'MARINA')).toThrow();
   });
 
   it('Marina isteği Tuzla’nın anahtarını almaz, Tuzla isteği alır; öneksiz eski ad ve şubesiz istek hiçbir şey almaz', async () => {
@@ -430,7 +430,7 @@ describe('kasanın çekimi', () => {
     let calls = 0;
     const prev = globalThis.fetch;
     vi.stubGlobal('fetch', async (...a: Parameters<typeof fetch>) => {
-      if (String(a[0]).startsWith(CLOUD)) calls++;
+      if (new URL(String(a[0] instanceof Request ? a[0].url : a[0])).origin === new URL(CLOUD).origin) calls++;
       return prev(...a);
     });
     env.cloudUrl = '';

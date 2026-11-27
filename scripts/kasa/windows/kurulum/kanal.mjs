@@ -1,11 +1,12 @@
 // Güncelleme kanalı: kafedeki kasanın kendiliğinden güncellenmesi için dist/web/guncelleme/ altına surum.json ve
-// lafpos-app-<build>.zip yazar. Vercel'deki lafpos projesi bunu her main derlemesinde çalıştırır (vercel.json
+// lafpos-app-<build>.zip yazar (eski güncelleyiciler bu adı ister). Vercel'deki proje (adı eski adla kaldı) bunu her main derlemesinde çalıştırır (vercel.json
 // buildCommand): kanal https://lafpos.laffogato.net/guncelleme/surum.json'da yayımlanır, gizli anahtar gerekmez.
 // Zip kurulumun app\ yüküdür (paket.mjs; node.exe ve better-sqlite3'ün Windows ikilisi hariç), kasa arayüzü Uzaktan
 // derlemesinden ayrı derlenir. `build` HEAD commit'inin unix zamanı: aynı commit'in kurulum dosyası (GitHub Release)
 // ve kanalı aynı numarayı taşır. Manifestte zip'in SHA-256'sı ve boyu, Node ve better-sqlite3'ün sürümü ve özeti
 // (surumler.mjs) bulunur; güncelleyici (guncelle.mjs) bunlarla doğrular. Aynı sunucu kodu zaten açık demoda (/demo).
-// Yanına siteden kurulumun web kurucusu LafPOS-Kur.cmd yazılır (web-kurucu.mjs).
+// Yanına siteden kurulumun web kurucusu AsilPOS-Kur.cmd yazılır (web-kurucu.mjs); aynı baytlarla eski adıyla da
+// (LafPOS-Kur.cmd): ladmin'in şube kurucusu ve eski bağlantılar o adresi okur (shared/eski-adlar.ts ESKI_WEB_KURUCU).
 // Kullanım: node scripts/kasa/windows/kurulum/kanal.mjs   (dist/web'in kendisi önce derlenmiş olmalı)
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -15,7 +16,7 @@ import { join } from 'node:path';
 import { filesOf, zipFiles } from './arsiv.mjs';
 import { buildInfo, ROOT, sqliteVersion, stageApp } from './paket.mjs';
 import { NODE_ABI, NODE_SHA256, NODE_VERSION, sqliteSha256 } from './surumler.mjs';
-import { WEB_INSTALLER_NAME, webInstaller } from './web-kurucu.mjs';
+import { OLD_WEB_INSTALLER_NAME, WEB_INSTALLER_NAME, webInstaller } from './web-kurucu.mjs';
 
 const OUT = join(ROOT, 'dist/web/guncelleme');
 
@@ -53,12 +54,14 @@ async function main() {
   const info = buildInfo();
   const sqlite = sqliteVersion();
   sqliteSha256(sqlite);
-  const tmp = mkdtempSync(join(tmpdir(), 'lafpos-kanal-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'asilpos-kanal-'));
   try {
     console.log(`▸ Güncelleme kanalı: kasa arayüzü derleniyor (derleme ${info.build})`);
     const web = join(tmp, 'web');
-    // Kasanın arayüzü: Uzaktan bayrağı olmadan (Vercel'in kendi derlemesi VITE_LAFPOS_UZAKTAN=1 ile)
+    // Kasanın arayüzü: Uzaktan bayrağı olmadan (Vercel'in kendi derlemesi VITE_ASILPOS_UZAKTAN=1 ile; eski adı da
+    // silinir, src/lib/remote.ts ikisini de okur)
     const env = { ...process.env };
+    delete env.VITE_ASILPOS_UZAKTAN;
     delete env.VITE_LAFPOS_UZAKTAN;
     execFileSync(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'build', '--outDir', web, '--emptyOutDir', '--logLevel', 'warn'], { cwd: ROOT, env, stdio: 'inherit' });
     const appDir = join(tmp, 'app');
@@ -69,8 +72,10 @@ async function main() {
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, manifest.app.file), zip);
     writeFileSync(join(OUT, 'surum.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-    // Siteden kurulum (LafPOS Uzaktan › İndir): aynı derlemenin özetleriyle anahtarsız web kurucusu (web-kurucu.mjs)
-    writeFileSync(join(OUT, WEB_INSTALLER_NAME), webInstaller({ manifest }));
+    // Siteden kurulum (AsilPOS Uzaktan › İndir): aynı derlemenin özetleriyle anahtarsız web kurucusu (web-kurucu.mjs)
+    const kurucu = webInstaller({ manifest });
+    writeFileSync(join(OUT, WEB_INSTALLER_NAME), kurucu);
+    writeFileSync(join(OUT, OLD_WEB_INSTALLER_NAME), kurucu);
     console.log(`✓ dist/web/guncelleme/${manifest.app.file} · ${(zip.length / 2 ** 20).toFixed(1)} MB · SHA-256 ${manifest.app.sha256}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });

@@ -121,7 +121,7 @@ describe('köprü satırları', () => {
       title: 'Masa 3',
       filter: 'Bahçe',
       callbackUrl: 'https://x',
-      note: 'LafPOS #12',
+      note: 'AsilPOS #12',
       items: [{ name: 'Latte', price: 12000, sectionNo: 1, taxPercent: 1000, quantity: 2000, adjust: { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: 1000 } }],
       paymentItems: [{ amount: 23000, type: 7, operatorId: 1002 }],
     });
@@ -132,14 +132,14 @@ describe('köprü satırları', () => {
       isVoid: false,
       items: [{ name: 'Latte', price: 12000, sectionNo: 1, taxPercent: 1000, quantity: 2000, unit: 'Adet', adjust: { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: 1000 } }],
       paymentItems: [{ amount: 23000, type: 7, operatorId: 1002 }],
-      note: 'LafPOS #12',
+      note: 'AsilPOS #12',
     });
   });
 
   it('köprü betiği ASCII (Windows PowerShell 5.1 BOM’suz dosyayı ANSI okur) ve iki sınıfı ayrı derler', () => {
     expect(/^[\x09\x0a\x0d\x20-\x7e]*$/.test(KOPRU_PS1)).toBe(true);
-    expect(KOPRU_PS1).toContain('[LafposKopruYukle]::Hazirla($Dll)');
-    expect(KOPRU_PS1.indexOf('[LafposKopruYukle]::Hazirla($Dll)')).toBeLessThan(KOPRU_PS1.indexOf('-ReferencedAssemblies @($Dll)'));
+    expect(KOPRU_PS1).toContain('[AsilposKopruYukle]::Hazirla($Dll)');
+    expect(KOPRU_PS1.indexOf('[AsilposKopruYukle]::Hazirla($Dll)')).toBeLessThan(KOPRU_PS1.indexOf('-ReferencedAssemblies @($Dll)'));
     for (const fn of ['sendBasket', 'sendPayment', 'getFiscalInfo', 'getActiveDeviceIndex', 'setSerialInCallback', 'setDeviceStateCallback', 'reConnect', 'deleteCommunication']) {
       expect(KOPRU_PS1).toContain(fn);
     }
@@ -218,7 +218,7 @@ describe('köprü yöneticisi', () => {
 
 describe('ödeme penceresi: yemek kartı cihaza', () => {
   const base: DeviceRouteInput = { provider: 'pavo', mode: 'anlik', auto: true, canSend: true, methodKind: 'yemek', tip: 0, payMode: 'tutar', splitActive: false, amount: 1000, remaining: 1000, pickedCount: 0, amountPaidHere: false };
-  it('Pavo: eşlenmiş yemek kartı cihaza gider, eşlenmemiş LafPOS’a yazılır (nedeniyle)', () => {
+  it('Pavo: eşlenmiş yemek kartı cihaza gider, eşlenmemiş AsilPOS’a yazılır (nedeniyle)', () => {
     expect(deviceRoute({ ...base, mealOnDevice: true })).toMatchObject({ send: true });
     expect(deviceRoute({ ...base, mealOnDevice: false })).toMatchObject({ send: false, reason: expect.stringContaining('eşlenmedi') });
     // Eski sunucu (bilgi yok): Pavo'da gitmez
@@ -335,7 +335,7 @@ describe('akış (sahte köprü)', () => {
     expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('acik');
   });
 
-  it('cihaz ekranındaki sepet LafPOS’tan silinmez (cihazda vazgeçilir); kablo çıkınca yalnız yetkili onayıyla iptal sayılır', async () => {
+  it('cihaz ekranındaki sepet AsilPOS’tan silinmez (cihazda vazgeçilir); kablo çıkınca yalnız yetkili onayıyla iptal sayılır', async () => {
     const o = await newOrder(1);
     const r = await h.ok<{ receipt: Receipt }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     const del = await h.call<{ error: string }>('kasa', 'POST', `/okc/receipts/${r.receipt.id}/cancel`, {});

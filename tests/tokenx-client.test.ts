@@ -42,7 +42,7 @@ beforeAll(async () => {
 afterAll(() => server.close());
 
 const client = () =>
-  new TokenxClient({ authUrl: base, basketUrl: base, settingsUrl: base, clientId: 'cid', clientSecret: 'csecret', terminalId: 'AV0000000001', branchId: '', appResource: 'lafpos' });
+  new TokenxClient({ authUrl: base, basketUrl: base, settingsUrl: base, clientId: 'cid', clientSecret: 'csecret', terminalId: 'AV0000000001', branchId: '', appResource: 'asilpos' });
 
 describe('TokenX Connect istemcisi', () => {
   it('Basic ile jeton alır, Bearer ve terminal-id ile kısımları ister', async () => {
@@ -51,7 +51,7 @@ describe('TokenX Connect istemcisi', () => {
     expect(r.sections[0]).toMatchObject({ sectionNo: 1, taxPercent: 1000 });
     const call = seen.find((s) => s.url === '/v1/fiscal-parameters')!;
     expect(call.headers['terminal-id']).toBe('AV0000000001');
-    expect(call.headers['x-application-resource']).toBe('lafpos');
+    expect(call.headers['x-application-resource']).toBe('asilpos');
     expect(call.headers.authorization).toMatch(/^Bearer tok\d+$/);
   });
 

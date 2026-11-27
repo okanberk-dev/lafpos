@@ -28,7 +28,7 @@ let server: Server;
 const posts: Record<string, unknown>[] = [];
 /** Sahte lafmaliyet'in yanıtı (gövdeye göre) */
 let reply: (body: Record<string, unknown>) => { status: number; json: unknown } = (body) => ({ status: 200, json: { ok: true, date: body.date, lines: 0, matched: 0, unmatched: [], counted: true } });
-/** Siteye (LafPOS Uzaktan) giden telefon bildirimleri */
+/** Siteye (AsilPOS Uzaktan) giden telefon bildirimleri */
 const notices: { kind: string; title: string; body: string }[] = [];
 
 beforeAll(async () => {
@@ -52,7 +52,7 @@ beforeAll(async () => {
   h = await startApp({
     PAVO_URL: device.url,
     PAVO_SERIAL: device.serial,
-    PAVO_FINGERPRINT: 'LafPOS-test',
+    PAVO_FINGERPRINT: 'AsilPOS-test',
     LAFMALIYET_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/`,
     LAFMALIYET_SYNC_SECRET: 's'.repeat(48),
   });

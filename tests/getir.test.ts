@@ -25,7 +25,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 beforeAll(async () => {
   fake = await startFakeGetir(KEYS);
-  h = await startApp({ GETIR_APP_SECRET_KEY: KEYS.appSecretKey, GETIR_RESTAURANT_SECRET_KEY: KEYS.restaurantSecretKey, GETIR_API_URL: fake.url, LAFPOS_CLOUD_URL: fake.url, LAFPOS_CLOUD_SECRET: CLOUD_SECRET });
+  h = await startApp({ GETIR_APP_SECRET_KEY: KEYS.appSecretKey, GETIR_RESTAURANT_SECRET_KEY: KEYS.restaurantSecretKey, GETIR_API_URL: fake.url, ASILPOS_CLOUD_URL: fake.url, ASILPOS_CLOUD_SECRET: CLOUD_SECRET });
   live = await import('../server/delivery/live');
   const { getirAdapter } = await import('../server/delivery/getir');
   const { setAdapter } = await import('../server/delivery/registry');

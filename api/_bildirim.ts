@@ -1,18 +1,20 @@
 /**
- * Patrona telefon bildirimi (LafPOS Uzaktan, Web Push). api/uzaktan.ts yolu `uzaktan/bildirim` ile başlayan istekleri
+ * Patrona telefon bildirimi (AsilPOS Uzaktan, Web Push). api/uzaktan.ts yolu `uzaktan/bildirim` ile başlayan istekleri
  * buraya verir.
  *
  * - Abonelik: patron Uzaktan'da (telefonda, ana ekrana eklenmiş sitede) "Bildirimleri aç"a basar; tarayıcının
  *   aboneliği gerçek oturumla (üye ya da parolalı giriş) saklanır. Parolasız görünümde abonelik açılmaz.
- * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, LAFPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
+ * - Gönderim: kasa olayı imzalı iter (`POST uzaktan/bildirim`, ASILPOS_CLOUD_SECRET): büyük iptal ya da ikram, kasa
  *   farkı, uzun internet kesintisi, Pavo gün sonu alınamadı, kapanış saati (gün hâlâ açık; `kapanis`), gün sonu
  *   lafmaliyet'e gitmedi (gövde kurulamadı ya da kalıcı ret; `lafmaliyet`). Güncelleme
  *   hatasını Merkez nabızdan kendisi görür. Bilinmeyen tür 400 alır; kasa onu yeniden denemez (eski sitede yeni tür
  *   kuyruğu tıkamaz).
  * - Anahtarlar: VAPID_PUBLIC_KEY ve VAPID_PRIVATE_KEY (Vercel). Yoksa bildirim kapalıdır, hiçbir şey kırılmaz.
- * - Redis: `lafpos:bildirim:aboneler` (JSON, uç → abonelik), `lafpos:bildirim:son` (son 30 bildirim)
+ * - Redis: `${REDIS_ONEKI}bildirim:aboneler` (JSON, uç → abonelik), `${REDIS_ONEKI}bildirim:son` (son 30 bildirim)
  */
 import webpush from 'web-push';
+import { eskiEnvAdi } from '../shared/pos-env.js';
+import { ALAN_ADI, REDIS_ONEKI } from '../shared/eski-adlar.js';
 
 export interface Notice {
   kind: string;
@@ -40,10 +42,11 @@ export interface BildirimDeps {
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (status: number, error: string, code: string) => json({ error, code }, status);
-const env = (k: string) => (process.env[k] ?? '').trim();
+/** Ortam değişkeni: `ASILPOS_X` verilince Vercel'de eski adla duran değer de okunur (shared/pos-env.ts) */
+const env = (k: string) => (process.env[k] ?? '').trim() || (process.env[eskiEnvAdi(k) ?? ''] ?? '').trim();
 
-const SUBS_KEY = 'lafpos:bildirim:aboneler';
-const LAST_KEY = 'lafpos:bildirim:son';
+const SUBS_KEY = `${REDIS_ONEKI}bildirim:aboneler`;
+const LAST_KEY = `${REDIS_ONEKI}bildirim:son`;
 const MAX_SUBS = 20;
 
 export const pushConfigured = () => !!env('VAPID_PUBLIC_KEY') && !!env('VAPID_PRIVATE_KEY');
@@ -55,7 +58,7 @@ const KIND_TTL_S: Record<string, number> = { kapanis: 3600 };
 
 type Sender = (sub: Sub, payload: string, ttl: number) => Promise<{ statusCode: number }>;
 let sender: Sender = (sub, payload, ttl) => {
-  webpush.setVapidDetails('https://lafpos.laffogato.net', env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
+  webpush.setVapidDetails(`https://${ALAN_ADI}`, env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
   return webpush.sendNotification(sub, payload, { TTL: ttl, urgency: 'high' });
 };
 /** Testler: gönderimi yakalar */
@@ -160,7 +163,7 @@ export async function bildirim(req: Request, path: string, deps: BildirimDeps): 
     return json(raw ? JSON.parse(raw) : []);
   }
   if (path === 'uzaktan/bildirim/dene' && req.method === 'POST') {
-    const sent = await broadcast(deps, { kind: 'deneme', title: 'LafPOS bildirimi', body: 'Bildirimler bu telefonda açık', at: Date.now() });
+    const sent = await broadcast(deps, { kind: 'deneme', title: 'AsilPOS bildirimi', body: 'Bildirimler bu telefonda açık', at: Date.now() });
     return json({ ok: true, sent });
   }
   return fail(404, 'Bildirimde böyle bir uç yok', 'not_found');

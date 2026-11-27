@@ -19,7 +19,7 @@ import { getOpenDay } from './orders';
  * siparişi, müşteri, denetim kaydı) silinir; kurulum (menü, personel, masalar, ödeme türleri, istasyonlar, yazıcılar,
  * ayarlar) kalır. Örnek PIN'ler kapanır: patron yeni PIN'ini aynı pencerede verir, örnek PIN'iyle kalan öbür hesaplar
  * kapatılır. `liveSince` yazılır; bir daha hiçbir şey silinmez (işlem tekrarlanırsa yalnız "zaten başladı" döner).
- * Silinen günlerin tarihleri aynı işlemde LafPOS Uzaktan'da boşaltılmak üzere yazılır (server/sync/cloud-reports.ts
+ * Silinen günlerin tarihleri aynı işlemde AsilPOS Uzaktan'da boşaltılmak üzere yazılır (server/sync/cloud-reports.ts
  * `markRemovedDays`): bulutta eski deneme raporları kalmaz.
  */
 
@@ -109,7 +109,7 @@ function provenDayIds(t: Tx | DB, days: DayRow[]): Set<string> {
 
 /**
  * Geçişi tamamlarken silinecek günler. Deneme günü: eğitimde kapanmış (`trainingDay` true) ya da işaret tutulmadan
- * önce kapanmış (null: LafPOS o zaman canlıda değildi); ikisi de lafmaliyet'e hiç gitmez. Gerçek görünen günler
+ * önce kapanmış (null: AsilPOS o zaman canlıda değildi); ikisi de lafmaliyet'e hiç gitmez. Gerçek görünen günler
  * (`trainingDay` false) yalnız hepsi bugünden önceyse ve gerçek kullanım hiç başlamadıysa silinebilir: patron PIN'i
  * değişince deneme sessizce kapanıp sonraki deneme günleri "gerçek" kaydedilmişti (Marina, Kasım 2026). Gerçek olduğu
  * kanıtlı gün (Pavo fişi, lafmaliyet'e gönderim) ve ondan sonraki hiçbir gün önerilmez: dün kapanmış ilk gerçek gün
@@ -302,7 +302,7 @@ export interface PurgeCounts {
  * oda, ödeme, kalem, açık hesap satırı, adisyon, kasa hareketi, vardiya sayımı, gün. Açık hesap satırı silinince
  * müşterinin bakiyesi o kadar geri alınır. O günlerin lafmaliyet giden kutusu kayıtları (`gun:<tarih>`) da silinir;
  * kalan bir günle aynı tarihi taşıyan kayda dokunulmaz. Başka güne bağlı hiçbir kayda dokunulmaz. Silinen günlerin
- * tarihleri LafPOS Uzaktan'da yenilenmek üzere yazılır (`markRemovedDays`): kalan günü olmayan tarih boşaltılır, kalan
+ * tarihleri AsilPOS Uzaktan'da yenilenmek üzere yazılır (`markRemovedDays`): kalan günü olmayan tarih boşaltılır, kalan
  * günü olan tarihe yalnız o günün raporu gider. `removedDates`: kalan günü olmayan tarihler
  */
 function purgeDays(t: Tx, days: DayRow[], realDays: number): { counts: PurgeCounts; removedDates: string[] } {
@@ -344,7 +344,7 @@ function purgeDays(t: Tx, days: DayRow[], realDays: number): { counts: PurgeCoun
   const kept = new Set(closedDays(t).map((d) => d.date));
   const removedDates = dates.filter((date) => !kept.has(date));
   const keys = removedDates.map((date) => `gun:${date}`);
-  // Gönderilmiş kayıt iz olarak kalır (lafmaliyet o günü almıştır; LafPOS'tan silmek orada silmez)
+  // Gönderilmiş kayıt iz olarak kalır (lafmaliyet o günü almıştır; AsilPOS'tan silmek orada silmez)
   if (keys.length) c.outbox = t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys), isNull(schema.outbox.sentAt))).run().changes;
   // Uzaktan'da bütün tarihler yenilenir: kalan günü olan tarihin raporu deneme satışı çıkmış hâliyle hemen gider
   // (beklerse bulutta günlük taramaya dek deneme satışıyla kalır), kalmayan tarih boşaltılır

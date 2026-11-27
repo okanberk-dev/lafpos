@@ -4,7 +4,7 @@ import { getSettings } from '../lib/settings';
 import { MIN_SECRET_LENGTH } from '../lib/signature';
 
 /**
- * Site bağlantısının iki kapısı (sahibin 26 Ekim kararı: LafPOS yalnız sahip açınca devreye girer).
+ * Site bağlantısının iki kapısı (sahibin 26 Ekim kararı: AsilPOS yalnız sahip açınca devreye girer).
  * - `siteLinked`: `LAFFOGATO_URL` .env'de açıkça yazılmış. Değilse siteye hiçbir istek gitmez: menü yoklaması, görsel
  *   indirme, sipariş sürüm sinyali, Tükendi yazımı. Varsayılan adres yoktur (server/env.ts).
  * - `siteSigned`: adres ve en az 32 karakterlik `LAFFOGATO_SYNC_SECRET`; imzalı uçlar (online siparişler, Tükendi
@@ -32,9 +32,9 @@ export function wrongSiteBranch(raw: unknown): string | null {
 }
 
 /**
- * İmzalı listelerin (`GET /api/panel/orders`, `GET /api/panel/menu`) LafPOS'un okuduğu biçim sürümü (laffogato
+ * İmzalı listelerin (`GET /api/panel/orders`, `GET /api/panel/menu`) AsilPOS'un okuduğu biçim sürümü (laffogato
  * `PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`). Alanı hiç göndermeyen eski site tanınır; başka her değer (2, "1",
- * null) LafPOS'un bilmediği biçimdir, liste okunmaz. docs/03-ENTEGRASYON.md §2.3
+ * null) AsilPOS'un bilmediği biçimdir, liste okunmaz. docs/03-ENTEGRASYON.md §2.3
  */
 export const SITE_LIST_VERSION = 1;
 
@@ -56,7 +56,7 @@ export function requireSiteSigned() {
 }
 
 /**
- * LafPOS'un yerel, telefonla damga kartı. Varsayılan kapalı (`stampCategoryKeys: []`): tek sadakat programı
+ * AsilPOS'un yerel, telefonla damga kartı. Varsayılan kapalı (`stampCategoryKeys: []`): tek sadakat programı
  * uygulamadaki damgadır (laffogato `src/lib/legal/content.ts` tek program tanımlar). Site bağlantısı kuruluyken hiç
  * açılmaz: damga birikmez, hediye kullanılmaz, ekranda görünmez.
  */

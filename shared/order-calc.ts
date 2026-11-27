@@ -426,16 +426,16 @@ export interface OffDevicePayment {
 
 /**
  * "Yazarkasadan geçmeyen": satış ödemelerinden mali fişi yazarkasada (ÖKC) kesilmeyenlerin kart ve nakit toplamı. Tanımın
- * tek yeri; X, Z, Raporlar ve LafPOS Uzaktan bunu kullanır (docs/04-YAZARKASA.md §4.2).
+ * tek yeri; X, Z, Raporlar ve AsilPOS Uzaktan bunu kullanır (docs/04-YAZARKASA.md §4.2).
  *
- * Ödeme cihazdan geçmiştir, ancak bir yazarkasa fişinin ödemesiyse: cihaz belgeyi kesip sonucu LafPOS'a işleyince
+ * Ödeme cihazdan geçmiştir, ancak bir yazarkasa fişinin ödemesiyse: cihaz belgeyi kesip sonucu AsilPOS'a işleyince
  * ödemenin kimliği o fişin `paymentIds`'ine yazılır (`receipts`; eğitim cihazınınki de, eğitimde satır gerçek
- * kullanımdaki gibi çalışsın). Geri kalanı "LafPOS'a yaz (fiş ayrıca)", "Başka yoldan aldım", kısmi tutar, paylaşımlı
+ * kullanımdaki gibi çalışsın). Geri kalanı "AsilPOS'a yaz (fiş ayrıca)", "Başka yoldan aldım", kısmi tutar, paylaşımlı
  * hesabın payı ya da yazarkasa bağlantısı kapalıyken alınmıştır: mali fişi cihazda ayrıca kesilmiş olmalı.
  * - Yalnız Z'nin nakit (`cash`) ve kredi kartı (`card`) alanı. Yemek kartı (mali fiş değil bilgi fişi kesilir), havale,
  *   açık hesap, online ve diğer bu satıra girmez; Z'de kendi satırlarındadır.
  * - Bahşiş girmez: satış değildir, mali fiş satış tutarına kesilir (yalnız `amount`).
- * - Kısmi ödemede her ödeme ayrı sayılır: hesabın LafPOS'ta alınan kısmı girer, aynı hesabın cihazdan geçen kısmı girmez.
+ * - Kısmi ödemede her ödeme ayrı sayılır: hesabın AsilPOS'ta alınan kısmı girer, aynı hesabın cihazdan geçen kısmı girmez.
  * - İptal edilen ödeme (cihazda fişi iptal edilen dahil) ve açık hesap tahsilatı girmez.
  */
 export function offDeviceTotals(payments: readonly OffDevicePayment[], receipts: readonly { paymentIds: readonly string[] }[]): OffDeviceTotals {

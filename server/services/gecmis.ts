@@ -5,12 +5,12 @@ import { trainingMode } from '../lib/settings';
 import { historyStore } from '../sync/modpos';
 
 /**
- * Kasadaki geçmiş ciro (LafPOS öncesi, ModPOS; server/sync/modpos.ts `historyStore`) bir dönemde nerede geçer. Geçmiş
- * günü yalnız LafPOS'ta gerçek iş günü olmayan, bugünden önceki tarihte geçer:
+ * Kasadaki geçmiş ciro (AsilPOS öncesi, ModPOS; server/sync/modpos.ts `historyStore`) bir dönemde nerede geçer. Geçmiş
+ * günü yalnız AsilPOS'ta gerçek iş günü olmayan, bugünden önceki tarihte geçer:
  * - o tarihte iş günü hiç yoksa geçmiş günü yazılır;
  * - varsa ve hepsi deneme günüyse (eğitimde ya da işaretten önce kapanmış: `trainingDay` true/null) ve kasa gerçek
  *   kullanımdaysa geçmiş günü o deneme günlerinin yerine geçer (`replaced`: raporlar o günlerin adisyonlarını okumaz);
- * - gerçek iş günü (`trainingDay` false) ya da açık gün varsa LafPOS'unki kalır.
+ * - gerçek iş günü (`trainingDay` false) ya da açık gün varsa AsilPOS'unki kalır.
  * Kurulum modunda deneme günleri kendi aralarında sayılır (patron panelinin kıyası gibi): geçmiş yalnız boş tarihe yazılır.
  * İş günü, Z zinciri ve lafmaliyet'e giden gün paketi bunu hiç okumaz.
  */

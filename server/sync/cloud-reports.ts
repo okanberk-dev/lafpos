@@ -17,7 +17,7 @@ import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListR
 import { cloudEnabled, patronSeesCash } from './cloud';
 
 /**
- * LafPOS Uzaktan raporları (docs/07-UZAKTAN-ERISIM.md §4 "Raporlar"). Kasa her iş gününün rapor özetini buluta iter:
+ * AsilPOS Uzaktan raporları (docs/07-UZAKTAN-ERISIM.md §4 "Raporlar"). Kasa her iş gününün rapor özetini buluta iter:
  * kapanan günler ve gün boyu bugün. Rakamlar Raporlar'ın kendi servislerinden (server/services/reports.ts) gelir,
  * uzaktaki sayfa günleri toplayınca kasadakiyle aynı rakamı verir (tests/uzaktan-raporlar.test.ts).
  *
@@ -29,7 +29,7 @@ import { cloudEnabled, patronSeesCash } from './cloud';
  *   onları bir kez gönderir. Gönderilen günün içerik özeti saklanır: aynı gün iki kez gitmez.
  * Gitmeyen: maliyet ve kâr (ürün raporu maliyetsiz kurulur), PIN, müşteri adı ve telefonu (raporlarda yok).
  *
- * Geçmiş ciro (LafPOS öncesi, ModPOS; server/services/gecmis.ts `historyFor`): LafPOS'ta gerçek iş günü olmayan
+ * Geçmiş ciro (AsilPOS öncesi, ModPOS; server/services/gecmis.ts `historyFor`): AsilPOS'ta gerçek iş günü olmayan
  * tarihlerin geçmiş günü de gün raporu olarak gider (`historyReport`: kaynak adı, ModPOS Z'si, indirim, ciro dışı, KDV).
  * Böylece Uzaktan, geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da o günleri bu
  * kasanın dükkânında gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an). Kayıt
@@ -39,7 +39,7 @@ import { cloudEnabled, patronSeesCash } from './cloud';
  * tarihe boş gün (`n: 0`, ek verisiz) gider; bulut o tarihin eski raporunun ve ek verisinin üstüne yazar, Uzaktan o günü
  * listeye ve toplamlara katmaz. Tarihler silmeyle aynı işlemde `REMOVED_KEY`'e yazılır, sıradaki canlı bakışta (en geç
  * 5 dk) gider. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan tarih de (eski sürümde yapılmış geçiş) tarama
- * ona gelince boşaltılır. O tarihte LafPOS günü ya da geçmiş ciro günü varsa boş gün gitmez, o günün raporu gider.
+ * ona gelince boşaltılır. O tarihte AsilPOS günü ya da geçmiş ciro günü varsa boş gün gitmez, o günün raporu gider.
  */
 export const LIVE_MIN_MS = 5 * 60_000;
 export const BACKFILL_MS = 60_000;
@@ -309,7 +309,7 @@ export function resetReportSync() {
 
 /**
  * Geçmiş cironun dönem ürün listesi Uzaktan'a nasıl gider: blok, dönemindeki geçmiş günü sayısı (`n`; kasanın
- * Raporlar'ındaki `historyProductsShown` gibi, biri LafPOS günüyle değiştiyse bulut bloğu tam göstermez) ve satırları
+ * Raporlar'ındaki `historyProductsShown` gibi, biri AsilPOS günüyle değiştiyse bulut bloğu tam göstermez) ve satırları
  * taşıyacak gün (`carrier`: bloğun dönemindeki son giden geçmiş günü). Blok yoksa ya da döneminde giden gün yoksa null
  */
 export interface PushedBlock {
@@ -387,15 +387,15 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     const removed = new Set(getSyncState<string[]>(REMOVED_KEY) ?? []);
     const removedDue = live ? [...removed].filter((d) => d >= oldest && d <= today) : [];
     if (live) lastLiveAt = now;
-    // Geçmiş ciro günleri (ModPOS): LafPOS'ta gerçek iş günü olmayan tarihte gün raporu onlardan kurulur
+    // Geçmiş ciro günleri (ModPOS): AsilPOS'ta gerçek iş günü olmayan tarihte gün raporu onlardan kurulur
     const hist = historyFor({ from: oldest, to: addDays(today, -1) }, today);
     const histByDate = new Map((hist?.days ?? []).map((d) => [d.date, d]));
     // Kayıt değişti (yeni çekim, elle yükleme ya da silinme) ya da geçmişin geçtiği tarihler değişti (kurulum modundan
-    // çıkış: deneme gününün yerine geçmiş; tarihte gerçek LafPOS günü açıldı): geçmiş günlerine bir kez bakılır, yalnız
+    // çıkış: deneme gününün yerine geçmiş; tarihte gerçek AsilPOS günü açıldı): geçmiş günlerine bir kez bakılır, yalnız
     // içeriği değişen gün gider
     const histDirty = (st.historyAt ?? 0) !== (hist?.at ?? 0) || (st.historyDates ?? []).join() !== [...histByDate.keys()].join();
     const histDue = histDirty ? [...histByDate.keys()] : [];
-    // Önceki bakışta geçmiş günü olarak gidip artık kayıtta olmayan tarih: o tarihin LafPOS raporu, yoksa boş gün gider
+    // Önceki bakışta geçmiş günü olarak gidip artık kayıtta olmayan tarih: o tarihin AsilPOS raporu, yoksa boş gün gider
     const histGone = new Set(histDirty ? (st.historyDates ?? []).filter((d) => !histByDate.has(d) && d >= oldest && d < today) : []);
     const block = historyBlockOf(hist);
     const dates = [...new Set([...liveDates, ...batch, ...histDue, ...histGone, ...removedDue])].filter((d) => d >= oldest && d <= today);
@@ -404,7 +404,7 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     const changed: { date: string; hash: string; report: RemoteDayReport }[] = [];
     for (const date of dates) {
       const h = histByDate.get(date);
-      // Sıra: geçmiş ciro günü, LafPOS günü; ikisi de yoksa ve tarih kasada silindiyse ya da daha önce gönderildiyse
+      // Sıra: geçmiş ciro günü, AsilPOS günü; ikisi de yoksa ve tarih kasada silindiyse ya da daha önce gönderildiyse
       // boş gün (bulutta eski rapor kalmasın). Gerçek günü ya da geçmiş günü olan tarih hiç boşaltılmaz
       const report = h ? historyDayReport(h, hist!.kaynak, block, now) : (buildDayReport(date, now) ?? (histGone.has(date) || removed.has(date) || st.sent[date] ? emptyDayReport(date, now) : null));
       if (!report) continue;

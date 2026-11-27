@@ -22,7 +22,7 @@ import { underBekci } from './yedek';
  * istek ve ayrı zamanlayıcı yok (AGENTS.md kural 6'daki bütçe).
  *
  * Son yanıt saklanır: internet ya da Merkez yokken kasa son geçerli kayıtla ve kendi saatiyle çalışır. Merkez adresi
- * yoksa (LAFPOS_MERKEZ_URL ya da LAFPOS_CLOUD_URL tanımsız, ya da LAFPOS_MERKEZ_URL=0) lisans uygulanmaz ve
+ * yoksa (ASILPOS_MERKEZ_URL ya da ASILPOS_CLOUD_URL tanımsız, ya da ASILPOS_MERKEZ_URL=0) lisans uygulanmaz ve
  * güncelleyici eskisi gibi kanalın son sürümünü izler.
  *
  * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md, sync/kontrol.ts) de bu nabızla gider: istekte yönetim özetinin parmak izi
@@ -137,7 +137,7 @@ export const merkezSyncState = () => ({ enabled: merkezEnabled(), lastOk, lastEr
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
 /** Nabzın yanıtı → saklanan kayıt (beklenmeyen alan düşer; lisans okunamazsa eski kayıt kalır) */
-/** Merkez'den gelen geçmiş ciro (LafPOS öncesi günler): kasa kendi patron panelinin kıyaslarına katar (reports.ts) */
+/** Merkez'den gelen geçmiş ciro (AsilPOS öncesi günler): kasa kendi patron panelinin kıyaslarına katar (reports.ts) */
 export function takeHistory(json: unknown) {
   if (!isRecord(json) || !('gecmis' in json)) return;
   const g = json.gecmis;
@@ -228,10 +228,10 @@ export function takeRemoteUpdate(istek: number | null | undefined, now = Date.no
       action: 'guncelleme',
       entity: 'merkez',
       message: kalmadi
-        ? `Merkez'den (LafPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu ${gunSonu.durum ? 'reddedildi' : 'kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)'}`
+        ? `Merkez'den (AsilPOS Uzaktan) gün sonuyla birlikte istenen güncelleme başlatılmadı: uzaktan gün sonu ${gunSonu.durum ? 'reddedildi' : 'kasada uygulanmadı (iptal edildi ya da kasaya ulaşmadı)'}`
         : can
-          ? "Merkez'den (LafPOS Uzaktan) güncelleme istendi: yeni sürüm denetleniyor, gün kapalıyken kurulur"
-          : "Merkez'den (LafPOS Uzaktan) güncelleme istendi; bu kurulumda otomatik güncelleyici yok, sunucu elle güncellenir",
+          ? "Merkez'den (AsilPOS Uzaktan) güncelleme istendi: yeni sürüm denetleniyor, gün kapalıyken kurulur"
+          : "Merkez'den (AsilPOS Uzaktan) güncelleme istendi; bu kurulumda otomatik güncelleyici yok, sunucu elle güncellenir",
       data: { kaynak: 'merkez', istek, ...(gunSonu ? { komut: gunSonu.komut, gunSonu: gunSonu.durum } : {}) },
     });
   });

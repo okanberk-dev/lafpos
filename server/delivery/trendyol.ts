@@ -275,7 +275,7 @@ function addressOf(pkg: TrendyolPackage): string | null {
 }
 
 /**
- * Trendyol paketi → LafPOS'un tek biçimi. Satırın birim fiyatı `price` (belgede seçenekler dahil: örneklerde
+ * Trendyol paketi → AsilPOS'un tek biçimi. Satırın birim fiyatı `price` (belgede seçenekler dahil: örneklerde
  * totalPrice = Σ price × birim; `modifierProducts[].price` yalnız bilgi, eklenmez); adet iptal edilmemiş birim sayısı.
  * Kampanyalar satırda, birimde (`items[].promotions`, `coupon`) ve pakette (`promotions`, `coupon`); restoranın payı
  * oranında adisyon indirimi, kalanı platformun. Paketin `totalPrice`'ı (müşterinin ödediği) varsa esas odur:

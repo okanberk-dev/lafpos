@@ -14,10 +14,11 @@ import { useFinePointer } from '@/lib/hooks';
 import { kontrolAnahtari, uyeDavetEt, uyeKaldir, uyelerSorgusu, uyeRolDegistir } from '@/lib/kontrol';
 import { toast } from '@/lib/toast';
 import { FormAlti, FormHatasi, NEDEN, NOT, SATIR } from './ortak';
+import { ALAN_ADI } from '@shared/eski-adlar';
 
 const EPOSTA_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** Giriş ekranındaki düğmenin adıyla (RemoteLoginPage: "Davet kodum var") */
-const DAVET_NOTU = 'Kod 7 gün geçerli; kişi lafpos.laffogato.net’te Üye girişi › Davet kodum var ile kodu ve kendi parolasını girer';
+const DAVET_NOTU = `Kod 7 gün geçerli; kişi ${ALAN_ADI}’te Üye girişi › Davet kodum var ile kodu ve kendi parolasını girer`;
 /** Üyelik kapalı (parolalı giriş): kişi eklenemez, bulut 409 der */
 const UYELIK_KAPALI = 'Kişi eklemek için önce üye girişi açılmalı';
 
@@ -154,7 +155,7 @@ function UyeSatiri({
           )}
         </div>
         <p className="mt-0.5 text-[13px] text-muted">{durum}</p>
-        {u.sabit && <p className={cn('mt-0.5', NEDEN)}>Sahip LafPOS’un sunucu ayarında tanımlı; buradan değiştirilmez</p>}
+        {u.sabit && <p className={cn('mt-0.5', NEDEN)}>Sahip AsilPOS’un sunucu ayarında tanımlı; buradan değiştirilmez</p>}
       </div>
       {!u.sabit && (
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full">

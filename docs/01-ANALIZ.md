@@ -43,12 +43,12 @@ Windows bilgisayarda çalışıyor, iş günü 06:00'da otomatik kapanıyor.
   içeceklerin çoğu **tek boy** ve fiyatlar siteyle uyuşmuyor (Latte 200 ₺ ↔ sitede 195/210 ₺, alternatif süt
   50 ₺ ↔ sitede 25 ₺). Üçüncü kopya sorunu bu.
 - Kasaya özel kalemler: Karaoke kişi başı (150 ₺), Karaoke toplu (1.000 ₺), Etkinlik ücreti, Yenilebilir bardak.
-  Türk kahvesi artık sitede (`mnu-0019`): LafPOS'ta yerel kopyası yok, kasaya özel şeker grubu site kalemine bağlı.
+  Türk kahvesi artık sitede (`mnu-0019`): AsilPOS'ta yerel kopyası yok, kasaya özel şeker grubu site kalemine bağlı.
   Yenilebilir bardak bardak seçeneği değil ayrı üründür (ModPOS'taki gibi ayrı satır, lafmaliyet'te ayrı reçete).
 
-**LafPOS'a yansıyanlar (tasarım farklı, yaklaşım karşılanıyor)**
+**AsilPOS'a yansıyanlar (tasarım farklı, yaklaşım karşılanıyor)**
 
-| ModPOS'ta | LafPOS'ta |
+| ModPOS'ta | AsilPOS'ta |
 | --- | --- |
 | Saat itibarıyla geçen hafta/ay kıyası | Patron paneli aynı kıyas + uyarı akışı + anomali kuralları |
 | 15 rapor türü | Aynı kapsam (Ciro, Kasa föyü, Adisyon, Satış, Kategori, Happy hour, İndirim, İptal, İkram, İade, Saatlik…) |
@@ -66,7 +66,7 @@ Kaynaklar: robotPOS'un [kafe](https://en.robotpos.com/cafe-pos-system) ve
 [restoran](https://en.robotpos.com/restaurant-pos-system) sayfaları, NarPOS'un yayımlanmış tanıtımı, lafmaliyet
 belgelerindeki ModPOS (Patron) kullanımı.
 
-| Özellik | ModPOS (bugün kafede) | robotPOS | NarPOS | LafPOS |
+| Özellik | ModPOS (bugün kafede) | robotPOS | NarPOS | AsilPOS |
 | --- | --- | --- | --- | --- |
 | Masa planı ve masa işlemleri | var | var | var | var, sürükle-bırak düzenleyici |
 | Seçenekli ürün (süt, shot, şurup) | kısıtlı | var | var | var, siteyle aynı seçenekler |
@@ -85,7 +85,7 @@ belgelerindeki ModPOS (Patron) kullanımı.
 | Happy hour | elle | kampanya | kampanya | saat/gün/kategori kuralıyla otomatik |
 | Karaoke / süreli hizmet | elle | yok | yok | oda sayacı, saatlik ücret, HİZMET KDV %20 |
 | Çevrimdışı çalışma | ? | hibrit | ? | yerel sunucu + giden kutusu |
-| Sadakat | yok | damga, puan | ? | damga kartı (LafPOS içi); site sadakatiyle birleşme sonraki iş |
+| Sadakat | yok | damga, puan | ? | damga kartı (AsilPOS içi); site sadakatiyle birleşme sonraki iş |
 | ÖKC (yazarkasa) | ayrı cihaz | entegre | entegre | kapsam dışı: bilgi fişi, mali fiş ÖKC'den |
 | e-Fatura / e-Arşiv | ? | var | var | kapsam dışı (lafmaliyet + Paraşüt) |
 | Yemek platformu entegrasyonu | yok | var | var | adaptör arayüzü; canlı bağlantı anlaşma ister |
@@ -131,7 +131,7 @@ belgelerindeki ModPOS (Patron) kullanımı.
   imzalı ping + imzalı çekme, 5 dakikadan sık periyodik iş yok, yeni cron yok, her alan beyaz listede.
 - **KVKK:** personel maliyet, maaş, kâr ve karaoke tutarlarını görmez.
 
-## 5. Sonuç: LafPOS'un yeri
+## 5. Sonuç: AsilPOS'un yeri
 
 ```
                  ┌──────────────────────────────┐
@@ -140,7 +140,7 @@ belgelerindeki ModPOS (Patron) kullanımı.
             menü (CDN)  │               │ Tükendi, sipariş aşaması (imzalı)
             siparişler  ▼               │
                  ┌──────────────────────┴───────┐
-  garson/barista │ LafPOS (kafedeki sunucu)     │  masa, adisyon, bar ekranı, ödeme, kasa, Z
+  garson/barista │ AsilPOS (kafedeki sunucu)     │  masa, adisyon, bar ekranı, ödeme, kasa, Z
   patron ──────▶ │ tablet · telefon · bilgisayar│
                  └──────┬───────────────────────┘
        günlük satış, Z  │ (bugün dışa aktarım, yarın imzalı uç)
@@ -150,5 +150,5 @@ belgelerindeki ModPOS (Patron) kullanımı.
                  └──────────────────────────────┘
 ```
 
-LafPOS ön cephedir. Ürünü site, maliyeti lafmaliyet bilir; LafPOS ikisini kopyalamaz, aralarındaki elle
+AsilPOS ön cephedir. Ürünü site, maliyeti lafmaliyet bilir; AsilPOS ikisini kopyalamaz, aralarındaki elle
 taşımayı (fiyat kopyası, Z yazma, aylık liste yapıştırma) ortadan kaldırır.

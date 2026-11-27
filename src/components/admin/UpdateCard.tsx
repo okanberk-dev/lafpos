@@ -53,7 +53,7 @@ const working = (d: UpdateData | undefined) => !!d && (!!d.request || d.status?.
 /**
  * Sürüm ve otomatik güncelleme (Yönetim › Ayarlar ve yedek). Güncellemeyi kafedeki bilgisayarın bekçisi yapar
  * (scripts/kasa/windows/kurulum/guncelle.mjs): yeni sürümü gün kapalıyken kendiliğinden kurar. "Şimdi güncelle" hemen
- * denetletir: gün kapalıysa varsa hemen kurulur; gün açıkken patron onaylarsa hemen (LafPOS bir dakika kadar kapanır),
+ * denetletir: gün kapalıysa varsa hemen kurulur; gün açıkken patron onaylarsa hemen (AsilPOS bir dakika kadar kapanır),
  * değilse gün sonunda. Kurulum bitince bu sayfa yeni sürümü görür ve yenilemeyi önerir. Git ile çalışan sunucuda durum
  * dosyası yoktur; kart yalnız sürümü söyler
  */
@@ -83,7 +83,7 @@ export function UpdateCard() {
     if (d.dayOpen && me?.role === 'patron') {
       simdi = await confirmDialog({
         title: 'Gün açık: şimdi mi güncellensin',
-        body: 'Yeni sürüm varsa hemen kurulur: LafPOS bir dakika kadar kapanır, tabletler bekler, açık adisyonlar kaybolmaz. Vazgeçerseniz gün sonundan sonra kendiliğinden kurulur',
+        body: 'Yeni sürüm varsa hemen kurulur: AsilPOS bir dakika kadar kapanır, tabletler bekler, açık adisyonlar kaybolmaz. Vazgeçerseniz gün sonundan sonra kendiliğinden kurulur',
         confirmLabel: 'Şimdi güncelle',
         tone: 'primary',
       });
@@ -170,7 +170,7 @@ export function UpdateCard() {
               <Button variant="primary" icon={<RefreshCw className="size-4" />} loading={sending} disabled={working(d) || st?.durum === 'kuruluyor'} onClick={() => void request()}>
                 Şimdi güncelle
               </Button>
-              {working(d) && <span className="text-xs text-muted">{st?.durum === 'kuruluyor' ? 'Kuruluyor; LafPOS bir dakika içinde yeniden açılır' : 'Denetleniyor…'}</span>}
+              {working(d) && <span className="text-xs text-muted">{st?.durum === 'kuruluyor' ? 'Kuruluyor; AsilPOS bir dakika içinde yeniden açılır' : 'Denetleniyor…'}</span>}
             </div>
           )}
         </div>

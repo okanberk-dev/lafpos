@@ -32,7 +32,7 @@ interface CustomerRow {
  * Ödenmez (adisyonun tamamı ya da tek kalem): kayıtlı bir kişi seçilmeden yapılmaz. Aranabilir liste iki grupta:
  * Personel (etkin kullanıcılar, rolüyle) ve Müşteriler (kayıtlı müşteriler, telefonun son 4 hanesiyle). Neden listesi
  * kalır; personel seçilince "Personel yemeği", patron seçilince "Patron hesabı" önerilir (yazılan neden ezilmez).
- * Kişi bilgisi yalnız LafPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez.
+ * Kişi bilgisi yalnız AsilPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez.
  */
 export function OdenmezModal({
   open,

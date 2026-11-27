@@ -12,6 +12,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { answerText, type DayAnswer, dayLabel, type StaffIssues, staffAnswerText, unmatchedCount, unmatchedText } from '@/lib/lafmaliyet';
 import { toast } from '@/lib/toast';
+import { SITE_ANAHTAR_ENV } from '@shared/eski-adlar';
 
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastCheckAt?: number; lastSuccessAt?: number; lastError?: string | null; lastErrorAt?: number; lastChanges?: number; etag?: string } | null };
@@ -40,7 +41,7 @@ interface SyncStatus {
     push: { lastRunAt?: number; sent?: number; failed?: number } | null;
     /** Son gönderilen günün lafmaliyet yanıtı */
     answer: DayAnswer | null;
-    /** Yanıttaki personel sorunları LafPOS adıyla; yalnız personel ya da bağlantı yöneticisine */
+    /** Yanıttaki personel sorunları AsilPOS adıyla; yalnız personel ya da bağlantı yöneticisine */
     staffIssues?: StaffIssues | null;
     /** "Geçmiş günleri gönder"in varsayılanı: lafmaliyet'in geçiş gününden düne */
     backfill: { from: string | null; to: string; unsent: number | null };
@@ -225,7 +226,7 @@ export default function IntegrationAdmin() {
                 {menu?.lastSuccessAt ? `Son başarılı kontrol ${fmtDateTime(menu.lastSuccessAt)}` : 'Henüz eşitlenmedi'}
                 {menu?.lastError && <span className={ERR}>Hata: {menu.lastError}</span>}
               </Status>
-              <p className="text-xs text-muted">Gün açıkken 15 dakikada bir kontrol edilir, gece sorulmaz; LafPOS siteye Tükendi yazınca hemen bir kez</p>
+              <p className="text-xs text-muted">Gün açıkken 15 dakikada bir kontrol edilir, gece sorulmaz; AsilPOS siteye Tükendi yazınca hemen bir kez</p>
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Toggle checked={s.menu.auto} disabled={!canSync} onChange={(v) => setting({ menuAutoSync: v })} label="Otomatik eşitle" />
                 <Button size="sm" icon={<RefreshCw className="size-4" />} loading={busy === '/sync/menu/apply'} onClick={() => void run('/sync/menu/apply', 'Menü eşitlendi')}>
@@ -234,7 +235,7 @@ export default function IntegrationAdmin() {
               </div>
             </>
           ) : (
-            <Status idle>Site bağlantısı kurulmadı: LafPOS siteye hiç bağlanmaz; menü olduğu gibi kalır, görseller ve online siparişler gelmez</Status>
+            <Status idle>Site bağlantısı kurulmadı: AsilPOS siteye hiç bağlanmaz; menü olduğu gibi kalır, görseller ve online siparişler gelmez</Status>
           )}
         </div>
       </Card>
@@ -249,8 +250,8 @@ export default function IntegrationAdmin() {
                   ? 'Anahtar tanımlı, siparişler imzalı bağlantıyla çekilir'
                   : 'Online sipariş çekimi kapalı: uygulama ve web siparişleri kasaya düşmez'
                 : s.menu.linked
-                  ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'
-                  : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'}
+                  ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız AsilPOS’ta değişir'
+                  : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız AsilPOS’ta değişir'}
             </Status>
             {s.online.configured && (
               <>
@@ -274,7 +275,7 @@ export default function IntegrationAdmin() {
                 )}
                 {s.online.soldOutPush.rejected > 0 && (
                   <Status>
-                    Site {s.online.soldOutPush.rejected} ürünün Satışta bilgisini reddetti; ürün LafPOS’ta açılınca ya da sitede aynı duruma gelince kalkar
+                    Site {s.online.soldOutPush.rejected} ürünün Satışta bilgisini reddetti; ürün AsilPOS’ta açılınca ya da sitede aynı duruma gelince kalkar
                     {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className={DETAIL}>Son hata: {s.online.soldOutPush.lastError}</span>}
                   </Status>
                 )}
@@ -313,7 +314,7 @@ export default function IntegrationAdmin() {
           Kasa bilgisayarının ayarları: site için <code className={CODE}>LAFFOGATO_URL</code> ve <code className={CODE}>LAFFOGATO_SYNC_SECRET</code>, lafmaliyet için <code className={CODE}>LAFMALIYET_URL</code> ve <code className={CODE}>LAFMALIYET_SYNC_SECRET</code> (en az 32 karakter). Adres yoksa o sisteme hiç istek gitmez.
         </p>
         <p>
-          Karaoke rezervasyonları sitede <code className={CODE}>LAFPOS_SYNC_SECRET</code> tanımlıysa ve anahtar aynıysa açılır. Masa QR kodları sitenin <code className={CODE}>PUT /api/panel/tables</code> ucuna gider.
+          Karaoke rezervasyonları sitede <code className={CODE}>{SITE_ANAHTAR_ENV}</code> tanımlıysa ve anahtar aynıysa açılır. Masa QR kodları sitenin <code className={CODE}>PUT /api/panel/tables</code> ucuna gider.
         </p>
         <p>Menü ETag ile sorulur; CDN’deki kopya eskiyince istek sitenin veritabanını uyandırır.</p>
         <p>
@@ -340,7 +341,7 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
     <div className={SECTION}>
       <Status ok={!!k.pulledAt} idle={k.closed || !k.pulledAt} error={!!k.lastError && !k.closed}>
         {k.closed
-          ? 'Site karaoke rezervasyonlarını LafPOS’a açmadı: sitedeki anahtar eksik ya da farklı'
+          ? 'Site karaoke rezervasyonlarını AsilPOS’a açmadı: sitedeki anahtar eksik ya da farklı'
           : k.pulledAt
             ? `Karaoke rezervasyonları: son çekim ${fmtDateTime(k.pulledAt)} · ${k.count} rezervasyon (${k.date})`
             : 'Karaoke rezervasyonları henüz çekilmedi: gün açılınca ya da oda adisyonu açılınca'}
@@ -352,7 +353,7 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
 }
 
 /**
- * ModPOS dönemi (LafPOS'tan önceki günler) lafmaliyet'ten: kaç gün, hangi aralık, son çekim ve hata; elle çekim. Günler
+ * ModPOS dönemi (AsilPOS'tan önceki günler) lafmaliyet'ten: kaç gün, hangi aralık, son çekim ve hata; elle çekim. Günler
  * Raporlar'da ve Uzaktan'da "ModPOS" etiketiyle görünür, iş gününe ve Z'ye girmez. Tutar yazılmaz (yalnız gün sayısı)
  */
 function ModposSection({ m, canSync, run, busy }: { m: ModposStatus; canSync: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
@@ -370,7 +371,7 @@ function ModposSection({ m, canSync, run, busy }: { m: ModposStatus; canSync: bo
             : `lafmaliyet’te bu şubenin ModPOS günü yok; son çekim ${fmtDateTime(m.pulledAt)}`}
         {error && <span className={ERR}>Son deneme: {error}</span>}
       </Status>
-      <p className="text-xs text-muted">LafPOS’tan önceki günler indirim, ödenmez, KDV ve Z numarasıyla Raporlar’da ve Uzaktan’da “ModPOS” etiketiyle görünür; iş gününe ve Z’ye girmez</p>
+      <p className="text-xs text-muted">AsilPOS’tan önceki günler indirim, ödenmez, KDV ve Z numarasıyla Raporlar’da ve Uzaktan’da “ModPOS” etiketiyle görünür; iş gününe ve Z’ye girmez</p>
       <Button size="sm" icon={<CloudDownload className="size-4" />} loading={busy === '/sync/lafmaliyet/modpos/pull'} disabled={!canSync} onClick={() => void run('/sync/lafmaliyet/modpos/pull', 'ModPOS dönemi çekildi')}>
         ModPOS dönemini çek
       </Button>
@@ -459,7 +460,7 @@ function LafmaliyetCard({
               {s.answer && unmatched > 0 && (
                 <Status>
                   lafmaliyet’te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
-                  <span className={DETAIL}>lafmaliyet Ayarlar › LafPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
+                  <span className={DETAIL}>lafmaliyet Ayarlar › AsilPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
                 </Status>
               )}
               {staff && (

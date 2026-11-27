@@ -10,7 +10,7 @@ import { onLive, useLive } from './live';
 import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, StoreCopyReceipt, ZReceipt } from './print';
 import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from './store-copies';
 
-/** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
+/** Bu sekmede basılmış AsilPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
 const once = printOnce();
 
 const DOC_LABEL: Record<string, string> = { okc_fis: 'fiş', bilgi_fisi: 'bilgi fişi', e_arsiv: 'e-Arşiv', e_fatura: 'e-Fatura' };
@@ -32,7 +32,7 @@ export function deviceCopyHere(boot: BootstrapDTO): boolean {
 }
 
 /**
- * LafPOS'ta alınan ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): müşteri nüshası ve
+ * AsilPOS'ta alınan ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): müşteri nüshası ve
  * işyeri nüshası, her biri kendi ayarıyla ve ayrı kâğıt. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey
  * olmaz. `key` her ödeme için tektir (ödeme kimlikleri). Cihaz ödemesinin nüshası ayrı yoldan: `useDeviceCopies`
  */
@@ -176,7 +176,7 @@ export function eodSlipHere(boot: BootstrapDTO): boolean {
 }
 
 /**
- * Banka gün sonunun kayıt kâğıtları: önce LafPOS Z'si (kör kasada yok), sonra banka gün sonu ve Pavo - LafPOS kıyası
+ * Banka gün sonunun kayıt kâğıtları: önce AsilPOS Z'si (kör kasada yok), sonra banka gün sonu ve Pavo - AsilPOS kıyası
  * (Pavo kendi slibini ayrıca basar). Gün sonunda kendiliğinden ve Yönetim › Yazarkasa POS › "Kâğıdı yeniden bas"la
  */
 export function printBankEodSlip(boot: BootstrapDTO, slip: BankEodSlip) {

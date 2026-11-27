@@ -1,7 +1,7 @@
 /**
  * Bulut yedeği (server/sync/yedek.ts): kasa şifreli yedeğini kısa süreli imzalı adrese doğrudan yükler ve oradan
- * indirir; Blob anahtarı (BLOB_READ_WRITE_TOKEN, Vercel › Storage › lafpos-yedek, özel depo) yalnız burada. Kasanın
- * istekleri LAFPOS_CLOUD_SECRET ile imzalı. Yedekler `yedek/<dükkân>/<an>.lpy`; dükkân başına son 30 yedek kalır.
+ * indirir; Blob anahtarı (BLOB_READ_WRITE_TOKEN, Vercel › Storage'daki özel yedek deposu; adı shared/eski-adlar.ts `BLOB_DEPOSU`) yalnız burada. Kasanın
+ * istekleri ASILPOS_CLOUD_SECRET ile imzalı. Yedekler `yedek/<dükkân>/<an>.lpy`; dükkân başına son 30 yedek kalır.
  * Dosyalar kasada şifrelenir (anahtar buraya hiç gelmez): Blob'u açan biri de içeriği okuyamaz.
  */
 import { del, issueSignedToken, list, presignUrl } from '@vercel/blob';

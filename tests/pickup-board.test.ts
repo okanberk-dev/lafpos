@@ -89,7 +89,7 @@ describe('çağrı ekranı', () => {
     expect(order.type).toBe('gelal');
 
     let board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
-    // Müşteri LafPOS numarasını bilmez, platformun kodunu bilir
+    // Müşteri AsilPOS numarasını bilmez, platformun kodunu bilir
     expect(board.preparing.find((e) => e.id === orderId)).toMatchObject({ code: 'K9TX', platform: 'yemeksepeti', name: 'Deniz' });
     // Hazır uyarısı platform bilgisini taşır: paket yetkili her cihazda çalar (kabul eden kafede olmayabilir)
     const { bus } = await import('../server/lib/events');
@@ -110,7 +110,7 @@ describe('çağrı ekranı', () => {
     const past = (await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1')).find((tk) => tk.orderId === orderId)!;
     expect(past.platform).toBe('yemeksepeti');
     expect(historyHandIds(past)).toEqual([]);
-    // Siparişler kartının başlığı self modda da platformun kodu: müşteri LafPOS numarasını bilmez (çağrı ekranı gibi)
+    // Siparişler kartının başlığı self modda da platformun kodu: müşteri AsilPOS numarasını bilmez (çağrı ekranı gibi)
     const card = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
     expect(orderCardName(card, 'self')).toEqual({ name: 'K9TX · Deniz Öztürk', head: 'K9TX' });
     expect(orderCardName(card, 'masa').head).toBe('K9TX');

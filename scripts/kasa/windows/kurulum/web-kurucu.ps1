@@ -1,8 +1,8 @@
-# LafPOS siteden kurulum: LafPOS-Kur.cmd'nin PowerShell gövdesi (Windows PowerShell 5.1). Bu dosya tek başına
+# AsilPOS siteden kurulum: AsilPOS-Kur.cmd'nin PowerShell gövdesi (Windows PowerShell 5.1). Bu dosya tek başına
 # çalışmaz: web-kurucu.mjs onu .cmd başlığının ardına koyar, iki yer tutucunun ($Gomulu ve $Dosyalar) yerine
-# derlemenin değerlerini yazar. Kanal derlemesi (kanal.mjs) çıktıyı dist/web/guncelleme/LafPOS-Kur.cmd'ye yazar.
+# derlemenin değerlerini yazar. Kanal derlemesi (kanal.mjs) çıktıyı dist/web/guncelleme/AsilPOS-Kur.cmd'ye yazar.
 #
-# Ne yapar (lafpos.nsi ile aynı düzen): yönetici izni ister; güncelleme kanalının surum.json'unu okur (okunamazsa
+# Ne yapar (asilpos.nsi ile aynı düzen): yönetici izni ister; güncelleme kanalının surum.json'unu okur (okunamazsa
 # dosyaya gömülü derlemeyi kullanır); Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama
 # yükünü kanaldan indirir ve üçünü de SHA-256 ile doğrular; çalışan sunucuyu durdurur, veritabanının kopyasını alır,
 # Program Files\LafPOS'u kurar, "LafPOS Sunucu" görevini, güvenlik duvarı iznini, kısayolları, güç ayarlarını ve
@@ -14,9 +14,9 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
-try { $Host.UI.RawUI.WindowTitle = 'LafPOS kurulumu' } catch { }
+try { $Host.UI.RawUI.WindowTitle = 'AsilPOS kurulumu' } catch { }
 
-$Kaynak = $env:LAFPOS_KUR
+$Kaynak = $env:ASILPOS_KUR
 $Kanal = @('https://lafpos.laffogato.net/guncelleme/', 'https://lafpos.vercel.app/guncelleme/')
 $Gorev = 'LafPOS Sunucu'
 $Port = 4000
@@ -31,8 +31,9 @@ $KurulumKodu = ''
 $Sys = Join-Path $env:SystemRoot 'System32'
 $ProgramKlasoru = $env:ProgramW6432
 if (-not $ProgramKlasoru) { $ProgramKlasoru = $env:ProgramFiles }
-$Kur = Join-Path $ProgramKlasoru 'LafPOS'
-$Veri = Join-Path $env:ProgramData 'LafPOS'
+# Klasörler ad değişikliğinden (26 Kasım 2026) önceki adla kalır: kurulu kasa, görev ve güncelleyici bunları bilir
+$Kur = Join-Path $ProgramKlasoru 'LafPOS' # eski-ad
+$Veri = Join-Path $env:ProgramData 'LafPOS' # eski-ad
 $Gecici = Join-Path $Kur 'kurulum.gecici'
 $SunucuDurdu = $false
 $GorevVardi = $false
@@ -74,7 +75,7 @@ function SunucuyuGeriAc {
   if ($SunucuDurdu -and $GorevVardi) {
     [void](Calistir (Join-Path $Sys 'schtasks.exe') @('/Change', '/TN', $Gorev, '/ENABLE'))
     [void](Calistir (Join-Path $Sys 'schtasks.exe') @('/Run', '/TN', $Gorev))
-    Write-Host 'Eski LafPOS sunucusu yeniden başlatıldı.' -ForegroundColor Yellow
+    Write-Host 'Eski AsilPOS sunucusu yeniden başlatıldı.' -ForegroundColor Yellow
   }
 }
 
@@ -89,8 +90,8 @@ function Dur([string]$Metin) {
 
 $kimlik = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $kimlik.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  Write-Host 'LafPOS yönetici izniyle kurulur. Windows "değişiklik yapmasına izin verilsin mi" diye soracak: Evet deyin.'
-  if (-not $Kaynak) { Dur 'Kurulum dosyası bulunamadı. LafPOS-Kur.cmd dosyasına çift tıklayarak çalıştırın.' }
+  Write-Host 'AsilPOS yönetici izniyle kurulur. Windows "değişiklik yapmasına izin verilsin mi" diye soracak: Evet deyin.'
+  if (-not $Kaynak) { Dur 'Kurulum dosyası bulunamadı. AsilPOS-Kur.cmd dosyasına çift tıklayarak çalıştırın.' }
   try { Unblock-File -LiteralPath $Kaynak } catch { }
   try {
     Start-Process -FilePath $Kaynak -Verb RunAs | Out-Null
@@ -100,15 +101,15 @@ if (-not $kimlik.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator
   exit 0
 }
 
-Write-Host 'LafPOS kurulumu' -ForegroundColor Green
+Write-Host 'AsilPOS kurulumu' -ForegroundColor Green
 Write-Host 'Program indirilip doğrulanacak ve bu bilgisayara kurulacak. İnternet hızına göre birkaç dakika sürer.'
 Write-Host 'Verileriniz ve ayarlarınız (C:\ProgramData\LafPOS) korunur.'
 
 if ((-not [Environment]::Is64BitOperatingSystem) -or ([Environment]::OSVersion.Version.Major -lt 10)) {
-  Dur 'LafPOS 64 bit Windows 10 ya da 11 ister.'
+  Dur 'AsilPOS 64 bit Windows 10 ya da 11 ister.'
 }
 if (-not [Environment]::Is64BitProcess) {
-  Dur 'Kurulum 64 bit PowerShell ister. LafPOS-Kur.cmd dosyasına Gezgin''den çift tıklayarak çalıştırın.'
+  Dur 'Kurulum 64 bit PowerShell ister. AsilPOS-Kur.cmd dosyasına Gezgin''den çift tıklayarak çalıştırın.'
 }
 $Tar = Join-Path $Sys 'tar.exe'
 if (-not (Test-Path -LiteralPath $Tar)) { Dur 'Windows güncel değil (tar.exe yok). Windows Update ile güncelleyip yeniden deneyin.' }
@@ -158,7 +159,7 @@ if ($null -eq $Surum) {
   $Surum = $Gomulu.Clone()
   $Surum.taban = $Kanal[0]
 }
-Write-Host ('  LafPOS ' + $Surum.version + ' (derleme ' + $Surum.build + ')')
+Write-Host ('  AsilPOS ' + $Surum.version + ' (derleme ' + $Surum.build + ')')
 
 # ─── İndir ve doğrula ────────────────────────────────────────────────────────
 
@@ -187,21 +188,21 @@ try {
   $indirilen = Join-Path $Gecici 'indirilen'
   New-Item -ItemType Directory -Path $indirilen | Out-Null
 
-  Adim 'İndiriliyor (Node, veritabanı modülü, LafPOS)'
+  Adim 'İndiriliyor (Node, veritabanı modülü, AsilPOS)'
   $nodeZip = Join-Path $indirilen ('node-v' + $Surum.nodeVersion + '-win-x64.zip')
   Indir ('https://nodejs.org/dist/v' + $Surum.nodeVersion + '/node-v' + $Surum.nodeVersion + '-win-x64.zip') $nodeZip $Surum.nodeSha ('Node ' + $Surum.nodeVersion)
   $sqliteAd = 'better-sqlite3-v' + $Surum.sqliteVersion + '-node-v' + $Surum.nodeAbi + '-win32-x64.tar.gz'
   $sqliteTgz = Join-Path $indirilen $sqliteAd
   Indir ('https://github.com/WiseLibs/better-sqlite3/releases/download/v' + $Surum.sqliteVersion + '/' + $sqliteAd) $sqliteTgz $Surum.sqliteSha ('better-sqlite3 ' + $Surum.sqliteVersion)
   $appZip = Join-Path $indirilen $Surum.appFile
-  Indir ($Surum.taban + $Surum.appFile) $appZip $Surum.appSha ('LafPOS ' + $Surum.version)
-  if ((Get-Item -LiteralPath $appZip).Length -ne $Surum.appSize) { throw 'LafPOS yükünün boyu surum.json''dakiyle aynı değil' }
+  Indir ($Surum.taban + $Surum.appFile) $appZip $Surum.appSha ('AsilPOS ' + $Surum.version)
+  if ((Get-Item -LiteralPath $appZip).Length -ne $Surum.appSize) { throw 'AsilPOS yükünün boyu surum.json''dakiyle aynı değil' }
 
   Adim 'Dosyalar hazırlanıyor'
   $yeniApp = Join-Path $Gecici 'app'
   [IO.Compression.ZipFile]::ExtractToDirectory($appZip, $yeniApp)
   $paket = Get-Content -LiteralPath (Join-Path $yeniApp 'package.json') -Raw | ConvertFrom-Json
-  if ([string]$paket.build -ne $Surum.build) { throw 'LafPOS yükünün derleme numarası beklenenle aynı değil' }
+  if ([string]$paket.build -ne $Surum.build) { throw 'AsilPOS yükünün derleme numarası beklenenle aynı değil' }
   $sqliteKlasoru = Join-Path $yeniApp 'node_modules\better-sqlite3'
   if ((Calistir $Tar @('-xzf', $sqliteTgz, '-C', $sqliteKlasoru)) -ne 0) { throw 'better-sqlite3 açılamadı' }
   if (-not (Test-Path -LiteralPath (Join-Path $sqliteKlasoru 'build\Release\better_sqlite3.node'))) { throw 'better-sqlite3 ikilisi pakette yok' }
@@ -234,7 +235,7 @@ try {
   $gun = Invoke-RestMethod -UseBasicParsing -Uri ('http://127.0.0.1:' + $Port + '/api/kasa/guncelleme-durumu') -TimeoutSec 5
   if ($gun.dayOpen -eq $true) {
     Write-Host ''
-    Write-Host 'Kasada gün açık. Kurulum sırasında LafPOS bir dakika kadar kapanır, tabletler o sırada bağlanamaz.' -ForegroundColor Yellow
+    Write-Host 'Kasada gün açık. Kurulum sırasında AsilPOS bir dakika kadar kapanır, tabletler o sırada bağlanamaz.' -ForegroundColor Yellow
     $cevap = Read-Host 'Yine de şimdi kurulsun mu? (E/H)'
     if ($cevap -notmatch '^\s*[eEyY]') {
       Sil $Gecici
@@ -248,7 +249,7 @@ try {
 # ─── Kur ─────────────────────────────────────────────────────────────────────
 
 try {
-  Adim 'Çalışan LafPOS sunucusu durduruluyor'
+  Adim 'Çalışan AsilPOS sunucusu durduruluyor'
   $schtasks = Join-Path $Sys 'schtasks.exe'
   $GorevVardi = ((Calistir $schtasks @('/Query', '/TN', $Gorev)) -eq 0)
   if ($GorevVardi) {
@@ -273,7 +274,7 @@ try {
     Write-Host ('  Veritabanının kopyası: ' + $yedek)
   }
 
-  Adim 'LafPOS kuruluyor'
+  Adim 'AsilPOS kuruluyor'
   # Otomatik güncellemenin bıraktığı klasörler kalmasın; node.yeni kalırsa başlatıcı onu Node'un yerine koyardı
   foreach ($k in @('app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni')) { Sil (Join-Path $Kur $k) }
   $app = Join-Path $Kur 'app'
@@ -310,12 +311,12 @@ try {
   }
 
   Adim 'Sunucu görevi, güvenlik duvarı ve kısayollar'
-  # Görev lafpos.nsi'dekiyle aynı: açılışta SYSTEM olarak, süre sınırı yok, pilde de çalışır, beş dakikada bir güvence
+  # Görev asilpos.nsi'dekiyle aynı: açılışta SYSTEM olarak, süre sınırı yok, pilde de çalışır, beş dakikada bir güvence
   $baslat = Join-Path $Kur 'baslat.cmd'
   $xml = @(
     '<?xml version="1.0" encoding="UTF-16"?>'
     '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">'
-    '  <RegistrationInfo><Description>LafPOS yerel sunucusu: kasa, tablet ve telefonlar buna bağlanır</Description></RegistrationInfo>'
+    '  <RegistrationInfo><Description>AsilPOS yerel sunucusu: kasa, tablet ve telefonlar buna bağlanır</Description></RegistrationInfo>'
     '  <Triggers>'
     '    <BootTrigger><Enabled>true</Enabled></BootTrigger>'
     '    <TimeTrigger><Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><StartBoundary>2026-01-01T00:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger>'
@@ -345,7 +346,7 @@ try {
     '  </Exec></Actions>'
     '</Task>'
   ) -join "`r`n"
-  $xmlYol = Join-Path $env:TEMP 'lafpos-gorev.xml'
+  $xmlYol = Join-Path $env:TEMP 'asilpos-gorev.xml'
   [IO.File]::WriteAllText($xmlYol, $xml, [Text.Encoding]::Unicode)
   $kod = Calistir $schtasks @('/Create', '/TN', $Gorev, '/XML', $xmlYol, '/RU', 'SYSTEM', '/F')
   Remove-Item -LiteralPath $xmlYol -Force
@@ -362,7 +363,7 @@ try {
   }
 
   # Kısayollar: Başlat menüsü (herkese), masaüstü, oturum açılınca kasa ekranı
-  $ikon = (Join-Path $Kur 'lafpos.ico') + ',0'
+  $ikon = (Join-Path $Kur 'asilpos.ico') + ',0'
   $kabukNesnesi = New-Object -ComObject WScript.Shell
   function Kisayol([string]$Yol, [string]$Hedef, [string]$Arguman, [string]$Aciklama, [int]$Pencere) {
     $k = $kabukNesnesi.CreateShortcut($Yol)
@@ -374,35 +375,49 @@ try {
     $k.Description = $Aciklama
     $k.Save()
   }
-  $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'LafPOS'
+  $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'AsilPOS'
   $masaustu = [Environment]::GetFolderPath('CommonDesktopDirectory')
   $baslangic = [Environment]::GetFolderPath('CommonStartup')
   Sil $menu
+  # Ad değişikliğinden (26 Kasım 2026) önceki kurulumun Başlat menüsü ve kısayolları (yenileri aşağıda yazılır)
+  $EskiAd = 'LafPOS' # eski-ad: shared/eski-adlar.ts
+  Sil (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $EskiAd)
+  foreach ($eski in @((Join-Path $masaustu ($EskiAd + ' Kasa.lnk')), (Join-Path $baslangic ($EskiAd + ' Kasa.lnk')), (Join-Path $baslangic ($EskiAd + ' Kasa Bekcisi.lnk')))) {
+    Remove-Item -LiteralPath $eski -Force -ErrorAction SilentlyContinue
+  }
   New-Item -ItemType Directory -Path $menu | Out-Null
-  $kasa = Join-Path $Kur 'LafPOS-Kasa.bat'
+  $kasa = Join-Path $Kur 'AsilPOS-Kasa.bat'
   $ps = Join-Path $Sys 'WindowsPowerShell\v1.0\powershell.exe'
   $yonet = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'yonet.ps1') + '" '
-  Kisayol (Join-Path $menu 'LafPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
-  Kisayol (Join-Path $menu 'LafPOS ayarları.lnk') $ps ($yonet + 'ayarlar') 'Site, lafmaliyet ve yazarkasa ayarları' 7
+  Kisayol (Join-Path $menu 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
+  Kisayol (Join-Path $menu 'AsilPOS ayarları.lnk') $ps ($yonet + 'ayarlar') 'Site, lafmaliyet ve yazarkasa ayarları' 7
   Kisayol (Join-Path $menu 'Sunucuyu yeniden başlat.lnk') $ps ($yonet + 'yeniden-baslat') '' 7
   Kisayol (Join-Path $menu 'Sunucu günlüğü.lnk') $ps ($yonet + 'gunluk') '' 7
   Kisayol (Join-Path $menu 'Kasa hazırlığı.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-hazirla.ps1') + '"') 'Ekran, Windows Update, ağ kartı, otomatik oturum' 7
   Kisayol (Join-Path $menu 'Kurulum notları.lnk') (Join-Path $Kur 'BENIOKU.txt') '' '' 1
   $kaldirExe = Join-Path $Kur 'Kaldir.exe'
   $kaldirPs = Join-Path $Kur 'LafPOS-Kaldir.ps1'
-  if (Test-Path -LiteralPath $kaldirExe) {
-    Kisayol (Join-Path $menu 'LafPOS''u kaldır.lnk') $kaldirExe '' '' 1
+  $anahtar = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS'
+  # Kurulum dosyasının Kaldir.exe'si yalnız kayıtta görünen ad AsilPOS ise yenidir. Ad değişikliğinden önceki Kaldir.exe
+  # yeni adlı kısayolları bilmez (kaldırınca Başlangıç'taki kasa kısayolu kalır): silinir, kaldırma bu kurulumun
+  # kaldırıcısına geçer (kurulum-yenile.mjs ile aynı kural)
+  $gorunenAd = $null
+  try { $gorunenAd = [string](Get-ItemProperty -LiteralPath $anahtar -ErrorAction Stop).DisplayName } catch { }
+  $kaldirExeYeni = (Test-Path -LiteralPath $kaldirExe) -and ($gorunenAd -eq 'AsilPOS')
+  if ((Test-Path -LiteralPath $kaldirExe) -and -not $kaldirExeYeni) { Remove-Item -LiteralPath $kaldirExe -Force -ErrorAction SilentlyContinue }
+  if ($kaldirExeYeni) {
+    Kisayol (Join-Path $menu 'AsilPOS''u kaldır.lnk') $kaldirExe '' '' 1
     $kaldirKomutu = '"' + $kaldirExe + '"'
   } else {
-    Kisayol (Join-Path $menu 'LafPOS''u kaldır.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $kaldirPs + '"') '' 1
+    Kisayol (Join-Path $menu 'AsilPOS''u kaldır.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $kaldirPs + '"') '' 1
     $kaldirKomutu = '"' + $ps + '" -NoProfile -ExecutionPolicy Bypass -File "' + $kaldirPs + '"'
   }
-  $url = @('[InternetShortcut]', ('URL=http://localhost:' + $Port + '/'), ('IconFile=' + (Join-Path $Kur 'lafpos.ico')), 'IconIndex=0')
-  Set-Content -LiteralPath (Join-Path $menu 'LafPOS (tarayıcıda).url') -Value $url -Encoding ASCII
-  Kisayol (Join-Path $masaustu 'LafPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
-  Kisayol (Join-Path $baslangic 'LafPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
+  $url = @('[InternetShortcut]', ('URL=http://localhost:' + $Port + '/'), ('IconFile=' + (Join-Path $Kur 'asilpos.ico')), 'IconIndex=0')
+  Set-Content -LiteralPath (Join-Path $menu 'AsilPOS (tarayıcıda).url') -Value $url -Encoding ASCII
+  Kisayol (Join-Path $masaustu 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
+  Kisayol (Join-Path $baslangic 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
   # Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
-  Kisayol (Join-Path $baslangic 'LafPOS Kasa Bekcisi.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-yazici.ps1') + '" -Bekci -BekciSurum 4') 'Kasa ve müşteri ekranı açık kalsın' 7
+  Kisayol (Join-Path $baslangic 'AsilPOS Kasa Bekcisi.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-yazici.ps1') + '" -Bekci -BekciSurum 4') 'Kasa ve müşteri ekranı açık kalsın' 7
 
   # Prizdeyken uyku kapalı: uyuyan bilgisayara tabletler bağlanamaz; USB aygıtları (yazıcı, dokunmatik) askıya alınmaz
   $powercfg = Join-Path $Sys 'powercfg.exe'
@@ -412,20 +427,21 @@ try {
   [void](Calistir $powercfg @('/setactive', 'SCHEME_CURRENT'))
 
   # Uygulamalar listesi: kurulum dosyasıyla (32 bit NSIS) aynı kayıt
-  $anahtar = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS'
   if (-not (Test-Path -LiteralPath $anahtar)) { New-Item -Path $anahtar | Out-Null }
   $boyut = [int]((Get-ChildItem -LiteralPath $Kur -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1024)
-  Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayName' -Value 'LafPOS'
+  Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayName' -Value 'AsilPOS'
   Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayVersion' -Value $Surum.version
   Set-ItemProperty -LiteralPath $anahtar -Name 'Publisher' -Value 'L''Affogato'
-  Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayIcon' -Value (Join-Path $Kur 'lafpos.ico')
+  Set-ItemProperty -LiteralPath $anahtar -Name 'DisplayIcon' -Value (Join-Path $Kur 'asilpos.ico')
   Set-ItemProperty -LiteralPath $anahtar -Name 'InstallLocation' -Value $Kur
   Set-ItemProperty -LiteralPath $anahtar -Name 'UninstallString' -Value $kaldirKomutu
+  # Kurulum dosyasının sessiz kaldırma satırı yalnız onun Kaldir.exe'si için (PowerShell kaldırıcısı soru sorar)
+  if (-not $kaldirExeYeni) { Remove-ItemProperty -LiteralPath $anahtar -Name 'QuietUninstallString' -ErrorAction SilentlyContinue }
   New-ItemProperty -LiteralPath $anahtar -Name 'NoModify' -Value 1 -PropertyType DWord -Force | Out-Null
   New-ItemProperty -LiteralPath $anahtar -Name 'NoRepair' -Value 1 -PropertyType DWord -Force | Out-Null
   New-ItemProperty -LiteralPath $anahtar -Name 'EstimatedSize' -Value $boyut -PropertyType DWord -Force | Out-Null
 
-  Adim 'LafPOS sunucusu başlatılıyor'
+  Adim 'AsilPOS sunucusu başlatılıyor'
   [void](Calistir $schtasks @('/Run', '/TN', $Gorev))
   $SunucuDurdu = $false
 } catch {
@@ -445,15 +461,15 @@ for ($i = 0; $i -lt 90; $i++) {
 
 Write-Host ''
 if ($acildi) {
-  Write-Host ('LafPOS ' + $Surum.version + ' kuruldu ve çalışıyor.') -ForegroundColor Green
-  Write-Host 'Kasa ekranı masaüstündeki "LafPOS Kasa" kısayoluyla açılır; şimdi açılıyor.'
-  Write-Host 'Ayarlar: Başlat > LafPOS > LafPOS ayarları. Tabletler için adres ve karekod: Yönetim > Ağ ve uzaktan erişim.'
+  Write-Host ('AsilPOS ' + $Surum.version + ' kuruldu ve çalışıyor.') -ForegroundColor Green
+  Write-Host 'Kasa ekranı masaüstündeki "AsilPOS Kasa" kısayoluyla açılır; şimdi açılıyor.'
+  Write-Host 'Ayarlar: Başlat > AsilPOS > AsilPOS ayarları. Tabletler için adres ve karekod: Yönetim > Ağ ve uzaktan erişim.'
   # Kurulum yönetici olarak çalışır; kasa ekranı Gezgin üzerinden normal kullanıcı olarak açılır
-  try { Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('"' + (Join-Path $menu 'LafPOS Kasa.lnk') + '"') } catch { }
+  try { Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('"' + (Join-Path $menu 'AsilPOS Kasa.lnk') + '"') } catch { }
 } else {
-  Write-Host 'LafPOS kuruldu ama sunucu 90 saniyede açılmadı.' -ForegroundColor Yellow
-  Write-Host 'Bir dakika sonra masaüstündeki "LafPOS Kasa"yı açın. Açılmazsa bilgisayarı yeniden başlatın;'
-  Write-Host 'sunucu günlüğü: Başlat > LafPOS > Sunucu günlüğü.'
+  Write-Host 'AsilPOS kuruldu ama sunucu 90 saniyede açılmadı.' -ForegroundColor Yellow
+  Write-Host 'Bir dakika sonra masaüstündeki "AsilPOS Kasa"yı açın. Açılmazsa bilgisayarı yeniden başlatın;'
+  Write-Host 'sunucu günlüğü: Başlat > AsilPOS > Sunucu günlüğü.'
 }
 Bekle
 exit 0

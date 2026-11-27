@@ -1,6 +1,6 @@
-# Uzaktan erişim: LafPOS'a kafenin dışından canlı bakmak
+# Uzaktan erişim: AsilPOS'a kafenin dışından canlı bakmak
 
-LafPOS'un sunucusu kafedeki kasa bilgisayarında çalışır (`docs/05-KASA-BILGISAYARI.md`). Kafenin Wi-Fi'ındaki
+AsilPOS'un sunucusu kafedeki kasa bilgisayarında çalışır (`docs/05-KASA-BILGISAYARI.md`). Kafenin Wi-Fi'ındaki
 tabletler ona yerel adresle bağlanır. Patron evden ya da yoldan aynı ekranları **Tailscale** ile açar: masalar,
 adisyonlar, bar ekranı, kasa, raporlar, patron paneli ve yönetim, kafedeki ekranlarla aynı anda güncellenir
 (sunucu olayları anlık iletir). Uzaktan yapılan her işlem kafedeki gibi PIN ve yetkiyle olur, denetim
@@ -11,8 +11,8 @@ kaydına düşer.
 | Yol | Durum |
 |---|---|
 | **Tailscale** (önerilen) | Kasa bilgisayarı ve telefon aynı özel ağa girer; bağlantı uçtan uca şifreli, yalnız sizin hesabınızdaki cihazlar görür. Modemde ayar yok, sabit IP gerekmez. Kişisel kullanım ücretsiz |
-| Modemden port açmak | **Yapmayın.** LafPOS internete açılır, PIN'i tahmin etmeye çalışan herkes kapıya gelir |
-| Bulut sunucusu | Kafede internet kesilince kasa durur; LafPOS bilerek yerelde çalışır (`docs/06-TEK-SISTEM.md`) |
+| Modemden port açmak | **Yapmayın.** AsilPOS internete açılır, PIN'i tahmin etmeye çalışan herkes kapıya gelir |
+| Bulut sunucusu | Kafede internet kesilince kasa durur; AsilPOS bilerek yerelde çalışır (`docs/06-TEK-SISTEM.md`) |
 
 Gün sonu rakamları lafmaliyet'e zaten gider (`docs/03-ENTEGRASYON.md`); Tailscale anlık ekranlar ve uzaktan
 işlem içindir.
@@ -23,12 +23,12 @@ işlem içindir.
    Apple hesabınızla girin. Saat yanındaki Tailscale simgesinden **Preferences › Run unattended**'ı açın:
    Windows'a kimse girmeden de (elektrik kesintisinden sonra) bağlı kalır.
 2. **Telefon:** App Store ya da Google Play'den Tailscale'i kurun, **aynı hesapla** girin.
-3. Kafede LafPOS'ta **Yönetim › Ağ ve uzaktan erişim**'i açın. "Dışarıdan (Tailscale)" kartında "Bağlı"
+3. Kafede AsilPOS'ta **Yönetim › Ağ ve uzaktan erişim**'i açın. "Dışarıdan (Tailscale)" kartında "Bağlı"
    yazar; adres `http://100.x.y.z:4000` ve karekodu oradadır.
 4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. Tarayıcı menüsünden
    "Ana ekrana ekle" ile uygulama gibi açılır.
 
-LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kafenin ağına ve Tailscale aralığına
+AsilPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kafenin ağına ve Tailscale aralığına
 (`100.64.0.0/10`) açar; başka ayar gerekmez. Git ile kurulan bilgisayarda Windows ilk açılışta izin sorar:
 "Özel ağlar"ı işaretleyin.
 
@@ -36,17 +36,17 @@ LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kaf
 
 - **Adres değişmez:** Tailscale cihaza sabit bir `100.x` adresi verir. Tailscale'de MagicDNS açıksa
   bilgisayarın adıyla da açılır (`http://<bilgisayar-adı>:4000`).
-- **HTTPS (isteğe bağlı):** kasa bilgisayarında yönetici komut isteminde `tailscale serve --bg 4000` LafPOS'u
+- **HTTPS (isteğe bağlı):** kasa bilgisayarında yönetici komut isteminde `tailscale serve --bg 4000` AsilPOS'u
   `https://<bilgisayar-adı>.<tailnet>.ts.net` adresinde geçerli sertifikayla sunar. Tarayıcı bu adreste ekran
   kilidini ve panoyu da açar. Bu yolda bütün uzak istekler sunucuya bilgisayarın kendisinden gelmiş görünür:
   PIN deneme sınırı uzaktaki cihazları birbirinden ayıramaz, adres yine yalnız sizin Tailscale ağınıza açıktır.
   Kapatmak: `tailscale serve reset`.
-- **Funnel kullanmayın:** `tailscale funnel` LafPOS'u herkese açık internete çıkarır.
+- **Funnel kullanmayın:** `tailscale funnel` AsilPOS'u herkese açık internete çıkarır.
 - **Personel telefonları** uzaktan erişime gerek duymaz; kafede yerel adresle bağlanır. Tailscale hesabına
   yalnız patron ve yönetici cihazlarını ekleyin.
-- **Bağlantı kopunca** ekranın üstündeki durum noktası kırmızıya döner, LafPOS kendini yeniden bağlar.
+- **Bağlantı kopunca** ekranın üstündeki durum noktası kırmızıya döner, AsilPOS kendini yeniden bağlar.
 
-## 4. LafPOS Uzaktan (Vercel): kurulumsuz, salt okunur
+## 4. AsilPOS Uzaktan (Vercel): kurulumsuz, salt okunur
 
 Telefona uygulama kurmadan, herhangi bir tarayıcıdan: `https://lafpos.vercel.app`, patron parolasıyla. Patron
 paneli, masalar, açık adisyonların kalemleri, bar kuyruğu ve Raporlar (aşağıda); işlem yapılmaz (iptal, ödeme, Tükendi kafedeki kasadan
@@ -106,7 +106,7 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 - **İnternet yokken** itme gidemez; özet kaybolmaz, bir sonraki itme son hâli taşır. İnternet gelince bekleyenlerle
   birlikte hemen bir kez itilir (`server/sync/catch-up.ts`, `docs/05-KASA-BILGISAYARI.md` §6 "İnternet yokken").
   Kafede durum alanı "İnternet yok · N kayıt bekliyor", sonra "Bekleyenler gönderildi"; son başarılı itme Yönetim ›
-  Genel bakış › Sistem sağlığı › LafPOS Uzaktan'da.
+  Genel bakış › Sistem sağlığı › AsilPOS Uzaktan'da.
 - **Anlık ciro (patron paneli):** bugünün cirosu, adisyon sayısı ve ortalaması, açık masaların tahsil edilecek
   tutarı, ödeme türleri, yazarkasadan geçmeyen kart ve nakit (Gün içi; kör kasa kuralıyla, `docs/04-YAZARKASA.md`
   §4.2), geçen haftanın aynı günüyle "bu saate kadar" kıyas ve saat saat grafik (bugün ve geçen
@@ -121,7 +121,7 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   gün; "22 Ekim Perşembe" gibi tarih ve gün adı yazılı). Her satır tutar, adisyon, fark (₺, işaretli) ve değişim
   (ok, işaret, yüzde; renk tek başına değil). Gün sürerken kıyas o günün **aynı saatine kadar** (gün başından, 05:00,
   aynı dakikaya kadar kapanan adisyonlar), küçük satırda o günün gün sonu toplamı; gün kapanınca tam gün; gün henüz
-  açılmadıysa kıyas günlerinin gün sonu, yüzdesiz. O tarihte iş günü yoksa (kafe kapalıydı, LafPOS'a geçişten önce)
+  açılmadıysa kıyas günlerinin gün sonu, yüzdesiz. O tarihte iş günü yoksa (kafe kapalıydı, AsilPOS'a geçişten önce)
   "Veri yok" yazar, ₺0 değil; geçen ayda o gün yoksa (31 Ekim → Eylül) "Eylül ayında 31 yok". Altında **Gün boyu
   ciro** (bugün ve geçen hafta aynı gün birikimli, üst üste; dokununca ya da oklarla saatin iki değeri, ekran okuyucuya
   tablo), **Hafta ve ay** (hafta Pazartesi'den, ay 1'inden bugüne; önceki hafta ya da ayın aynı gün sayısıyla, aynı
@@ -168,12 +168,12 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     bugünkü kategori haritasını taşır); gün aşırı ödeme (adisyon başka günde) dönemin içine düşüyorsa kapanmışların
     ödemesi ve adisyonun ödeme türü sayılır (`xpay`). Yalnız lafmaliyet aktarımı kafede. Kasadakiyle eşitlik
     `tests/uzaktan-raporlar.test.ts`.
-  - **Yeniden gönder:** Redis silinir ya da eksik kalırsa Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan ›
+  - **Yeniden gönder:** Redis silinir ya da eksik kalırsa Yönetim › Ağ ve uzaktan erişim › AsilPOS Uzaktan ›
     "Raporları yeniden gönder" gönderim geçmişini sıfırlar; tarama 400 günü yaklaşık bir saatte yeniden iter.
   - **Silinen günler:** "Denemeyi bitir" ve "Geçişi tamamla" (`server/services/deneme.ts`) kasada sildiği günlerin
     tarihlerini silmeyle aynı işlemde yazar (`sync_state` `cloud.reports.silinen`). Sıradaki canlı bakışta (en geç 5 dk)
     o tarihlere satışsız gün raporu (`n: 0`, ek verisiz) gider: bulut eski deneme raporunun ve ek verisinin üstüne yazar,
-    Uzaktan o günü gün listesine ve toplamlara katmaz. API değişmedi. O tarihte LafPOS günü kaldıysa (deneme günüyle aynı
+    Uzaktan o günü gün listesine ve toplamlara katmaz. API değişmedi. O tarihte AsilPOS günü kaldıysa (deneme günüyle aynı
     tarihte gerçek gün) ya da geçmiş ciro (ModPOS) günü varsa boş gün gitmez, aynı bakışta o günün raporu gider (deneme
     satışı çıkmış hâliyle; günlük taramayı beklemez). Gidemeyen tarih
     listede kalır; "Raporları yeniden gönder" listeyi silmez. Daha önce gönderilmiş ama kasada artık hiçbir şeyi olmayan
@@ -184,11 +184,11 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
   kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
   `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.
-- **Üyelik (e-posta ve parola):** Vercel'de `LAFPOS_UYE_EPOSTA` (virgülle birden çok e-posta) tanımlıysa giriş e-posta
-  ve parolayla çalışır ve gerçek veri yalnız üyeye açılır; parolasız görünüm ve `LAFPOS_UZAKTAN_PAROLA` o zaman
+- **Üyelik (e-posta ve parola):** Vercel'de `ASILPOS_UYE_EPOSTA` (virgülle birden çok e-posta) tanımlıysa giriş e-posta
+  ve parolayla çalışır ve gerçek veri yalnız üyeye açılır; parolasız görünüm ve `ASILPOS_UZAKTAN_PAROLA` o zaman
   kullanılmaz. Parola hiçbir ortam değişkeninde ya da dosyada durmaz: üye ilk girişte ("Üyeliği oluştur") kendisi
   belirler, Redis'te yalnız scrypt özeti (`lafpos:uye:<e-posta>`) saklanır. İlk girişte davet kodu istenir
-  (`LAFPOS_UYE_DAVET`, gizli, en az 8; büyük-küçük harf, boşluk ve tire fark etmez): e-postayı bilen başkası üyeliği
+  (`ASILPOS_UYE_DAVET`, gizli, en az 8; büyük-küçük harf, boşluk ve tire fark etmez): e-postayı bilen başkası üyeliği
   sahipten önce açamaz; kod tanımlı değilse üyelik açılmaz. Üyelik bir kez açılır (sonraki deneme 409); parolayı
   sıfırlamak için Upstash'te o anahtar silinir, üye giriş ekranında "İlk kez mi giriyorsunuz? Üyeliği oluştur"a
   basıp davet koduyla yeniden oluşturur (başka üye varken de). Oturum 30 gün; imzaya parola
@@ -201,15 +201,15 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 - **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir; girişten sonra menüde **İndir**
   (`/indir`, yalnız Uzaktan derlemesinde). Kafeden veri gelmemişken üye girişten sonra doğrudan kabuksuz İndir'i görür;
   sayfa yarım dakikada bir `/api/uzaktan/durum`'a bakar, kafe bağlanınca canlı görünüm kendiliğinden açılır.
-  Sayfa kanalın yanındaki anahtarsız web kurucusuna bağlanır: `/guncelleme/LafPOS-Kur.cmd` (`npm run kanal`
+  Sayfa kanalın yanındaki anahtarsız web kurucusuna bağlanır: `/guncelleme/AsilPOS-Kur.cmd` (`npm run kanal`
   yazar, `scripts/kasa/windows/kurulum/web-kurucu.mjs`; `vercel.json` onu indirme olarak sunar). Dosya herkese
   açıktır ama gizli bir şey taşımaz (`tests/web-kurucu.test.ts`); bağlantı yalnız oturumda görünür. Kurucu cmd ve
   PowerShell 5.1 iki dilli tek dosyadır: yönetici izni ister, kanalın surum.json'unu okur (okunamazsa içine gömülü
   derlemeyi kullanır), Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama yükünü
-  kanaldan SHA-256 ile doğrulayarak indirir, `lafpos.nsi` ile aynı klasörleri, görevi, güvenlik duvarını,
+  kanaldan SHA-256 ile doğrulayarak indirir, `asilpos.nsi` ile aynı klasörleri, görevi, güvenlik duvarını,
   kısayolları ve Uygulamalar kaydını yazar. Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa
   sorar, önce veritabanının kopyasını alır). Kurulum dosyasının Kaldir.exe'si yoksa kaldırma
-  `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (LafPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
+  `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (AsilPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
   Vercel NSIS derleyemez.
 
 - **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
@@ -218,9 +218,9 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   `remote_admin` (oturum düşmez), kafe bağlanmadan örnek satır salt okunur.
   - **Kayıt:** kasa ilk açılışta gizli anahtar üretir, kurulum kimliği anahtarın özetidir (sha256'nın ilk 24'ü;
     `sync_state` `merkez.kimlik`, deneme bitirme silmez): kimliği gören başkası onu kendi anahtarıyla kaydedemez.
-    Merkez adresi `LAFPOS_MERKEZ_URL`, yoksa `LAFPOS_CLOUD_URL`; `LAFPOS_MERKEZ_URL=0` kapatır, `LAFPOS_CLOUD_SECRET`
+    Merkez adresi `ASILPOS_MERKEZ_URL`, yoksa `ASILPOS_CLOUD_URL`; `ASILPOS_MERKEZ_URL=0` kapatır, `ASILPOS_CLOUD_SECRET`
     yoksa da kapalıdır. İnternete ilk çıktığında `POST /api/merkez/kayit`, kafenin ortak anahtarıyla
-    (`LAFPOS_CLOUD_SECRET`) imzalı: dışarıdan kimse kurulum açamaz; aynı kimliğe başka anahtar 409 (kasa o zaman yeni
+    (`ASILPOS_CLOUD_SECRET`) imzalı: dışarıdan kimse kurulum açamaz; aynı kimliğe başka anahtar 409 (kasa o zaman yeni
     kimlik üretir), IP başına saatte 10 kayıt, onay bekleyen en çok 50 (429). Merkez'de "Onay bekliyor". Sonra 5
     dakikada bir `POST /api/merkez/nabiz`, kurulumun kendi anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
     sürüm, güncelleme durumu, gün açık mı. Nabız yalnız kendi alanlarını ayrı anahtara yazar
@@ -239,7 +239,7 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     çok uyarıdır ("kasa Merkez'e ulaşamıyor, satış sürüyor"). Böylece sahibin uzattığı lisansı henüz alamamış kasa
     durmaz; bedeli, internetten kopan kasanın kapanmamasıdır. Panel aynı kuralı kasanın son görülmesiyle hesaplar
     (`shared/lisans.ts` `licenseState` `confirmedAt`). **Lisans zorlayıcı değildir:** Merkez adresi yoksa
-    (`LAFPOS_MERKEZ_URL=0`, `LAFPOS_CLOUD_URL` ya da `LAFPOS_CLOUD_SECRET` tanımsız) lisans uygulanmaz; kasanın
+    (`ASILPOS_MERKEZ_URL=0`, `ASILPOS_CLOUD_URL` ya da `ASILPOS_CLOUD_SECRET` tanımsız) lisans uygulanmaz; kasanın
     ayarlar.env'ine erişen kişi kapatabilir. Durum Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de (lisans, son
     günü, şube kodu).
   - **Şube kodu:** sahip dükkânın ayarlarında verir ("TZL"; büyük harf, rakam ve tire, en çok 12). Nabzın yanıtıyla
@@ -295,13 +295,13 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 
 | Nerede | Ne |
 |---|---|
-| Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
-| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `LAFPOS_UYE_EPOSTA` ve gizli `LAFPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
-| Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
-| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
-| Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › `lafpos` projesi › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
+| Vercel › `lafpos` projesi › Environment Variables | Ad değişikliğinden önce girilen `LAFPOS_*` adları da okunur (aynı ayar iki adla girilirse `ASILPOS_*` geçer). `ASILPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `ASILPOS_UYE_EPOSTA` ve gizli `ASILPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `ASILPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `ASILPOS_UZAKTAN_PAROLA` (en az 10) |
+| Kafede `ayarlar.env` / `.env` | `ASILPOS_CLOUD_URL=https://lafpos.vercel.app`, `ASILPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
+| Vercel › `lafpos` projesi › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
+| Vercel › `lafpos` projesi › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `ASILPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
-**İlk etapta parolasız** (27 Ekim 2026 kararı): `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
+**İlk etapta parolasız** (27 Ekim 2026 kararı): `ASILPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
 sormaz; bağlantıyı bilen herkes gerçek ciroyu ve personel adlarını salt okunur görür. Gerçek kullanıma geçmeden
 parolayı açın.
 
@@ -312,13 +312,14 @@ yerelde `npm run build` ile denenir.
 Neden kasa Neon'a taşınmadı: kasa internet kesilince de çalışmalı; Neon'un ücretsiz planındaki aylık işlem süresi
 açık saatler boyunca uyanık bir veritabanına yetmez ve lafmaliyet'in veritabanını da durdururdu. Kalıcı geçmiş gün
 sonunda lafmaliyet'e (Neon) gider; anlık görünüm için Redis yeterli ve ucuz. Parola denemesi IP başına 15 dakikada 8.
-Durum: Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan. Giriş ekranı kurulumu baştan sorar (`GET
+Durum: Yönetim › Ağ ve uzaktan erişim › AsilPOS Uzaktan. Giriş ekranı kurulumu baştan sorar (`GET
 /api/uzaktan/kurulum`, yalnız var/yok döner): eksik adım varsa parola alanı yerine kontrol listesi görünür.
 
 **Tek komutla kurulum** (operatörün Mac'inde, Vercel CLI girişiyle): `scripts/vercel/baglanti-kur.sh`. Üç ortak
-anahtarı üretir ve Vercel'e yazar (laffogato ve lafmaliyet'e `LAFPOS_SYNC_SECRET`, lafpos'a `LAFPOS_CLOUD_SECRET`),
+anahtarı üretir ve Vercel'e yazar (her biri iki adla, aynı değer: laffogato ve lafmaliyet'e `ASILPOS_SYNC_SECRET` ve `LAFPOS_SYNC_SECRET`, Vercel'deki
+`lafpos` projesine `ASILPOS_CLOUD_SECRET` ve `LAFPOS_CLOUD_SECRET`; site ve henüz güncellenmemiş panel eski adı okur),
 parolayı sorar (tanımlıysa dokunmaz), Upstash Redis'i ekler (koşulları operatör onaylar), üç projenin main'den gelen
-son üretim dağıtımını yeniden derler ve kafe bilgisayarına girecek satırları `~/Downloads/lafpos-kasa-ayarlari.env`
+son üretim dağıtımını yeniden derler ve kafe bilgisayarına girecek satırları `~/Downloads/asilpos-kasa-ayarlari.env`
 dosyasına yazar (izin 600; lafmaliyet ve Uzaktan satırları 1. adım, site satırları kurulum modu kapandıktan sonra 2.
 adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz; tanımlı bir değişkene `--yenile` olmadan dokunmaz.
 
@@ -330,14 +331,14 @@ adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz
 | Telefonda sayfa açılmıyor | Telefonda Tailscale açık mı, iki cihaz aynı hesapta mı; Tailscale uygulamasında kasa bilgisayarı "Connected" mı |
 | Kafede açılıyor, dışarıda açılmıyor | Kasa bilgisayarı uykuda olabilir: Windows kurulumundaki "Prizdeyken uyku kapalı" seçeneği |
 | "Bu işlem için yetkiniz yok" | Uzaktan da rol yetkileri geçerli (Yönetim › Roller ve yetkiler) |
-| LafPOS Uzaktan "Kafeden henüz veri gelmedi" | Kafede `LAFPOS_CLOUD_URL` ve `LAFPOS_CLOUD_SECRET`, Vercel'de aynı anahtar; Yönetim › Ağ'daki son hata |
-| LafPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › lafpos › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
+| AsilPOS Uzaktan "Kafeden henüz veri gelmedi" | Kafede `ASILPOS_CLOUD_URL` ve `ASILPOS_CLOUD_SECRET`, Vercel'de aynı anahtar; Yönetim › Ağ'daki son hata |
+| AsilPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › `lafpos` projesi › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
 
 Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts`, `server/sync/cloud.ts` ve `server/sync/cloud-reports.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`, `tests/uzaktan-raporlar.test.ts`.
 
-## Geçmiş ciro (LafPOS'tan önceki kasa programı)
+## Geçmiş ciro (AsilPOS'tan önceki kasa programı)
 
-Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o günler raporlarda görünür
+Dükkân AsilPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o günler raporlarda görünür
 (`shared/gecmis.ts`). İki kaynak var:
 
 1. **lafmaliyet (asıl kaynak):** kasa ModPOS dönemini lafmaliyet'ten çeker (`GET /api/panel/pos/modpos-gunler`,
@@ -355,28 +356,28 @@ Kasa ikisini birleştirir (aynı tarihte lafmaliyet'inki geçer; `mergeHistory`,
 - **Kasanın kendi ekranları:** patron panelinin kıyası ve Raporlar › Ciro, Ürünler, Saatlik o günleri görür. Günler
   "ModPOS" etiketli (günlük grafiğin ipucunda ModPOS Z'siyle), ciro dökümüne indirimi, ciro dışı ve KDV'siyle girer;
   ürün listesi Ürünler'de ayrı "ModPOS · indirim öncesi" kartı (yalnız dönemin hepsi seçiliyse; bir kısmı seçiliyse not;
-  LafPOS ürün cirosuna eklenmez); İndirim ve İkram listeleri ModPOS günlerinin toplamını, İptal, Happy hour ve
+  AsilPOS ürün cirosuna eklenmez); İndirim ve İkram listeleri ModPOS günlerinin toplamını, İptal, Happy hour ve
   Adisyonlar yalnız notu söyler (kalem ve adisyon kaydı yok; Adisyonlar fiş sayısını yazar). Saatlik'e kapanış dakikası
-  olmayan gün girmez (gün sayısına ve haftanın günü ortalamasına da); Paket platformlarının payı LafPOS günlerinin
+  olmayan gün girmez (gün sayısına ve haftanın günü ortalamasına da); Paket platformlarının payı AsilPOS günlerinin
   cirosundandır. Bugünü içeren dönemin "aynı saate kadar" kıyasında kesimden önce biten geçmiş günü bütün sayılır, kesimi
   içeren gün kapanış dakikalarıyla (dakikası olmayan ModPOS günü orada sayılmaz); Uzaktan'ın `salesUntil`'i de aynı
-  kuralla. Geçmiş günü yalnız LafPOS'ta gerçek iş günü olmayan tarihte geçer; gerçek kullanımda deneme günlerinin
+  kuralla. Geçmiş günü yalnız AsilPOS'ta gerçek iş günü olmayan tarihte geçer; gerçek kullanımda deneme günlerinin
   yerine geçer (`server/services/gecmis.ts` `historyFor`) ve o deneme günlerinin adisyonları hiçbir sekmede (İndirim,
   İkram, Adisyonlar, İade, Hazırlama, Personel, Paket platformları, CSV) okunmaz. Z raporu, Kasa › Geçmiş günler, iş
   günü, Z zinciri ve lafmaliyet'e giden gün paketi geçmişi hiç görmez.
-- **LafPOS Uzaktan:** kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak iter (`server/sync/cloud-reports.ts`,
-  `historyReport`: kaynak ve `zText` alanlarıyla; bulut ikisini kısa metin olarak doğrular). Yalnız LafPOS'ta gerçek iş
+- **AsilPOS Uzaktan:** kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak iter (`server/sync/cloud-reports.ts`,
+  `historyReport`: kaynak ve `zText` alanlarıyla; bulut ikisini kısa metin olarak doğrular). Yalnız AsilPOS'ta gerçek iş
   günü olmayan tarihte ve içerik değişince gider (kayıt ya da geçmişin geçtiği tarihler değişince, ör. kurulum modundan
   çıkınca deneme gününün yerine geçmiş geçer, bütün geçmiş günlerine bir kez bakılır; gün özeti aynıysa gitmez). Dönemin
   ürün listesi `urunler` alanında gider: bloğun dönemindeki her geçmiş günü dönemi ve dönemin geçmiş günü sayısını (`n`)
   taşır, satırları yalnız bloğun son geçmiş günü (liste her gün anahtarında kopyalanmaz: 400 gün × 500 satır uzun dönemin
   MGET'ini şişirirdi; bulut biçimini doğrular). Uzaktan Ürünler bloğu, seçilen dönem onu kapsıyor, `n` günün hepsi ve
   satırları taşıyan gün raporda duruyorsa ürün ürün gösterir, değilse not. lafmaliyet'te silinen ya da başka güne taşınan gün Uzaktan'da kalmaz: önceki bakışta
-  geçmiş günü olarak giden tarih kayıttan çıkınca yerine satışsız gün raporu (`n: 0`; o tarihte artık LafPOS günü varsa
+  geçmiş günü olarak giden tarih kayıttan çıkınca yerine satışsız gün raporu (`n: 0`; o tarihte artık AsilPOS günü varsa
   onun raporu) gider. Böylece geçmiş bulutta başka bir dükkânın anahtarında dursa ya da hiç yüklenmemiş olsa da "Geçen
   hafta" ModPOS günlerini gösterir; "Denemeyi bitir"den önce itilmiş eski deneme raporunun yerine geçer (yeni an).
-- **Buluttaki elle yüklenmiş kayıt** yine okunur: aynı tarihte LafPOS'un da gün raporu varsa cirosu büyük olan geçer
-  (geçiş gününde LafPOS'ta yalnız deneme satışı olur); iki kaynak toplanmaz. Ek Redis komutu yok: kayıt gün raporlarıyla
+- **Buluttaki elle yüklenmiş kayıt** yine okunur: aynı tarihte AsilPOS'un da gün raporu varsa cirosu büyük olan geçer
+  (geçiş gününde AsilPOS'ta yalnız deneme satışı olur); iki kaynak toplanmaz. Ek Redis komutu yok: kayıt gün raporlarıyla
   aynı MGET'te okunur; yeni kasanın özetinde yalnız geçmişi olan dükkânda, işlev örneği başına bir kez. Patron panelinin
   ETag'i geçmişin yükleme anını taşır (yeni yükleme 304'ün arkasında kalmaz).
 

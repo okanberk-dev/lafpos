@@ -2,22 +2,23 @@ import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { signedHeaders } from '../server/lib/signature';
 import { upstashFetch } from './fake-upstash';
+import { REDIS_ONEKI, VERCEL_ALANI } from '@shared/eski-adlar';
 
 /**
  * Uzaktan görünüm dükkân bazında (api/uzaktan.ts): kasa `x-laf-dukkan` ile iter, görünüm seçili dükkânı okur; Merkez'e
  * bağlı olmayan eski kasanın `default` özeti eski anahtarda okunmaya devam eder.
  */
-const CLOUD = 'https://lafpos.vercel.app';
+const CLOUD = `https://${VERCEL_ALANI}`;
 const SECRET = 'd'.repeat(40);
 const PASSWORD = 'dukkan-parola-123';
 const store = new Map<string, string>();
-const KEYS = ['LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_PAROLA', 'LAFPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA'];
+const KEYS = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_UZAKTAN_PAROLA', 'ASILPOS_UZAKTAN_PAROLA_GEREKLI', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'ASILPOS_UZAKTAN_DEMO', 'ASILPOS_UYE_EPOSTA'];
 const before: Record<string, string | undefined> = {};
 
 beforeAll(() => {
   for (const k of KEYS) before[k] = process.env[k];
-  delete process.env.LAFPOS_UYE_EPOSTA;
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
+  delete process.env.ASILPOS_UYE_EPOSTA;
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0' });
   const redis = upstashFetch(store);
   vi.stubGlobal('fetch', async (_i: string, init?: RequestInit) => redis(init));
 });
@@ -46,14 +47,14 @@ async function view(path: string, shop?: string) {
 describe('dükkân bazında uzaktan görünüm', () => {
   it('eski kasa (başlıksız) default anahtarına yazar ve okunur', async () => {
     expect((await push(null, snap('Eski', 1000))).status).toBe(200);
-    expect(store.has('lafpos:snapshot')).toBe(true);
+    expect(store.has(`${REDIS_ONEKI}snapshot`)).toBe(true);
     expect((await view('bootstrap')).settings.businessName).toBe('Eski');
   });
 
   it('iki dükkân ayrı anahtarda; seçilen dükkân okunur, seçilmezse en son veri gönderen', async () => {
     const A = 'a1b2c3d4e5f6a7b8c9d0e1f2';
     const B = 'f1e2d3c4b5a6f7e8d9c0b1a2';
-    store.set(`lafpos:merkez:kurulum:${A}`, JSON.stringify({ ad: 'Tuzla' }));
+    store.set(`${REDIS_ONEKI}merkez:kurulum:${A}`, JSON.stringify({ ad: 'Tuzla' }));
     await push(A, snap('Tuzla', 2000));
     await push(B, snap('Marina', 3000));
     expect((await view('bootstrap', A)).settings.businessName).toBe('Tuzla');

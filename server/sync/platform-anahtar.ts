@@ -8,8 +8,8 @@ import { getSettings } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 
 /**
- * Platform anahtarları buluttan (#75 İş 2): sahip Trendyol ve Yemeksepeti değerlerini bir kez Vercel'deki LafPOS Uzaktan
- * projesine girer; kasa onları `GET /api/uzaktan/anahtarlar` ucundan (LAFPOS_CLOUD_SECRET imzası) açılışta ve 10
+ * Platform anahtarları buluttan (#75 İş 2): sahip Trendyol ve Yemeksepeti değerlerini bir kez Vercel'deki AsilPOS Uzaktan
+ * projesine girer; kasa onları `GET /api/uzaktan/anahtarlar` ucundan (ASILPOS_CLOUD_SECRET imzası) açılışta ve 10
  * dakikada bir çeker. Uç yalnız Vercel ortamını okur, Redis'e dokunmaz (Upstash bütçesi). Değer değişince yerel kopyaya
  * yazılır, bağdaştırıcı yeniden kurulur ve denetim kaydına değersiz bir satır düşer. Çekim olmazsa (internet yok, uç
  * kapalı) kasa son değerlerle sürer. Platformun modu değişmez: açmak sahibin kararı.

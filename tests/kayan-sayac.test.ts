@@ -5,7 +5,7 @@ import { tl, tlPlain, tlShort } from '@shared/money';
 import { cellsText, toCells } from '../src/components/ui/rollingDigits';
 
 /**
- * Kayan rakamlı sayaç (src/components/ui/AnimatedCounter.tsx): yazı LafPOS'un kendi biçimleyicisinden gelir, sayaç yalnız
+ * Kayan rakamlı sayaç (src/components/ui/AnimatedCounter.tsx): yazı AsilPOS'un kendi biçimleyicisinden gelir, sayaç yalnız
  * basamakları döndürür. Burada ekrana çizilen hücrelerin biçimleyicinin yazısıyla birebir aynı olduğu ve basamak
  * anahtarlarının değer değişince yerinde kaldığı denetlenir
  */

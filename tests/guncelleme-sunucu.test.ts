@@ -52,7 +52,7 @@ describe('Ayarlar ve yedek › Sürüm ve güncelleme', () => {
     const empty = await h.ok<{ installed: { version: string }; status: unknown }>('patron', 'GET', '/admin/guncelleme');
     expect(empty.installed.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(empty.status).toBeNull();
-    const dir = join(process.env.LAFPOS_DATA_DIR!, 'guncelleme');
+    const dir = join(process.env.ASILPOS_DATA_DIR!, 'guncelleme');
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, 'durum.json'),
@@ -71,13 +71,13 @@ describe('Ayarlar ve yedek › Sürüm ve güncelleme', () => {
 });
 
 describe('Ayarlar ve yedek › Şimdi güncelle', () => {
-  const file = () => join(process.env.LAFPOS_DATA_DIR!, 'guncelleme', 'istek.json');
+  const file = () => join(process.env.ASILPOS_DATA_DIR!, 'guncelleme', 'istek.json');
   afterAll(() => {
-    delete process.env.LAFPOS_STDIN_CONTROL;
+    delete process.env.ASILPOS_STDIN_CONTROL;
   });
 
   it('Windows kurulumu (bekçi) değilse 409; istek dosyası yazılmaz', async () => {
-    delete process.env.LAFPOS_STDIN_CONTROL;
+    delete process.env.ASILPOS_STDIN_CONTROL;
     const r = await h.call<{ code: string }>('patron', 'POST', '/admin/guncelleme', {});
     expect(r).toMatchObject({ status: 409, json: { code: 'not_installed' } });
     expect(existsSync(file())).toBe(false);
@@ -85,7 +85,7 @@ describe('Ayarlar ve yedek › Şimdi güncelle', () => {
   });
 
   it('bekçi altında istek dosyası yazılır, bekçi alana dek ekranda bekler; denetim kaydına düşer', async () => {
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     expect((await h.call('garson', 'POST', '/admin/guncelleme', {})).status).toBe(403);
     const r = await h.ok<{ canRequest: boolean; request: { simdi: boolean } | null }>('mudur', 'POST', '/admin/guncelleme', {});
     expect(r.canRequest).toBe(true);
@@ -99,7 +99,7 @@ describe('Ayarlar ve yedek › Şimdi güncelle', () => {
   });
 
   it('gün açıkken hemen kurmayı yalnız patron seçer; gün kapalıyken "şimdi" ayrıca işaretlenmez', async () => {
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     const s = await h.ok<{ dayOpen: boolean }>('patron', 'GET', '/admin/guncelleme');
     if (!s.dayOpen) await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
     expect(await h.call('mudur', 'POST', '/admin/guncelleme', { simdi: true })).toMatchObject({ status: 403, json: { code: 'patron_only' } });
@@ -109,7 +109,7 @@ describe('Ayarlar ve yedek › Şimdi güncelle', () => {
 });
 
 describe('Kasadaki güncelleme teklifi: Şimdi güncelle / Gün sonunda güncelle', () => {
-  const dir = () => join(process.env.LAFPOS_DATA_DIR!, 'guncelleme');
+  const dir = () => join(process.env.ASILPOS_DATA_DIR!, 'guncelleme');
   const file = () => join(dir(), 'istek.json');
   const ready = () => {
     mkdirSync(dir(), { recursive: true });
@@ -117,11 +117,11 @@ describe('Kasadaki güncelleme teklifi: Şimdi güncelle / Gün sonunda güncell
     if (existsSync(file())) rmSync(file());
   };
   afterAll(() => {
-    delete process.env.LAFPOS_STDIN_CONTROL;
+    delete process.env.ASILPOS_STDIN_CONTROL;
   });
 
   it('kasayı yöneten görür; garson göremez. Gün sonunda: seçim saklanır, istek dosyası yazılmaz', async () => {
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     ready();
     expect((await h.call('garson', 'GET', '/admin/guncelleme/teklif')).status).toBe(403);
     const offer = await h.ok<{ yeni: { build: number }; secim: string | null; canRequest: boolean }>('kasa', 'GET', '/admin/guncelleme/teklif');
@@ -135,7 +135,7 @@ describe('Kasadaki güncelleme teklifi: Şimdi güncelle / Gün sonunda güncell
   });
 
   it('Şimdi: satış ya da ödeme sürerken reddedilir (409 busy); kasa boşken gün açıkken de hemen kurma isteği yazılır', async () => {
-    process.env.LAFPOS_STDIN_CONTROL = '1';
+    process.env.ASILPOS_STDIN_CONTROL = '1';
     ready();
     const { resetActivity, QUIET_MS } = await import('../server/lib/mesgul');
     const s = await h.ok<{ dayOpen: boolean }>('patron', 'GET', '/admin/guncelleme');

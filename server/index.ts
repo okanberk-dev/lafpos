@@ -8,9 +8,10 @@ import { env } from './env';
 import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
 import { recordRestoreResult } from './sync/yedek';
+import { posEnv } from '@shared/pos-env';
 
 runMigrations();
-if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; LafPOS deneme modunda (satışlar gerçek sayılmaz)');
+if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; AsilPOS deneme modunda (satışlar gerçek sayılmaz)');
 upgradeRoleSets();
 upgradeStoredSettings();
 upgradeOptionProfiles();
@@ -24,15 +25,15 @@ const server = serve({ fetch: app.fetch, port: env.port, hostname: env.host }, (
     .flat()
     .filter((n) => n && n.family === 'IPv4' && !n.internal)
     .map((n) => `http://${n!.address}:${info.port}`);
-  console.log(`LafPOS sunucusu hazır: http://localhost:${info.port}${lan.length ? `  ·  ağdan: ${lan.join(', ')}` : ''}`);
+  console.log(`AsilPOS sunucusu hazır: http://localhost:${info.port}${lan.length ? `  ·  ağdan: ${lan.join(', ')}` : ''}`);
 });
 
 startJobs();
 
 /**
- * Düzgün kapanış: veritabanı kapanınca WAL ana dosyaya yazılır, lafpos.db tek başına da eksiksiz olur. Windows'ta
+ * Düzgün kapanış: veritabanı kapanınca WAL ana dosyaya yazılır, veritabanı dosyası tek başına da eksiksiz olur. Windows'ta
  * bekçi sinyal gönderemez (süreci sonlandırmak kapanış kodunu çalıştırmaz); ona standart girdiden "kapat" yazar
- * (LAFPOS_STDIN_CONTROL=1).
+ * (ASILPOS_STDIN_CONTROL=1).
  */
 let closing = false;
 function shutdown() {
@@ -48,7 +49,7 @@ function shutdown() {
   process.exit(0);
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) process.on(sig, shutdown);
-if (process.env.LAFPOS_STDIN_CONTROL === '1') {
+if (posEnv(process.env, 'STDIN_CONTROL') === '1') {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => String(d).includes('kapat') && shutdown());
 }

@@ -57,7 +57,7 @@ const MENU_YENILE_MS = [0, 30_000];
 const IZLENEN_EN_COK = 100;
 
 /**
- * LafPOS Uzaktan › Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): kasanın personeli, PIN'leri, rol yetkileri, Tükendi'si ve
+ * AsilPOS Uzaktan › Uzaktan yönetim (docs/UZAKTAN-YONETIM.md): kasanın personeli, PIN'leri, rol yetkileri, Tükendi'si ve
  * servis modu telefondan. Her değişiklik buluttaki kuyruğa girer, kasa Merkez nabzında alır ve kasadaki yönetim
  * ekranının kurallarıyla uygular; ekranda "Bekliyor → Uygulandı / Reddedildi" görünür. Sahip burada panele kimin
  * gireceğini de belirler (Erişim). Rol kapısı arayüzde de var (izleyici yalnız görür, yönetici patron hesabına ve rol

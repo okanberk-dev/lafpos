@@ -2,7 +2,7 @@
  * İnternet kesintisi (docs/05-KASA-BILGISAYARI.md §6 "İnternet yokken"): sahte lafmaliyet ucu kapalıyken satış ve gün
  * sonu yapılır, kasa durmaz; gün sonu giden kutusunda bekler ve üst çubukta "İnternet yok · 1 kayıt bekliyor" rozeti
  * görünür. Uç açılınca (kasa dakikada bir TCP ile dener, istek bütçesine girmez) bekleyen gün kendiliğinden ve tam bir
- * kez gider, rozet "Bekleyenler gönderildi" der. Sunucu işleri açık (LAFPOS_NO_JOBS yok), dış adres yalnız sahte uç.
+ * kez gider, rozet "Bekleyenler gönderildi" der. Sunucu işleri açık (ASILPOS_NO_JOBS yok), dış adres yalnız sahte uç.
  */
 import { createServer } from 'node:http';
 import { join } from 'node:path';
@@ -25,7 +25,7 @@ function fakeLafmaliyet(port) {
             if (req.method === 'POST' && req.url === '/api/pos/gun') {
               const day = JSON.parse(body);
               received.push({ signed: String(req.headers['x-laf-signature'] ?? '').startsWith('v1='), body: day });
-              // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa LafPOS gönderildi saymaz)
+              // lafmaliyet'in 200'ü gönderilen günü yineler (yoksa AsilPOS gönderildi saymaz)
               res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, date: day.date, counted: true, switchDay: null }));
               return;
             }

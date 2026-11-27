@@ -523,7 +523,7 @@ posRoutes.post('/kitchen/status', async (c) => {
 
 /**
  * Seçeneği kasada Tükendi yap / satışa aç (yulaf sütü bitti): ürünün Tükendi'siyle aynı yetki (`urun.tukendi` ya da
- * menü yetkisi). Yalnız LafPOS'ta; siteye gitmez
+ * menü yetkisi). Yalnız AsilPOS'ta; siteye gitmez
  */
 posRoutes.post('/option-items/:id/sold-out', async (c) => {
   const user = c.get('user');

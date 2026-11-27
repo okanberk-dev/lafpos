@@ -3,9 +3,10 @@ import { generateTableCode, normalizeTableCode, TABLE_CODE_ALPHABET, TABLE_CODE_
 import type { BootstrapDTO } from '@shared/types';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { PINS, startApp, type Harness } from './harness';
+import { SITE_AKTOR } from '@shared/eski-adlar';
 
 /**
- * Masaya özel QR: kodu LafPOS üretir (sitenin 10 simgelik Crockford kuralı), QR içeriği sitenin masa adresi.
+ * Masaya özel QR: kodu AsilPOS üretir (sitenin 10 simgelik Crockford kuralı), QR içeriği sitenin masa adresi.
  * Yönetim › Masa planı'ndan masa başına ya da toplu üretilir, yenilenir; elle yazılamaz. Siteden gelen masa siparişi
  * önce koduyla (`tableCode`), sonra etiketiyle masaya düşer. Liste siteye giden kutusundan gider; site ucu henüz
  * tanımıyorsa (404) yeniden denenmez ve Entegrasyon'da görünür.
@@ -133,7 +134,7 @@ describe('masa QR yönetimi', () => {
     const pending = () => db.select().from(schema.outbox).where(and(eq(schema.outbox.kind, 'tables.sync'), isNull(schema.outbox.sentAt))).all();
     expect(pending()).toHaveLength(1);
     const payload = pending()[0]!.payload as { tables: { code: string; name: string; active: boolean }[]; actor: string };
-    expect(payload.actor).toBe('LafPOS');
+    expect(payload.actor).toBe(SITE_AKTOR);
     // Etkin masalar + yenilenen eski kod (pasif)
     expect(payload.tables.filter((t) => t.active).length).toBe(boot.tables.filter((t) => t.kind === 'masa').length);
     expect(payload.tables.filter((t) => !t.active).length).toBe(1);

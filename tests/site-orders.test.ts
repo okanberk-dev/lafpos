@@ -238,7 +238,7 @@ describe('bar istasyonu yedeği ve planlı sipariş', () => {
     return db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId)).all();
   };
 
-  it('LafPOS\'ta ürünü olmayan kalem barın istasyonuna düşer, bar ve çağrı ekranında görünür; boş kalmış kalem sonraki çekimde bağlanır', async () => {
+  it('AsilPOS\'ta ürünü olmayan kalem barın istasyonuna düşer, bar ve çağrı ekranında görünür; boş kalmış kalem sonraki çekimde bağlanır', async () => {
     const { syncOnlineOrders } = await import('../server/sync/laffogato-orders');
     const { pickupBoard } = await import('../server/services/floor');
     const { db, schema } = await import('../server/db/client');

@@ -7,21 +7,25 @@ import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState, updateSettings } from '../lib/settings';
 import { db } from '../db/client';
 import { branchLocked } from './lafmaliyet';
+import { ESKI_KURULUM_YOLU } from '@shared/eski-adlar';
+import { yeniAdlarla } from '@shared/pos-env';
 
 /**
- * Şube kurulumu (ladmin › Ayarlar › Şubeler): ana yönetici şubeyi ekleyince şubeye özel kurucu (LafPOS-Kur.cmd) üretilir,
+ * Şube kurulumu (ladmin › Ayarlar › Şubeler): ana yönetici şubeyi ekleyince şubeye özel kurucu (AsilPOS-Kur.cmd) üretilir,
  * içinde ladmin'in adresi ve tek kullanımlık kurulum kodu durur. Kurucu kodu veri klasörüne yazar (`kurulum-kodu.json`);
- * sunucu açılınca kodu ladmin'e bir kez verir (`POST {adres}/api/lafpos/kurulum`) ve karşılığında şubesini (kimlik, ad)
- * ve bağlantı bilgilerini (lafmaliyet, LafPOS Uzaktan, site) alır: şube kimliği ayarlara, bağlantılar ayarlar dosyasına
+ * sunucu açılınca kodu ladmin'e bir kez verir (`POST {adres}/api/asilpos/kurulum`; eski panel 404 derse eski yol) ve karşılığında şubesini (kimlik, ad)
+ * ve bağlantı bilgilerini (lafmaliyet, AsilPOS Uzaktan, site) alır: şube kimliği ayarlara, bağlantılar ayarlar dosyasına
  * yazılır, bekçi sunucuyu yeni ayarlarla yeniden başlatır. Kimse şube kimliği ya da anahtar yazmaz; kasa yanlış şubeyle
  * açılmaz. Sözleşme: docs/03-ENTEGRASYON.md "Şube kurulumu".
  */
 
 export const KOD_DOSYASI = 'kurulum-kodu.json';
+/** ladmin'in kurulum kodu ucu (ad değişikliğinden önceki panelde yalnız `ESKI_KURULUM_YOLU`) */
+export const KURULUM_YOLU = '/api/asilpos/kurulum';
 const STATE = 'kurulum.sube';
 
-/** ladmin'in verebileceği bağlantı anahtarları (başkası yazılmaz) */
-export const KURULUM_ANAHTARLARI = ['LAFMALIYET_URL', 'LAFMALIYET_SYNC_SECRET', 'LAFPOS_CLOUD_URL', 'LAFPOS_CLOUD_SECRET', 'LAFFOGATO_URL', 'LAFFOGATO_SYNC_SECRET'] as const;
+/** ladmin'in verebileceği bağlantı anahtarları (başkası yazılmaz). Uzaktan'ınkiler eski adla da gelir (`yeniAdlarla`) */
+export const KURULUM_ANAHTARLARI = ['LAFMALIYET_URL', 'LAFMALIYET_SYNC_SECRET', 'ASILPOS_CLOUD_URL', 'ASILPOS_CLOUD_SECRET', 'LAFFOGATO_URL', 'LAFFOGATO_SYNC_SECRET'] as const;
 
 const KOD_RE = /^[A-Za-z0-9_-]{24,128}$/;
 const BRANCH_RE = /^[a-z][a-z0-9-]{1,23}$/;
@@ -73,7 +77,7 @@ export function readRedeemAnswer(json: unknown): { sube: { id: string; ad: strin
   const sube = o.sube as Record<string, unknown> | undefined;
   if (o.ok !== true || !sube || typeof sube.id !== 'string' || !BRANCH_RE.test(sube.id) || typeof sube.ad !== 'string' || !sube.ad.trim()) return null;
   const edits: Record<string, string> = {};
-  const raw = (o.baglanti && typeof o.baglanti === 'object' ? o.baglanti : {}) as Record<string, unknown>;
+  const raw = yeniAdlarla((o.baglanti && typeof o.baglanti === 'object' ? o.baglanti : {}) as Record<string, unknown>);
   for (const key of KURULUM_ANAHTARLARI) {
     const v = raw[key];
     const field = connField(key);
@@ -85,6 +89,15 @@ export function readRedeemAnswer(json: unknown): { sube: { id: string; ad: strin
 }
 
 let running = false;
+
+/** Yanıt panelin kendi kurulum yanıtı mı (`{ ok: false, … }` JSON); bilinmeyen yolun 404 sayfası değil. Gövdeyi tüketmez */
+async function panelYaniti(res: Response): Promise<boolean> {
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as { ok?: unknown } | null;
+  return body?.ok === false;
+}
 
 /**
  * Kodu ladmin'e verir (sunucu açılışında ve 5 dakikada bir, kod dosyası durdukça). Başarıda dosya `.kullanildi` olur;
@@ -111,12 +124,18 @@ export async function redeemInstallCode(opts: { dataDir?: string; fetchImpl?: ty
     }
     let res: Response;
     try {
-      res = await (opts.fetchImpl ?? fetch)(new URL('/api/lafpos/kurulum', code.adres), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kod: code.kod, surum: process.env.npm_package_version ?? null }),
-        signal: AbortSignal.timeout(15_000),
-      });
+      // Yeni yol; ad değişikliğinden önceki panel onu tanımaz (404, panelin kendi JSON yanıtı değil): eski yol yeniden
+      // denenir. Panelin kendi 404'ü (`ok: false`: kod ya da şube yok) kalıcı yanıttır, yeniden denenmez: kod o anda
+      // kullanılmış sayılmış olabilir, eski yol "kullanılmış" der ve asıl neden kaybolur
+      const post = (yol: string) =>
+        (opts.fetchImpl ?? fetch)(new URL(yol, code.adres), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kod: code.kod, surum: process.env.npm_package_version ?? null }),
+          signal: AbortSignal.timeout(15_000),
+        });
+      res = await post(KURULUM_YOLU);
+      if (res.status === 404 && !(await panelYaniti(res))) res = await post(ESKI_KURULUM_YOLU);
     } catch (e) {
       return save({ ok: false, sube: null, at: now, hata: `ladmin’e ulaşılamadı (${e instanceof Error ? e.message : String(e)}); internet gelince yeniden denenir` });
     }

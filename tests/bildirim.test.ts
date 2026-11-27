@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLOSING_REMINDER_MS, closingAtMs } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
+import { REDIS_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Patrona telefon bildirimi: kasa olayı imzalı iter (server/sync/bildirim.ts), site abonelere Web Push atar
@@ -24,7 +25,7 @@ beforeAll(async () => {
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
   const { env } = await import('../server/env');
   Object.assign(env, { cloudUrl: CLOUD, cloudSecret: SECRET });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0', VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' });
+  Object.assign(process.env, { ASILPOS_CLOUD_SECRET: SECRET, ASILPOS_UZAKTAN_PAROLA: PASSWORD, ASILPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', ASILPOS_UZAKTAN_DEMO: '0', VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' });
   const { setPushSender } = await import('../api/_bildirim');
   setPushSender(async (sub, payload, ttl) => {
     if (sub.endpoint.endsWith('/gitti')) throw Object.assign(new Error('gone'), { statusCode: 410 });
@@ -100,7 +101,7 @@ describe('telefon bildirimi', () => {
     expect(pushed[0]!.payload.body).toContain(`Adisyon ${o.no}`);
     // Neden bildirime girmez
     expect(JSON.stringify(pushed[0])).not.toContain('Yanlış masa');
-    expect(Object.keys(JSON.parse(store.get('lafpos:bildirim:aboneler')!))).toEqual(['https://push.test/1']);
+    expect(Object.keys(JSON.parse(store.get(`${REDIS_ONEKI}bildirim:aboneler`)!))).toEqual(['https://push.test/1']);
   });
 
   it('kapalıyken gitmez; internet yokken kuyrukta bekler, dönünce gider', async () => {

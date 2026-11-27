@@ -19,7 +19,7 @@ import { kabloPlan, kabloWantedFor, type KabloSettings as Settings } from './tok
 export { kabloPlan };
 
 /**
- * Token kablolunun LafPOS'a bağlandığı yer: köprüyü açar ya da kapatır, kablo takılınca kurulumu kendiliğinden yapar
+ * Token kablolunun AsilPOS'a bağlandığı yer: köprüyü açar ya da kapatır, kablo takılınca kurulumu kendiliğinden yapar
  * (kısımlar, yemek kartları, gerekirse bağlantıyı Token kabloluya geçirir), cihazdan gelen satış sonucunu adisyona işler
  * ve Yönetim › Yazarkasa POS › "Kurulumu yap" düğmesini çalıştırır (Pavo için de). Ayrıntı: docs/04-YAZARKASA.md §9.
  */
@@ -81,7 +81,7 @@ export function kabloSale(sale: TokenxSale) {
     .where(and(eq(schema.fiscalReceipts.id, sale.basketID), eq(schema.fiscalReceipts.provider, 'tokenkablo')))
     .get();
   if (!r) {
-    console.warn(`[token-kablo] LafPOS'ta olmayan sepetin sonucu geldi (${sale.basketID})`);
+    console.warn(`[token-kablo] AsilPOS'ta olmayan sepetin sonucu geldi (${sale.basketID})`);
     return;
   }
   applyResult(r.id, fromTokenxSale(sale, r.amount), 'cihaz');
@@ -203,7 +203,7 @@ let setupRunning: Promise<SetupRun> | null = null;
  * yemek kartları, bağlantıyı Token kabloluya geçirme. Arka planda sürer; adımlar `okcStatus().tokenKablo.setup`'ta
  */
 export function startTokenKabloSetup(actor: Actor): SetupRun {
-  if (!kablo.supported) throw conflict('Kablolu Token kurulumu yalnız Windows kasa bilgisayarında yapılır (LafPOS’u kasa bilgisayarına kurun)', 'okc_windows');
+  if (!kablo.supported) throw conflict('Kablolu Token kurulumu yalnız Windows kasa bilgisayarında yapılır (AsilPOS’u kasa bilgisayarına kurun)', 'okc_windows');
   if (setupRunning) return getSyncState<SetupRun>(SETUP_KEY)!;
   const s = getSettings();
   if (s.okcProvider !== 'tokenkablo' && s.okcProvider !== 'kapali' && s.okcProvider !== 'simulator' && actor.user.role !== 'patron') {
@@ -240,7 +240,7 @@ export function startTokenKabloSetup(actor: Actor): SetupRun {
         kablo.restart();
         if (await waitConnected(45_000)) return `Sürücü kuruldu · ${kablo.state.model ?? 'Token'} · ${kablo.state.fiscalId ?? ''}`.trim();
       }
-      throw new Error(`Cihaz görünmüyor. ${CABLE_HINT}. Sonra yeniden “Kurulumu yap”a basın; kablo takılınca LafPOS kendiliğinden de bağlanır`);
+      throw new Error(`Cihaz görünmüyor. ${CABLE_HINT}. Sonra yeniden “Kurulumu yap”a basın; kablo takılınca AsilPOS kendiliğinden de bağlanır`);
     });
     if (!found) return st.finish(false);
     const ok = await st.step('ayar', async () => {

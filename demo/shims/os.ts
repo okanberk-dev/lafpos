@@ -1,6 +1,6 @@
 /** Tarayıcı demosunda `node:os`: ağ kartı yok (Cihaz ekranı adres göstermez) */
 export function hostname(): string {
-  return 'lafpos-demo';
+  return 'asilpos-demo';
 }
 
 export function networkInterfaces(): Record<string, never[]> {

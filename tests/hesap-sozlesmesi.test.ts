@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Hesap sözleşmesi (docs/hesap-sozlesmesi.md): LafPOS ile ladmin'in (lafmaliyet) ortak hesap belgesi iki depoda bayt
+ * Hesap sözleşmesi (docs/hesap-sozlesmesi.md): AsilPOS ile ladmin'in (lafmaliyet) ortak hesap belgesi iki depoda bayt
  * bayt aynıdır. Bu test belgenin SHA-256 özetini sabitler; lafmaliyet'teki tests/hesap-sozlesmesi.test.ts aynı sabiti
  * taşır. Belge değişince iki kopya ve iki test aynı PR serisinde güncellenir.
  */

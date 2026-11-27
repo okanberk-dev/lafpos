@@ -198,7 +198,7 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
                 {gone && gone.days > 0 ? (
                   <>
                     <b className="tabular font-semibold text-ink">{rangeText(gone)}</b> silinir: o günlerin adisyonları, ödemeleri, kasa hareketleri, vardiya sayımları, yazarkasa fişleri ve
-                    Z raporları. LafPOS raporlarında görünmezler; lafmaliyet’e gönderilmiş bir gün orada kalır.
+                    Z raporları. AsilPOS raporlarında görünmezler; lafmaliyet’e gönderilmiş bir gün orada kalır.
                   </>
                 ) : (
                   'Silinecek deneme günü yok.'

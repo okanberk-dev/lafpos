@@ -9,6 +9,7 @@ import { getSettings } from './settings';
 import { db, schema, sqlite } from '../db/client';
 import { env } from '../env';
 import { HttpError } from './http';
+import { PIN_IMZA_ONEKI } from '@shared/eski-adlar';
 
 export interface AuthUser {
   id: string;
@@ -24,7 +25,7 @@ export type AppEnv = { Variables: { user: AuthUser } };
 
 /** PIN'in anahtarlı özeti. Tekil olduğu için giriş yalnız PIN'le yapılır. */
 export function hashPin(pin: string): string {
-  return createHmac('sha256', env.secret).update(`lafpos-pin:${pin}`).digest('hex');
+  return createHmac('sha256', env.secret).update(`${PIN_IMZA_ONEKI}${pin}`).digest('hex');
 }
 
 export function isValidPin(pin: string): boolean {
@@ -232,7 +233,7 @@ export function resetFailures() {
 
 /**
  * Deneme sayacının anahtarı: bağlantının gerçek adresi. `X-Forwarded-For` istemcinin kendi yazdığı başlıktır ve
- * LafPOS'un önünde vekil sunucu yoktur; ona güvenilirse her denemede başlığı değiştirerek kilit aşılır.
+ * AsilPOS'un önünde vekil sunucu yoktur; ona güvenilirse her denemede başlığı değiştirerek kilit aşılır.
  */
 export function clientKey(c: Context): string {
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;

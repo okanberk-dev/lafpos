@@ -139,7 +139,7 @@ export function PaymentModal({
       if (e.topic !== 'okc' || e.orderId !== order.id) return;
       if (e.kind === 'okc.cancelled' || e.kind === 'okc.error') {
         // Bu ekranın otomatik gönderdiği sepet cihazda reddedildi ya da iptal edildi: neden pencerede, ödeme yeniden denenir.
-        // LafPOS'tan "Sepeti iptal et" (olayı yapan kullanıcı belli) müşteri reddi değildir: uyarı çıkmaz
+        // AsilPOS'tan "Sepeti iptal et" (olayı yapan kullanıcı belli) müşteri reddi değildir: uyarı çıkmaz
         if (autoSent.current && !(e.kind === 'okc.cancelled' && e.byUserId)) setDeviceError(e.kind === 'okc.cancelled' ? 'Müşteri cihazda ödemeden vazgeçti' : (e.message ?? 'Yazarkasa ödemeyi almadı'));
         if (e.kind === 'okc.cancelled') {
           okcSentHere.current = null;
@@ -221,7 +221,7 @@ export function PaymentModal({
   }, [split, paidShares]);
   const nextShare = split?.shares[0] ?? 0;
 
-  // Tutar kipinde yazılan kalana kırpılmaz: fazlası reddedilir (bankanın POS'undan çekilenle LafPOS'a yazılan ayrışmasın).
+  // Tutar kipinde yazılan kalana kırpılmaz: fazlası reddedilir (bankanın POS'undan çekilenle AsilPOS'a yazılan ayrışmasın).
   // Kalem ve pay kiplerinde tutar sunucunun hesabıdır, kalanla sınırlı
   const typed = parseTL(amountText) ?? 0;
   const overRemaining = mode === 'tutar' && typed > remaining;
@@ -353,7 +353,7 @@ export function PaymentModal({
     }
   };
 
-  /** `withoutDevice`: cihaz reddettikten ya da ulaşılamadıktan sonra ödeme yazarkasasız LafPOS'a yazılır (bugünkü yetki kuralı) */
+  /** `withoutDevice`: cihaz reddettikten ya da ulaşılamadıktan sonra ödeme yazarkasasız AsilPOS'a yazılır (bugünkü yetki kuralı) */
   const pay = async (withoutDevice = false) => {
     if (!method || !valid) return;
     if (route.send && !withoutDevice) return payOnDevice();

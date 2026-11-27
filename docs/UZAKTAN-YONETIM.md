@@ -1,4 +1,4 @@
-# Uzaktan yönetim: kasayı LafPOS Uzaktan'dan yönetmek
+# Uzaktan yönetim: kasayı AsilPOS Uzaktan'dan yönetmek
 
 Sözleşme (türler, doğrulama, imza metni): `shared/kontrol.ts`. Bulut: `api/_kontrol.ts` (panel uçları ve kuyruk),
 `api/_merkez.ts` (nabızla teslim), `api/uzaktan.ts` (yönlendirme ve üye rolleri). Kasa: `server/sync/kontrol.ts`
@@ -36,10 +36,10 @@ Sözleşme (türler, doğrulama, imza metni): `shared/kontrol.ts`. Bulut: `api/_
 
 ## Akış
 
-1. Panel `POST /api/kontrol/komut` (dükkân `x-lafpos-dukkan` başlığından, uzaktan görünümün dükkân seçimi). Bulut:
+1. Panel `POST /api/kontrol/komut` (dükkân `x-laf-dukkan` başlığından, uzaktan görünümün dükkân seçimi). Bulut:
    üyenin rolünü denetler (`uyeYapabilir`), kasanın son özeti var ve komut türünü destekliyor mu bakar, `komutDogrula`
    ile doğrular (gün sonunda kasanın son nabzı Merkez'in "çevrimiçi" süresinde mi: değilse 409 `kasa_cevrimdisi`),
-   `komutOzeti` ile özetler, `imzaMetni`ni (kurulum kimliği ve üyenin rolü dahil) LAFPOS_CLOUD_SECRET ile HMAC-SHA256
+   `komutOzeti` ile özetler, `imzaMetni`ni (kurulum kimliği ve üyenin rolü dahil) ASILPOS_CLOUD_SECRET ile HMAC-SHA256
    imzalar, kuyruğa koyar.
 2. Kasa nabzı (`POST /api/merkez/nabiz`) isteğe `kontrol: { ozet, durum?, sonuclar? }` ekler. Bulut yanıta
    `kontrol: { durumIste, komutlar }` ekler (eski kasa alanı görmez, eski bulut alanı göndermez: iki yön geriye uyumlu).
@@ -86,12 +86,12 @@ ikisinde de işler.
 - Yalnız gerçek oturum (üye ya da parolalı giriş); `izleyici` ve parolasız görünüm 403, demo 403 `remote_readonly`.
 - Patron hesabına dokunan personel komutları ve rol yetkileri yalnız `sahip`.
 - Komut bulutta HMAC'le imzalanır; imza metninde kurulum kimliği ve üyenin rolü de var. Redis'e yazabilen biri
-  (LAFPOS_CLOUD_SECRET'ı bilmeden) kasaya komut sokamaz, bir şubenin komutunu başka şubeye taşıyamaz, rolü
+  (ASILPOS_CLOUD_SECRET'ı bilmeden) kasaya komut sokamaz, bir şubenin komutunu başka şubeye taşıyamaz, rolü
   değiştiremez. Kasa kimliği ve alt sınır tekrar oynatmayı, süre ve saat payı eski/gelecek komutu engeller.
 - Rol kapısı iki yerde: bulut kasanın son özetiyle, kasa uygulama anında kendi kaydıyla (özet eski olabilir: kuyrukta
   bekleyen rol değişikliği, kasada yeni patron).
 - PIN tarayıcıda kasanın açık anahtarıyla şifrelenir (RSA-OAEP 2048, SHA-256; Web Crypto). Kasa açık anahtarı kurulum
-  kimliğine bağlı olarak LAFPOS_CLOUD_SECRET ile imzalar (`anahtarImza`); bulut anahtarı panele yalnız imza tutarsa
+  kimliğine bağlı olarak ASILPOS_CLOUD_SECRET ile imzalar (`anahtarImza`); bulut anahtarı panele yalnız imza tutarsa
   verir. Bulut yalnız şifreli metni görür ve saklar; kasa uygulayınca komut kuyruktan silinir. Açık PIN hiçbir günlüğe,
   özete, geçmişe, denetim kaydına, hata iletisine girmez (testle). Özel anahtar yalnız kasanın veritabanında.
 - Güvencenin sınırı: Redis'e yazabilen ama ortak anahtarı bilmeyen saldırgana karşıdır. Vercel ortamını (ortak anahtar)

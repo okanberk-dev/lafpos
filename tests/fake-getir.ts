@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { GetirOrder, InboxItem } from '../server/delivery/getir';
 
 /**
- * Testler için sahte LafPOS Uzaktan gelen kutusu (`/api/getir/inbox`, `/inbox/ack`; imza başlığı aranır) ve sahte
+ * Testler için sahte AsilPOS Uzaktan gelen kutusu (`/api/getir/inbox`, `/inbox/ack`; imza başlığı aranır) ve sahte
  * GetirFood API'si (`/auth/login`, `/food-orders/periodic/unapproved|cancelled`, `/food-orders/active`,
  * `GET /food-orders/{id}`, `/food-orders/{id}/cancel-options`, `/food-orders/{id}/verify|verify-scheduled|prepare|
  * handover|deliver|cancel`). Çağrılar ve gövdeler kaydedilir; `statusFor` ile bir uca sırayla verilecek durum kodları

@@ -1,5 +1,5 @@
 /**
- * Tarayıcı demosu (dist/web/demo, lafpos.vercel.app/demo): LafPOS sunucusu sayfanın içinde çalışır. Derlenmiş
+ * Tarayıcı demosu (dist/web/demo, lafpos.vercel.app/demo): AsilPOS sunucusu sayfanın içinde çalışır. Derlenmiş
  * dosyalar Vercel'in yönlendirmeleriyle aynı statik sunucudan açılır. PIN ekranı yok; tarama (telefon, tablet,
  * bilgisayar, koyu), akışlar ve iki sekme. Site görselleri ağa çıkmaz, boş görselle yanıtlanır.
  */
@@ -42,7 +42,7 @@ export async function startStatic() {
 async function openDemo(browser, viewport, role = 'patron') {
   const context = await browser.newContext({ ...VIEWPORTS[viewport], locale: 'tr-TR', timezoneId: 'Europe/Istanbul', reducedMotion: 'reduce' });
   await context.route(/^https:\/\/laffogato\.net\//, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
-  await context.addInitScript((r) => localStorage.setItem('lafpos.demo.rol', r), role);
+  await context.addInitScript((r) => localStorage.setItem('asilpos.demo.rol', r), role);
   const problems = [];
   const watch = (page) => {
     page.on('console', (m) => m.type() === 'error' && problems.push(`konsol: ${m.text().slice(0, 200)}`));
@@ -56,7 +56,7 @@ async function openDemo(browser, viewport, role = 'patron') {
 
 /** Demo açılana dek bekler: ilk açılışta sql.js yüklenir, kurulum ve örnek gün işlenir */
 async function ready(page) {
-  await page.getByText('LafPOS demosu hazırlanıyor').waitFor({ state: 'detached', timeout: 20_000 });
+  await page.getByText('AsilPOS demosu hazırlanıyor').waitFor({ state: 'detached', timeout: 20_000 });
   await settle(page);
 }
 
@@ -128,7 +128,7 @@ async function flow(browser, base, fn) {
 const api = (page, method, path, body) =>
   page.evaluate(
     async ([m, p, b]) => {
-      const res = await fetch(`/api${p}`, { method: m, headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('lafpos.demo.token')}` }, body: b === undefined ? undefined : JSON.stringify(b) });
+      const res = await fetch(`/api${p}`, { method: m, headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('asilpos.demo.token')}` }, body: b === undefined ? undefined : JSON.stringify(b) });
       return res.json();
     },
     [method, path, body],

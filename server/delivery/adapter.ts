@@ -7,7 +7,7 @@ export type PlatformNotify = 'hazir' | 'yolda' | 'teslim';
  * Gerçek platform bağlantısı: siparişi tek biçime çevirir (`PlatformOrderPayload`) ve kabul / ret / aşama çağrılarını
  * yapar. Akış, ödeme ve kilit `service.ts`'te; bağdaştırıcı yalnız platformla konuşur. Yoklama yapanlar (Trendyol Go)
  * `poll` ile yeni siparişleri ve platformun iptallerini getirir; siparişi iten platformlar (Yemeksepeti, Getir) için
- * `poll` LafPOS Uzaktan aktarıcısından çeker.
+ * `poll` AsilPOS Uzaktan aktarıcısından çeker.
  */
 export interface PollResult {
   orders: PlatformOrderPayload[];

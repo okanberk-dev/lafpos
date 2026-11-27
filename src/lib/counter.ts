@@ -1,7 +1,7 @@
 import type { OrderDTO } from '@shared/types';
 import { post } from './api';
 
-const KEY = 'lafpos.counterDraft';
+const KEY = 'asilpos.counterDraft';
 
 /**
  * Tezgâh satışı açar. Bu cihazın (sekmenin) son boş tezgâh adisyonu varsa sunucu onu yeniden kullanır: art arda

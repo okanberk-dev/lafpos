@@ -435,7 +435,7 @@ function imzaAlarmi(n: number) {
     action: 'uzaktan.imza',
     severity: 'alarm',
     entity: 'kontrol',
-    message: `Uzaktan yönetim: ${n} işlem imzası tutmadığı için reddedildi. İşlem LafPOS Uzaktan’dan ya da bu kasa için gelmiyor olabilir (başka şubenin işlemi) ya da kasadaki ve Vercel’deki LAFPOS_CLOUD_SECRET farklı`,
+    message: `Uzaktan yönetim: ${n} işlem imzası tutmadığı için reddedildi. İşlem AsilPOS Uzaktan’dan ya da bu kasa için gelmiyor olabilir (başka şubenin işlemi) ya da kasadaki ve Vercel’deki ASILPOS_CLOUD_SECRET farklı`,
     data: { sayi: n },
   });
   fx.flush();
@@ -467,7 +467,7 @@ async function komutIsle(raw: unknown, now: number): Promise<Islem> {
   if (!d.ok || !imzali) {
     // Doğrulanamayan ya da imzasız komut uygulanmaz; bilinen bir komutun sonucunu da ezemez
     if (bilinen || bekliyor) return null;
-    sonucYaz({ id, durum: 'reddedildi', mesaj: d.ok ? 'İmza tutmadı: işlem bu kasa için LafPOS Uzaktan’dan gelmiyor ya da kasanın anahtarı farklı' : d.hata, at: now });
+    sonucYaz({ id, durum: 'reddedildi', mesaj: d.ok ? 'İmza tutmadı: işlem bu kasa için AsilPOS Uzaktan’dan gelmiyor ya da kasanın anahtarı farklı' : d.hata, at: now });
     return d.ok ? 'imza' : 'yeni';
   }
   const by = kim as string;

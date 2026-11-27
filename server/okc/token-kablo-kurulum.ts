@@ -6,7 +6,7 @@ import { dllPath, HUB_DLL, TOKEN_KABLO_DIR, vcRuntimeX86 } from './token-kablo';
 
 /**
  * Token kablolu bağlantının bilgisayar tarafı kurulumu (Yönetim › Yazarkasa POS › Kurulumu yap). Kasa sunucusu Windows'ta
- * SYSTEM olarak çalışır (Görev Zamanlayıcı, lafpos.nsi): kurulumlar onay penceresi açmadan, sessiz yapılır.
+ * SYSTEM olarak çalışır (Görev Zamanlayıcı, asilpos.nsi): kurulumlar onay penceresi açmadan, sessiz yapılır.
  *
  * 1. Visual C++ çalışma kitaplığı (x86): Microsoft'un kalıcı adresinden; dosyanın Microsoft imzası denetlenir.
  * 2. Token'ın kütüphanesi (IntegrationHub.dll): Token'ın açık örnek projesinden, sabit commit ve SHA-256 ile.

@@ -70,7 +70,7 @@ function Authed() {
     };
   }, [qc]);
 
-  if (boot.isLoading) return <PageLoading label="LafPOS açılıyor…" />;
+  if (boot.isLoading) return <PageLoading label="AsilPOS açılıyor…" />;
   // Uzaktan görünümde kafe henüz bağlanmadıysa (özet yok) üye doğrudan İndir'i görür: program buradan kurulur, kafe
   // bağlanınca canlı görünüm kendiliğinden açılır. İndir adresi başka bir açılış hatasında da kabuksuz açılır
   const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
@@ -100,7 +100,7 @@ function Authed() {
             )
           }
         >
-          {REMOTE ? errorMessage(boot.error) : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
+          {REMOTE ? errorMessage(boot.error) : 'Kafedeki AsilPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
         </ErrorState>
       </div>
     );
@@ -108,7 +108,7 @@ function Authed() {
 
   if (REMOTE && !REMOTE_PATHS.includes(location.pathname) && !location.pathname.startsWith('/adisyon/')) return <Navigate to="/patron" replace />;
 
-  const demo = REMOTE && sessionStorage.getItem('lafpos.demo') === '1';
+  const demo = REMOTE && sessionStorage.getItem('asilpos.demo') === '1';
   return (
     // Uzaktan görünümün demo notu kabuğun şeridinde, sayfanın dışında: sayfa main'in tam yüksekliğini kullanır, içeride
     // dursa her ekranın altını keserdi. Uyarı değil bilgi
@@ -146,7 +146,7 @@ function Authed() {
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
           {/* Sık sorulan sorular: oturum açan herkese; sorular kişinin yetkisine göre süzülür (src/lib/faq.ts). Uzaktan görünümde yok */}
           {!REMOTE && <Route path="/yardim" element={<HelpPage />} />}
-          {/* Siteden kurulum: yalnız LafPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
+          {/* Siteden kurulum: yalnız AsilPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
           {REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}
           {REMOTE && <Route path={MERKEZ_PATH} element={<MerkezPage />} />}
           {REMOTE && <Route path={KONTROL_PATH} element={<KontrolPage />} />}
@@ -178,7 +178,7 @@ export function App() {
   if (!REMOTE && (location.pathname === '/cagri' || location.pathname === '/musteri-ekrani')) {
     return <Suspense fallback={<PageLoading />}>{location.pathname === '/cagri' ? <PickupBoardPage /> : <CustomerDisplayPage />}</Suspense>;
   }
-  if (!ready) return <PageLoading label="LafPOS açılıyor…" />;
+  if (!ready) return <PageLoading label="AsilPOS açılıyor…" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;
     return REMOTE ? <RemoteLoginPage /> : DEMO ? <DemoRolePicker /> : <LoginPage />;

@@ -3,7 +3,7 @@ import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
- * Sahibin 26 Ekim kararı (L3 madde 8): LafPOS bağlantısı varsayılan kapalı. `LAFFOGATO_URL` .env'de açıkça
+ * Sahibin 26 Ekim kararı (L3 madde 8): AsilPOS bağlantısı varsayılan kapalı. `LAFFOGATO_URL` .env'de açıkça
  * yazılmadıkça siteye hiçbir istek gitmez: menü yoklaması, görsel, sipariş sürüm sinyali, Tükendi yazımı. Anahtar
  * tek başına bağlantıyı açmaz; elle "Siteyle eşitle" ve "Yenile" "Site bağlantısı kurulmadı" der.
  */
@@ -43,7 +43,7 @@ describe('LAFFOGATO_URL yokken site bağlantısı kapalı', () => {
     expect(status.menu.state?.lastError ?? null).toBeNull();
   });
 
-  it('Tükendi yalnız LafPOS\'ta değişir, ürün görseli indirilmez', async () => {
+  it('Tükendi yalnız AsilPOS\'ta değişir, ürün görseli indirilmez', async () => {
     const latte = boot.products.find((p) => p.name === 'Latte' && p.extSource === 'laffogato')!;
     expect((await h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${latte.id}/availability`, { active: false })).site).toBe('baglanti_yok');
     expect((await h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${latte.id}/availability`, { active: true })).site).toBe('baglanti_yok');
@@ -85,13 +85,13 @@ describe('LAFFOGATO_URL yokken site bağlantısı kapalı', () => {
     fetchSpy.mockClear();
     const jobs = await import('../server/jobs');
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
-    process.env.LAFPOS_NO_JOBS = '0';
+    process.env.ASILPOS_NO_JOBS = '0';
     try {
       jobs.startJobs();
       await vi.advanceTimersByTimeAsync(2 * 3600_000);
     } finally {
       jobs.stopJobs();
-      process.env.LAFPOS_NO_JOBS = '1';
+      process.env.ASILPOS_NO_JOBS = '1';
       vi.useRealTimers();
     }
     expect(fetchSpy).not.toHaveBeenCalled();

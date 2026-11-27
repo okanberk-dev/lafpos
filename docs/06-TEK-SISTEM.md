@@ -17,9 +17,9 @@ Hepsinde ortak olan **tek veri, iki yüz**: ürün, fiyat ve rapor için web ark
 Verisi ayrı iki sistem (ürünü bir yerde yükleyip kasaya elle aktarmak) hiçbirinde yok; çift giriş ve
 "kasadaki fiyat başka, sitedeki başka" hatası doğurur.
 
-## LafPOS'un kararı
+## AsilPOS'un kararı
 
-1. **LafPOS tek sistemdir, iki yüzü vardır.** Aynı sunucu ve veritabanı:
+1. **AsilPOS tek sistemdir, iki yüzü vardır.** Aynı sunucu ve veritabanı:
    - **Kasa:** kasa bilgisayarında Chrome kiosk (`docs/05-KASA-BILGISAYARI.md`), tezgâh tableti, garson
      telefonu, bar ekranı. Masalar, adisyon, ödeme, yazarkasa, kasa ve gün sonu.
    - **Yönetim:** Innex paneli (`DESIGN.md`), herhangi bir tarayıcıdan: ürünler, roller ve personel, masa
@@ -27,27 +27,27 @@ Verisi ayrı iki sistem (ürünü bir yerde yükleyip kasaya elle aktarmak) hiç
    Hangi yüzü kimin gördüğünü **rol ve yetki** belirler (Yönetim › Roller ve yetkiler); kasiyer yönetimi
    görmez, adresle girse de sunucu reddeder.
 2. **Ürünün tek ana kaydı laffogato'nun yönetim panelidir.** Site, uygulama ve kasa aynı menüyü okur; ad,
-   fiyat, boy, KDV, fotoğraf orada değişir. LafPOS menüyü kendisi çeker (gün açıkken 15 dakikada bir, ETag ile;
+   fiyat, boy, KDV, fotoğraf orada değişir. AsilPOS menüyü kendisi çeker (gün açıkken 15 dakikada bir, ETag ile;
    `.env`'de `LAFFOGATO_URL` yoksa hiç). Otomatik senkron değişikliği doğrudan uygular ve denetim kaydına yazar;
    yalnız elle "Siteyle eşitle" uygulamadan önce önizler. Kasaya özgü alanları (istasyon, kısa ad, porsiyon, seçenek grubu,
-   sık kullanılan) LafPOS tutar. Yönetim › Ürünler'deki **"Sitede ürün ekle"** laffogato panelinin yeni
+   sık kullanılan) AsilPOS tutar. Yönetim › Ürünler'deki **"Sitede ürün ekle"** laffogato panelinin yeni
    ürün sayfasını açar.
 3. **Karaoke odasını site satar:** rezervasyon sitede (`/karaoke` ve uygulama) alınır ve çoğunlukla orada ödenir.
-   LafPOS bugünün rezervasyonlarını okur, oda sayacını rezervasyona bağlar, sitede ödenen saati yeniden almaz; kasada
+   AsilPOS bugünün rezervasyonlarını okur, oda sayacını rezervasyona bağlar, sitede ödenen saati yeniden almaz; kasada
    yalnız bloğu aşan süre ve köşkte ödenecek rezervasyonun tutarı alınır (`docs/03-ENTEGRASYON.md` §2.4). Odaya
-   LafPOS'ta yerel rezervasyon yazılmaz. **Yalnız kasada çalınan hizmetler** (odanın saatlik ücreti, etkinlik ücreti)
-   LafPOS'ta "yerel ürün"dür; laffogato'nun menüsüne girmez.
-4. **Maliyet, reçete, stok ve muhasebenin kaynağı lafmaliyet'tir.** LafPOS gün sonunu oraya gönderir,
-   maliyeti oradan günde bir okur (`docs/03-ENTEGRASYON.md` §4); kopyalamaz. LafPOS'taki `products.cost`
+   AsilPOS'ta yerel rezervasyon yazılmaz. **Yalnız kasada çalınan hizmetler** (odanın saatlik ücreti, etkinlik ücreti)
+   AsilPOS'ta "yerel ürün"dür; laffogato'nun menüsüne girmez.
+4. **Maliyet, reçete, stok ve muhasebenin kaynağı lafmaliyet'tir.** AsilPOS gün sonunu oraya gönderir,
+   maliyeti oradan günde bir okur (`docs/03-ENTEGRASYON.md` §4); kopyalamaz. AsilPOS'taki `products.cost`
    yalnız gösterim için önbellektir (lafmaliyet'te olmayan ürününki boşalır); hangi günün hesaplara girdiğine de
-   lafmaliyet'in "LafPOS'a geçiş günü" karar verir, LafPOS kendi tarihini tutmaz.
+   lafmaliyet'in "AsilPOS'a geçiş günü" karar verir, AsilPOS kendi tarihini tutmaz.
 5. **Neden bulut değil kafedeki bilgisayar:** internet giderken de satış sürmeli (ModPOS ve Lightspeed'in
-   çevrimdışı çalışma gereği). Patronun dışarıdan erişimi Tailscale ve salt okunur LafPOS Uzaktan ile
+   çevrimdışı çalışma gereği). Patronun dışarıdan erişimi Tailscale ve salt okunur AsilPOS Uzaktan ile
    (`docs/07-UZAKTAN-ERISIM.md`).
 
 ## Sonuçları
 
-- Ürün yüklemek için ayrı bir "LafPOS ürün paneli" yapılmadı; yerel ürün yalnız hizmetler için.
+- Ürün yüklemek için ayrı bir "AsilPOS ürün paneli" yapılmadı; yerel ürün yalnız hizmetler için.
 - laffogato'da şema değişikliği gerekmedi: imzalı `GET /api/panel/menu` menüdeki ve menü dışındaki her
-  kalemi zaten veriyor; LafPOS bağlantısı için ayrı imza anahtarı ve sipariş sürüm sinyali laffogato#263'te.
-- lafmaliyet'te LafPOS'un gün sonunu alan uç ve ürün maliyeti ucu lafmaliyet#34'te.
+  kalemi zaten veriyor; AsilPOS bağlantısı için ayrı imza anahtarı ve sipariş sürüm sinyali laffogato#263'te.
+- lafmaliyet'te AsilPOS'un gün sonunu alan uç ve ürün maliyeti ucu lafmaliyet#34'te.

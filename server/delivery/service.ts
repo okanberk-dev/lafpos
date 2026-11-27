@@ -117,7 +117,7 @@ function platformActor(user: AuthUser): Actor {
 const norm = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
 
 /**
- * Platform kalemi → LafPOS ürünü: önce Ürün eşleme tablosu (platform ürün kimliği → ürün; Yönetim › Paket platformları),
+ * Platform kalemi → AsilPOS ürünü: önce Ürün eşleme tablosu (platform ürün kimliği → ürün; Yönetim › Paket platformları),
  * sonra aynı ad (Türkçe büyük-küçük harf duyarsız); boy seçeneklerde yazar
  */
 function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {

@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { splitKdv } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
+import { TEL_KART_ALANI } from '@shared/eski-adlar';
 
 /**
- * Gün sonu eksiksiz lafmaliyet'e (sahibin isteği, 24 Kasım 2026): LafPOS'ta girilen her şey ve kasanın bildiği cihaz
+ * Gün sonu eksiksiz lafmaliyet'e (sahibin isteği, 24 Kasım 2026): AsilPOS'ta girilen her şey ve kasanın bildiği cihaz
  * (Pavo) verisi gün gövdesinde (docs/03-ENTEGRASYON.md §4.9). Gün denetimdeki Marina 24.11 gününe benzer: yazarkasada
  * nakit ve kart, yazarkasadan geçmeyen kart ve bahşişi, nakit bahşiş, adisyon ve kalem indirimi, yemek kartı, açık
  * hesap ve tahsilatı (kart ve nakit), havale, vardiya sayımı, föyde yazılan kart slipi, gün sonu notu; gün kapandıktan
@@ -84,13 +85,13 @@ describe('gün sonu eksiksiz: kasa ve cihaz verisi gövdede', () => {
     const o2 = await sell([{ name: 'Türk Kahvesi', size: 'M' }, { name: 'Espresso', size: 'M' }]);
     totals.o2 = o2.total;
     deviceBasketToVoid = await payOnDevice(o2, 3);
-    // O3 adisyon indirimi %10, kart LafPOS'ta (yazarkasadan geçmedi) ve ₺20 kart bahşişi
+    // O3 adisyon indirimi %10, kart AsilPOS'ta (yazarkasadan geçmedi) ve ₺20 kart bahşişi
     let o3 = await sell([{ name: 'Latte', size: 'L' }, { name: 'Espresso', size: 'M' }]);
     o3 = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o3.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim indirimi' });
     orderDiscount = o3.totals.orderDiscount;
     totals.o3 = o3.total;
     await payHere(o3, 'Kredi kartı', { tip: 2000 });
-    // O4 yemek kartı; O5 kalem indirimi ₺10, nakit LafPOS'ta ve ₺10 nakit bahşiş
+    // O4 yemek kartı; O5 kalem indirimi ₺10, nakit AsilPOS'ta ve ₺10 nakit bahşiş
     await payHere(await sell([{ name: 'San Sebastian' }]), 'Pluxee');
     let o5 = await sell([{ name: 'Türk Kahvesi', size: 'M' }, { name: 'Espresso', size: 'M' }]);
     const espresso = o5.items.find((i) => i.name === 'Espresso')!;
@@ -138,7 +139,7 @@ describe('gün sonu eksiksiz: kasa ve cihaz verisi gövdede', () => {
     // C1 gün sonu: sayılan, föyde kart slipi ₺995,00, not (boşluklarıyla)
     const expected = (await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day')).summary.expectedCash;
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: expected - 500, cashCounts: { [`m:${method('Kredi kartı').id}`]: 99500 }, note: '  Gün sonu notu  ' });
-    // Gün kapandıktan sonra O2'nin fişi cihazda iptal edildi: LafPOS'ta ödeme canlı kalır (fis_iptal; Pavo'nun iptal
+    // Gün kapandıktan sonra O2'nin fişi cihazda iptal edildi: AsilPOS'ta ödeme canlı kalır (fis_iptal; Pavo'nun iptal
     // sonucu kapanmış günde böyle işlenir, okc/service.ts `okc.void_closed_day`; eğitim cihazı kapanmış günde iptal etmez)
     m.db.update(m.schema.fiscalReceipts).set({ status: 'fis_iptal' }).where(eq(m.schema.fiscalReceipts.id, deviceBasketToVoid)).run();
     // Fişler Pavo'nun (gerçek cihaz belgesi)
@@ -168,7 +169,7 @@ describe('gün sonu eksiksiz: kasa ve cihaz verisi gövdede', () => {
       { batchNo: '000279', at: '2026-11-24T21:31:00.000Z', total: p.bankPos!.pavoCard, trigger: 'elle', dayClosed: true },
     ]);
     expect(p.bankPos).toMatchObject({ status: 'ok', batchNo: '000279', diff: 0 });
-    expect(p.bankPos!.pavoCard).toBe(p.bankPos!.lafposCard);
+    expect(p.bankPos!.pavoCard).toBe(p.bankPos![TEL_KART_ALANI]);
   });
 
   it('bankPos.dayCard: günün bütün kıyası = Z kartı + kart bahşişi + kartla tahsilat − yazarkasadan geçmeyen (bahşişiyle) − cihazda iptal edilen', async () => {
@@ -176,7 +177,7 @@ describe('gün sonu eksiksiz: kasa ve cihaz verisi gövdede', () => {
     expect(p.bankPos!.dayCard).toBe(tl(cardBasis(dayId, []).dayCardKurus!));
     const z = p.z;
     expect(p.bankPos!.dayCard).toBeCloseTo(z.card + z.cardTips + z.cardCollections - p.offDevice.card - p.offDevice.cardTips! - p.okc!.voided.card, 2);
-    // Karaoke (yazarkasada kart) + kartla tahsilat; O3 (LafPOS'ta kart, bahşişiyle) ve cihazda iptal edilen O2 yok
+    // Karaoke (yazarkasada kart) + kartla tahsilat; O3 (AsilPOS'ta kart, bahşişiyle) ve cihazda iptal edilen O2 yok
     expect(p.bankPos!.dayCard).toBe(tl(totals.o6 + 10000));
   });
 

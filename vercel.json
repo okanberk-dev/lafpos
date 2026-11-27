@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "VITE_LAFPOS_UZAKTAN=1 npm run build && npm run build:demo && npm run kanal",
+  "buildCommand": "VITE_ASILPOS_UZAKTAN=1 npm run build && npm run build:demo && npm run kanal",
   "outputDirectory": "dist/web",
   "installCommand": "npm ci",
   "regions": [
@@ -31,6 +31,27 @@
         {
           "key": "cache-control",
           "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/guncelleme/AsilPOS-Kur.cmd",
+      "headers": [
+        {
+          "key": "cache-control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "content-type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "content-disposition",
+          "value": "attachment; filename=\"AsilPOS-Kur.cmd\""
+        },
+        {
+          "key": "x-content-type-options",
+          "value": "nosniff"
         }
       ]
     },

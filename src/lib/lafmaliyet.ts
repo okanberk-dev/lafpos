@@ -4,6 +4,7 @@
  */
 
 import { fmtDateLong } from '@shared/time';
+import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /** lafmaliyet'in gün sonu yanıtından saklananlar (sunucudaki `DayAnswer`); eski lafmaliyet alanları göndermez */
 export interface DayAnswer {
@@ -15,12 +16,12 @@ export interface DayAnswer {
   counted?: boolean;
   switchDay?: string | null;
   /** Ertesi günün beklenen açılışı (TL; kasa zinciri); kasa rakamlarını görmeyene gitmez */
-  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  nextOpening?: { amount: number; source: 'kasa_raporu' | typeof TEL_KAYNAK } | null;
   /** Gövdenin `workedStaffRefs`'inin lafmaliyet'teki karşılığı (§4.8); yalnız personel ya da bağlantı yöneticisine */
   staff?: { counted: string[]; unknown: string[]; otherBranch: string[] };
 }
 
-/** lafmaliyet'in saymadığı personel kimlikleri, LafPOS'taki adıyla (`lafmaliyetStatus` `staffIssues`; ad bu kasada) */
+/** lafmaliyet'in saymadığı personel kimlikleri, AsilPOS'taki adıyla (`lafmaliyetStatus` `staffIssues`; ad bu kasada) */
 export interface StaffIssues {
   unknown: { ref: string; name: string | null }[];
   otherBranch: { ref: string; name: string | null }[];
@@ -50,12 +51,12 @@ export function staffAnswerText(a: DayAnswer, issues: StaffIssues | null | undef
 /**
  * Açılış önerisi (`GET /api/cash/day` `opening`; kasa zinciri, docs/03-ENTEGRASYON.md §4.6): `source` beklenenin
  * kaynağı (lafmaliyet'in devri ya da kasanın sayımı); lafmaliyet'inse `ladminSource` onun kaynağı (`kasa_raporu`:
- * panelin Kasa raporu; `lafpos`: rapor yokken geri söylenen sayım)
+ * panelin Kasa raporu; `TEL_KAYNAK` (telde eski adla): rapor yokken geri söylenen sayım)
  */
 export interface OpeningSuggestion {
   suggested: number;
-  source: 'lafmaliyet' | 'lafpos';
-  ladminSource?: 'kasa_raporu' | 'lafpos';
+  source: 'lafmaliyet' | typeof ACILIS_KASA;
+  ladminSource?: 'kasa_raporu' | typeof TEL_KAYNAK;
   fromDate: string;
 }
 
@@ -65,9 +66,9 @@ export interface OpeningSuggestion {
  */
 export function openingSourceText(o: Pick<OpeningSuggestion, 'source' | 'ladminSource' | 'fromDate'>): string {
   const day = fmtDateLong(o.fromDate);
-  if (o.source === 'lafpos') return `${day} gün sonu sayımı`;
+  if (o.source === ACILIS_KASA) return `${day} gün sonu sayımı`;
   if (o.ladminSource === 'kasa_raporu') return `${day} devri, lafmaliyet kasa raporundan`;
-  if (o.ladminSource === 'lafpos') return `${day} gün sonu sayımı, lafmaliyet'ten`;
+  if (o.ladminSource === TEL_KAYNAK) return `${day} gün sonu sayımı, lafmaliyet'ten`;
   return `${day} devri, lafmaliyet'ten`;
 }
 
@@ -77,7 +78,7 @@ export const dayLabel = (date: string) => dayFmt.format(new Date(`${date}T12:00:
 
 /**
  * Son gönderilen günün lafmaliyet'teki durumu. `idle`: hata değil, sakin bilgi (geçiş gününden önceki günler deneme
- * olarak saklanır, hesaplara girmez; sahibin kararı). Geçiş gününün sahibi lafmaliyet'tir, LafPOS yalnız yanıtı okur.
+ * olarak saklanır, hesaplara girmez; sahibin kararı). Geçiş gününün sahibi lafmaliyet'tir, AsilPOS yalnız yanıtı okur.
  */
 export function answerText(a: DayAnswer): { tone: 'ok' | 'idle'; text: string } {
   const day = dayLabel(a.date);

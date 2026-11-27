@@ -193,7 +193,7 @@ describe('eski kasa yolu: kıyas girdisi bulutun gün raporlarından', () => {
     const { buildDayReport } = await import('../server/sync/cloud-reports');
     const { reportStatsDates, statsFromReports } = await import('@shared/remote-calc');
     const { statsSource } = await import('@shared/today-stats');
-    // Kasanın buluta ittiği gün raporları (LafPOS Uzaktan'da duran veri); iş günü olmayan tarih null
+    // Kasanın buluta ittiği gün raporları (AsilPOS Uzaktan'da duran veri); iş günü olmayan tarih null
     const reports = reportStatsDates(d.date).all.map((date) => buildDayReport(date, d.now));
     expect(reports.filter(Boolean).length).toBeGreaterThanOrEqual(4);
     // Eski kasanın özeti: `stats` yok

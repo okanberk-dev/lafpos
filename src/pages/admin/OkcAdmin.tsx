@@ -159,8 +159,8 @@ const OTHER_VENDORS: { name: string; channel: string; state: string }[] = [
 const STEPS = [
   'Ödeme penceresinde “Hesabı yazarkasaya gönder”e basılır (kalem seçerek bölünmüş hesap da gönderilebilir)',
   'Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar',
-  'Sonuç LafPOS’a gelir, ödemeler adisyona işlenir, adisyon kapanır; Z no ve fiş no adisyonda kalır',
-  'Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer',
+  'Sonuç AsilPOS’a gelir, ödemeler adisyona işlenir, adisyon kapanır; Z no ve fiş no adisyonda kalır',
+  'Cihazda fiş iptal edilirse AsilPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer',
 ];
 
 /** Yazılan adresin kısa hâli: varsayılan şema ve port gösterilmez (192.168.1.50) */
@@ -316,7 +316,7 @@ function TokenSetup({ open }: { open?: boolean }) {
         <Link to="/yonetim/baglanti-bilgileri" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">
           Yönetim › Bağlantı bilgileri
         </Link>
-        ’ne yazılır; LafPOS birkaç saniyede yeni bilgilerle açılır, sonra “Bağlantıyı dene”.
+        ’ne yazılır; AsilPOS birkaç saniyede yeni bilgilerle açılır, sonra “Bağlantıyı dene”.
       </p>
       <p>
         Ayrıntı ve diğer markalar için üreticiden istenecekler: <code className={CODE}>docs/04-YAZARKASA.md</code>
@@ -406,7 +406,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
       }
       bodyClassName="space-y-4 text-sm"
     >
-      <p className="text-muted">Cihaz bankalardaki kart işlemlerini kapatır. LafPOS gün sonu bunu beklemez: cihaz yanıt vermese de gün kapanır, sonuç burada görünür</p>
+      <p className="text-muted">Cihaz bankalardaki kart işlemlerini kapatır. AsilPOS gün sonu bunu beklemez: cihaz yanıt vermese de gün kapanır, sonuç burada görünür</p>
       {eod ? (
         <div className="max-w-2xl">
           <DefRow label="Son deneme">
@@ -426,7 +426,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
             <DefRow label="Genel toplam">{eod.amountsHidden ? <span className="font-normal text-[var(--admin-text-mute)]">Gizli</span> : <span className="tabular">{tl(eod.grandTotalKurus!)}</span>}</DefRow>
           )}
           {diff !== 0 && (
-            <DefRow label={eod.dayCardSinceBatch ? `LafPOS kartı (batch ${eod.dayCardSinceBatch} sonrası)` : 'LafPOS kart toplamı'}>
+            <DefRow label={eod.dayCardSinceBatch ? `AsilPOS kartı (batch ${eod.dayCardSinceBatch} sonrası)` : 'AsilPOS kart toplamı'}>
               <span className="tabular">{tl(eod.dayCardKurus!)}</span>
             </DefRow>
           )}
@@ -437,7 +437,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
           )}
         </div>
       ) : (
-        <p className="text-muted">Bu cihazda LafPOS’tan henüz gün sonu alınmadı</p>
+        <p className="text-muted">Bu cihazda AsilPOS’tan henüz gün sonu alınmadı</p>
       )}
       {eod && eod.status === 'ok' && eod.acquirers.length > 0 && (
         <div>
@@ -454,8 +454,8 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
         </div>
       )}
       {diff !== 0 && (
-        <Notice tone="warn" title="Cihazın toplamı LafPOS’un kart toplamından farklı" className="text-[13px]">
-          Cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir; denetim kaydında ayrıntı var
+        <Notice tone="warn" title="Cihazın toplamı AsilPOS’un kart toplamından farklı" className="text-[13px]">
+          Cihazda AsilPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir; denetim kaydında ayrıntı var
         </Notice>
       )}
       {eod && eod.status !== 'ok' && eod.message && (
@@ -470,7 +470,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
           disabled={savingAuto}
           onChange={onAuto}
           label="Gün kapanınca cihazda gün sonu al"
-          hint="LafPOS gün sonundan hemen sonra, gün başına bir kez; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
+          hint="AsilPOS gün sonundan hemen sonra, gün başına bir kez; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
         />
         {s.pavoEodFis !== undefined && (
           <Toggle
@@ -480,7 +480,7 @@ function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus
             disabled={savingFis}
             onChange={onFis}
             label="Gün sonu kâğıdı fiş yazıcısından da çıksın"
-            hint="Cihaz kendi slibini her gün sonunda basar. Açıkken kasa ekranı fiş yazıcısından da LafPOS Z’sini ve bankalarla Pavo - LafPOS kıyasını basar (her gün sonunda bir kez; kör kasada Z basılmaz)"
+            hint="Cihaz kendi slibini her gün sonunda basar. Açıkken kasa ekranı fiş yazıcısından da AsilPOS Z’sini ve bankalarla Pavo - AsilPOS kıyasını basar (her gün sonunda bir kez; kör kasada Z basılmaz)"
           />
         )}
       </div>
@@ -962,7 +962,7 @@ export default function OkcAdmin() {
               </div>
             )}
             {!s.tokenx.webhookUrl && (
-              <p className="text-xs text-muted">Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa LafPOS sepet durumunu 2,5 sn’de bir sorgular; sonuç yine gelir</p>
+              <p className="text-xs text-muted">Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa AsilPOS sepet durumunu 2,5 sn’de bir sorgular; sonuç yine gelir</p>
             )}
             {s.lastError && (
               <Notice tone="danger" title={`Son hata · ${fmtDateTime(s.lastError.at)}`} className="text-[13px]">
@@ -1087,7 +1087,7 @@ export default function OkcAdmin() {
             </li>
           ))}
         </ul>
-        <p>LafPOS’ta her marka ayrı bir sağlayıcıdır; üretici belgeyi ve test bilgilerini verince sağlayıcı eklenir, adisyon ve ödeme akışı değişmez. Masada ödemede GMP-3 §6.1 gereği üreticinin bulut kanalının bilgi fişi ve TSM kaydını desteklediği yazılı teyit edilmeli</p>
+        <p>AsilPOS’ta her marka ayrı bir sağlayıcıdır; üretici belgeyi ve test bilgilerini verince sağlayıcı eklenir, adisyon ve ödeme akışı değişmez. Masada ödemede GMP-3 §6.1 gereği üreticinin bulut kanalının bilgi fişi ve TSM kaydını desteklediği yazılı teyit edilmeli</p>
       </SetupNotes>
     </div>
   );

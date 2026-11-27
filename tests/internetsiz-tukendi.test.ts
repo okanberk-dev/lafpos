@@ -4,6 +4,7 @@ import { type AvailabilityResultDTO, availabilityNotice } from '@shared/tukendi'
 import type { OrderDTO } from '@shared/types';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * İnternet yokken kasada elle Tükendi / Satışa aç (server/sync/laffogato-orders.ts `setAvailability`,
@@ -83,7 +84,7 @@ describe('internet yokken elle Tükendi', () => {
     expect(site.dropped).toContain('POST /api/panel/menu');
     expect(postsOf('mnu-0043')).toEqual([]);
     const after = await product('mnu-0043');
-    expect([after.active, after.soldOutBy]).toEqual([false, 'lafpos']);
+    expect([after.active, after.soldOutBy]).toEqual([false, TUKENDI_KASA]);
     // Giden kutusunda tek kayıt, kimin bastığıyla
     const rows = await pendingOf('mnu-0043');
     expect(rows).toHaveLength(1);
@@ -222,7 +223,7 @@ describe('internet yokken elle Tükendi', () => {
     const r = await tap('kasa', cilek.id, true);
     expect(r.status).toBe(502);
     const after = await product('mnu-0051');
-    expect([after.active, after.soldOutBy]).toEqual([false, 'lafpos']);
+    expect([after.active, after.soldOutBy]).toEqual([false, TUKENDI_KASA]);
     expect(await pendingOf('mnu-0051')).toEqual([]);
     expect((await audit('product.available')).some((m) => m.includes('Çilek'))).toBe(false);
   });
@@ -248,9 +249,9 @@ describe('internet yokken elle Tükendi', () => {
     expect((await tap('mudur', frambuaz.id, true)).json).toEqual({ site: 'kuyrukta', neden: 'internet' });
     expect([(await product('mnu-0052')).active, (await product('mnu-0052')).soldOutBy]).toEqual([true, null]);
     expect(await audit('product.available')).toContain('Müdür: Frambuaz satışa açıldı (sitede kapatılmıştı) (site: kuyrukta, internet yok)');
-    // Kasiyerin kendi Tükendi'si (`lafpos`) internetsiz de yine kasiyerce açılır; yalnız son durum bekler
+    // Kasiyerin kendi Tükendi'si (`asilpos`) internetsiz de yine kasiyerce açılır; yalnız son durum bekler
     expect((await tap('kasa', frambuaz.id, false)).json.site).toBe('kuyrukta');
-    expect((await product('mnu-0052')).soldOutBy).toBe('lafpos');
+    expect((await product('mnu-0052')).soldOutBy).toBe(TUKENDI_KASA);
     expect((await tap('kasa', frambuaz.id, true)).json.site).toBe('kuyrukta');
     expect((await pendingOf('mnu-0052')).map((x) => x.payload)).toEqual([{ id: 'mnu-0052', isActive: true, actor: 'Kasa' }]);
 
@@ -283,7 +284,7 @@ describe('kasiyerin bildirimi', () => {
     expect(availabilityNotice('Americano', false, { site: 'guncellendi' })).toEqual({ tone: 'ok', text: 'Americano tükendi; site ve uygulama da güncellendi' });
     expect(availabilityNotice('Tost', true, { site: 'bagli_degil' })).toEqual({ tone: 'ok', text: 'Tost satışa açıldı' });
     expect(availabilityNotice('Latte', false, { site: 'anahtar_yok' })).toEqual({ tone: 'ok', text: 'Latte tükendi' });
-    expect(availabilityNotice('Latte', false, { site: 'anahtar_yok' }, { admin: true }).text).toBe('Latte tükendi; site anahtarı yok, yalnız LafPOS');
-    expect(availabilityNotice('Latte', false, { site: 'baglanti_yok' }, { admin: true }).text).toBe('Latte tükendi; site bağlantısı kurulmadı, yalnız LafPOS');
+    expect(availabilityNotice('Latte', false, { site: 'anahtar_yok' }, { admin: true }).text).toBe('Latte tükendi; site anahtarı yok, yalnız AsilPOS');
+    expect(availabilityNotice('Latte', false, { site: 'baglanti_yok' }, { admin: true }).text).toBe('Latte tükendi; site bağlantısı kurulmadı, yalnız AsilPOS');
   });
 });

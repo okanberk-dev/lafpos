@@ -251,7 +251,7 @@ describe('kişi bilgisi dışarı gitmez', () => {
     expect(JSON.stringify(state)).not.toContain('Ayşe');
   });
 
-  it('LafPOS Uzaktan özetinde yalnız ilk ad, kimlik yok', async () => {
+  it('AsilPOS Uzaktan özetinde yalnız ilk ad, kimlik yok', async () => {
     const o = await newOrder([{ name: 'Latte', qty: 2 }]);
     await h.ok('mudur', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, kind: 'odenmez', reason: 'Müşteri şikâyeti', person: { kind: 'customer', id: customerId } });
     const { buildSnapshot } = await import('../server/sync/cloud');

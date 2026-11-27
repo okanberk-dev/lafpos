@@ -79,7 +79,7 @@ export const RING_LEVEL_TABLE = 1;
 export const RING_LEVEL_OTHER = 0.8;
 /** Bu cihazdaki "Gördüm" bu kadar hatırlanır */
 export const ACK_KEEP_MS = 24 * 3600_000;
-export const ACKS_KEY = 'lafpos.pref.siteAlerts.acks';
+export const ACKS_KEY = 'asilpos.pref.siteAlerts.acks';
 
 /** Kim neyi duyar: online siparişi siparişi alan ya da bar; karaokeyi siparişi alan ya da rezervasyoncu */
 export interface AlertPerms {

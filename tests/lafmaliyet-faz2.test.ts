@@ -243,7 +243,7 @@ describe('iptaller, iadeler ve yazarkasadan geçmeyen', () => {
   });
 
   it('yazarkasadan geçmeyen kart ve nakit (bahşiş hariç); yazarkasanın Z no metin', () => {
-    // Cihazdan geçen San Sebastian dışındaki satışlar LafPOS'ta alındı
+    // Cihazdan geçen San Sebastian dışındaki satışlar AsilPOS'ta alındı
     expect(p.offDevice).toEqual({ card: 195 + 60, cash: 110, cardTips: 0 });
     expect(p.z.okcZNo).toEqual(expect.stringMatching(/^\d+$/));
   });
@@ -313,7 +313,7 @@ describe('gönderim sırası ve düzeltme', () => {
     const date = businessDate(Date.now());
     const before = posts.filter((x) => x.date === date).at(-1) as Payload & { okc?: { card: number; voided: { count: number; card: number } } };
     expect(before.okc).toMatchObject({ card: sent.receipt.amount / 100, voided: { count: 0, card: 0 } });
-    // Ertesi sabah fiş cihazda iptal edildi (okc.void_closed_day): LafPOS'ta ödeme kalır, gün yeniden kuyruğa girer
+    // Ertesi sabah fiş cihazda iptal edildi (okc.void_closed_day): AsilPOS'ta ödeme kalır, gün yeniden kuyruğa girer
     const { applyResult } = await import('../server/okc/service');
     applyResult(sent.receipt.id, { status: 'voided', docKind: null, zNo: null, receiptNo: null, docId: null, payments: [] }, 'cihaz');
     expect(m.db.select().from(m.schema.fiscalReceipts).where(m.eq(m.schema.fiscalReceipts.id, sent.receipt.id)).get()!.status).toBe('fis_iptal');

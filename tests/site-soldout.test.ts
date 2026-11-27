@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
+import { SITE_AKTOR, TUKENDI_KASA } from '@shared/eski-adlar';
 
 /**
  * Porsiyon ve site (L3 madde 5): porsiyonu biten ürünün Tükendi'si giden kutusundan siteye gider (tekrar denenir,
@@ -48,11 +49,11 @@ describe('porsiyon biter: Tükendi giden kutusundan siteye', () => {
     const espresso = await product('mnu-0005');
     expect(espresso.active).toBe(false);
     expect(espresso.portionsLeft).toBe(0);
-    expect(espresso.soldOutBy).toBe('lafpos');
+    expect(espresso.soldOutBy).toBe(TUKENDI_KASA);
     expect(await pending()).toEqual([expect.objectContaining({ kind: 'menu.isActive', dedupeKey: 'menu:mnu-0005' })]);
     const { flushSiteOutbox } = await import('../server/sync/site-outbox');
     expect(await flushSiteOutbox()).toEqual({ sent: 1, failed: 0 });
-    expect(site.menuPosts.at(-1)).toEqual({ id: 'mnu-0005', isActive: false, actor: 'LafPOS porsiyon', branch: 'marina' });
+    expect(site.menuPosts.at(-1)).toEqual({ id: 'mnu-0005', isActive: false, actor: `${SITE_AKTOR} porsiyon`, branch: 'marina' });
     expect(await pending()).toHaveLength(0);
   });
 
@@ -126,11 +127,11 @@ describe('porsiyon geri döner: site de açılır', () => {
     await h.ok('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/void`, { reason: 'Yanlış ürün' });
     const reopened = await product('mnu-0057');
     expect([reopened.active, reopened.portionsLeft, reopened.soldOutBy]).toEqual([true, 1, null]);
-    expect(await pending()).toEqual([expect.objectContaining({ dedupeKey: 'menu:mnu-0057', payload: { id: 'mnu-0057', isActive: true, actor: 'LafPOS porsiyon' } })]);
+    expect(await pending()).toEqual([expect.objectContaining({ dedupeKey: 'menu:mnu-0057', payload: { id: 'mnu-0057', isActive: true, actor: `${SITE_AKTOR} porsiyon` } })]);
     site.menuPostStatus.push(503);
     expect(await flushSiteOutbox()).toEqual({ sent: 0, failed: 1 });
 
-    // Site hâlâ "Tükendi" diyor ama LafPOS'un yazımı bekliyor: eşitleme ürünü kapatmaz, "Sitede satışta değil" yazmaz
+    // Site hâlâ "Tükendi" diyor ama AsilPOS'un yazımı bekliyor: eşitleme ürünü kapatmaz, "Sitede satışta değil" yazmaz
     const r = await syncMenu();
     expect(r.preview?.changes.filter((c) => c.extId === 'mnu-0057')).toEqual([]);
     const held = await product('mnu-0057');
@@ -186,7 +187,7 @@ describe('porsiyon sayacı bitmemişken kayıt Satışta bilgisine dokunmaz', ()
     await h.ok('mudur', 'PATCH', `/admin/products/${sandwich.id}`, { portionsLeft: 3, shortName: 'ROSB' });
     expect(site.menuPosts).toHaveLength(posts);
     const after = await product('mnu-0074');
-    expect([after.active, after.soldOutBy, after.shortName]).toEqual([false, 'lafpos', 'ROSB']);
+    expect([after.active, after.soldOutBy, after.shortName]).toEqual([false, TUKENDI_KASA, 'ROSB']);
     await h.ok('kasa', 'POST', `/sync/products/${sandwich.id}/availability`, { active: true });
     await h.ok('mudur', 'PATCH', `/admin/products/${sandwich.id}`, { portionsLeft: null });
   });
@@ -247,7 +248,7 @@ describe('internet kesikken elle Tükendi', () => {
     const rows = (await pending()).filter((x) => x.dedupeKey === 'menu:mnu-0006');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.payload).toMatchObject({ id: 'mnu-0006', isActive: false });
-    expect((rows[0]!.payload as { actor: string }).actor).not.toBe('LafPOS porsiyon');
+    expect((rows[0]!.payload as { actor: string }).actor).not.toBe(`${SITE_AKTOR} porsiyon`);
     // Biten ürün satılmaz
     const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
     const add = await h.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: p.id, qty: 1, ...(p.priceL != null ? { size: 'M' } : {}) }] });

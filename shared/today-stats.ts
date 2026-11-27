@@ -1,7 +1,7 @@
 /**
  * Patron panelinin "Bugün" kıyasları (dün, geçen hafta aynı gün, geçen ay aynı gün; hafta ve ay başından bugüne; gün
  * sonu tahmini; birikimli ciro eğrisi; en çok satanların geçen haftaya göre değişimi). Saf işlevler: kasa
- * (`server/services/reports.ts` `patronLive`) girdiyi kurar, ekran (kafede ve LafPOS Uzaktan'da) şu anki saatle
+ * (`server/services/reports.ts` `patronLive`) girdiyi kurar, ekran (kafede ve AsilPOS Uzaktan'da) şu anki saatle
  * hesaplar. Girdi saatten bağımsızdır (kapanış dakikaları ve tam gün toplamları): özet yalnız satışla değişir, Uzaktan'ın
  * sürüm ve ETag kuralı bozulmaz, kıyas her yoklamada Redis'ten okunmaz.
  *
@@ -41,7 +41,7 @@ export interface PatronStats {
   /** Geçen haftanın aynı günü, bugünün en çok satanları (`top` sırası) için: [sıra, dakika, adet, ciro] */
   topPrev: [number, number, number, number][];
   /**
-   * Girdiyi kim kurdu. Yoksa kasa (`patronLive`). `rapor`: kasa girdiyi göndermiyor (eski derleme), LafPOS Uzaktan
+   * Girdiyi kim kurdu. Yoksa kasa (`patronLive`). `rapor`: kasa girdiyi göndermiyor (eski derleme), AsilPOS Uzaktan
    * bulutta duran gün raporlarından kurdu (api/uzaktan.ts `withStats`)
    */
   src?: 'rapor';

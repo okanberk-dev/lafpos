@@ -5,7 +5,7 @@ import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNot
 
 /**
  * Yemeksepeti (Delivery Hero POS middleware) bağdaştırıcısı. Platform siparişi kasaya değil herkese açık bir adrese
- * iter: LafPOS Uzaktan (Vercel, api/uzaktan.ts `yemeksepeti/*`) siparişi JWT ile doğrulayıp Redis'teki gelen kutusuna
+ * iter: AsilPOS Uzaktan (Vercel, api/uzaktan.ts `yemeksepeti/*`) siparişi JWT ile doğrulayıp Redis'teki gelen kutusuna
  * koyar ve `remoteOrderId` ile hemen yanıtlar; kasa gelen kutusunu imzalı olarak 20 saniyede bir çeker, işler ve
  * siler. Kabul, ret ve aşamalar kasadan middleware'e gider (`POST /v2/login` jetonuyla; sipariş gövdesindeki
  * `callbackUrls` varsa o adreslere). Belgeler: calisma/arastirma/paket-platformlari/yemeksepeti-dh/*.yaml
@@ -167,7 +167,7 @@ function feeLabel(name: string | null): string {
 const present = (v: unknown) => v != null && !(typeof v === 'string' && !v.trim());
 
 /**
- * Delivery Hero siparişi → LafPOS'un tek biçimi. Birim fiyat ürün + seçenekler; ürünün `paidPrice`'ı (adet toplamı)
+ * Delivery Hero siparişi → AsilPOS'un tek biçimi. Birim fiyat ürün + seçenekler; ürünün `paidPrice`'ı (adet toplamı)
  * varsa birim ona göre düzeltilir. Ücretler (`deliveryFees`: teslimat, ambalaj…) adlarıyla ayrı satır olur
  * (`kind: 'fee'`); yalnız Yemeksepeti kuryesinin teslimat ücreti platformundur ve satır olmaz. İndirimlerin restoran
  * payı VENDOR sponsorluğu. Müşterinin bize ödediği: kapıda tahsilatta `collectFromCustomer`, yoksa `grandTotal`
@@ -359,7 +359,7 @@ export class YemeksepetiClient {
 
 }
 
-// ─── Aktarıcı (LafPOS Uzaktan) ───────────────────────────────────────────────
+// ─── Aktarıcı (AsilPOS Uzaktan) ───────────────────────────────────────────────
 
 /**
  * Aktarıcının adresi; restoranın kimliği imzalı sorguda (`?restoran=`): aktarıcı yalnız bu restoranın gelen kutusunu

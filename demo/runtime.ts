@@ -9,16 +9,17 @@ import { clearSaved, loadSaved, save } from './store';
 import { acquireLead, follow, lead, resetAll, route } from './tabs';
 
 /**
- * Tarayıcı demosunun çalışma zamanı: gerçek LafPOS sunucusu (Hono, aynı uçlar ve iş kuralları) sayfanın içinde
+ * Tarayıcı demosunun çalışma zamanı: gerçek AsilPOS sunucusu (Hono, aynı uçlar ve iş kuralları) sayfanın içinde
  * çalışır. Arayüzün `/api/*` istekleri ağa çıkmadan `app.fetch`'e gider; canlı olaylar da aynı yoldan (SSE).
  * Veritabanı sql.js (bellekte SQLite); her yazmadan sonra IndexedDB'ye kaydedilir. Dış sistemlere (laffogato,
- * lafmaliyet, LafPOS Uzaktan) istek gitmez. Birden çok sekmede sunucuyu biri çalıştırır (demo/tabs.ts).
+ * lafmaliyet, AsilPOS Uzaktan) istek gitmez. Birden çok sekmede sunucuyu biri çalıştırır (demo/tabs.ts).
  */
 /**
  * Demonun ilk gününün sürümü (demo/scenario.ts). İlk gün değişince (ör. self servise geçiş) kayıtlı demo yeni ilk
- * günle açılır: eski kayıt eski kurguyu (masalı gün) göstermeye devam etmesin
+ * günle açılır: eski kayıt eski kurguyu (masalı gün) göstermeye devam etmesin. 3: ad değişikliği (26 Kasım 2026; demonun
+ * deposu ve PIN anahtarı yeni adla)
  */
-const DEMO_DAY_VERSION = 2;
+const DEMO_DAY_VERSION = 3;
 const VERSION_KEY = 'demo.ilk-gun-surumu';
 
 let persistent = true;

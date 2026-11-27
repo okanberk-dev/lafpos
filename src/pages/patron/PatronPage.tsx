@@ -64,7 +64,7 @@ export interface PatronData {
   alerts: { id: number; at: number; severity: 'uyari' | 'alarm'; action: string; message: string; amount: number | null; orderId: string | null }[];
   anomalies: { level: 'uyari' | 'alarm'; title: string; detail: string }[];
   /**
-   * Son gün sonu (yalnız LafPOS Uzaktan özetinde, server/sync/cloud.ts): gün kapalıyken kart. Kasa rakamları yalnız
+   * Son gün sonu (yalnız AsilPOS Uzaktan özetinde, server/sync/cloud.ts): gün kapalıyken kart. Kasa rakamları yalnız
    * patron rolü kasa rakamlarını görüyorsa (kör kasa)
    */
   lastClose?: {
@@ -199,7 +199,7 @@ export default function PatronPage() {
   const visibleHours = hourBars(d);
   /**
    * Kıyasın yolu (shared/today-stats.ts `StatsSource`): `kasa` kasa girdiyi gönderdi; `rapor` eski kasa göndermedi,
-   * LafPOS Uzaktan bulutta duran gün raporlarından kurdu (api/uzaktan.ts `withStats`); `ozet` ikisi de yok, kart özetin
+   * AsilPOS Uzaktan bulutta duran gün raporlarından kurdu (api/uzaktan.ts `withStats`); `ozet` ikisi de yok, kart özetin
    * iki rakamıyla (dünün gün sonu, geçen haftanın bu saati) çizilir. Kıyas özetin anıyla (veri o saattedir)
    */
   const source = statsSource(d);
@@ -684,7 +684,7 @@ function OffDeviceRow({ off }: { off: OffDeviceTotals }) {
     <Row
       label="Yazarkasadan geçmeyen"
       sub={total > 0 ? <Pairs parts={[`kart ${tlShort(off.card)}`, `nakit ${tlShort(off.cash)}`]} /> : undefined}
-      detail="Cihaza gitmeden LafPOS’a yazılan kart ve nakit, bahşiş hariç (kısmi tutar, kişi payı, “Başka yoldan aldım”, yazarkasa kapalıyken alınan); mali fişi yazarkasada ayrıca kesilir"
+      detail="Cihaza gitmeden AsilPOS’a yazılan kart ve nakit, bahşiş hariç (kısmi tutar, kişi payı, “Başka yoldan aldım”, yazarkasa kapalıyken alınan); mali fişi yazarkasada ayrıca kesilir"
     >
       {total > 0 ? <Amount k={total} /> : <Faint>yok</Faint>}
     </Row>

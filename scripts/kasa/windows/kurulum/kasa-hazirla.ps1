@@ -1,4 +1,4 @@
-# LafPOS kasa hazirligi (Baslat > LafPOS > Kasa hazirligi): bilgisayar yeniden acilinca her sey kendiliginden calissin
+# AsilPOS kasa hazirligi (Baslat > AsilPOS > Kasa hazirligi): bilgisayar yeniden acilinca her sey kendiliginden calissin
 # diye istege bagli Windows ayarlari. Her adim once sorulur (Evet / Hayir); hicbir sey sormadan degismez, hicbir parola
 # saklanmaz. -SadeceModpos: yalniz eski "Modpos & Gafdigi POS" acilista basliyor mu bakar ve uyarir (silmez).
 # Betik guncellemeyle gelir (app\). Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
@@ -6,10 +6,10 @@ param([switch]$SadeceModpos)
 Add-Type -AssemblyName System.Windows.Forms
 
 function Sor([string]$metin) {
-  return [System.Windows.Forms.MessageBox]::Show($metin, 'LafPOS kasa hazirligi', 'YesNo', 'Question') -eq 'Yes'
+  return [System.Windows.Forms.MessageBox]::Show($metin, 'AsilPOS kasa hazirligi', 'YesNo', 'Question') -eq 'Yes'
 }
 function Bilgi([string]$metin) {
-  [System.Windows.Forms.MessageBox]::Show($metin, 'LafPOS kasa hazirligi', 'OK', 'Information') | Out-Null
+  [System.Windows.Forms.MessageBox]::Show($metin, 'AsilPOS kasa hazirligi', 'OK', 'Information') | Out-Null
 }
 
 # Acilista baslayan eski kasa programi (Baslangic klasorleri ve Run kayitlari): yalniz listelenir, silinmez
@@ -31,7 +31,7 @@ function Get-ModposStartup {
 function Uyar-Modpos {
   $liste = @(Get-ModposStartup)
   if (-not $liste.Count) { return $false }
-  $ac = Sor ("Eski kasa programi bilgisayar acilinca hala basliyor:`n`n  " + ($liste -join "`n  ") + "`n`nLafPOS'a tam gectiyseniz acilista baslamasini kapatmaniz onerilir (program silinmez). Windows'un 'Baslangic uygulamalari' ekrani acilsin mi?")
+  $ac = Sor ("Eski kasa programi bilgisayar acilinca hala basliyor:`n`n  " + ($liste -join "`n  ") + "`n`nAsilPOS'a tam gectiyseniz acilista baslamasini kapatmaniz onerilir (program silinmez). Windows'un 'Baslangic uygulamalari' ekrani acilsin mi?")
   if ($ac) { Start-Process 'ms-settings:startupapps' }
   return $true
 }
@@ -71,9 +71,9 @@ if (Sor "Ag karti guc tasarrufu kapatilsin mi? (Windows ag kartini kapatip Pavo 
     $yapilan += 'Ag karti guc tasarrufu: kapali'
   } catch { $yapilan += 'Ag karti guc tasarrufu ayarlanamadi' }
 }
-if (Sor "Bilgisayar acilinca otomatik oturum acilsin mi? Windows'un kendi 'Kullanici hesaplari' ekrani acilir: 'Kullanicilar bu bilgisayari kullanmak icin...' kutusunun isaretini kaldirip parolanizi orada girin. LafPOS parolanizi saklamaz.") {
+if (Sor "Bilgisayar acilinca otomatik oturum acilsin mi? Windows'un kendi 'Kullanici hesaplari' ekrani acilir: 'Kullanicilar bu bilgisayari kullanmak icin...' kutusunun isaretini kaldirip parolanizi orada girin. AsilPOS parolanizi saklamaz.") {
   Start-Process 'netplwiz.exe'
   $yapilan += 'Otomatik oturum: Windows ekrani acildi'
 }
 if (Uyar-Modpos) { $yapilan += 'Eski kasa programi uyarisi gosterildi' }
-Bilgi ("Tamamlandi.`n`n" + ($(if ($yapilan.Count) { $yapilan -join "`n" } else { 'Hicbir ayar degismedi.' })) + "`n`nLafPOS sunucusu, kasa ekrani ve musteri ekrani bilgisayar acilinca kendiliginden baslar.")
+Bilgi ("Tamamlandi.`n`n" + ($(if ($yapilan.Count) { $yapilan -join "`n" } else { 'Hicbir ayar degismedi.' })) + "`n`nAsilPOS sunucusu, kasa ekrani ve musteri ekrani bilgisayar acilinca kendiliginden baslar.")

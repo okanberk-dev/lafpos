@@ -1,6 +1,6 @@
-// LafPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır; ayar ve anahtar
-// gerekmez. Güncelleme kanalı Vercel'deki lafpos projesidir (kanal.mjs her main derlemesinde yazar): sırayla
-// MANIFEST_URLS'teki surum.json, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 3 dk'da
+// AsilPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır; ayar ve anahtar
+// gerekmez. Güncelleme kanalını Vercel'deki proje (adı ad değişikliğinde kaldı) her main derlemesinde yazar (kanal.mjs).
+// Sırayla MANIFEST_URLS'teki surum.json okunur, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 3 dk'da
 // bir (ETag: değişmeyen kanal gövde göndermez). Yeni derleme (`build`, HEAD commit'inin zamanı) varsa uygulama yükünü
 // (lafpos-app-<build>.zip) aynı adresten indirir, boyunu ve SHA-256'sını doğrular; Node ya da better-sqlite3 değiştiyse
 // onları açık kaynaklarından (nodejs.org, WiseLibs'in GitHub sürümü) indirip manifestteki özetle doğrular.
@@ -8,7 +8,9 @@
 // veritabanının kopyası alınır, app → app.eski ve app.yeni → app olur, yeni sürüm (yeni bekçi ve sunucu) deneme olarak
 // açılır; 60 sn içinde /api/health yeni derlemeyi söylemezse eski klasöre dönülür ve o derleme bir daha denenmez.
 // Başarıda bekçi 75 koduyla çıkar: zamanlanmış görevin başlatıcısı (baslat.cmd) varsa yeni node.exe'yi yerine koyup
-// bekçiyi yeni sürümle yeniden açar. LAFPOS_GUNCELLEME=kapali (ayarlar.env) kapatır.
+// bekçiyi yeni sürümle yeniden açar. ASILPOS_GUNCELLEME=kapali (ayarlar.env; kurulu kasada eski adla da) kapatır.
+// Ad değişikliği (26 Kasım 2026): kanal adresleri, yükün adı (lafpos-app-<build>.zip), veritabanı ve kopyalarının adı
+// eski adla kalır (shared/eski-adlar.ts): eski güncelleyiciler ve eski sürüme dönüş onları arar
 // Durum veri klasöründe guncelleme\durum.json; sunucu onu Yönetim › Ayarlar ve yedek'te gösterir.
 // Bağımlılıksız; pakete girer (paket.mjs). Saf yardımcıların ve kurulum akışının testi tests/guncelleme.test.ts.
 import { execFile, spawn } from 'node:child_process';
@@ -17,6 +19,9 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { join } from 'node:path';
 import { entryData, extractZip, readTarGz, readZip } from './arsiv.mjs';
 
+/** `ASILPOS_X`, yoksa kurulu kasanın ayarlar.env'indeki eski adla X */
+const posEnv = (vars, ad) => vars?.[`ASILPOS_${ad}`] ?? vars?.[`LAFPOS_${ad}`];
+
 /** Güncelleme kanalı: önce alan adı, o yoksa Vercel'in kendi adresi */
 export const MANIFEST_URLS = ['https://lafpos.laffogato.net/guncelleme/surum.json', 'https://lafpos.vercel.app/guncelleme/surum.json'];
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
@@ -24,11 +29,11 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 export const allowedUrl = (u) => u.protocol === 'https:' || (u.protocol === 'http:' && LOOPBACK.has(u.hostname));
 
 /**
- * Kanalın adresleri: ayarlar.env'de LAFPOS_GUNCELLEME_KANAL (virgülle) varsa onlar (Windows CI'daki gerçek kurulum
+ * Kanalın adresleri: ayarlar.env'de ASILPOS_GUNCELLEME_KANAL (virgülle) varsa onlar (Windows CI'daki gerçek kurulum
  * denemesi yerel kanalı böyle gösterir; .github/workflows/windows.yml), yoksa sitenin kanalı. Geçersiz adres düşer
  */
 export function channelUrls(vars) {
-  const list = String(vars?.LAFPOS_GUNCELLEME_KANAL ?? '')
+  const list = String(posEnv(vars, 'GUNCELLEME_KANAL') ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter((s) => {
@@ -67,15 +72,17 @@ const SEMVER_RE = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
 
 // ─── Ayar ve manifest ────────────────────────────────────────────────────────
 
-/** ayarlar.env'deki LAFPOS_GUNCELLEME: "kapali" (kapalı, off, hayir, 0, false) değilse otomatik */
+/** ayarlar.env'deki ASILPOS_GUNCELLEME: "kapali" (kapalı, off, hayir, 0, false) değilse otomatik */
 export function updateMode(vars) {
-  const raw = String(vars?.LAFPOS_GUNCELLEME ?? '')
+  const raw = String(posEnv(vars, 'GUNCELLEME') ?? '')
     .trim()
     .toLocaleLowerCase('tr');
   return ['kapali', 'kapalı', 'kapat', 'off', 'hayir', 'hayır', 'no', 'false', '0'].includes(raw) ? 'kapali' : 'otomatik';
 }
 
+/** Yükün adı: eski güncelleyiciler `lafpos-app-<build>.zip`'ten başkasını reddeder; bu sürüm ileride yeni adı da kabul eder */
 export const appZipName = (build) => `lafpos-app-${build}.zip`;
+const yeniZipAdi = (build) => `asilpos-app-${build}.zip`;
 export const nodeZipUrl = (v) => `https://nodejs.org/dist/v${v}/node-v${v}-win-x64.zip`;
 export const sqliteTarUrl = (v, abi) => `https://github.com/WiseLibs/better-sqlite3/releases/download/v${v}/better-sqlite3-v${v}-node-v${abi}-win32-x64.tar.gz`;
 
@@ -90,7 +97,7 @@ export function parseManifest(json, manifestUrl) {
   if (!Number.isInteger(build) || build < 1e9 || build > 1e11) throw new Error('surum.json: derleme numarası anlaşılamadı');
   if (typeof m.version !== 'string' || !SEMVER_RE.test(m.version)) throw new Error('surum.json: sürüm anlaşılamadı');
   const app = m.app ?? {};
-  if (app.file !== appZipName(build)) throw new Error('surum.json: uygulama yükünün adı beklenmedik');
+  if (app.file !== appZipName(build) && app.file !== yeniZipAdi(build)) throw new Error('surum.json: uygulama yükünün adı beklenmedik');
   if (!SHA_RE.test(String(app.sha256))) throw new Error('surum.json: uygulama yükünün özeti anlaşılamadı');
   if (!Number.isInteger(app.size) || app.size <= 0 || app.size > MAX_BYTES.app) throw new Error('surum.json: uygulama yükünün boyu anlaşılamadı');
   const node = m.node ?? {};
@@ -210,7 +217,7 @@ export function oldUpdateBackups(files, keep = KEEP_UPDATE_BACKUPS) {
 export function staleDownloads(names, keepBuild) {
   return names.filter((n) => {
     if (n.endsWith('.part')) return true;
-    const m = /^lafpos-app-(\d+)\.zip$/.exec(n);
+    const m = /^(?:lafpos-app-|asilpos-app-)(\d+)\.zip$/.exec(n);
     return !!m && Number(m[1]) !== keepBuild;
   });
 }
@@ -237,7 +244,7 @@ export function nextStatus(prev, ev) {
         if (ev.kurulu?.build === p.yeni.build) return { ...base, durum: 'guncel', yeni: null, sonKurulum: iso(ev.now), mesaj: 'Güncellendi' };
         return { ...base, durum: 'hata', yeni: null, mesaj: 'Kurulum yarıda kaldı (bilgisayar kapanmış olabilir); eski sürüm çalışıyor, yeniden denenecek' };
       }
-      if (ev.mode === 'kapali') return { ...base, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
+      if (ev.mode === 'kapali') return { ...base, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: ASILPOS_GUNCELLEME=kapali)' };
       // Elle (kurulum dosyasıyla) daha yeni bir sürüm kurulduysa bekleyen yeni sürüm artık eskidir
       if (p.yeni && ev.kurulu && p.yeni.build <= ev.kurulu.build) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Güncel' };
       if (p.durum === 'kapali' || p.durum === 'indiriliyor' || p.durum === 'kuruluyor' || !prev) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Yeni sürüm birkaç dakika içinde denetlenecek' };
@@ -250,7 +257,7 @@ export function nextStatus(prev, ev) {
       // Yönetim › Ayarlar ve yedek › "Şimdi güncelle": güncelleyici isteği aldı, kanala bakıyor
       return { ...p, sonIstek: iso(ev.now), mesaj: ev.simdi ? 'Yeni sürüm denetleniyor; varsa hemen kurulacak' : 'Yeni sürüm denetleniyor' };
     case 'mod':
-      if (ev.mode === 'kapali') return { ...p, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
+      if (ev.mode === 'kapali') return { ...p, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: ASILPOS_GUNCELLEME=kapali)' };
       return p.durum === 'kapali' ? { ...p, durum: 'guncel', mesaj: 'Otomatik güncelleme açıldı; yeni sürüm birkaç dakika içinde denetlenecek' } : p;
     case 'kontrol': {
       const base = { ...p, sonKontrol: iso(ev.now), sonBasariliKontrol: iso(ev.now), sonHata: null, merkez: ev.merkez ?? p.merkez };
@@ -381,8 +388,9 @@ export function createUpdater(deps) {
     ((nodeExe, appDir) =>
       spawn(nodeExe, [join(appDir, 'bekci.mjs')], {
         cwd: deps.installDir,
-        // Deneme bekçisi güncelleme denetlemez; durdurma standart girdiden ("kapat"), Windows'ta sinyal yok
-        env: { ...process.env, LAFPOS_BEKCI_STDIN: '1', LAFPOS_GUNCELLEME_DENEME: '1' },
+        // Deneme bekçisi güncelleme denetlemez; durdurma standart girdiden ("kapat"), Windows'ta sinyal yok. İki adla:
+        // eski adı eski güncelleyiciler de verir (yeni bekçi ikisini okur)
+        env: { ...process.env, ASILPOS_BEKCI_STDIN: '1', ASILPOS_GUNCELLEME_DENEME: '1', LAFPOS_BEKCI_STDIN: '1', LAFPOS_GUNCELLEME_DENEME: '1' },
         stdio: ['pipe', 'ignore', 'ignore'],
         windowsHide: true,
       }));
@@ -447,7 +455,7 @@ export function createUpdater(deps) {
     let target = url;
     for (let hop = 0; hop < 5; hop++) {
       if (!allowedUrl(new URL(target))) throw new Error(`Güvensiz adres: ${target}`);
-      const headers = { 'user-agent': 'LafPOS-guncelleme', ...(etag && hop === 0 ? { 'if-none-match': etag } : {}) };
+      const headers = { 'user-agent': 'AsilPOS-guncelleme', ...(etag && hop === 0 ? { 'if-none-match': etag } : {}) };
       const res = await fetchImpl(target, { headers, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get('location');

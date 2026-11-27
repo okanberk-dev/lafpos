@@ -50,7 +50,7 @@ export function historyHandIds(t: Pick<KitchenTicket, 'source' | 'platform' | 'i
 /**
  * Siparişler kartının adı (teslim bildiriminin öznesi de). Self modlarda kasanın tezgâh ve gel-al siparişi çağrı
  * numarasıyla ("No 34 · Ayşe Yılmaz"); paket platformunun gel-al'ı platformun kısa koduyla ("K9TX · Deniz Öztürk"):
- * müşteri LafPOS numarasını bilmez, uygulamada platformun kodunu görür (çağrı ekranı gibi). `head` varsa sipariş
+ * müşteri AsilPOS numarasını bilmez, uygulamada platformun kodunu görür (çağrı ekranı gibi). `head` varsa sipariş
  * numarası ("#12") ayrıca yazılmaz.
  */
 export function orderCardName(

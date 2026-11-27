@@ -483,7 +483,7 @@ export default function MenuAdmin() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-[var(--admin-text-mute)]">LafPOS menüsü sitedekiyle aynı</p>
+            <p className="text-sm text-[var(--admin-text-mute)]">AsilPOS menüsü sitedekiyle aynı</p>
           )}
         </div>
       </Modal>
@@ -641,7 +641,7 @@ function ProductDrawer({
       onClose={onClose}
       label={product ? `${product.name} ayrıntısı` : 'Yeni yerel ürün'}
       title={product ? product.name : 'Yeni yerel ürün'}
-      subtitle={product ? `${synced ? 'Siteden' : 'Yerel'} · ${cat?.name ?? ''}` : 'Yalnız LafPOS’ta satılan ürün (karaoke, etkinlik ücreti gibi)'}
+      subtitle={product ? `${synced ? 'Siteden' : 'Yerel'} · ${cat?.name ?? ''}` : 'Yalnız AsilPOS’ta satılan ürün (karaoke, etkinlik ücreti gibi)'}
       footer={
         <>
           {product && !synced && (

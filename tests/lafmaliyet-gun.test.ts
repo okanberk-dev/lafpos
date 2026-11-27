@@ -11,7 +11,7 @@ import { type Harness, startApp } from './harness';
  * satır, ekler koda göre (laktozsuz süt 0 TL), ikram ekleri ve yalnız kapanmış adisyonların ikramı, kartla bahşiş ve
  * kartla cari tahsilatı, dünden açık kalan güne satış engeli, yönetimin doğrulamaları. Altın gövde
  * (tests/fixtures/lafmaliyet-gun.golden.json) iki deponun ortak sözleşme örneğidir: lafmaliyet aynı dosyayı kendi
- * ayrıştırıcısıyla okur. Gövde değişirse bilerek yeniden üretilir: LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts
+ * ayrıştırıcısıyla okur. Gövde değişirse bilerek yeniden üretilir: ASILPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts
  */
 const GOLDEN = new URL('./fixtures/lafmaliyet-gun.golden.json', import.meta.url);
 /** Aynı gün, personel bağlantısıyla (§4.8 `workedStaffRefs`): ikinci ortak örnek, lafmaliyet aynı dosyayı okur */
@@ -244,7 +244,7 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     const payload = await payloadOf(day.id);
     // Hiçbir kullanıcı lafmaliyet personeline bağlı değil: alan yok, gövde bağlantıdan önceki baytlarla aynı (§4.8)
     expect('workedStaffRefs' in payload).toBe(false);
-    if (process.env.LAFPOS_GOLDEN === '1') {
+    if (process.env.ASILPOS_GOLDEN === '1') {
       mkdirSync(new URL('./fixtures/', import.meta.url), { recursive: true });
       writeFileSync(GOLDEN, `${JSON.stringify(payload, null, 2)}\n`);
     }
@@ -332,7 +332,7 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş; indirim, i
     try {
       for (const [name, ref] of links) db.update(schema.users).set({ staffRef: ref }).where(eq(schema.users.id, user(name).id)).run();
       const payload = await payloadOf(goldenDayId);
-      if (process.env.LAFPOS_GOLDEN === '1') writeFileSync(GOLDEN_STAFF, `${JSON.stringify(payload, null, 2)}\n`);
+      if (process.env.ASILPOS_GOLDEN === '1') writeFileSync(GOLDEN_STAFF, `${JSON.stringify(payload, null, 2)}\n`);
       expect(`${JSON.stringify(payload, null, 2)}\n`).toBe(readFileSync(GOLDEN_STAFF, 'utf8'));
       const golden = JSON.parse(readFileSync(GOLDEN, 'utf8')) as Record<string, unknown>;
       expect(payload).toEqual({ ...golden, workedStaffRefs: ['s:7', 's:12'] });
@@ -666,8 +666,8 @@ describe('yönetim doğrulamaları', () => {
 
 /**
  * Şube kimliği (docs/03-ENTEGRASYON.md §4, 4 Kasım 2026): gün sonu paketi kasanın şubesini taşır, böylece
- * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `marina`: ilk LafPOS kasası
- * Marina'da (21 Kasım 2026); lafmaliyet LafPOS'un şubesinden başka şubeye ayarlı kasanın gününü reddeder.
+ * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `marina`: ilk AsilPOS kasası
+ * Marina'da (21 Kasım 2026); lafmaliyet AsilPOS'un şubesinden başka şubeye ayarlı kasanın gününü reddeder.
  */
 describe('şube kimliği pakete girer', () => {
   it('varsayılan marina, ayar değişince paket onu taşır', async () => {

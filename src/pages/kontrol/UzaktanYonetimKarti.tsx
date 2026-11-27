@@ -7,7 +7,7 @@ import { KONTROL_PATH } from '@/lib/download';
 import { useUzaktanErisim } from '@/lib/kontrol';
 
 /**
- * Patron panelinde (yalnız LafPOS Uzaktan) Uzaktan yönetim'e giden kart: kasanın personeli, PIN'i, Tükendi'si ve servis
+ * Patron panelinde (yalnız AsilPOS Uzaktan) Uzaktan yönetim'e giden kart: kasanın personeli, PIN'i, Tükendi'si ve servis
  * modu telefondan. Kartın tamamı bağlantı; ok halkası üstüne gelince ve odakta döner. Parolasız görünümde yok (uçlar
  * gerçek giriş ister: kart hep aynı hataya götürürdü)
  */

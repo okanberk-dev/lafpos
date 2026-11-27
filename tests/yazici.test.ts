@@ -5,7 +5,7 @@ import { parsePrinters, pickReceiptPrinter, type WinPrinter } from '../server/li
 import { type Harness, startApp } from './harness';
 
 /**
- * Fiş yazıcısı (Windows kurulumu): kasa kısayolunun betiği yazıcıları bildirir, LafPOS fişin çıkacağını söyler; tek fiş
+ * Fiş yazıcısı (Windows kurulumu): kasa kısayolunun betiği yazıcıları bildirir, AsilPOS fişin çıkacağını söyler; tek fiş
  * yazıcısı kendiliğinden seçilir, birden çoksa yönetimden seçilir
  */
 const p = (name: string, extra: Partial<WinPrinter> = {}): WinPrinter => ({ name, port: 'USB001', driver: null, isDefault: false, offline: false, ...extra });
@@ -37,7 +37,7 @@ describe('fiş yazıcısının seçimi', () => {
 
   it('kasa kısayolu Chrome’dan önce yazıcı betiğini çalıştırır; betik yalnız ASCII ve kurulum paketine girer', () => {
     const root = join(__dirname, '..');
-    const bat = readFileSync(join(root, 'scripts/kasa/windows/LafPOS-Kasa.bat'), 'utf8');
+    const bat = readFileSync(join(root, 'scripts/kasa/windows/AsilPOS-Kasa.bat'), 'utf8');
     expect(bat.indexOf('kasa-yazici.ps1')).toBeGreaterThan(0);
     expect(bat.indexOf('kasa-yazici.ps1')).toBeLessThan(bat.indexOf(':chrome'));
     const ps1 = readFileSync(join(root, 'scripts/kasa/windows/kurulum/kasa-yazici.ps1'), 'latin1');

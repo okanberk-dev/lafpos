@@ -5,6 +5,7 @@ import { findPavo, privateIpv4, scanHosts } from '../server/okc/pavo-bul';
 import { pavoTiming } from '../server/okc/providers/pavo';
 import { type FakePavo, startFakePavo } from './fake-pavo';
 import { type Harness, startApp } from './harness';
+import { PAVO_KIMLIGI } from '@shared/eski-adlar';
 
 /**
  * Pavo cihazının bilgileri yönetimden (ayarlar dosyası olmadan): adres ve seri no'nun okunması, kaydedince eşleştirmenin
@@ -106,7 +107,7 @@ describe('yönetimden cihaz bilgileri (ayarlar dosyası yok)', () => {
     expect(test.paired).toBe(true);
     // İlk eşleştirme kuruluma özel kimlik üretir ve saklar; eşleştirme ve sonraki istekler onunla gider
     const fp = (await h.ok<{ pavo: { fingerprint: string; fingerprintSource: string } }>('patron', 'GET', '/okc/status')).pavo;
-    expect(fp.fingerprint).toMatch(/^LafPOS-[A-Z2-9]{6}$/);
+    expect(fp.fingerprint).toMatch(new RegExp(`^${PAVO_KIMLIGI}-[A-Z2-9]{6}$`));
     expect(fp.fingerprintSource).toBe('kurulum');
     const handles = device.requests.filter((r) => r.path !== '/Ping').map((r) => (r.body.TransactionHandle as { Fingerprint: string }).Fingerprint);
     expect(new Set(handles)).toEqual(new Set([fp.fingerprint]));

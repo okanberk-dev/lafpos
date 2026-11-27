@@ -1,4 +1,4 @@
-# LafPOS sürekli entegrasyon: tip denetimi, birim testleri, üretim derlemesi ve gerçek tarayıcıda uçtan uca
+# AsilPOS sürekli entegrasyon: tip denetimi, birim testleri, üretim derlemesi ve gerçek tarayıcıda uçtan uca
 # tarama (runner'daki Google Chrome ile; telefon, tablet, bilgisayar, küçük kasa bilgisayarı, koyu tema ve akışlar).
 name: CI
 

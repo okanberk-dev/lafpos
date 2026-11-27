@@ -1,7 +1,7 @@
-// LafPOS Windows kurulum dosyasını derler: dist/windows/LafPOS-Kurulum-<sürüm>.exe
+// AsilPOS Windows kurulum dosyasını derler: dist/windows/AsilPOS-Kurulum-<sürüm>.exe
 // Uygulama yükü (paket.mjs: tek dosyalık sunucu, arayüz, göçler, menü anlık görüntüsü, bekçi ve güncelleyici) güncelleme
 // kanalınınkiyle aynıdır; yanına Windows için Node (LTS) ve better-sqlite3'ün win32-x64 ikilisi (surumler.mjs'teki
-// özetlerle doğrulanır) ve başlatıcı (baslat.cmd) konur; makensis lafpos.nsi ile kurulumu üretir.
+// özetlerle doğrulanır) ve başlatıcı (baslat.cmd) konur; makensis asilpos.nsi ile kurulumu üretir.
 // Kurulumdan önce aynı paket açılıp denenir (giriş, açılış verisi, arayüz, günlük): Windows'ta pakettekinin aynısı
 // (indirilen node.exe ve better-sqlite3'ün Windows ikilisi), macOS ve Linux'ta bu bilgisayarın Node'u ve ikilisiyle.
 // Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3; PATH'te değilse
@@ -26,17 +26,17 @@ const WIN = process.platform === 'win32';
 const OUT = join(ROOT, 'dist/windows');
 const STAGE = join(OUT, 'stage');
 const APP = join(STAGE, 'app');
-const CACHE = join(ROOT, 'node_modules/.cache/lafpos-windows');
+const CACHE = join(ROOT, 'node_modules/.cache/asilpos-windows');
 const fast = process.argv.includes('--hizli');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 /** Derleme numarası (HEAD commit'inin zamanı): güncelleme kanalıyla aynı */
 const BUILD = buildInfo();
 /**
- * Kurulum dosyasının sürümü (Windows'un Uygulamalar listesinde): CI LAFPOS_SURUM ile package.json'ın major.minor'u +
+ * Kurulum dosyasının sürümü (Windows'un Uygulamalar listesinde): CI ASILPOS_SURUM ile package.json'ın major.minor'u +
  * çalıştırma no verir (.github/workflows/windows.yml); yoksa package.json'ınki
  */
-const VERSION = process.env.LAFPOS_SURUM || pkg.version;
-if (!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(VERSION)) throw new Error(`LAFPOS_SURUM anlaşılmadı: ${VERSION}`);
+const VERSION = process.env.ASILPOS_SURUM || pkg.version;
+if (!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(VERSION)) throw new Error(`ASILPOS_SURUM anlaşılmadı: ${VERSION}`);
 
 const step = (s) => console.log(`\n▸ ${s}`);
 const run = (cmd, args, env) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, env: env && { ...process.env, ...env } });
@@ -117,7 +117,7 @@ async function windowsNode() {
     rmSync(zip, { force: true });
     throw new Error(`${zipName} SHA-256 özeti tutmadı (nodejs.org: ${want ?? 'yok'}, betik: ${NODE_SHA256}); dosya silindi, yeniden deneyin`);
   }
-  const tmp = mkdtempSync(join(tmpdir(), 'lafpos-node-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'asilpos-node-'));
   const members = [`node-v${NODE_VERSION}-win-x64/node.exe`, `node-v${NODE_VERSION}-win-x64/LICENSE`];
   if (process.platform === 'linux') run('unzip', ['-q', '-o', zip, ...members, '-d', tmp]);
   else run(TAR, ['-xf', zip, '-C', tmp, ...members]);
@@ -129,8 +129,12 @@ async function windowsNode() {
 
 function windowsFiles() {
   step('Kısayollar, yönetim betiği, notlar');
+  cpSync(join(ROOT, 'scripts/kasa/windows/AsilPOS-Kasa.bat'), join(STAGE, 'AsilPOS-Kasa.bat'));
+  cpSync(join(HERE, 'asilpos.ico'), join(STAGE, 'asilpos.ico'));
+  // Ad değişikliğinden önceki kısayollar ve Uygulamalar kaydı eski adları çağırır: kasa kısayolu yenisine yönlendirir,
+  // simge aynı dosyanın kopyası (web-kurucu.mjs shellFiles ile aynı)
   cpSync(join(ROOT, 'scripts/kasa/windows/LafPOS-Kasa.bat'), join(STAGE, 'LafPOS-Kasa.bat'));
-  cpSync(join(HERE, 'lafpos.ico'), join(STAGE, 'lafpos.ico'));
+  cpSync(join(HERE, 'asilpos.ico'), join(STAGE, 'lafpos.ico'));
   writeFileSync(join(STAGE, 'yonet.ps1'), crlf(readFileSync(join(HERE, 'yonet.ps1'), 'utf8')));
   // Eski Not Defteri UTF-8'i BOM'la tanır
   writeFileSync(join(STAGE, 'BENIOKU.txt'), `\uFEFF${crlf(readFileSync(join(HERE, 'BENIOKU.txt'), 'utf8'))}`);
@@ -144,7 +148,7 @@ function windowsFiles() {
  */
 async function smokeTest() {
   step(`Paket deneniyor (bekçi, göçler, ilk kurulum, giriş, arayüz, günlük; ${WIN ? `paketteki Node ${NODE_VERSION}` : `bu bilgisayarın Node'u ${process.versions.node}`})`);
-  const tmp = mkdtempSync(join(tmpdir(), 'lafpos-deneme-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'asilpos-deneme-'));
   const home = join(tmp, 'veri');
   try {
     cpSync(APP, join(tmp, 'app'), { recursive: true });
@@ -152,12 +156,12 @@ async function smokeTest() {
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const node = WIN ? join(STAGE, 'node', 'node.exe') : process.execPath;
-    // LAFPOS_PAKET_DENEME: bekçi kurulumu yenilemez. Yenilese kök dosyaları deneme klasörüne koyar ve (yönetici
-    // kabuğunda) bu bilgisayarda kurulu LafPOS'un Başlat menüsü, masaüstü ve Başlangıç kısayollarını deneme bitince
+    // ASILPOS_PAKET_DENEME: bekçi kurulumu yenilemez. Yenilese kök dosyaları deneme klasörüne koyar ve (yönetici
+    // kabuğunda) bu bilgisayarda kurulu AsilPOS'un Başlat menüsü, masaüstü ve Başlangıç kısayollarını deneme bitince
     // silinen klasöre çevirirdi (inceleme, 23 Kas 2026)
-    const env = { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', LAFPOS_PAKET_DENEME: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) };
+    const env = { ...process.env, ASILPOS_HOME: home, ASILPOS_PORT: String(port), ASILPOS_HOST: '127.0.0.1', ASILPOS_NO_JOBS: '1', ASILPOS_PAKET_DENEME: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) };
     // Bellek sınırı ayar dosyasından gelsin: gerçek ortam değişkeni dosyadakini ezerdi
-    delete env.LAFPOS_MAX_HEAP_MB;
+    delete env.ASILPOS_MAX_HEAP_MB;
     const child = spawn(node, [join(tmp, 'app/bekci.mjs')], {
       cwd: tmp,
       env,
@@ -193,7 +197,7 @@ async function smokeTest() {
       const st = existsSync(durum) ? JSON.parse(readFileSync(durum, 'utf8')) : null;
       if (st?.kurulu?.build !== BUILD.build) fail(`Bekçinin güncelleyicisi durum dosyasını yazmadı (${durum})`);
       // Kurulumu yenileyen bekçi açılışta önce kök dosyaları koyar (kısayollardan önce): deneme klasöründe olmamalı
-      if (existsSync(join(tmp, 'LafPOS-Kasa.bat'))) fail('Paket denemesinde bekçi kurulumu yeniledi (LAFPOS_PAKET_DENEME)');
+      if (existsSync(join(tmp, 'AsilPOS-Kasa.bat'))) fail('Paket denemesinde bekçi kurulumu yeniledi (ASILPOS_PAKET_DENEME)');
       console.log(`  tamam: derleme ${BUILD.build}, güncelleme durumu "${st.durum}"`);
       const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '1897' }) });
       if (!login.ok) fail(`Örnek PIN'le giriş olmadı (${login.status})`);
@@ -208,21 +212,21 @@ async function smokeTest() {
       if (!logText().includes(`bellek sınırı ${heapDefault} MB`)) fail(`Bekçi varsayılan bellek sınırını (${heapDefault} MB) yazmadı`);
 
       // ayarlar.env kaydedilince bekçi sunucuyu yeni ayarlarla (bellek sınırı dahil) yeniden başlatır
-      writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nLAFPOS_SESSION_HOURS=13\r\nLAFPOS_MAX_HEAP_MB=768\r\n');
+      writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nASILPOS_SESSION_HOURS=13\r\nASILPOS_MAX_HEAP_MB=768\r\n');
       for (let i = 0; ; i++) {
         // Bekçi ayar dosyasına 5 sn'de bir bakar; sunucu kapanıp yeniden açılır
         if (i > 200) fail('ayarlar.env değişince sunucu 40 sn içinde yeniden başlamadı');
-        const restarted = logText().split('LafPOS sunucusu hazır').length > 2;
+        const restarted = logText().split('AsilPOS sunucusu hazır').length > 2;
         if (restarted && (await fetch(`${base}/api/health`).then((r) => r.ok, () => false))) break;
         await new Promise((r) => setTimeout(r, 200));
       }
-      if (!logText().includes('bellek sınırı 768 MB')) fail('ayarlar.env\'deki LAFPOS_MAX_HEAP_MB bekçiye geçmedi');
+      if (!logText().includes('bellek sınırı 768 MB')) fail('ayarlar.env\'deki ASILPOS_MAX_HEAP_MB bekçiye geçmedi');
       console.log(`  tamam: ayar değişince sunucu yeni ayarlarla açıldı (bellek sınırı ${heapDefault} → 768 MB)`);
     } finally {
       await stopWatchdog(child);
     }
     const log = readFileSync(join(home, 'logs/sunucu.log'), 'utf8');
-    if (!log.includes('LafPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
+    if (!log.includes('AsilPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
     for (const f of ['lafpos.db', 'secret.key']) if (!existsSync(join(home, f))) throw new Error(`${f} veri klasöründe yok`);
     // Bekçi durunca sunucu veritabanını düzgün kapatır: WAL ana dosyaya yazılır, -wal dosyası kalmaz
     if (existsSync(join(home, 'lafpos.db-wal'))) throw new Error(`Sunucu kapanırken veritabanını kapatmadı (lafpos.db-wal kaldı):\n${log}`);
@@ -259,12 +263,12 @@ function findMakensis() {
 
 function makeInstaller() {
   step('Kurulum dosyası (makensis)');
-  const outfile = join(OUT, `LafPOS-Kurulum-${VERSION}.exe`);
+  const outfile = join(OUT, `AsilPOS-Kurulum-${VERSION}.exe`);
   const makensis = findMakensis();
   // macOS ve Linux'ta makensis Türkçe harfleri ancak UTF-8 yereliyle okur ("Bad text encoding")
   const utf8 = /utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '');
   const locale = process.platform === 'win32' || utf8 ? undefined : { LC_ALL: process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8' };
-  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${VERSION}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'lafpos.nsi')], locale);
+  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${VERSION}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'asilpos.nsi')], locale);
   const mb = (statSync(outfile).size / 1024 / 1024).toFixed(1);
   console.log(`\n✓ ${outfile}\n  ${mb} MB · SHA-256 ${sha256(outfile)}`);
 }

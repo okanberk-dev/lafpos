@@ -3,7 +3,7 @@ import { tokenKabloProvider } from './tokenkablo';
 import { tokenxProvider } from './tokenx';
 import type { FiscalProvider, ProviderId } from './types';
 
-/** Eğitim cihazı: sepet LafPOS'ta bekler, /cihaz ekranından ödenir; dışarıyla konuşmaz */
+/** Eğitim cihazı: sepet AsilPOS'ta bekler, /cihaz ekranından ödenir; dışarıyla konuşmaz */
 export const simulatorProvider: FiscalProvider = {
   id: 'simulator',
   label: 'Eğitim cihazı (simülatör)',

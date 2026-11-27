@@ -1,11 +1,12 @@
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { type DB, schema, type Tx } from '../db/client';
 import { getSyncState } from '../lib/settings';
+import { ACILIS_KASA, TEL_KAYNAK } from '@shared/eski-adlar';
 
 /**
- * Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): gün açılırken beklenen nakit önceki gerçek günün devridir. LafPOS'ta gün
+ * Kasa zinciri (docs/03-ENTEGRASYON.md §4.6): gün açılırken beklenen nakit önceki gerçek günün devridir. AsilPOS'ta gün
  * sonundan sonra teslim yok (teslim gün içinde yazılır, beklenenden düşer): yerel devir günün sayımıdır. lafmaliyet'in
- * değeri (`nextOpening`: kasa raporu varsa sayılan − teslim, yoksa LafPOS'un sayımı) panelde düzeltilen raporu da görür;
+ * değeri (`nextOpening`: kasa raporu varsa sayılan − teslim, yoksa AsilPOS'un sayımı) panelde düzeltilen raporu da görür;
  * varsa o geçer. Ağ işi yoktur: lafmaliyet'in değeri gün sonu yanıtından (gönderim kaydı) ve tembel devir okumasından
  * (sync/lafmaliyet.ts `devirIfStale`, sync_state `lafmaliyet.devir`) okunur.
  */
@@ -18,7 +19,7 @@ export const OPENING_REASON_MIN = 100;
 /** lafmaliyet'in devri (kuruş): gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı nesne */
 export interface NextOpening {
   amount: number;
-  source: 'kasa_raporu' | 'lafpos';
+  source: 'kasa_raporu' | typeof TEL_KAYNAK;
 }
 
 /** Tembel devir okumasının durumu (sync_state `lafmaliyet.devir`) */
@@ -37,8 +38,8 @@ export interface DevirState {
 export interface OpeningExpectation {
   /** Beklenen açılış nakdi (kuruş) */
   amount: number;
-  /** `lafmaliyet`: panelin devri; `lafpos`: kasanın kendi sayımı */
-  source: 'lafmaliyet' | 'lafpos';
+  /** `lafmaliyet`: panelin devri; `ACILIS_KASA` (eski adla): kasanın kendi sayımı */
+  source: 'lafmaliyet' | typeof ACILIS_KASA;
   /** lafmaliyet'in kaynağı (yalnız `source: 'lafmaliyet'`) */
   ladminSource?: NextOpening['source'];
   /** Devrin geldiği gün */
@@ -81,7 +82,7 @@ function pushedCount(payload: unknown): number | null {
  *
  * lafmaliyet devri kayıtlı Kasa raporundan hesaplar ve raporu yanıtı gönderdikten sonra yazar: bir gönderimin yanıtı o
  * gönderimin sayımını görmez. Yeniden sayım ya da yeniden kapanışın yanıtı (`kasa_raporu`) önceki bir gönderimin
- * sayımına eşitse ve bu gönderiminkine değilse rapor LafPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt
+ * sayımına eşitse ve bu gönderiminkine değilse rapor AsilPOS'un önceki gönderiminden yazılmış otomatik rapordur: yanıt
  * eskidir, lafmaliyet raporu bu gönderimin sayımıyla günceller (yerel sayım geçer). Panelde düzeltilen rapor önceki
  * sayımın yankısı değildir, o yanıt geçer. Günün son gönderiminden önce okunan devir de o gönderimin sayımını görmedi
  */
@@ -120,6 +121,6 @@ export function expectedOpening(t: Tx | DB): OpeningExpectation | null {
   const from = { fromDate: day.date, fromZNo: day.zNo, fromDayId: day.id };
   const ladmin = dayPushPending(t, day.date) ? undefined : ladminNextOpening(t, day.date);
   if (ladmin?.value) return { amount: ladmin.value.amount, source: 'lafmaliyet', ladminSource: ladmin.value.source, ...from };
-  if (day.countedCash != null) return { amount: day.countedCash, source: 'lafpos', ...from };
+  if (day.countedCash != null) return { amount: day.countedCash, source: ACILIS_KASA, ...from };
   return null;
 }

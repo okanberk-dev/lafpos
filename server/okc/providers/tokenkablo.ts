@@ -27,7 +27,7 @@ export const tokenKabloProvider: FiscalProvider = {
   },
   /**
    * Kablolu protokolde sepet cihazdan silinmez: satış cihazın ekranındaysa kasiyer cihazda vazgeçer (sonuç "vazgeçildi"
-   * olarak gelir). Cihaz bağlı değilse sepet yalnız yetkili onayıyla LafPOS'ta iptal sayılır
+   * olarak gelir). Cihaz bağlı değilse sepet yalnız yetkili onayıyla AsilPOS'ta iptal sayılır
    */
   async cancel() {
     if (!kablo.connected) throw new KabloError(notConnectedMessage(kablo.state));

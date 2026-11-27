@@ -564,7 +564,7 @@ export default function FloorAdmin() {
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-[var(--admin-text-mute)]">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
+                    <p className="text-xs text-[var(--admin-text-mute)]">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu AsilPOS üretir, sitenin biçimiyle</p>
                     <Button size="sm" icon={<QrCodeIcon className="size-4" />} onClick={() => void makeQr(sel)}>
                       QR üret
                     </Button>

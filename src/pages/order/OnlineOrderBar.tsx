@@ -66,7 +66,7 @@ export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
       {order.status === 'kapali' && stage === 'gone' && (
         <p className="mt-2 text-sm font-medium text-ink-2">Siteden kalktı: sitede tamamlandı, iptal edildi ya da süresi geçti</p>
       )}
-      <p className="mt-1.5 text-xs text-muted">LafPOS’ta tahsil edilmez, Z’ye girmez</p>
+      <p className="mt-1.5 text-xs text-muted">AsilPOS’ta tahsil edilmez, Z’ye girmez</p>
     </div>
   );
 }

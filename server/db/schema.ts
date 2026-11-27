@@ -6,11 +6,12 @@ import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
 import type { CompKind, CompPersonKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
+import { TUKENDI_KASA } from '@shared/eski-adlar';
 
 export type { CompKind, ZField, ZSummary };
 
 /**
- * LafPOS veritabanı şeması (SQLite). Para alanları kuruş tam sayı; zaman alanları epoch milisaniye;
+ * AsilPOS veritabanı şeması (SQLite). Para alanları kuruş tam sayı; zaman alanları epoch milisaniye;
  * iş günü tarihi "YYYY-MM-DD" metin. İşlem kayıtları (adisyon, kalem, ödeme…) ULID ile kimliklenir.
  */
 
@@ -125,7 +126,7 @@ export const tables = sqliteTable(
     hourlyRate: integer('hourly_rate'),
     /** Sitedeki masa adı ("Masa 4"): online masa siparişini etiketle eşlemek için (Yönetim › Masa planı "Sitedeki masa adı") */
     siteTableCode: text('site_table_code'),
-    /** Masanın QR kodu: LafPOS üretir, sitenin biçimiyle (10 simge Crockford; shared/table-qr.ts); QR içeriği sitenin masa adresi */
+    /** Masanın QR kodu: AsilPOS üretir, sitenin biçimiyle (10 simge Crockford; shared/table-qr.ts); QR içeriği sitenin masa adresi */
     qrCode: text('qr_code'),
     sort: integer('sort').notNull().default(0),
     active: bool('active').notNull().default(true),
@@ -199,10 +200,10 @@ export const products = sqliteTable(
     /** Satışta (false = Tükendi) */
     active: bool('active').notNull().default(true),
     /**
-     * Tükendi'yi kim kapattı: 'lafpos' (kasadan, bardan ya da porsiyon bitince) ya da 'site' (sitede satıştan
-     * kalktı, senkron kapattı). Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar; menü yöneticisi hepsini
+     * Tükendi'yi kim kapattı: `TUKENDI_KASA` (eski adla saklanan değer; kasadan, bardan ya da porsiyon bitince) ya da 'site' (sitede satıştan
+     * kalktı, senkron kapattı). Kasiyer (`urun.tukendi`) yalnız AsilPOS'un kapattığını açar; menü yöneticisi hepsini
      */
-    soldOutBy: text('sold_out_by').$type<'lafpos' | 'site'>(),
+    soldOutBy: text('sold_out_by').$type<typeof TUKENDI_KASA | 'site'>(),
     /** POS ekranında gösterme (sitede durabilir) */
     hidden: bool('hidden').notNull().default(false),
     favorite: bool('favorite').notNull().default(false),
@@ -265,7 +266,7 @@ export const optionItems = sqliteTable(
     sort: integer('sort').notNull().default(0),
     active: bool('active').notNull().default(true),
     /**
-     * Kasada Tükendi (yulaf sütü bitti): kasa satışı bu seçeneği almaz. Yalnız LafPOS'ta; siteye gitmez, menü
+     * Kasada Tükendi (yulaf sütü bitti): kasa satışı bu seçeneği almaz. Yalnız AsilPOS'ta; siteye gitmez, menü
      * senkronu dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi)
      */
     soldOut: bool('sold_out').notNull().default(false),
@@ -356,7 +357,7 @@ export const businessDays = sqliteTable(
      */
     recountedAt: integer('recounted_at'),
     /**
-     * Açılışta beklenen nakit (kuruş): önceki gerçek günün devri, lafmaliyet'in `nextOpening`'i ya da LafPOS'un sayımı
+     * Açılışta beklenen nakit (kuruş): önceki gerçek günün devri, lafmaliyet'in `nextOpening`'i ya da AsilPOS'un sayımı
      * (services/devir.ts). Önceki gerçek gün yoksa ya da sayılmadıysa boş. docs/03-ENTEGRASYON.md §4.6
      */
     expectedOpening: integer('expected_opening'),
@@ -366,7 +367,7 @@ export const businessDays = sqliteTable(
     openingReason: text('opening_reason'),
     /**
      * Gün sonu kurulum (eğitim) modunda mı alındı: true eğitim günü, false gerçek gün. null: gün açık ya da bu işaret
-     * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
+     * yokken kapandı (AsilPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
      */
     trainingDay: integer('training_day', { mode: 'boolean' }),
     /**
@@ -558,7 +559,7 @@ export const orders = sqliteTable(
     /** Online sipariş: sitedeki kimlik (ord-0042), aşama, teslim türü, etiket; ödemesi sitede alınmış */
     extId: text('ext_id'),
     extNo: integer('ext_no'),
-    /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı (sitede tamamlandı, iptal ya da süresi geçti) */
+    /** done: AsilPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı (sitede tamamlandı, iptal ya da süresi geçti) */
     extStage: text('ext_stage').$type<'new' | 'preparing' | 'ready' | 'done' | 'gone'>(),
     extFulfillment: text('ext_fulfillment').$type<'table' | 'pickup' | 'delivery'>(),
     extLabel: text('ext_label'),
@@ -624,7 +625,7 @@ export const orderItems = sqliteTable(
      * ve Z'de ayrı görünür. Eski kayıtlarda boş = ikram
      */
     compKind: text('comp_kind').$type<CompKind>(),
-    /** Ödenmezde adına yazılan kayıtlı kişi: tür, kimlik ve o anki adının kopyası (yalnız LafPOS'ta kalır) */
+    /** Ödenmezde adına yazılan kayıtlı kişi: tür, kimlik ve o anki adının kopyası (yalnız AsilPOS'ta kalır) */
     compPersonKind: text('comp_person_kind').$type<CompPersonKind>(),
     compPersonId: text('comp_person_id'),
     compPersonName: text('comp_person_name'),
@@ -905,7 +906,7 @@ export const platformOrders = sqliteTable(
 );
 
 /**
- * Platform ürünü → LafPOS ürünü: platformdan gelen her kalem (platform ürün kimliğiyle) burada görülür; eşlenmemişse
+ * Platform ürünü → AsilPOS ürünü: platformdan gelen her kalem (platform ürün kimliğiyle) burada görülür; eşlenmemişse
  * (`productId` boş) ada göre eşlenir, Yönetim › Paket platformları › Ürün eşleme'den bağlanır
  */
 export const platformProducts = sqliteTable(

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { TLSSocket } from 'node:tls';
+import { PAVO_KIMLIGI } from '@shared/eski-adlar';
 
 /**
  * Pavo yazarkasa POS (N86 ve diğer PavoPay cihazları) için yerel ağ REST istemcisi.
@@ -15,7 +16,7 @@ import type { TLSSocket } from 'node:tls';
  * (`/PerformEOD`, `/PrintEODCopy`) Pavo'nun REST paketinden (BKM TechPOS 509 REST V39, örnek istek ve yanıtlarıyla).
  * Ayrıntı ve doğrulanmamış noktalar: docs/04-YAZARKASA.md §8.
  *
- * Güvenlik: cihaz kendi imzaladığı sertifikayla HTTPS sunar. LafPOS eşleştirmede gördüğü sertifikanın parmak izini
+ * Güvenlik: cihaz kendi imzaladığı sertifikayla HTTPS sunar. AsilPOS eşleştirmede gördüğü sertifikanın parmak izini
  * saklar ve sonraki isteklerde gövdeyi göndermeden önce karşılaştırır (aynı ağdaki başka bir makine kendini cihaz
  * gibi gösteremez). Sertifika değişirse (cihaz uygulaması güncellendi) yeniden eşleştirilir.
  */
@@ -143,7 +144,7 @@ export class PavoClient {
     const url = (env.PAVO_URL ?? '').trim().replace(/\/+$/, '');
     const serial = (env.PAVO_SERIAL ?? '').trim();
     if (!/^https?:\/\/[^/\s]+$/.test(url) || !serial) return null;
-    return { url, serial, fingerprint: (env.PAVO_FINGERPRINT ?? '').trim() || 'LafPOS' };
+    return { url, serial, fingerprint: (env.PAVO_FINGERPRINT ?? '').trim() || PAVO_KIMLIGI };
   }
 
   /** Bağlantı denemesi (eşleştirmesiz çalışır) */
@@ -209,7 +210,7 @@ export class PavoClient {
 
   /**
    * Önceki gün sonunun bilgisi (`/PrintEODCopy`); `batchNo` verilmezse son gün sonu. Pavo'da bu uç varsayılan olarak
-   * slip basar: `print: false` açıkça gönderilir, LafPOS yalnız özeti okur.
+   * slip basar: `print: false` açıkça gönderilir, AsilPOS yalnız özeti okur.
    */
   eodCopy(batchNo?: number, timeoutMs = 30_000): Promise<PavoResponse> {
     return this.call('/PrintEODCopy', { EODCopy: { ...(batchNo != null ? { batchNo } : {}), useSummary: true, print: false, receiptImage: false } }, { timeoutMs });
@@ -342,7 +343,7 @@ function code(res: PavoResponse): string | null {
 /**
  * Eşleştirmenin bozulduğunu söyleyen cihaz kodları (sahada görüldü, Kasım 2026): 73 sıra no hatası, 74 kimlik
  * (FingerPrint) tutmuyor. İkisi de cihaz başka bir programla (başka POS, Pavo'nun kendi uygulaması) yeniden
- * eşleştirilince gelir; LafPOS'tan yeniden eşleştirince düzelir (sıra no 1'den başlar, kimlik yeniden kaydedilir)
+ * eşleştirilince gelir; AsilPOS'tan yeniden eşleştirince düzelir (sıra no 1'den başlar, kimlik yeniden kaydedilir)
  */
 const PAIRING_LOST = new Set(['73', '74']);
 export function pairingLost(errorCode: string | number | null | undefined): boolean {

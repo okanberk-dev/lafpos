@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BootstrapDTO, DenemeStatusDTO, OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
+import { YEDEK_DOSYA_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Deneme modu ve "Denemeyi bitir, gerçek kullanıma başla" (server/services/deneme.ts): yeni kurulumda hiçbir hareket
@@ -124,7 +125,7 @@ describe('Denemeyi bitir', () => {
     expect(r.already).toBe(false);
     expect(r.deleted.orders).toBeGreaterThan(0);
     expect(r.deleted.days).toBe(1);
-    expect(r.backup).toMatch(/lafpos-deneme-oncesi-.*\.db$/);
+    expect(r.backup).toMatch(new RegExp(`${YEDEK_DOSYA_ONEKI}deneme-oncesi-.*\\.db$`));
     expect(existsSync(r.backup)).toBe(true);
     expect(r.closedUsers.sort()).toEqual(['Bar ekranı', 'Garson', 'Kasa', 'Müdür']);
 
@@ -133,7 +134,7 @@ describe('Denemeyi bitir', () => {
     const audit = db.select().from(schema.auditLog).all();
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ action: 'deneme.bitir', severity: 'uyari', data: { remoteDays: 1 } });
-    // Silinen günün tarihi aynı işlemde LafPOS Uzaktan'da boşaltılmak üzere yazıldı (tests/deneme-uzaktan.test.ts)
+    // Silinen günün tarihi aynı işlemde AsilPOS Uzaktan'da boşaltılmak üzere yazıldı (tests/deneme-uzaktan.test.ts)
     const { getSyncState } = await import('../server/lib/settings');
     expect(getSyncState('cloud.reports.silinen')).toEqual([days[0]!.date]);
     // Kurulum aynı; örnek PIN'li hesaplar silinmez, kapanır

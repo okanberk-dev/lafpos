@@ -5,11 +5,11 @@ import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
- * LafPOS Uzaktan'a itme (server/sync/cloud.ts): değişmeyen özet gitmez (gece boşta yalnız 15 dk'da bir), gün açıkken
+ * AsilPOS Uzaktan'a itme (server/sync/cloud.ts): değişmeyen özet gitmez (gece boşta yalnız 15 dk'da bir), gün açıkken
  * nabız yine gider; gövde gzip'li tam özet. Kasa bilgisayarı boşta işlemci yemesin diye. Aralıklar
  * docs/07-UZAKTAN-ERISIM.md §4'te yazdığı gibi
  */
-const CLOUD = 'https://lafpos-uzak.test';
+const CLOUD = 'https://asilpos-uzak.test';
 let h: Harness;
 let pushes: { at: number }[] = [];
 
@@ -55,7 +55,7 @@ afterEach(() => {
   anchor = null;
 });
 
-describe('LafPOS Uzaktan itmesi', () => {
+describe('AsilPOS Uzaktan itmesi', () => {
   it('değişmeyen özet gitmez; zaman damgaları değişiklik sayılmaz', async () => {
     const { pushSnapshot, resetCloudSync, buildSnapshot, snapshotHash } = await import('../server/sync/cloud');
     resetCloudSync();

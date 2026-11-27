@@ -17,11 +17,11 @@ type Msg =
   | { type: 'reset' }
   | { type: 'reload' };
 
-const LOCK = 'lafpos-demo-sunucu';
+const LOCK = 'asilpos-demo-sunucu';
 const NULL_BODY = new Set([101, 204, 205, 304]);
 
 const me = crypto.randomUUID();
-const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('lafpos-demo');
+const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('asilpos-demo');
 const post = (m: Msg) => channel?.postMessage(m);
 
 interface Pending {

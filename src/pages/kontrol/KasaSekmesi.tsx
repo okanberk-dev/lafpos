@@ -56,7 +56,7 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
   const gunSonu = async () => {
     const ok = await confirmDialog({
       title: 'Gün sonu alınsın ve güncelleme kurulsun mu',
-      body: `Kasa en geç 5 dakikada gün sonunu (Z) sayımsız alır: Pavo banka gün sonu, lafmaliyet ve e-postalar kendiliğinden gider. Gün kapanınca yeni sürüm kurulur (LafPOS bir dakika kadar kapanır). Gün sonu şu durumlarda alınmaz, nedeni Geçmiş’te yazar ve güncelleme de hemen kurulmaz: kasada açık adisyon var, istek ${GUN_SONU_OMRU_MS / 60_000} dakikada kasaya ulaşmadı ya da bu arada kasada gün değişti. Kasa sayımını sonra Kasa › Geçmiş günler › Kasa föyü’nden girin`,
+      body: `Kasa en geç 5 dakikada gün sonunu (Z) sayımsız alır: Pavo banka gün sonu, lafmaliyet ve e-postalar kendiliğinden gider. Gün kapanınca yeni sürüm kurulur (AsilPOS bir dakika kadar kapanır). Gün sonu şu durumlarda alınmaz, nedeni Geçmiş’te yazar ve güncelleme de hemen kurulmaz: kasada açık adisyon var, istek ${GUN_SONU_OMRU_MS / 60_000} dakikada kasaya ulaşmadı ya da bu arada kasada gün değişti. Kasa sayımını sonra Kasa › Geçmiş günler › Kasa föyü’nden girin`,
       confirmLabel: 'Gün sonu al ve güncelle',
       tone: 'primary',
     });
@@ -84,7 +84,7 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
       }
     >
       {gunNeden && gunNeden !== genel && <p className={cn('border-b border-[var(--admin-divider)] px-5 py-2.5', NEDEN)}>{gunNeden}</p>}
-      <p className="px-5 py-4 text-sm text-muted">Kafede kimse gün sonu almadıysa kasa bağlıyken buradan alınır; ardından yeni LafPOS sürümü kendiliğinden kurulur. Yalnız panelin sahibi.</p>
+      <p className="px-5 py-4 text-sm text-muted">Kafede kimse gün sonu almadıysa kasa bağlıyken buradan alınır; ardından yeni AsilPOS sürümü kendiliğinden kurulur. Yalnız panelin sahibi.</p>
     </Card>
     <Card
       title="Servis modu"

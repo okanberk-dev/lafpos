@@ -1,5 +1,5 @@
 #!/bin/sh
-# LafPOS kasa bilgisayarı kurulumu (macOS). Ayrıntı: docs/05-KASA-BILGISAYARI.md
+# AsilPOS kasa bilgisayarı kurulumu (macOS). Ayrıntı: docs/05-KASA-BILGISAYARI.md
 #   Kur:    sh scripts/kasa/mac/kur.sh
 #   Kaldır: sh scripts/kasa/mac/kur.sh --kaldir
 # Oturum açılınca sunucu (launchd, çökerse yeniden başlar) ve kasa ekranı (kiosk Chrome) açılır.
@@ -13,7 +13,7 @@ if [ "$1" = "--kaldir" ]; then
   launchctl unload "$AGENTS/$SERVER.plist" 2>/dev/null || true
   launchctl unload "$AGENTS/$SCREEN.plist" 2>/dev/null || true
   rm -f "$AGENTS/$SERVER.plist" "$AGENTS/$SCREEN.plist"
-  echo "LafPOS otomatik başlatma kaldırıldı (veriler duruyor: $REPO/data)."
+  echo "AsilPOS otomatik başlatma kaldırıldı (veriler duruyor: $REPO/data)."
   exit 0
 fi
 
@@ -52,4 +52,4 @@ launchctl unload "$AGENTS/$SERVER.plist" 2>/dev/null || true
 launchctl load "$AGENTS/$SERVER.plist"
 launchctl unload "$AGENTS/$SCREEN.plist" 2>/dev/null || true
 launchctl load "$AGENTS/$SCREEN.plist"
-echo "Tamam: oturum açılınca LafPOS sunucusu ve kasa ekranı açılacak."
+echo "Tamam: oturum açılınca AsilPOS sunucusu ve kasa ekranı açılacak."

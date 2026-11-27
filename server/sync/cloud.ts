@@ -17,7 +17,7 @@ import { startReportSync } from './cloud-reports';
 import { remoteShop } from './merkez';
 
 /**
- * LafPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
+ * AsilPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
  * adisyonlar, bar). Kasa yerelde kalır; bulut salt okunur bir kopyadır. Değişiklikte en sık 15 sn'de bir, gün açıkken
  * 5 dk'da bir nabız; gövde gzip (zlib'in iş havuzunda, ana iş parçacığı beklemez), laffogato ile aynı imza kuralı.
  * Değişmeyen özet gitmez: gün kapalıyken (gece) nabız yalnız özet değiştiyse ya da son itmenin üstünden 15 dk

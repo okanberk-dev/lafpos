@@ -38,7 +38,7 @@ export interface ClaimedStoreCopy {
   claim: string;
   order: OrderDTO;
   /**
-   * Bu fişin LafPOS'a yazdığı ödemeler. Kör kasada da gider: nüsha cihazın aldığını yazar ve aynı döküm (tür, tutar)
+   * Bu fişin AsilPOS'a yazdığı ödemeler. Kör kasada da gider: nüsha cihazın aldığını yazar ve aynı döküm (tür, tutar)
    * `okc.paid` olayıyla zaten her ekrana gidiyor; adisyonun öteki ödemeleri `blindOrder` kuralıyla kalır
    */
   payments: { id: string; methodName: string; amount: number; tip: number; userName: string | null }[];

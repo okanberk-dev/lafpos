@@ -21,7 +21,7 @@ const KEY = ['sync', 'bildirim'];
 
 /**
  * Telefon bildirimleri (Yönetim › Ağ ve uzaktan erişim): hangi olayın patronun telefonuna gideceği ve eşikleri
- * (server/sync/bildirim.ts). Telefonda bildirimi patron LafPOS Uzaktan › Merkez'de açar. Kapanış saati bildirimi
+ * (server/sync/bildirim.ts). Telefonda bildirimi patron AsilPOS Uzaktan › Merkez'de açar. Kapanış saati bildirimi
  * Ayarlar'daki kapanış saatine bağlı: saat girilmemişse anahtar açık olsa da bir şey gitmez, altında nereden girileceği.
  * lafmaliyet'e gitmeyen gün sonunun (`lafmaliyet`) anahtarı yok: bildirim açıkken her zaman gider, kartta tek satır
  */
@@ -51,7 +51,7 @@ export function NotifyCard() {
   return (
     <Card
       title="Telefon bildirimleri"
-      subtitle="Önemli olaylar patronun telefonuna; telefonda LafPOS Uzaktan › Merkez'den açılır"
+      subtitle="Önemli olaylar patronun telefonuna; telefonda AsilPOS Uzaktan › Merkez'den açılır"
       actions={d ? d.ready ? s?.enabled ? <Badge tone="success" dot>Açık</Badge> : <Badge>Kapalı</Badge> : <Badge>Uzaktan kurulu değil</Badge> : undefined}
     >
       {q.isError ? (

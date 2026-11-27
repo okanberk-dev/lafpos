@@ -1,4 +1,4 @@
-// LafPOS Uzaktan: patrona telefon bildirimi (Web Push, api/_bildirim.ts). Yalnız bildirimi gösterir ve dokununca
+// AsilPOS Uzaktan: patrona telefon bildirimi (Web Push, api/_bildirim.ts). Yalnız bildirimi gösterir ve dokununca
 // paneli açar; sayfaları önbelleğe almaz (canlı veri her zaman siteden).
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
@@ -8,12 +8,12 @@ self.addEventListener('push', (e) => {
   try {
     data = e.data ? e.data.json() : {};
   } catch {
-    data = { title: 'LafPOS', body: e.data ? e.data.text() : '' };
+    data = { title: 'AsilPOS', body: e.data ? e.data.text() : '' };
   }
   e.waitUntil(
-    self.registration.showNotification(data.title || 'LafPOS', {
+    self.registration.showNotification(data.title || 'AsilPOS', {
       body: data.body || '',
-      tag: data.tag || 'lafpos',
+      tag: data.tag || 'asilpos',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       data: { url: data.url || '/patron' },

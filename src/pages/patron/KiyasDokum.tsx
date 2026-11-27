@@ -59,7 +59,7 @@ export function KiyasDokum({
   const live = mode === 'live';
   return (
     <Modal open={open} onClose={onClose} size="xl" title="Kıyas dökümü" subtitle={live ? `Bugün ${fmtTime(now)} itibarıyla; kıyas günleri aynı saate kadar` : 'Gün sonu tutarlarıyla'}>
-      {/* LafPOS Keel: soğuk gri zemin, kenarsız beyaz kartlar, bugün ters (mürekkep) kartta, nane vurgu */}
+      {/* AsilPOS Keel: soğuk gri zemin, kenarsız beyaz kartlar, bugün ters (mürekkep) kartta, nane vurgu */}
       <div className="space-y-4 bg-[var(--admin-bg)] p-4 sm:p-5">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <section aria-label="Bugün" className="k-inverse flex flex-col justify-between rounded-[var(--r-card)] px-5 py-5">
@@ -106,7 +106,7 @@ export function KiyasDokum({
                     {live && c.grain === 'saat' && <p className="mt-2 text-xs text-muted">O gün saat saat biliniyor: tamamlanan saatlere kadar</p>}
                   </>
                 ) : (
-                  <p className="mt-3 text-sm text-muted">Veri yok: o gün kafe kapalıydı ya da LafPOS kullanılmıyordu</p>
+                  <p className="mt-3 text-sm text-muted">Veri yok: o gün kafe kapalıydı ya da AsilPOS kullanılmıyordu</p>
                 )}
               </article>
             ))}

@@ -92,7 +92,7 @@ export function updateCustomer(t: Tx, actor: Actor, fx: Effects, id: string, inp
 
 /** Damga kartı: hedefe ulaşan müşteriye bir içecek ikram edilir, damga hedef kadar düşer. */
 export function redeemStamps(t: Tx, actor: Actor, fx: Effects, customerId: string, goal: number) {
-  if (!localStampsOn()) throw conflict('LafPOS damga kartı kapalı; sadakat damgası uygulamadan verilir', 'stamps_off');
+  if (!localStampsOn()) throw conflict('AsilPOS damga kartı kapalı; sadakat damgası uygulamadan verilir', 'stamps_off');
   need(actor, 'siparis.ikram');
   const c = t.select().from(schema.customers).where(eq(schema.customers.id, customerId)).get();
   if (!c) throw notFound('Müşteri');

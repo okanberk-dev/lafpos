@@ -25,9 +25,11 @@ import { dayPushPending, type DevirState, kurusOf, lastClosedRealDay } from '../
 import { getOpenDay, REFUND_REWRITE, REFUND_VOID } from '../services/orders';
 import { notify } from './bildirim';
 import { dropPending, land, takeOff } from './outbox-flight';
+import { TEL_KART_ALANI, TEL_KAYNAK } from '@shared/eski-adlar';
+import { PANEL_ANAHTAR_METNI } from '@shared/pos-env';
 
 /**
- * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
+ * AsilPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
  * `GET /api/panel/pos/urunler`'den günde bir gelir. Elle yedek: Satışlar ekranına yüklenen "Ürün;Adet;Tutar" listesi
  * ve Kasa raporu alanları. Bağlantı `.env`'de LAFMALIYET_URL ve LAFMALIYET_SYNC_SECRET yokken kapalı; kurulum
  * modunda kapanan gün (eğitim günü) hiç gönderilmez. docs/03-ENTEGRASYON.md §3-4
@@ -112,7 +114,7 @@ export function addonSiteIds(): Record<AddonKey, string | null> {
 /**
  * Kalemin eklerinin reçete maliyeti (KDV hariç, kuruş; Raporlar › Ürünler ve patron panelinin brüt kârı). Gün sonunun
  * kuralıyla: ekler `addonsOf`, kimlik `addonSiteIds`, maliyet ekin M birim maliyeti × kalem adedi × ek adedi. Maliyeti
- * bilinmeyen ek 0 sayılır, `partial` işaretlenir (lafmaliyet reçetesiz ürüne 0 gönderir, LafPOS saklamaz)
+ * bilinmeyen ek 0 sayılır, `partial` işaretlenir (lafmaliyet reçetesiz ürüne 0 gönderir, AsilPOS saklamaz)
  */
 export function addonCostOf(i: { options: SelectedOption[]; qty: number }, costs: Record<string, number>, ids: Record<AddonKey, string | null>): { cost: number; partial: boolean } {
   let cost = 0;
@@ -430,7 +432,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
     .from(schema.payments)
     .where(and(eq(schema.payments.dayId, day.id), eq(schema.payments.zField, 'card'), isNull(schema.payments.refundedAt)))
     .all();
-  // Pavo banka gün sonu ve LafPOS kıyası (gün kapandıktan sonra gelir; gelince gün yeniden gönderilir, okc/service.ts
+  // Pavo banka gün sonu ve AsilPOS kıyası (gün kapandıktan sonra gelir; gelince gün yeniden gönderilir, okc/service.ts
   // saveEod). Pavo yoksa ya da henüz denenmediyse alan gitmez; eski panel bilmediği alanı yok sayar
   const eod = getSyncState<
     Pick<PavoEodRecord, 'status' | 'batchNo' | 'at' | 'grandTotalKurus' | 'dayCardKurus' | 'message' | 'acquirers'> &
@@ -445,7 +447,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
           batchNo: eod.batchNo,
           at: new Date(eod.at).toISOString(),
           pavoCard: eod.grandTotalKurus != null ? toTL(eod.grandTotalKurus) : null,
-          lafposCard: eod.dayCardKurus != null ? toTL(eod.dayCardKurus) : null,
+          [TEL_KART_ALANI]: eod.dayCardKurus != null ? toTL(eod.dayCardKurus) : null,
           diff: eod.grandTotalKurus != null && eod.dayCardKurus != null ? toTL(eod.grandTotalKurus - eod.dayCardKurus) : null,
           acquirers: eod.acquirers.map((a) => ({ name: a.name, count: a.count, total: a.totalKurus != null ? toTL(a.totalKurus) : null })),
           message: eod.message,
@@ -462,14 +464,14 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
               trigger: b.trigger === 'elle' ? ('elle' as const) : ('otomatik' as const),
               dayClosed: b.dayClosed !== false,
             })),
-          // LafPOS'ta günün bankaya giden bütün kartı (Z kartı + kart bahşişi + kartla tahsilat − yazarkasadan geçmeyen,
+          // AsilPOS'ta günün bankaya giden bütün kartı (Z kartı + kart bahşişi + kartla tahsilat − yazarkasadan geçmeyen,
           // bahşişiyle − cihazda fişi iptal edilen); gün açıkken null
           dayCard: dayCardOf(day.id),
         }
       : null;
   return {
     version: 1,
-    source: 'lafpos',
+    source: TEL_KAYNAK,
     // Bu günün kaçıncı gönderimi (lafmaliyet sürüm geçmişini tutar) ve varsa düzeltmenin türü ve nedeni
     revision: revisionOf(day.date),
     ...(correction ? { correction } : {}),
@@ -500,7 +502,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
       countedCash: z.counted_cash,
       handedOver: z.handed_over,
       cashDiff: z.cash_diff,
-      // lafmaliyet beklenen nakdi bunlarla LafPOS'unkine eşitler (docs/03-ENTEGRASYON.md §4)
+      // lafmaliyet beklenen nakdi bunlarla AsilPOS'unkine eşitler (docs/03-ENTEGRASYON.md §4)
       cashIn: z.cash_in,
       expectedCash: z.expected_cash,
       // Kartla bahşiş ve kartla cari tahsilatı: banka POS'unda var, Z'nin `card` alanında yok (isteğe bağlı alanlar)
@@ -512,7 +514,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
       ikramTotal: toTL(ikramTotal),
       odenmezTotal: toTL(odenmezTotal),
       zayiTotal: toTL(compTotal('zayi')),
-      // Günün KDV'si LafPOS'un dökümü (adisyon başına yuvarlanmış, oran başına toplam); lafmaliyet yeniden hesaplamaz
+      // Günün KDV'si AsilPOS'un dökümü (adisyon başına yuvarlanmış, oran başına toplam); lafmaliyet yeniden hesaplamaz
       vat: (summary.kdv ?? []).map((k) => ({ rate: k.rate, base: toTL(k.base), vat: toTL(k.kdv) })),
       openedAt: new Date(day.openedAt).toISOString(),
       closedAt: day.closedAt != null ? new Date(day.closedAt).toISOString() : null,
@@ -568,7 +570,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
       )
       .slice(0, LIST_MAX),
     // Kasa hareketleri satır satır (§4.7; lafmaliyet "Kasadan çıkanlar"): hep gider, hareketsiz günde boş dizi (eski
-    // LafPOS'tan ayrılsın). Yazan kişi gitmez; teslimde parayı alan (`recipient`, sahibin kararı) gider; harcamanın
+    // AsilPOS'tan ayrılsın). Yazan kişi gitmez; teslimde parayı alan (`recipient`, sahibin kararı) gider; harcamanın
     // kategorisi lafmaliyet'in kimliğiyle. Σharcama = cashOut, Σteslim = handedOver, Σgiriş ≤ cashIn (cashIn nakit
     // tahsilatı ve bahşişi de sayar)
     cashMoves: cashMovesOf(day.id),
@@ -589,7 +591,7 @@ export function buildDayPayload(dayId: string, opts: { eodAtClose?: boolean } = 
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
-/** En az bir LafPOS kullanıcısı lafmaliyet personeline bağlı mı (yoksa gövde `workedStaffRefs` taşımaz) */
+/** En az bir AsilPOS kullanıcısı lafmaliyet personeline bağlı mı (yoksa gövde `workedStaffRefs` taşımaz) */
 export function anyStaffLinked(): boolean {
   return !!db.select({ id: schema.users.id }).from(schema.users).where(isNotNull(schema.users.staffRef)).get();
 }
@@ -660,7 +662,7 @@ const KIND_OF_FIELD: Record<string, MethodKind> = { cash: 'nakit', card: 'kart',
 const kindOf = (methods: Map<string, MethodRow>, methodId: string | undefined, zField: string): MethodKind =>
   (methodId ? methods.get(methodId)?.kind : undefined) ?? KIND_OF_FIELD[zField] ?? 'diger';
 
-/** LafPOS'un günün bütün kartıyla kıyas tutarı (okc/card-basis.ts `cardBasis`, önceki batch'siz); gün açıkken null */
+/** AsilPOS'un günün bütün kartıyla kıyas tutarı (okc/card-basis.ts `cardBasis`, önceki batch'siz); gün açıkken null */
 function dayCardOf(dayId: string): number | null {
   const k = cardBasis(dayId, []).dayCardKurus;
   return k == null ? null : toTL(k);
@@ -828,14 +830,14 @@ export const TRAINING_MESSAGE =
 /**
  * lafmaliyet'e yalnız kurulum modu dışında kapanan gün gider. Kurulum modunda kapanan gün (eğitim günü) kurulum modu
  * sonradan kapansa da gitmez: ne gün sonunda, ne yeniden sayımda, ne "Gönder"le, ne geçmiş günlerle. İşaretten önce
- * kapanan gün (`null`) de gitmez: LafPOS o zaman canlıda değildi. docs/03-ENTEGRASYON.md §4.3
+ * kapanan gün (`null`) de gitmez: AsilPOS o zaman canlıda değildi. docs/03-ENTEGRASYON.md §4.3
  */
 export const realDay = (d: { trainingDay: boolean | null }) => d.trainingDay === false;
 
 function trainingDayMessage(d: { trainingDay: boolean | null }) {
   return d.trainingDay
     ? "Bu gün kurulum modunda kapandı (eğitim günü); lafmaliyet'e gönderilmez. Satışlar elle aktarılır (Raporlar › lafmaliyet aktarımı)"
-    : "Bu gün eğitim günü işareti tutulmadan önce kapandı (LafPOS o zaman canlıda değildi); lafmaliyet'e gönderilmez";
+    : "Bu gün eğitim günü işareti tutulmadan önce kapandı (AsilPOS o zaman canlıda değildi); lafmaliyet'e gönderilmez";
 }
 
 const notConfigured = () => conflict('lafmaliyet bağlantısı tanımlı değil (LAFMALIYET_URL, LAFMALIYET_SYNC_SECRET)', 'not_configured');
@@ -896,13 +898,13 @@ export interface DayAnswer {
   unmatched?: string[];
   /** lafmaliyet bu günü hesaplara sayıyor mu (gün geçiş gününden önce değilse true) */
   counted?: boolean;
-  /** lafmaliyet'teki "LafPOS'a geçiş günü"; null: seçilmedi, kasa ModPOS */
+  /** lafmaliyet'teki "AsilPOS'a geçiş günü"; null: seçilmedi, kasa ModPOS */
   switchDay?: string | null;
   /**
    * Ertesi günün beklenen açılışı (TL; kasa zinciri §4.6): lafmaliyet'te bu günün kasa raporu varsa sayılan − teslim
-   * (`kasa_raporu`), yoksa gövdenin sayımı (`lafpos`); null: gün sayılmadı
+   * (`kasa_raporu`), yoksa gövdenin sayımı (`TEL_KAYNAK`, telde eski adla); null: gün sayılmadı
    */
-  nextOpening?: { amount: number; source: 'kasa_raporu' | 'lafpos' } | null;
+  nextOpening?: { amount: number; source: 'kasa_raporu' | typeof TEL_KAYNAK } | null;
   /**
    * Gövdedeki `workedStaffRefs`'in lafmaliyet'teki karşılığı (§4.8): sayılan, lafmaliyet'te bulunmayan ve başka şubenin
    * kaydı olan kimlikler. Yalnız alan gönderildiyse gelir
@@ -911,7 +913,14 @@ export interface DayAnswer {
 }
 
 /** lafmaliyet'in devir nesnesi (gün sonu yanıtında ve `GET /api/panel/pos/devir`'de aynı) */
-const nextOpeningShape = z.object({ amount: z.number().finite().min(0).max(10_000_000), source: z.enum(['kasa_raporu', 'lafpos']) });
+/**
+ * Devrin kaynağı: ad değişikliğinden sonraki panel yeni adı da gönderebilir; ikisi de kabul edilir, kasada eski değerle
+ * tutulur (okunan iki ad, yazılan eski ad; shared/eski-adlar.ts)
+ */
+const nextOpeningShape = z.object({
+  amount: z.number().finite().min(0).max(10_000_000),
+  source: z.enum(['kasa_raporu', TEL_KAYNAK, 'asilpos']).transform((s) => (s === 'asilpos' ? TEL_KAYNAK : s)),
+});
 
 const count = z.number().int().min(0).optional().catch(undefined);
 /** lafmaliyet personel kimlikleri (`s:<staff.id>`); bozuk liste yanıtın `staff`'ını düşürür, günü değil */
@@ -958,9 +967,9 @@ const RESEND = 'Kasa › Geçmiş günler › Z › Gönder';
 export function httpErrorText(status: number, json: unknown): string {
   const detail = errorDetail(json);
   const code = (json as { error?: unknown } | null)?.error;
-  if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. LafPOS'taki LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)`;
+  if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. AsilPOS'taki LAFMALIYET_SYNC_SECRET paneldeki ${PANEL_ANAHTAR_METNI} ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)`;
   // 503 yalnız gövdesi not_configured ise "anahtar yok"; başkası (bakım, barındırma hatası) geçici sayılır
-  if (status === 503 && code === 'not_configured') return `HTTP 503${detail}: lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil, bağlantı panelde kapalı`;
+  if (status === 503 && code === 'not_configured') return `HTTP 503${detail}: lafmaliyet'te ${PANEL_ANAHTAR_METNI} tanımlı değil, bağlantı panelde kapalı`;
   if (status === 503 || status === 502 || status === 504) return `HTTP ${status}${detail}: lafmaliyet şu an yanıt vermiyor (bakım ya da sunucu hatası)`;
   if (status === 404 || status === 405) return `HTTP ${status}${detail}: adreste lafmaliyet yok. Yönetim › Bağlantı bilgileri › lafmaliyet adresi https://ladmin.laffogato.net olmalı`;
   return `HTTP ${status}${detail}`;
@@ -992,10 +1001,10 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
     const sent = (payload as { z?: { zNo?: unknown } } | null)?.z?.zNo;
     const known = typeof body.zNo === 'number' ? `lafmaliyet'te bu güne Z ${body.zNo} kayıtlı, gönderilen Z ${typeof sent === 'number' ? sent : '?'}. ` : '';
-    return `lafmaliyet reddetti: HTTP 409${detail}. ${known}Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince ${RESEND} ile yeniden gönderin`;
+    return `lafmaliyet reddetti: HTTP 409${detail}. ${known}Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › AsilPOS (kasa)'da günün kaydı silinince ${RESEND} ile yeniden gönderin`;
   }
-  // 400/413/422: gövde sözleşmeye uymadı ya da çok büyük; LafPOS'un ya da panelin sürüm farkı, kullanıcının düzelteceği bir şey yok
-  if (PERMANENT.has(status)) return `lafmaliyet reddetti: HTTP ${status}${detail}. Kendiliğinden yeniden denenmez; LafPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin, sürerse destekle görüşün`;
+  // 400/413/422: gövde sözleşmeye uymadı ya da çok büyük; AsilPOS'un ya da panelin sürüm farkı, kullanıcının düzelteceği bir şey yok
+  if (PERMANENT.has(status)) return `lafmaliyet reddetti: HTTP ${status}${detail}. Kendiliğinden yeniden denenmez; AsilPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin, sürerse destekle görüşün`;
   return httpErrorText(status, json);
 }
 
@@ -1055,7 +1064,7 @@ export function pushRejectNotice(status: number, json: unknown, payload: unknown
     return { title, body: `${day}lafmaliyet'te bu güne ${known} kayıtlı (HTTP 409). lafmaliyet'te günün kaydı silinince ${RESEND} ile yeniden gönderin` };
   }
   const code = [j.error, j.field].filter((x): x is string => typeof x === 'string' && x.length > 0).join(': ');
-  return { title, body: `${day}gövde kabul edilmedi (HTTP ${status}${code ? `, ${clip(code, 48)}` : ''}). LafPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin` };
+  return { title, body: `${day}gövde kabul edilmedi (HTTP ${status}${code ? `, ${clip(code, 48)}` : ''}). AsilPOS'u ve lafmaliyet'i güncelleyip ${RESEND} ile yeniden gönderin` };
 }
 
 /**
@@ -1348,7 +1357,7 @@ export function answerFor(a: DayAnswer | null, seesCash: boolean, seesStaff = fa
 }
 
 /**
- * lafmaliyet'in saymadığı personel kimlikleri, LafPOS'taki adıyla (Entegrasyon; ad yalnız bu kasada, lafmaliyet'e
+ * lafmaliyet'in saymadığı personel kimlikleri, AsilPOS'taki adıyla (Entegrasyon; ad yalnız bu kasada, lafmaliyet'e
  * gitmez): bulunmayan (ladmin'de silinmiş kayıt) ve başka şubenin kaydı. Bu kasada bağlı kullanıcı yoksa ad null
  */
 function staffIssuesOf(a: DayAnswer | null) {
@@ -1433,7 +1442,7 @@ export function backfillDays(input: { from: string; to: string }, actor: { id: s
   return { queued: queued.length, days: queued, training };
 }
 
-// ─── Maliyet (lafmaliyet → LafPOS) ──────────────────────────────────────────
+// ─── Maliyet (lafmaliyet → AsilPOS) ──────────────────────────────────────────
 
 /** `GET /api/panel/pos/urunler` gövdesi (docs/03-ENTEGRASYON.md §4.1); bozuksa önceki maliyetler kalır */
 const costsBody = z.object({
@@ -1539,7 +1548,7 @@ export function costsAt(): number | null {
   return costsState()?.at || null;
 }
 
-// ─── Kasa zinciri: devir ve gider kategorileri (lafmaliyet → LafPOS) ────────
+// ─── Kasa zinciri: devir ve gider kategorileri (lafmaliyet → AsilPOS) ────────
 
 /**
  * lafmaliyet'e kendiliğinden giden okumaların (devir, gider kategorileri) en kısa arası: istek ancak ekran isteyince

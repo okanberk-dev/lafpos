@@ -9,9 +9,9 @@ import type { BootstrapDTO, OrderDTO } from '@shared/types';
  * satışı, seçenek fiyatları, iptal/indirim yetkisi, kalem bazlı ve nakit ödeme, eğitim cihazıyla yazarkasa
  * ödemesi, karaoke odası, gün sonu, lafmaliyet paketi ve yetki sınırları.
  */
-const dir = mkdtempSync(join(tmpdir(), 'lafpos-test-'));
-process.env.LAFPOS_DATA_DIR = dir;
-process.env.LAFPOS_NO_JOBS = '1';
+const dir = mkdtempSync(join(tmpdir(), 'asilpos-test-'));
+process.env.ASILPOS_DATA_DIR = dir;
+process.env.ASILPOS_NO_JOBS = '1';
 
 type App = { request: (path: string, init?: RequestInit) => Response | Promise<Response> };
 let app: App;
@@ -53,7 +53,7 @@ const product = (name: string) => boot.products.find((p) => p.name === name)!;
 const optionItem = (groupKey: string, code: string) => boot.optionGroups.find((g) => g.extKey === groupKey)!.items.find((i) => i.code === code)!;
 const method = (name: string) => boot.paymentMethods.find((m) => m.name === name)!;
 
-describe('LafPOS uçtan uca', () => {
+describe('AsilPOS uçtan uca', () => {
   it('kurulum: site menüsü, yerel ürünler, seçenekler, masa planı', () => {
     expect(boot.products.length).toBeGreaterThan(80);
     expect(product('Latte').priceL).toBeGreaterThan(product('Latte').price);
@@ -135,7 +135,7 @@ describe('LafPOS uçtan uca', () => {
     expect(after.items.every((i) => i.paidQty === i.qty)).toBe(true);
   });
 
-  it('cihazda fiş iptali LafPOS ödemesini geri alır ve adisyonu açar', async () => {
+  it('cihazda fiş iptali AsilPOS ödemesini geri alır ve adisyonu açar', async () => {
     let o = await ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
     o = await ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
     const sent = await ok<{ receipt: { id: string } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
