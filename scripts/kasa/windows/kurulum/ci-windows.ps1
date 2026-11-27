@@ -34,6 +34,13 @@ function Native([string]$exe, [string[]]$a) {
 
 function Json($x) { ConvertTo-Json -InputObject $x -Depth 6 -Compress }
 
+# Dosyanin SHA-256 ozeti (.NET; Get-FileHash modulden gelir, PowerShell 7'nin PSModulePath'iyle 5.1'de bulunamayabilir)
+function Get-Sha256([string]$yol) {
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $fs = [System.IO.File]::OpenRead($yol)
+  try { return ([BitConverter]::ToString($sha.ComputeHash($fs))).Replace('-', '') } finally { $fs.Dispose(); $sha.Dispose() }
+}
+
 function Read-Link([string]$yol) {
   if ($yol.EndsWith('.url')) {
     $url = (Get-Content -LiteralPath $yol | Where-Object { $_ -like 'URL=*' } | Select-Object -First 1)
@@ -111,7 +118,7 @@ switch ($Islem) {
     Json $r.cikti
   }
   'agac' {
-    $kok = @(Get-ChildItem -LiteralPath $Klasor -File | Sort-Object Name | ForEach-Object { [ordered]@{ ad = $_.Name; ozet = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } })
+    $kok = @(Get-ChildItem -LiteralPath $Klasor -File | Sort-Object Name | ForEach-Object { [ordered]@{ ad = $_.Name; ozet = (Get-Sha256 $_.FullName) } })
     $klasorler = @(Get-ChildItem -LiteralPath $Klasor -Directory | Sort-Object Name | ForEach-Object { $_.Name })
     $dosyalar = @()
     foreach ($d in @('app', 'node')) {

@@ -32,6 +32,11 @@ import { buildInfo, ROOT } from './paket.mjs';
 import { NODE_VERSION } from './surumler.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// İş akışının adımı pwsh'ta (PowerShell 7) koşar; pwsh PSModulePath'e kendi modül klasörlerini koyar. Buradan açılan
+// Windows PowerShell 5.1 (ci-windows.ps1, kurulumların kisayollar.ps1'i, siteden kurulum) önce 7'nin modüllerini bulur ve
+// Get-FileHash gibi komutları yükleyemez. Kafede kısayol, görev ve kurulum dosyası 5.1'i temiz ortamla açar: denemede de
+// değişken silinir, 5.1 kendi varsayılan yolunu kurar
+delete process.env.PSModulePath;
 const INSTALL = join(process.env.ProgramFiles || 'C:\\Program Files', 'LafPOS'); // eski-ad: kurulu kasanın klasörü
 const HOME = join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS'); // eski-ad
 const ENV_FILE = join(HOME, 'ayarlar.env');
