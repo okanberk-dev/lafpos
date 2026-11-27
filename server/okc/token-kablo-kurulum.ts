@@ -185,7 +185,8 @@ export function slicePart(tool: Uint8Array, part: EmbeddedPart, name: string): B
   return out;
 }
 
-const ZIP_END = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+// Uint8Array: dosya yüklenirken çalışır, tarayıcı demosunda Buffer yok (Buffer.lastIndexOf bunu da arar)
+const ZIP_END = new Uint8Array([0x50, 0x4b, 0x05, 0x06]);
 const ZIP_LOCAL = 0x04034b50;
 const ZIP_CENTRAL = 0x02014b50;
 
