@@ -344,6 +344,17 @@ Günlük yedek (`backups\lafpos-<tarih>.db`) alınınca kasada sıkıştırılı
 (Vercel Blob, özel depo `lafpos-yedek`; `server/sync/yedek.ts`, `api/_yedek.ts`). Dükkân başına son 30 yedek kalır;
 gidemezse yarım saatte bir yeniden denenir. Durum ve "Şimdi yedekle": Yönetim › Ayarlar ve yedek › Bulut yedeği.
 
+**Anahtar değişince** (27 Kasım 2026 incelemesi; `docs/07-UZAKTAN-ERISIM.md` §7): ladmin'in dağıttığı yeni Uzaktan anahtarı
+gün sonunda yazılır, günün yedeği ise gün içinde eski anahtarla gitmiştir. Ertesi günün yedeğine dek buluttaki bütün
+yedekler eski anahtarla şifreli kalırdı: o arada yeni anahtarla kurulan bilgisayar hiçbirini açamazdı. Artık:
+- Sunucu yeni anahtarla açılınca ilk yedek turunda (yarım dakika) veritabanının şimdiki hâli yeni anahtarla hemen
+  yüklenir. Son yüklemenin anahtarı izinden (`yedek.bulut` `lastKey`: anahtarın özeti, kendisi değil) bilinir; yükleme
+  gidemezse yarım saatte bir yeniden denenir. Anlık kopya yükleme bitince silinir.
+- Ayarlar dosyasındaki ortak ya da şube anahtarı başka değere geçince (ladmin'in dağıtımı, Bağlantı bilgileri, kurulum
+  kodu) eski değer `ASILPOS_CLOUD_SECRET_ONCEKI` / `ASILPOS_CLOUD_SUBE_SECRET_ONCEKI` satırında kalır (dosyanın
+  adlandırmasıyla; kurulu kasada eski önekle). Geri yükleme önce şimdiki anahtarları, sonra bunları dener: değişimden
+  önce alınmış yedek de aynı kasada açılır. Yalnız bir önceki değer tutulur; bu satırla hiçbir istek imzalanmaz.
+
 **Geri yükleme** (yalnız patron, kendi PIN'iyle, gün kapalıyken, Windows kurulumunda): "Buluttan geri yükle" yedeği
 seçtirir; seçilen yedek indirilir, çözülür, SQLite olduğu doğrulanır ve veri klasöründe `geri-yukle\hazir.db` olarak
 bekler. Sunucu kapanır; bekçi açmadan önce mevcut veritabanının kopyasını alır
@@ -430,6 +441,42 @@ Seçim sürüme bağlıdır (yeni sürümde yeniden sorulur) ve Merkez'e nabızl
 **Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı** olarak görünür. Uzaktan › Merkez ›
 **Güncellemeyi şimdi gönder** kasaya en geç 5 dakikada ulaşır ve aynı pencereyi çıkarır (gün kapalıysa hemen kurulur).
 Zorunlu test: `e2e/flows.mjs` "Şimdi güncelle: kasa yeni sürümle açılınca aynı masa ve aynı sepetle devam eder".
+
+### Güncellemeden sonraki ilk açılış yeni sürümle (27 Kasım 2026 düzeltmesi)
+
+Otomatik güncellemeden sonra sahip kasayı (kiosk penceresi ya da tarayıcı) ilk açtığında eski sürüm (eski yeşil kenar
+çubuğu) görünüyor, elle yenileyince düzeliyordu. İki yol vardı:
+
+1. **Tarayıcı önbelleği.** Sunucu kökü (`/`, kasa penceresinin adresi) ve derleme dosyalarını önbellek başlığı olmadan,
+   yalnız Last-Modified ile veriyordu. Chrome böyle yanıtı sezgisel olarak, son değişikliğin yaşının onda biri kadar
+   (birkaç gün önce kurulmuş sürümde saatlerce) sunucuya sormadan açar: güncellemeden sonraki ilk açılışta eski
+   `index.html` eski betiği önbellekten yüklüyordu. Artık arayüz sayfası (kök, `/index.html`, arayüz yolları) hiç
+   saklanmaz (`no-store`; `no-cache` yeni açılışta sordururdu ama geri gelişte ve oturum geri yüklemesinde tarayıcı saklı
+   sayfayı sormadan açar), adı içerik özeti taşımayan dosyalar (sw.js, manifest, simgeler) her açılışta sorulur
+   (`no-cache`), adına Vite'ın özetini koyduğu `/assets/` dosyaları bir yıl önbellekte kalır (`server/app.ts`
+   `arayuzOnbellegi`).
+2. **Güncellemeden hemen önce açılmış sayfa.** Kasa sabah açılınca kasa penceresi eski sunucudan gelir; güncelleme
+   (gece kapalıysa) açılıştan 2 dakika sonra kurulur. Giriş ekranında canlı bağlantı olmadığı için sayfa sunucunun
+   yenilendiğini görmüyor, girişten sonraki ilk derleme sorusu yeni sunucuya gidiyor ve eski sayfa yeni derlemeyi "bu
+   sürüm" sanıp hiç yenilenmiyordu. Artık sayfa kendi ana betiğini sunucunun `index.html`'indekiyle karşılaştırır
+   (`src/lib/buildWatch.ts`): açılışta, canlı bağlantı yokken (giriş ekranı, müşteri ve çağrı ekranı, kopukluk) dakikada
+   bir, ekrana dönünce ve canlı bağlantı her kurulduğunda. Farklıysa sayfa bir kez kendiliğinden yenilenir (açık pencere
+   kapanınca; oturum varsa "Yeni sürüm kuruldu" der); yenilemeden sonra da farklıysa döngüye girmez.
+
+**Tarayıcının kendi önbelleği** (27 Kasım 2026 incelemesi): kasa bekçisi ve kasa kısayolu kasa penceresini ya da müşteri
+ekranını yeni bir tarayıcı süreciyle açmadan önce o profilin HTTP önbelleğini (`%LocalAppData%\LafPOS\chrome`, `\edge`
+ve `\chrome-musteri` altında `Default\Cache`) siler (`app\kasa-yazici.ps1` `Clear-BrowserCache`). Yalnız o profilin
+tarayıcısı açık değilken, pencere kilidinin altında; oturum, ayarlar ve yerel depolama kalır. Dosyalar yerel sunucudan
+geldiği için bedeli ilk yüklemenin yeniden yapılmasıdır. Böylece eski sunucunun başlıksız verdiği ve profilde kalmış
+`index.html` bilgisayar yeniden açılınca ya da pencere yeniden açılınca kullanılmaz.
+
+**Bu sürüme geçişte bir kez:** yeni denetim yeni sürümün betiğindedir. Bu düzeltmeyi getiren güncelleme kurulurken eski
+sürümün giriş ekranı açıksa o açık sayfa bir kez daha eski görünebilir: elle yenileyince (F5) düzelir. Bilgisayar
+yeniden başlayınca ya da pencere kasa kısayoluyla açılınca önbellek silindiği için görünmez (güncellemeden önce başlamış
+bekçi eski betiği çalıştırmaya devam eder, yenisini bilgisayar yeniden açılınca alır). Sonraki güncellemelerde görünmez.
+Testler:
+`tests/arayuz-onbellek.test.ts`; e2e akışları "Güncellemeden sonra ilk açılış", "Eski sürümle açılan sayfa" ve "Giriş
+ekranı güncellemeden sonra".
 
 ### İnternet yokken ve internet gelince
 

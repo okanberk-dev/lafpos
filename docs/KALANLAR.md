@@ -123,7 +123,9 @@ ad değişikliğinden önceki adlar, yeni kod ikisini de okur; laffogato'da ad b
 21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
 **geçersiz**. Dosya kaybolursa anahtarlar yeniden üretilir (`scripts/vercel/baglanti-kur.sh --yenile` ya da Vercel'de
 elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", geri okunamaz. Kasa bağlanınca doğrulama: Yönetim
-› Genel bakış › Sistem sağlığı ve Site ve lafmaliyet sayfasındaki durum satırları.
+› Genel bakış › Sistem sağlığı ve Site ve lafmaliyet sayfasındaki durum satırları. Çalışan kafede anahtar `--yenile` ile
+değil, iki değerli sırayla değiştirilir (27 Kasım 2026 olayı; `docs/07-UZAKTAN-ERISIM.md` §7): yeni değer Uzaktan'da ve
+panelde şimdiki, eski değer `_ONCEKI` adıyla; kasalar gece geçer, birkaç gün sonra `_ONCEKI` silinir.
 
 ```
 LAFMALIYET_URL=https://ladmin.laffogato.net

@@ -39,6 +39,19 @@ function Get-DisplayExe {
   return $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 }
 
+# Tarayici onbellegi (inceleme, 27 Kas 2026): yeni kasa ya da musteri ekrani tarayicisi acilmadan once o profilin HTTP
+# onbellegi (Default\Cache) silinir. 27 Kasim surumunden onceki sunucu arayuz sayfasini onbellek basligi olmadan veriyordu;
+# Chrome onu sunucuya sormadan acabiliyor, guncellemeden sonraki ilk acilista eski arayuz gorunuyordu. Yeni sunucu sayfayi
+# saklatmaz (no-store) ama eski kayit profilde kalmis olabilir. Dosyalar yerel sunucudan gelir: silmek yalniz ilk yuklemeyi
+# yeniden yaptirir. Oturum, ayarlar ve yerel depolama (Local Storage, Cookies) silinmez. Profil kullanimdayken cagrilmaz
+# (yalniz o profilin tarayicisi yokken, kilit altinda); silinemeyen dosya sessizce kalir
+function Clear-BrowserCache([string]$profileDir) {
+  try {
+    $cache = Join-Path $profileDir 'Default\Cache'
+    if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue }
+  } catch { }
+}
+
 # Musteri ekrani acik mi: musteri profiliyle (chrome-musteri) calisan Chrome/Edge sureci
 function Test-CustomerDisplay {
   $p = Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*chrome-musteri*' } | Select-Object -First 1
@@ -73,6 +86,7 @@ function Start-CustomerDisplay([string]$base) {
       '--no-first-run', '--no-default-browser-check', '--disable-pinch', '--overscroll-history-navigation=0', '--autoplay-policy=no-user-gesture-required',
       '--disable-session-crashed-bubble', '--disable-features=Translate'
     )
+    Clear-BrowserCache $profileDir
     Start-Process -FilePath $exe -ArgumentList $chromeArgs | Out-Null
     # Surec gorunene dek beklenir: ardindan gelen (bat ya da bekci) ikinci pencere acmasin
     for ($i = 0; $i -lt 20; $i++) {
@@ -138,10 +152,14 @@ function Open-KasaWindow([bool]$SunucuGerek) {
     if (-not $exe) { return $false }
     $common = @('--no-first-run', '--no-default-browser-check', '--disable-pinch', '--overscroll-history-navigation=0', '--autoplay-policy=no-user-gesture-required')
     if ($exe -like '*msedge.exe') {
+      $kasaProfil = Join-Path $env:LOCALAPPDATA 'LafPOS\edge'
       $kasaArgs = @('--kiosk', $kasaUrl, '--edge-kiosk-type=fullscreen', '--kiosk-printing', ('--user-data-dir="' + (Join-Path $env:LOCALAPPDATA 'LafPOS\edge') + '"')) + $common + @('--disable-features=Translate', '--noerrdialogs')
     } else {
+      $kasaProfil = Join-Path $env:LOCALAPPDATA 'LafPOS\chrome'
       $kasaArgs = @('--kiosk', '--kiosk-printing', ('--app=' + $kasaUrl), ('--user-data-dir="' + (Join-Path $env:LOCALAPPDATA 'LafPOS\chrome') + '"')) + $common + @('--disable-session-crashed-bubble', '--disable-features=Translate', '--noerrdialogs')
     }
+    # Kasa profilinin tarayicisi yok (Test-KasaWindow, kilit altinda): eski arayuz onbellekten acilmasin
+    Clear-BrowserCache $kasaProfil
     Start-Process -FilePath $exe -ArgumentList $kasaArgs | Out-Null
     # Surec gorunene dek beklenir: ardindan gelen (bat ya da bekci) ikinci pencere acmasin
     for ($i = 0; $i -lt 20; $i++) {

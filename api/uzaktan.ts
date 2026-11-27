@@ -3,7 +3,8 @@
  * (server/sync/cloud.ts); patron parolasıyla giren tarayıcı aynı arayüzü salt okunur görür. Kasa yerelde kalır.
  *
  * Ortam: ASILPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32; isteğe bağlı şube başına ASILPOS_CLOUD_SECRET_<ŞUBE>,
- * api/_kafe.ts), ASILPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
+ * api/_kafe.ts; anahtar değişiminde önceki değerleri ASILPOS_CLOUD_SECRET_ONCEKI ve ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI,
+ * docs/07-UZAKTAN-ERISIM.md §7), ASILPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
  * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
  * isteğe bağlı YEMEKSEPETI_<ŞUBE>_REMOTE_ID (ve eski öneksiz YEMEKSEPETI_REMOTE_ID; yalnız bu restoranların
@@ -31,7 +32,7 @@ import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js
 import { CLOUD_KEYS, DUKKAN_KANIT_BASLIGI, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 import { eskiEnvAdi } from '../shared/pos-env.js';
 import { REDIS_ONEKI } from '../shared/eski-adlar.js';
-import { dukkanKanitiTutar, type Kafe, kafeAnahtari, kafeKimligi, subeAnahtarlari, subeErisimi } from './_kafe.js';
+import { anahtarBasligi, dukkanKanitiTutar, type Kafe, kafeAnahtarDegerleri, kafeAnahtari, kafeKimligi, kafeOncekiAnahtarlari, oncekiDurumu, ortakOncekiler, subeErisimi } from './_kafe.js';
 
 const SNAPSHOT_KEY = `${REDIS_ONEKI}snapshot`;
 const TOKEN_HOURS = 12;
@@ -53,6 +54,13 @@ interface Snapshot {
 /** Ortam değişkeni: `ASILPOS_X` verilince Vercel'de eski adla duran değer de okunur (shared/pos-env.ts) */
 const env = (k: string) => (process.env[k] ?? '').trim() || (process.env[eskiEnvAdi(k) ?? ''] ?? '').trim();
 const secret = () => env('ASILPOS_CLOUD_SECRET');
+/**
+ * Oturum jetonu kafe anahtarıyla imzalı: anahtar değişiminde (önceki değer ASILPOS_CLOUD_SECRET_ONCEKI ya da eski adıyla
+ * tanımlıyken) eski anahtarla verilmiş jeton da tutar, sahibin telefonu oturumdan düşmez. Yeni jeton hep şimdiki anahtarla
+ */
+const jetonAnahtarlari = () => [secret(), ...ortakOncekiler(secret())].filter((k) => k.length >= 32);
+const jetonTutar = (auth: string) => jetonAnahtarlari().some((k) => tokenValid(k, auth));
+const uyeJetonuTutar = (auth: string, hash: string) => jetonAnahtarlari().some((k) => memberTokenValid(k, auth, hash));
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
 const fail = (status: number, error: string, code: string) => json({ error, code }, status);
@@ -831,13 +839,14 @@ const GETIR_MAX_AGE_MS = 86_400_000;
 const GETIR_LIST_TTL_S = 86_400;
 
 /**
- * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET), şube anahtarlarından
- * ve Yemeksepeti'nin anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse
- * aktarıcı kurulmamış sayılır (boş döner)
+ * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET), şube anahtarlarından,
+ * bunların anahtar değişimindeki önceki değerlerinden (`_ONCEKI`, docs/07-UZAKTAN-ERISIM.md §7) ve Yemeksepeti'nin
+ * anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse aktarıcı
+ * kurulmamış sayılır (boş döner)
  */
 function getirKey(): string {
   const key = env('GETIR_WEBHOOK_SECRET');
-  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET') || [...subeAnahtarlari().values()].includes(key)) return '';
+  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET') || kafeAnahtarDegerleri().has(key)) return '';
   return key;
 }
 
@@ -1824,12 +1833,12 @@ async function handle(req: Request): Promise<Response> {
    */
   const session = once(async (): Promise<KontrolOturumu | null> => {
     if (secret().length < 32) return null;
-    if (!memberMode) return passwordRequired() && tokenValid(secret(), auth) ? { eposta: null, rol: 'sahip' } : null;
+    if (!memberMode) return passwordRequired() && jetonTutar(auth) ? { eposta: null, rol: 'sahip' } : null;
     const email = memberTokenEmail(auth);
     if (!email || !EPOSTA_RE.test(email)) return null;
     const record = await member(email);
     const rol = memberRole(email, record, members);
-    return rol && record && memberTokenValid(secret(), auth, record.h) ? { eposta: email, rol } : null;
+    return rol && record && uyeJetonuTutar(auth, record.h) ? { eposta: email, rol } : null;
   });
   /** Sahibin oturumu: Merkez paneli ve bildirim aboneliği. Parolasız görünümde ve panele eklenen üyede hiç */
   const admin = async () => (await session())?.rol === 'sahip';
@@ -1840,7 +1849,7 @@ async function handle(req: Request): Promise<Response> {
   const viewerSession = async () => {
     if (secret().length < 32) return false;
     if (memberMode) return ((await session())?.rol ?? 'sahip') !== 'sahip';
-    return !passwordRequired() && tokenValid(secret(), auth);
+    return !passwordRequired() && jetonTutar(auth);
   };
   /**
    * Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı; api/_kafe.ts): tutarsa kasanın kimliği, tutmazsa null.
@@ -1894,6 +1903,8 @@ async function handle(req: Request): Promise<Response> {
       secret: secret(),
       // Şube anahtarı olan kasanın komutu ve açık anahtar imzası o şubenin anahtarıyla (api/_kafe.ts)
       anahtar: (sube) => kafeAnahtari(sube, secret()),
+      // Anahtar değişiminde önceki değerler: kasa yeni değere geçene dek komut kasanın kullandığı anahtarla imzalanır
+      onceki: (sube) => kafeOncekiAnahtarlari(sube, secret()),
       sahipler: members,
       uyeDegisti: (email) => memberCache.delete(email),
       // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı kayıt (hedef, gönderim, istek), gün sonuna bağlı
@@ -1903,9 +1914,9 @@ async function handle(req: Request): Promise<Response> {
     });
   }
   // Gerçek oturumun jetonu (kafe anahtarıyla imzalı) demoya düşmez: kafe bağlıyken verilmiştir, kapı Redis'e sormaz
-  const realToken = secret().length >= 32 && tokenValid(secret(), auth);
+  const realToken = secret().length >= 32 && jetonTutar(auth);
   if (path !== 'uzaktan/push' && !memberRequest && !realToken && demoAllowed() && !(await realData(versions))) {
-    if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
+    if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now(), ...oncekiDurumu(secret()) });
     if (path === 'uzaktan/giris' && req.method === 'POST') return json({ token: issueToken(demoKey()), me: ME, demo: true });
     if (!tokenValid(demoKey(), auth)) return fail(401, 'Oturum kapalı. Yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
@@ -1914,7 +1925,8 @@ async function handle(req: Request): Promise<Response> {
   }
   if (!secret() || secret().length < 32) return fail(503, 'AsilPOS Uzaktan kurulmamış (ASILPOS_CLOUD_SECRET)', 'not_configured');
 
-  if (path === 'health') return json({ ok: true, remote: true, time: Date.now() });
+  // Sağlık: anahtar değişiminin önceki değeri tanımlı mı (yalnız var ya da yok ve adları; api/_kafe.ts oncekiDurumu)
+  if (path === 'health') return json({ ok: true, remote: true, time: Date.now(), ...oncekiDurumu(secret()) });
 
   // Kafedeki sunucunun itmesi: imza, sonra gzip açılır ve saklanır
   if (path === 'uzaktan/push' && req.method === 'POST') {
@@ -2038,7 +2050,8 @@ function serve(snap: Snapshot | null, path: string, url: URL, demo: boolean): Re
 
 async function safe(req: Request): Promise<Response> {
   try {
-    return await handle(req);
+    // Kasa imzası tuttuysa 2xx yanıt hangi değerle tuttuğunu söyler (x-laf-anahtar; api/_kafe.ts anahtarBasligi)
+    return anahtarBasligi(req, await handle(req));
   } catch (e) {
     const missing = e instanceof Error && e.message === 'redis_missing';
     return fail(503, missing ? 'Upstash Redis bağlı değil (Vercel › Storage)' : 'Uzaktan görünüm şu an yanıt veremiyor', missing ? 'redis_missing' : 'internal');

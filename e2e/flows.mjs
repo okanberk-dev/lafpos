@@ -104,6 +104,123 @@ export async function runFlows(ctx) {
         ),
     ],
     [
+      // 27 Kas 2026: otomatik güncellemeden sonra sahip kasayı ilk açtığında eski sürüm (eski yeşil kenar çubuğu)
+      // görünüyordu, elle yenileyince düzeliyordu. Sunucu kökü (kasa penceresinin adresi) önbellek başlığı olmadan, yalnız
+      // Last-Modified ile veriyordu; Chrome böyle yanıtı sezgisel olarak sunucuya sormadan önbellekten açar (kiosk
+      // penceresi de: --app= adresi sıradan bir açılıştır). Gerçek Chrome önbelleğiyle denenir: ne yeni açılış ne geri
+      // geliş arayüz sayfasını önbellekten açar (server/app.ts arayuzOnbellegi)
+      'Güncellemeden sonra ilk açılış: kasa penceresi arayüz sayfasını önbellekten açmaz (yeni açılış ve geri geliş)',
+      () =>
+        withPage(ctx, 'dokunmatik-pc', 'kasa', async (page) => {
+          const cdp = await page.context().newCDPSession(page);
+          await cdp.send('Network.enable');
+          const docs = [];
+          const lower = (h) => Object.fromEntries(Object.entries(h ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
+          cdp.on('Network.responseReceived', (e) => {
+            if (e.type !== 'Document' || new URL(e.response.url).pathname.startsWith('/api/')) return;
+            docs.push({ path: new URL(e.response.url).pathname, cache: !!(e.response.fromDiskCache || e.response.fromMemoryCache || e.response.fromServiceWorker), cc: lower(e.response.headers)['cache-control'] ?? null });
+          });
+          await go(ctx, page, '/');
+          // Başka bir adrese (aynı kaynak: oturum betiği orada da çalışır) gidip kasa yeniden açılır
+          await page.goto(ctx.server.base + '/api/health');
+          await go(ctx, page, '/');
+          // Geri geliş (tarayıcının saklı sayfası; oturum geri yüklemesi de böyle açar)
+          await page.goto(ctx.server.base + '/api/health');
+          await page.goBack({ waitUntil: 'domcontentloaded' });
+          await settle(page);
+          assert(docs.length === 3, `üç açılış bekleniyordu: ${JSON.stringify(docs)}`);
+          assert(docs.every((d) => d.cc === 'no-store'), `arayüz sayfasının önbellek başlığı: ${JSON.stringify(docs)}`);
+          assert(docs.every((d) => !d.cache), `arayüz sayfası önbellekten geldi (güncellemeden sonra eski sürüm görünür): ${JSON.stringify(docs)}`);
+          // Adında içerik özeti olan derleme dosyası kalıcı önbellekte
+          const js = await page.evaluate(() => document.querySelector('script[type="module"][src]')?.getAttribute('src'));
+          assert(js?.startsWith('/assets/'), `ana betik: ${js}`);
+          const res = await page.request.get(ctx.server.base + js);
+          assert(res.headers()['cache-control'] === 'public, max-age=31536000, immutable', `derleme dosyasının başlığı: ${res.headers()['cache-control']}`);
+        }),
+    ],
+    [
+      // Aynı olayın öbür yolu: sayfa eski derlemeden açıldıysa (önbellek ya da güncellemeden hemen önce eski sunucudan)
+      // ilk derleme sorusu yeni sunucuya gidiyor, eski sayfa yeni derlemeyi "bu sürüm" sanıp hiç yenilenmiyordu. Artık
+      // sayfa kendi ana betiğini sunucunun index.html'iyle karşılaştırır (src/lib/buildWatch.ts): başka bir derleme
+      // gösteriyorsa sayfa bir kez yenilenir, aynı ekranla ve "Yeni sürüm kuruldu" ile; yenilemeden sonra da eskiyse
+      // (ara önbellek) döngüye girmez
+      'Eski sürümle açılan sayfa bir kez kendiliğinden yenilenir, aynı ekranla; döngüye girmez',
+      () =>
+        withPage(ctx, 'dokunmatik-pc', 'kasa', async (page) => {
+          // Sunucunun verdiği index.html (sayfanın fetch('/') denetimi) başka bir derlemeyi gösterir: sayfa "eski"
+          await page.route(
+            (url) => url.pathname === '/',
+            async (route) => {
+              if (route.request().resourceType() !== 'fetch') return route.continue();
+              const res = await route.fetch();
+              const html = (await res.text()).replace(/(<script[^>]+type="module"[^>]+src=")[^"]+"/, '$1/assets/index-YeniSurum.js"');
+              return route.fulfill({ response: res, body: html });
+            },
+          );
+          let loads = 0;
+          page.on('load', () => (loads += 1));
+          await go(ctx, page, '/kasa');
+          const until = async (ok, ms, what) => {
+            const end = Date.now() + ms;
+            while (!ok()) {
+              assert(Date.now() < end, what);
+              await page.waitForTimeout(100);
+            }
+          };
+          await until(() => loads >= 2, 15_000, `eski sayfa yenilenmedi (açılış ${loads})`);
+          await settle(page);
+          await page.getByText('Yeni sürüm kuruldu').first().waitFor({ timeout: 8000 });
+          assert(new URL(page.url()).pathname === '/kasa', `aynı ekran açılmadı: ${page.url()}`);
+          // Yenilemeden sonra da "eski" (ara önbellek): ekrana dönüşte ve canlı bağlantıda ikinci kez yenilenmez
+          await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+          await page.waitForTimeout(4000);
+          assert(loads === 2, `sayfa döngüye girdi: ${loads} açılış`);
+        }),
+    ],
+    [
+      // Sabahki sıra: kasa açılır, sayfa eski sunucudan gelir (giriş ekranı); güncelleme iki dakika sonra kurulur. Giriş
+      // ekranında canlı bağlantı yok: sayfa dakikada bir sunucunun index.html'ine bakar ve girişi beklemeden yeni sürüme
+      // geçer (oturum yok: "Yeni sürüm kuruldu" denmez). Saat sayfada ileri alınır (dakikalık denetim)
+      'Giriş ekranı güncellemeden sonra kendiliğinden yeni sürüme geçer (girişi beklemeden)',
+      () =>
+        withPage(ctx, 'dokunmatik-pc', null, async (page) => {
+          let guncellendi = false;
+          await page.route(
+            (url) => url.pathname === '/',
+            async (route) => {
+              if (!guncellendi || route.request().resourceType() !== 'fetch') return route.continue();
+              const res = await route.fetch();
+              const html = (await res.text()).replace(/(<script[^>]+type="module"[^>]+src=")[^"]+"/, '$1/assets/index-YeniSurum.js"');
+              return route.fulfill({ response: res, body: html });
+            },
+          );
+          await page.clock.install();
+          let loads = 0;
+          page.on('load', () => (loads += 1));
+          await go(ctx, page, '/');
+          assert(new URL(page.url()).pathname === '/giris', `giriş ekranı açılmadı: ${page.url()}`);
+          // Sunucu güncellenmeden geçen dakika: sayfa güncel, yenilenmez
+          await page.clock.runFor(61_000);
+          await page.waitForTimeout(500);
+          assert(loads === 1, `güncel sayfa yenilendi: ${loads} açılış`);
+          // Güncelleme kuruldu; bir dakika içinde sayfa kendiliğinden yenilenir
+          guncellendi = true;
+          await page.clock.runFor(61_000);
+          const end = Date.now() + 10_000;
+          while (loads < 2) {
+            assert(Date.now() < end, 'giriş ekranı güncellemeden sonra yenilenmedi');
+            await page.waitForTimeout(100);
+          }
+          await settle(page);
+          assert(new URL(page.url()).pathname === '/giris', `giriş ekranına dönülmedi: ${page.url()}`);
+          assert(!(await page.getByText('Yeni sürüm kuruldu').count()), 'oturumsuz ekranda "Yeni sürüm kuruldu" dendi');
+          // Ara önbellek sayfayı yine eski verirse döngü yok
+          await page.clock.runFor(125_000);
+          await page.waitForTimeout(1000);
+          assert(loads === 2, `giriş ekranı döngüye girdi: ${loads} açılış`);
+        }),
+    ],
+    [
       'Telefonda giriş: tuş takımıyla PIN',
       () =>
         withPage(ctx, 'telefon', null, async (page) => {

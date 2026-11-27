@@ -9,6 +9,7 @@ import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
+import { useStalePageWatch } from './lib/buildWatch';
 import { DOWNLOAD_PATH, KONTROL_PATH, MERKEZ_PATH } from './lib/download';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
@@ -166,6 +167,10 @@ export function App() {
   useEffect(() => {
     init();
   }, [init]);
+
+  // Kasa: güncellemeden sonra eski derlemeyle açılan sayfa (tarayıcı önbelleği ya da güncellemeden hemen önce açılmış
+  // giriş ekranı) girişi beklemeden kendiliğinden yeni sürüme geçer (src/lib/buildWatch.ts)
+  useStalePageWatch(!REMOTE && !DEMO);
 
   // Açılıştaki bar ekranı koyusu (main.tsx initTheme) adres oradan çıkınca bırakılır: giriş ya da yetki
   // yönlendirmesi başka ekrana götürdüyse o ekran temasıyla açılır. Bar ekranı açıkken kendi koyusunu tutar

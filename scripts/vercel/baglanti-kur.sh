@@ -10,6 +10,8 @@
 #   4. Kafe bilgisayarına girecek satırları ~/Downloads/asilpos-kasa-ayarlari.env dosyasına yazar (izin 600).
 #
 # Anahtarlar ekrana basılmaz, depoya yazılmaz. Önceden tanımlı bir değişkene dokunmaz; değiştirmek için --yenile.
+# --yenile değerleri hemen değiştirir: çalışan kasalar elle güncellenene dek reddedilir. Çalışan kafede anahtar
+# değişimi docs/07-UZAKTAN-ERISIM.md §7 sırasıyla yapılır (önceki değer _ONCEKI adıyla, kasalar gece geçer).
 # Gerekenler: Vercel CLI girişi (npx vercel login), openssl. Belge: docs/07-UZAKTAN-ERISIM.md §5.
 set -euo pipefail
 

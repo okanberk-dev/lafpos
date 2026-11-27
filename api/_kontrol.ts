@@ -81,6 +81,12 @@ export interface KontrolDeps {
    * şube anahtarıyla imzalarken) o şubenin kendi anahtarı, yoksa ortak anahtar. Verilmezse hep ortak anahtar
    */
   anahtar?: (sube: string | undefined) => string;
+  /**
+   * `anahtar`'ın önceki değerleri (anahtar değişimi, api/_kafe.ts kafeOncekiAnahtarlari; docs/07-UZAKTAN-ERISIM.md §7):
+   * kasa yeni değere geçene dek açık anahtar imzası onlardan biriyle de tutar, komut kasanın imzaladığı anahtarla
+   * imzalanır. Yoksa boş
+   */
+  onceki?: (sube: string | undefined) => readonly string[];
   /** Vercel ortamındaki sahip e-postaları (ASILPOS_UYE_EPOSTA); boşsa üyelik kapalı (parolalı ya da parolasız görünüm) */
   sahipler: string[];
   /** Üye kaydı değişti ya da silindi: oturum önbelleğinden düşsün */
@@ -172,6 +178,23 @@ async function govde(req: Request): Promise<Record<string, unknown> | Response> 
  * çalışıyorsa şubesininki (KontrolDeps.anahtar). Kasa aynı metinden sabit zamanlı karşılaştırır
  */
 export const komutImzasi = (secret: string, k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>) => createHmac('sha256', secret).update(imzaMetni(k)).digest('base64url');
+
+/**
+ * Kasanın imza anahtarları: önce şimdiki (şubenin ya da ortak), sonra varsa önceki değerleri (anahtar değişimi; kasa yeni
+ * değere gün kapanınca geçer)
+ */
+function imzaAnahtarlari(deps: Pick<KontrolDeps, 'secret' | 'anahtar' | 'onceki'>, sube: string | undefined): string[] {
+  const simdiki = deps.anahtar?.(sube) ?? deps.secret;
+  return [...new Set([simdiki, ...(deps.onceki?.(sube) ?? []).filter((k) => k.length >= 32)])];
+}
+
+/**
+ * Kasanın kullandığı anahtar: açık anahtar imzasını (`anahtarImza`) tutan ilk anahtar; hiçbiri tutmazsa null. Bulutun
+ * kasaya imzaladığı komut bununla imzalanır: anahtar değişiminde kasa önceki değerle çalışırken yeni değerle imzalı komutu
+ * reddederdi. Kasa yeni değere geçince özetini (imza değişti, parmak izi de) yeniden gönderir
+ */
+const kasaninAnahtari = (anahtarlar: string[], kurulum: string, d: Pick<KontrolDurumu, 'anahtar' | 'anahtarImza'>): string | null =>
+  anahtarlar.find((k) => anahtarTutar(k, kurulum, d)) ?? null;
 
 /** Kasanın açık anahtarı kasadan mı geldi: imzası kafenin ortak anahtarıyla ve bu kurulumla tutuyor mu (sabit zamanlı) */
 export function anahtarTutar(secret: string, kurulum: string, d: Pick<KontrolDurumu, 'anahtar' | 'anahtarImza'>): boolean {
@@ -417,7 +440,11 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   const ad = typeof body.ad === 'string' ? ozetAdi(body.ad) : '';
   if (ad && veri.id && (d.tur === 'urun.satis' || d.tur === 'urun.gorunum' || d.tur === 'urun.gorsel' || d.tur === 'secenek.satis')) adlar[d.tur === 'secenek.satis' ? 'secenek' : 'urun'] = adHaritasi([[veri.id, ad]]);
   const temel = { id: `k_${randomBytes(18).toString('base64url')}`, tur: d.tur, veri: d.veri, at: now, kim, kurulum: id, rol: ben.rol };
-  const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.anahtar?.(durum.sube) ?? deps.secret, temel) };
+  // İmza kasanın şu an kullandığı anahtarla (son özetindeki açık anahtar imzası hangisiyle tutuyorsa; anahtar değişiminde
+  // önceki değer olabilir), özet imzasızsa şimdiki anahtarla
+  const anahtarlar = imzaAnahtarlari(deps, durum.sube);
+  const imzaAnahtari = kasaninAnahtari(anahtarlar, id, durum) ?? anahtarlar[0]!;
+  const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(imzaAnahtari, temel) };
   await deps.redis('HSET', komutKey(id), kayit.id, JSON.stringify(kayit));
   await deps.redis('SET', varKey(id), '1');
   // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı yol (hedef, gönderim anı ve istek), bu gün sonuna
@@ -480,11 +507,11 @@ function kasaBilgisi(rawKurulum: unknown, rawNabiz: unknown): KontrolPaneli['kas
  * Panele giden özet: açık anahtar yalnız kasanın imzası (anahtarImza) tutarsa verilir, yoksa boş (arayüz PIN işlemlerini
  * kapatır, kasa bir sonraki özetinde imzalı anahtarı yeniden gönderir). İmzanın kendisi panele gitmez
  */
-function panelDurumu(raw: unknown, anahtar: (sube: string | undefined) => string, kurulum: string): KontrolDurumu | null {
+function panelDurumu(raw: unknown, anahtarlar: (sube: string | undefined) => string[], kurulum: string): KontrolDurumu | null {
   const d = parse<unknown>(raw);
   if (!durumGecerli(d)) return null;
   const { anahtarImza: _imza, ...rest } = d;
-  return { ...rest, anahtar: anahtarTutar(anahtar(d.sube), kurulum, d) ? d.anahtar : '' };
+  return { ...rest, anahtar: kasaninAnahtari(anahtarlar(d.sube), kurulum, d) ? d.anahtar : '' };
 }
 
 async function panelVerisi(deps: KontrolDeps, ben: KontrolOturumu): Promise<KontrolPaneli> {
@@ -495,7 +522,7 @@ async function panelVerisi(deps: KontrolDeps, ben: KontrolOturumu): Promise<Kont
   const [rawDurum, rawVar, rawKurulum, rawNabiz] = ((await deps.redis('MGET', durumKey(id), varKey(id), ...merkezKeys(id))) as unknown[] | null) ?? [];
   const gecmis = gecmisOku(await deps.redis('LRANGE', gecmisKey(id), 0, GECMIS_EN_COK - 1));
   const bekleyen = rawVar != null ? (await kuyruk(deps.redis, id)).map((k) => satir(k)) : [];
-  return { ben, durum: panelDurumu(rawDurum, (sube) => deps.anahtar?.(sube) ?? deps.secret, id), bekleyen, gecmis, kasa: kasaBilgisi(rawKurulum, rawNabiz) };
+  return { ben, durum: panelDurumu(rawDurum, (sube) => imzaAnahtarlari(deps, sube), id), bekleyen, gecmis, kasa: kasaBilgisi(rawKurulum, rawNabiz) };
 }
 
 // ─── Uçlar ───────────────────────────────────────────────────────────────────
