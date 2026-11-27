@@ -25,8 +25,9 @@ işlem içindir.
 2. **Telefon:** App Store ya da Google Play'den Tailscale'i kurun, **aynı hesapla** girin.
 3. Kafede AsilPOS'ta **Yönetim › Ağ ve uzaktan erişim**'i açın. "Dışarıdan (Tailscale)" kartında "Bağlı"
    yazar; adres `http://100.x.y.z:4000` ve karekodu oradadır.
-4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. Tarayıcı menüsünden
-   "Ana ekrana ekle" ile uygulama gibi açılır.
+4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. iPhone'da Safari › Paylaş ›
+   "Ana Ekrana Ekle" ile uygulama gibi açılır; Android'de bu http adresinde yalnız kısayol eklenir (adres çubuğuyla;
+   `docs/05-KASA-BILGISAYARI.md` §5).
 
 AsilPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kafenin ağına ve Tailscale aralığına
 (`100.64.0.0/10`) açar; başka ayar gerekmez. Git ile kurulan bilgisayarda Windows ilk açılışta izin sorar:

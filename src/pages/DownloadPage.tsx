@@ -81,7 +81,9 @@ export function DownloadContent() {
             </li>
             <li className="flex gap-2.5">
               <TabletSmartphone aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
-              <span className="text-pretty">Tablet ve telefona kurulum gerekmez: kafenin ağından adresle açılır, menüdeki Ana ekrana ekle ile uygulama gibi durur.</span>
+              <span className="text-pretty">
+                Tablet ve telefona kurulum gerekmez: kafenin ağından adresle açılır. iPad ve iPhone’da Safari › Paylaş › Ana Ekrana Ekle ile uygulama gibi açılır; Android’de yalnız kısayol eklenir, adres çubuğu kalır.
+              </span>
             </li>
           </ul>
         </Card>

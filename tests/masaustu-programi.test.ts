@@ -57,6 +57,27 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(ps1).toContain('[switch]$Ac)');
   });
 
+  it('güncelleme eski bat çalışırken yenisini yazarsa cmd kaldığı bayttan etikete düşer ve programı açar', async () => {
+    // cmd toplu dosyayı her komuttan sonra kaydettiği bayttan yeniden okur; sunucu bekçisi kök dosyaları her açılışta
+    // yeniler (kurulum-yenile.mjs syncRootFiles). 27 Kasım öncesinin AsilPOS-Kasa.bat'ı uzun süren üç komuttan sonra
+    // sürer: sunucu bekleme (90 sn), kipsiz betik, -KasaAc. Kurulu hâli (CRLF) 881, 1243, 1575; LF'li kopyada 871, 1230,
+    // 1559. Bayt aralığı ikisini ve sonraki set satırlarını kapsar. Kurulumun yazdığı baytlarla (web-kurucu.mjs shellFiles)
+    const { shellFiles } = await load('web-kurucu.mjs');
+    const bat = (shellFiles()['AsilPOS-Kasa.bat'] as Buffer).toString('latin1');
+    const komut = (l: string) => l.trim() !== '' && !l.startsWith(':') && !/^rem /i.test(l);
+    for (let o = 850; o <= 1720; o++) {
+      const [ilk, ...sonra] = bat.slice(o).split(/\r?\n/);
+      // Satırın kalanı boş ya da etiket: çalıştırılmaz (yarım bir komut ya da rem'in kuyruğu komut olurdu)
+      expect(ilk === '' || ilk!.startsWith(':'), `${o}: ${ilk}`).toBe(true);
+      const komutlar = sonra.filter(komut).slice(0, 3);
+      expect(komutlar[0], String(o)).toBe('if not exist "%~dp0app\\kasa-yazici.ps1" goto eski');
+      expect(komutlar[1], String(o)).toMatch(/^start "" \/min ".*powershell\.exe" .* -File "%~dp0app\\kasa-yazici\.ps1" -Ac$/);
+      expect(komutlar[2], String(o)).toBe('exit /b 0');
+    }
+    // -Ac açık pencereyi öne getirir, ikincisini açmaz (eski yolun doğrudan Chrome'u ya da Edge'i açmaz)
+    expect(ac).toContain('if ($acik) { Show-KasaWindow $acik }');
+  });
+
   it('tek pencere: açıksa öne getirir (küçültülmüşse açar); ikinci tıklama beklemez', () => {
     expect(ac).toContain("Mutex($false, 'Local\\AsilPOS-KasaAcilis')");
     // Öne getirme her şeyden önce; kilidi alamayan ikinci açılış hemen çıkar
@@ -317,6 +338,13 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
     // Kafenin ağındaki http adresi: tam yükleme yok, menüden kısayol
     expect(installWay({ ...base, ua: android })).toBe('android');
     expect(installWay({ ...base, ua: android, secure: true })).toBeNull();
+    // Galaxy Tab'ın varsayılan tarayıcısı ve Firefox da Android yolunu alır: tarif tarayıcı adı vermez, adres çubuğunu söyler
+    const samsung = 'Mozilla/5.0 (Linux; Android 14; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0 Safari/537.36';
+    const firefox = 'Mozilla/5.0 (Android 14; Tablet; rv:132.0) Gecko/132.0 Firefox/132.0';
+    for (const ua of [samsung, firefox]) expect(installWay({ ...base, ua }), ua).toBe('android');
+    const { INSTALL_HINT } = await import('../src/lib/pwa-yol');
+    expect(INSTALL_HINT.android).not.toMatch(/Chrome|⋮/);
+    expect(INSTALL_HINT.android).toContain('adres çubuğu');
     // Kasa bilgisayarı (sunucunun kendisi) ve zaten ana ekrandan açılmış uygulama
     expect(installWay({ ...base, ua: windows, hasPrompt: true, secure: true, kasaPc: true })).toBeNull();
     expect(installWay({ ...base, ua: iphone, standalone: true })).toBeNull();
@@ -348,6 +376,23 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
     expect([ico.readUInt16LE(0), ico.readUInt16LE(2)]).toEqual([0, 1]);
     const n = ico.readUInt16LE(4);
     expect([...Array(n)].map((_, i) => ico[6 + i * 16])).toEqual([16, 32, 48]);
+  });
+
+  it('sahibin okuduğu metinler: Android uygulama sözü vermez, karekodun yanı menüdeki yolu söyler, kasadan çıkış bakım arası', () => {
+    // http'de Android yalnız kısayol ekler (docs/05 §5): "uygulama gibi" sözü yalnız Safari yoluna
+    const metinler = { indir: read('src/pages/DownloadPage.tsx'), readme: read('README.md'), benioku: read(`${K}BENIOKU.txt`) };
+    for (const [ad, t] of Object.entries(metinler)) {
+      expect(t, ad).not.toContain('Ana ekrana ekle ile uygulama gibi');
+      expect(t, ad).toMatch(/Android[’']de[^.]*kısayol/);
+    }
+    const ag = read('src/pages/admin/NetworkAdmin.tsx');
+    expect(ag).not.toContain('Chrome menüsünden');
+    expect(ag).toContain('kişi menüsündeki “Ana ekrana ekle” cihaza göre yolu söyler');
+    // Bekçi kapanan pencereyi 15 sn'de açar: notlar Alt+F4'ü çıkış diye vermez, ekrandaki düğmenin adını verir
+    expect(metinler.benioku).not.toContain('Çıkmak için Alt+F4');
+    expect(metinler.benioku.replace(/\s+/g, ' ')).toContain('Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar › 15 dakika bakım arası');
+    expect(ag).toContain('<Card title="Bu bilgisayar">');
+    expect(ag).toMatch(/\n\s*15 dakika bakım arası\n/);
   });
 
   it('kullanıcı menüsünde yalnız yol varken; olay ilk iş yakalanır, kasa bilgisayarında saklanmaz', () => {

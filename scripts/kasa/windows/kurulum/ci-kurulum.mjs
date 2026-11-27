@@ -161,7 +161,7 @@ async function login() {
   return (await r.json()).token;
 }
 
-/** Kasa penceresinin bakım arası (Yönetim › Ağ › Bu bilgisayar › 15 dakika açılmasın) */
+/** Kasa penceresinin bakım arası (Yönetim › Ağ › Bu bilgisayar › 15 dakika bakım arası) */
 async function bakim(on) {
   const r = await fetch(`http://127.0.0.1:${PORT}/api/admin/kasa-bakim`, {
     method: 'POST',

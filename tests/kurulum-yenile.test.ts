@@ -335,7 +335,9 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     const ac = bat.indexOf('kasa-yazici.ps1" -Ac');
     expect(ac).toBeGreaterThan(0);
     expect(ac).toBeLessThan(bat.indexOf(':eski'));
-    expect(bat).toContain('start "" "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\\kasa-yazici.ps1" -Ac');
+    // /min: start'ın açtığı yeni konsol PowerShell gizleyene dek ekranın ortasında belirmez (görev çubuğuna sabitlenmiş
+    // eski kısayollar hâlâ bunu çalıştırır)
+    expect(bat).toContain('start "" /min "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\\kasa-yazici.ps1" -Ac');
     expect(bat).toContain('if not exist "%~dp0app\\kasa-yazici.ps1" goto eski');
     expect(bat.indexOf(':eski')).toBeLessThan(bat.indexOf(':chrome'));
     expect(ASCII.test(read('scripts/kasa/windows/AsilPOS-Kasa.bat', 'latin1'))).toBe(true);

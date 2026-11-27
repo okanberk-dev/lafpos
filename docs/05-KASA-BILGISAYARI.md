@@ -250,8 +250,12 @@ menüsündeki ve Başlangıç'taki **AsilPOS Kasa** kısayolu konsolsuz PowerShe
 Pencerenin başlığı "AsilPOS", görev çubuğunda ve Alt+Tab'da AsilPOS simgesi (`public/favicon.ico` ve 32 px PNG; sekmede
 SVG). Kasa profili ayrı olduğu için pencere kişisel Chrome'dan ayrı durur; Chrome güncellenince açık pencere eski sürümle
 çalışmayı sürdürür, yeni Chrome pencere yeniden açılınca gelir. Kasa bekçisi ve tarayıcı kurulum klasöründe çalışır
-(`app\` güncellemede taşınabilsin). `AsilPOS-Kasa.bat` eski ya da elle kopyalanmış kısayollar için aynı programı açıp
-hemen kapanır; betik yoksa (git ile geliştirici kurulumu) eski yolla Chrome'u açar.
+(`app\` güncellemede taşınabilsin). `AsilPOS-Kasa.bat` eski ya da elle kopyalanmış (görev çubuğuna sabitlenmiş) kısayollar
+için aynı programı küçültülmüş açıp (`start /min`; ekranda konsol belirmez) hemen kapanır; betik yoksa (git ile
+geliştirici kurulumu) eski yolla Chrome'u açar. Güncelleme bu dosyayı 27 Kasım öncesinin hâli çalışırken (sabah
+oturum açılırken sunucuyu bekliyor) değiştirebilir: cmd kaldığı bayttan yeni dosyayı okur. Yeni dosyada o baytlar
+(eski hâlin uzun komutlarından sonrası: 881, 1243, 1575) boş etiket satırları; cmd oradan programı açar, program açık
+pencereyi öne getirir (ikinci pencere ya da Edge açılmaz; `tests/masaustu-programi.test.ts`).
 
 **Edge (Chrome yoksa ya da `ASILPOS_TARAYICI=edge`):** Edge'in kiosk kipi her zaman InPrivate açar: pencere her yeniden
 açılışta oturumu, gönderilmemiş sepeti ve tercihleri kaybediyordu. Artık Edge kalıcı profille tam ekran uygulama
@@ -297,7 +301,7 @@ kullanıcı hesabı önerilir.
 
 Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini 15 sn içinde yeniden açar.
 Bakım için (Windows ayarı, yazıcı kurulumu, başka bir program) Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
-**15 dakika açılmasın** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca pencereyi açmaz
+**15 dakika bakım arası** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca pencereyi açmaz
 (`GET /api/kasa/bakim`, oturumsuz, yalnız bu bilgisayardan; sunucuya ulaşılamazsa ara yok sayılır). Süre bitince ya da
 **Bakımı bitir**le yine açar; kalıcı kapatma yoktur. Denetim kaydına yazılır. Kasa kısayolu (`-Ac`) aradan etkilenmez.
 Bekçi pencereyi arka planda açar ama öne getirmez (başka bir programın üstüne fırlamaz).
@@ -349,8 +353,9 @@ metinler Yönetim › Müşteri ekranı'ndan.
 - **Ana ekrana ekleme (27 Kasım 2026):** kullanıcı menüsünde (kişi düğmesi › Bu cihaz ve oturum) **Ana ekrana ekle**
   cihaza göre yolu söyler ya da açar (`src/lib/pwa.ts`): iPad ve iPhone'da Safari › Paylaş › Ana Ekrana Ekle (kafenin
   ağındaki http adresinde de adres çubuksuz açılır); Chrome ve Edge güvenli adreste (https) kendi yükleme penceresini
-  açar. Android'de kafenin ağındaki http adresi güvenli sayılmaz: Chrome menüsü › Ana ekrana ekle bir kısayol ekler ama
-  adres çubuklu açılır ve "Ekran kararmasın" (Wake Lock) çalışmaz. Tam uygulama için https gerekir: Tailscale'in
+  açar. Android'de kafenin ağındaki http adresi güvenli sayılmaz: tarayıcı menüsü › Ana ekrana ekle (Chrome, Samsung
+  Internet, Firefox; satırın yol tarifi tarayıcı adı vermez) bir kısayol ekler ama adres çubuklu açılır ve "Ekran
+  kararmasın" (Wake Lock) çalışmaz. Tam uygulama için https gerekir: Tailscale'in
   `tailscale serve` adresi (`docs/07-UZAKTAN-ERISIM.md`) ya da tablette `chrome://flags` › "Insecure origins treated as
   secure" alanına kasanın adresini (`http://<kasa-ip>:4000`) yazıp Chrome'u yeniden başlatmak. Uygulamanın kimliği ve
   kapsamı `public/manifest.webmanifest`'te (`id` ve `scope` `/`, `display: standalone`); sayfa önbelleğe alınmaz (`sw.js`

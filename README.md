@@ -84,8 +84,9 @@ verilsin mi?" sorusuna **Evet** deyin.
 
 **3. Kurun.** İleri › Kur › Son. AsilPOS arka planda çalışmaya başlar ve bilgisayar her açıldığında kendiliğinden
 açılır. Kasa ekranı masaüstündeki **AsilPOS Kasa** kısayoluyla açılır. Tabletler ve telefonlar için adres ve
-karekod: Yönetim › Ağ ve uzaktan erişim; kurulum gerekmez, kullanıcı menüsündeki **Ana ekrana ekle** ile uygulama gibi
-durur.
+karekod: Yönetim › Ağ ve uzaktan erişim; kurulum gerekmez. iPad ve iPhone'da Safari › Paylaş › **Ana Ekrana Ekle** ile
+uygulama gibi açılır; Android'de kafenin ağında yalnız kısayol eklenir (adres çubuğuyla açılır, tam uygulama için https:
+[docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §5).
 
 **4. Bilgileri girin (programın içinden).** Kasa ekranında patron PIN'inizle girin, **Yönetim › Bağlantı
 bilgileri**'ni açın. Size verilen satırları "Hazır satırları yapıştır" kutusuna yapıştırıp **Satırları kaydet**'e

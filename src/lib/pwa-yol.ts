@@ -24,6 +24,7 @@ export function installWay(c: InstallContext): InstallWay {
   const ios = /iPad|iPhone|iPod/.test(c.ua) || (/Macintosh/.test(c.ua) && c.touchPoints > 1);
   // iOS'ta yalnız Safari ana ekrana ekler (iOS 16.4'ten önce öbür tarayıcılar eklemez)
   if (ios) return /Safari/.test(c.ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(c.ua) ? 'ios' : null;
+  // Android'de her tarayıcı (Chrome, Samsung Internet, Firefox): yol tarifi tarayıcı adı vermez
   if (/Android/.test(c.ua) && !c.secure) return 'android';
   return null;
 }
@@ -32,7 +33,8 @@ export function installWay(c: InstallContext): InstallWay {
 export const INSTALL_HINT: Record<Exclude<InstallWay, null>, string> = {
   prompt: 'AsilPOS bu cihazda adres çubuğu olmadan, kendi penceresinde açılır',
   ios: 'Safari’de Paylaş düğmesi › Ana Ekrana Ekle',
-  android: 'Chrome menüsü (⋮) › Ana ekrana ekle',
+  // http adresinde Android tam uygulama vermez: kısayol tarayıcıda açılır (docs/05-KASA-BILGISAYARI.md §5)
+  android: 'Tarayıcı menüsü › Ana ekrana ekle; kısayol adres çubuğuyla açılır',
 };
 
 /** Sunucunun çalıştığı bilgisayar (kasa programı): localhost */

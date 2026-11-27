@@ -2,14 +2,28 @@
 rem AsilPOS kasa ekrani (Windows). Kurulumun kisayollari 27 Kasim 2026'dan beri bunu degil, konsolsuz
 rem "powershell -WindowStyle Hidden -File app\kasa-yazici.ps1 -Ac"yi acar (kurulum-yenile.mjs shortcutSpec): bu dosya eski,
 rem elle kopyalanmis ya da gorev cubuguna sabitlenmis kisayollar icin ayni programi acip hemen kapanir. Ayrinti:
-rem docs/05-KASA-BILGISAYARI.md. Kiosktan cikmak icin Alt+F4.
+rem docs/05-KASA-BILGISAYARI.md. Kapatilan kasa penceresini bekci 15 sn icinde yeniden acar (bakim arasi: Yonetim, Ag ve uzaktan erisim).
 setlocal
 rem Ad degisikligi (26 Kas 2026) oncesinin degiskeni de okunur
 if "%ASILPOS_URL%"=="" set "ASILPOS_URL=%LAFPOS_URL%"
 if "%ASILPOS_URL%"=="" set "ASILPOS_URL=http://localhost:4000/"
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+rem Ustteki iki nokta satirlari bos etiket, silmeyin: guncelleme bu dosyayi 27 Kasim oncesinin hali calisirken
+rem degistirebilir. cmd kaldigi bayttan (eski dosyada 881, 1243, 1575) bu dosyada surer, etikete duser ve asagidaki
+rem programi acar; program kasa penceresini ikinci kez acmaz, one getirir (tests/masaustu-programi.test.ts)
 rem Program: betik sunucuyu bekler, yazicilari bildirir, bekciyi ve kasa penceresini acar (zaten aciksa one getirir)
 if not exist "%~dp0app\kasa-yazici.ps1" goto eski
-start "" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1" -Ac
+start "" /min "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1" -Ac
 exit /b 0
 
 :eski

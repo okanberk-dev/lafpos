@@ -30,7 +30,11 @@ import { fileURLToPath } from 'node:url';
 
 /** app\ içinde kök dosyaların klasörü */
 export const ROOT_DIR = 'kok';
-/** Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır */
+/**
+ * Çalışırken değiştirilemeyen kök dosyalar: farklıysa yalnız uyarılır. AsilPOS-Kasa.bat değiştirilir: 27 Kasım
+ * öncesinin hâli (90 sn'ye kadar çalışır) o an açıksa cmd kaldığı bayttan yenisini okur; yenisinde o baytlar boş etiket,
+ * oradan programı açar (tests/masaustu-programi.test.ts). Yenisi anında kapanır
+ */
 export const LOCKED_ROOT_FILES = ['baslat.cmd'];
 /**
  * Yalnız kurulumda zaten varsa yenilenen kök dosyalar: siteden kurulumun kaldırıcısı (Uygulamalar listesi onu çağırır;
