@@ -8,6 +8,8 @@ import { getSettings, getSyncState, setSyncState, updateSettings } from '../lib/
 import { db } from '../db/client';
 import { branchLocked } from './lafmaliyet';
 import { subeDegisti } from './sube-degisti';
+import { merkezKapaliUyarisi } from './merkez';
+import { kasaSubesi, subeAdi } from '../lib/sube';
 import { ESKI_KURULUM_YOLU } from '@shared/eski-adlar';
 import { yeniAdlarla } from '@shared/pos-env';
 
@@ -45,6 +47,24 @@ export interface KurulumDurumu {
 }
 
 export const kurulumDurumu = () => getSyncState<KurulumDurumu>(STATE);
+
+/**
+ * Yönetim › Bağlantı bilgileri'nin "Şube kurulumu" kartı: kasanın şubesi (yoksa null: şubeye bağlı senkron bekler),
+ * veri klasöründe ladmin'e verilmeyi bekleyen kurulum kodu var mı, son denemenin sonucu ve hatası (kalıcıysa yeni bağlantı
+ * gerekir; geçiciyse 5 dakikada bir yeniden denenir) ve Merkez kapalıyken ikinci şubenin uyarısı. Kod ve anahtar dönmez
+ */
+export function kurulumGorunumu(dataDir = env.dataDir) {
+  const d = kurulumDurumu();
+  return {
+    sube: kasaSubesi(),
+    subeAdi: subeAdi(),
+    kodBekliyor: existsSync(resolve(dataDir, KOD_DOSYASI)),
+    durum: d ? { ok: d.ok, sube: d.sube, at: d.at, hata: d.hata, kalici: !!d.kalici, kilitli: !!d.kilitli } : null,
+    merkezUyarisi: merkezKapaliUyarisi(),
+  };
+}
+export type KurulumGorunumu = ReturnType<typeof kurulumGorunumu>;
+
 /** Kurulumdan gelen şubenin adı (Merkez kaydı ve fiş başlığı için); yoksa null */
 export const kurulumSubeAdi = () => kurulumDurumu()?.sube?.ad ?? null;
 

@@ -11,6 +11,7 @@ import { HttpError } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { subeEtiketi } from '@shared/baglanti';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
+import { ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
 import { installedVersion, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
 import { underBekci } from './yedek';
 
@@ -65,6 +66,19 @@ export interface MerkezLast {
 
 /** Merkez açık: adres ve kafenin ortak anahtarı (kayıt onunla imzalı; anahtarsız kasada lisans uygulanmaz) */
 export const merkezEnabled = () => !!env.merkezUrl && env.cloudSecret.length >= MIN_SECRET_LENGTH;
+
+/**
+ * Merkez kapalıyken (ASILPOS_MERKEZ_URL=0) AsilPOS Uzaktan özeti, raporları ve bulut yedeklerini bütün kasaların ortak
+ * `default` dükkânına yazar (`remoteShop`). Tek kasada sorun yok; birden çok şubenin kasası varken şubeler birbirinin
+ * raporunu ve yedeğini ezer. İlk kasa Marina'nınki: şubesi başka olan kasa ikinci şubedir, Merkez kapalıysa uyarı
+ * (Yönetim › Bağlantı bilgileri). Uzaktan kurulu değilse buluta bir şey gitmez, uyarı yok
+ */
+export function merkezKapaliUyarisi(): string | null {
+  if (merkezEnabled() || !env.cloudUrl || env.cloudSecret.length < MIN_SECRET_LENGTH) return null;
+  const sube = kasaSubesi();
+  if (!sube || sube === ESKI_VARSAYILAN_SUBE) return null;
+  return 'Merkez kapalı (ASILPOS_MERKEZ_URL=0): AsilPOS Uzaktan bu kasanın özetini, raporlarını ve bulut yedeklerini bütün kasaların ortak "default" dükkânına yazar. Birden çok şubenin kasası varken şubeler birbirinin raporunu ve yedeğini ezer; ayarlar dosyasından ASILPOS_MERKEZ_URL=0 satırını kaldırın';
+}
 
 /** Kurulum kimliği anahtarın özetidir (api/_merkez.ts installIdFor ile aynı): kimliği bilen başkası onu kaydedemez */
 export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
