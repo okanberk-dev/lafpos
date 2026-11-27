@@ -9,7 +9,7 @@ import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { ESKI_KASA_DENETIMI, ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
-import { signedFetch } from '../lib/signature';
+import { kafeFetch, yedekAnahtari, yedekCozmeAnahtarlari } from '../lib/kafe-anahtari';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
 import { posEnv } from '@shared/pos-env';
@@ -84,8 +84,24 @@ export function openBackup(buf: Buffer, secret: string): Buffer {
   return db;
 }
 
+/**
+ * Yedeği anahtarlardan biriyle çözer (önce şube anahtarı, sonra ortak: şube anahtarından önce alınmış yedek ortak
+ * anahtarla şifreli; server/lib/kafe-anahtari.ts). Hiçbiri tutmazsa ilk hatayı verir
+ */
+export function openBackupAny(buf: Buffer, secrets: string[]): Buffer {
+  let first: unknown = null;
+  for (const secret of secrets) {
+    try {
+      return openBackup(buf, secret);
+    } catch (e) {
+      first ??= e;
+    }
+  }
+  throw first ?? new Error('Yedeğin şifresi çözülemedi: AsilPOS Uzaktan anahtarı tanımlı değil');
+}
+
 async function cloud<T>(path: string, body: unknown): Promise<T> {
-  const res = await signedFetch(env.cloudSecret, 'POST', new URL(`/api/uzaktan/yedek/${path}`, env.cloudUrl), body, 20_000, { 'x-laf-dukkan': remoteShop() });
+  const res = await kafeFetch(env.cloudSecret, 'POST', new URL(`/api/uzaktan/yedek/${path}`, env.cloudUrl), body, 20_000, { 'x-laf-dukkan': remoteShop() });
   const json = (res.json ?? {}) as T & { error?: string };
   if (res.status !== 200) throw new Error(json.error ?? `Bulut yanıt vermedi (${res.status})`);
   return json;
@@ -95,7 +111,7 @@ async function cloud<T>(path: string, body: unknown): Promise<T> {
 export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
   if (!cloudEnabled()) throw new Error('AsilPOS Uzaktan kurulu değil');
   try {
-    const sealed = await sealBackupAsync(readFileSync(file), env.cloudSecret);
+    const sealed = await sealBackupAsync(readFileSync(file), yedekAnahtari());
     const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });
     const res = await fetch(url, { method: 'PUT', body: new Uint8Array(sealed), headers: { 'content-type': 'application/octet-stream' }, signal: AbortSignal.timeout(10 * 60_000) });
     if (!res.ok) throw new Error(`Yedek yüklenemedi (${res.status})`);
@@ -195,7 +211,7 @@ export async function stageRestore(pathname: string, byUserId: string, byName = 
   const { url } = await cloud<{ url: string }>('indir', { pathname });
   const res = await fetch(url, { signal: AbortSignal.timeout(10 * 60_000) });
   if (!res.ok) throw new Error(`Yedek indirilemedi (${res.status})`);
-  const db = openBackup(Buffer.from(await res.arrayBuffer()), env.cloudSecret);
+  const db = openBackupAny(Buffer.from(await res.arrayBuffer()), yedekCozmeAnahtarlari());
   const dir = resolve(env.dataDir, 'geri-yukle');
   mkdirSync(dir, { recursive: true });
   // Önce istek (kim, adıyla: eski yedekte kullanıcı olmayabilir), sonra hazır yedek: yeniden adlandırma onay anıdır.

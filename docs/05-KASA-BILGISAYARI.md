@@ -75,7 +75,8 @@ Kod: katalog `shared/baglanti.ts`, dosya yazımı `server/lib/ayar-dosyasi.ts`, 
 ekran `src/pages/admin/ConnectionsAdmin.tsx`, testler `tests/baglanti.test.ts` (e2e akışı da yazar).
 
 - **Ne yazılır:** yalnız katalogdaki anahtarlar: lafmaliyet (`LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET`), AsilPOS
-  Uzaktan (`ASILPOS_CLOUD_URL`, `ASILPOS_CLOUD_SECRET`), site (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`; deneme
+  Uzaktan (`ASILPOS_CLOUD_URL`, `ASILPOS_CLOUD_SECRET`, isteğe bağlı şube anahtarı `ASILPOS_CLOUD_SUBE_SECRET`;
+  `docs/07-UZAKTAN-ERISIM.md` §6), site (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`; deneme
   bittikten sonra, `docs/03-ENTEGRASYON.md` §8), Token (`TOKENX_*`, `ASILPOS_PUBLIC_URL`), Yemeksepeti, Getir ve
   Trendyol Go. Bilinmeyen anahtar 400. Adres http(s) olmalı, gizli anahtarın en kısa boyu denetlenir (Uzaktan ve site
   32, webhook 16), boşluk, tırnak ve satır sonu kabul edilmez; boş değer satırı kaldırır.
@@ -339,7 +340,7 @@ metinler Yönetim › Müşteri ekranı'ndan.
 ### Bulut yedeği
 
 Günlük yedek (`backups\lafpos-<tarih>.db`) alınınca kasada sıkıştırılıp şifrelenir (AES-256-GCM; anahtar
-`ASILPOS_CLOUD_SECRET`'ten türetilir, buluta hiç gitmez) ve AsilPOS Uzaktan'ın verdiği 15 dakikalık imzalı adrese yüklenir
+`ASILPOS_CLOUD_SECRET`'ten, şube anahtarı varsa ondan türetilir, buluta hiç gitmez; `docs/07-UZAKTAN-ERISIM.md` §6) ve AsilPOS Uzaktan'ın verdiği 15 dakikalık imzalı adrese yüklenir
 (Vercel Blob, özel depo `lafpos-yedek`; `server/sync/yedek.ts`, `api/_yedek.ts`). Dükkân başına son 30 yedek kalır;
 gidemezse yarım saatte bir yeniden denenir. Durum ve "Şimdi yedekle": Yönetim › Ayarlar ve yedek › Bulut yedeği.
 
@@ -348,7 +349,8 @@ seçtirir; seçilen yedek indirilir, çözülür, SQLite olduğu doğrulanır ve
 bekler. Sunucu kapanır; bekçi açmadan önce mevcut veritabanının kopyasını alır
 (`backups\lafpos-geri-yukleme-oncesi-<an>.db`) ve yedeği yerine koyar (`geri-yukle.mjs`), AsilPOS yarım dakikada
 yeniden açılır. **Yeni bilgisayarda:** AsilPOS'u kurup ayarlar.env'e aynı `ASILPOS_CLOUD_URL` ve `ASILPOS_CLOUD_SECRET`
-yazılınca eski bilgisayarın yedekleri listede "Kurulum" seçiminden bulunur. Denetim kaydına yazılır. **Başka şubenin
+yazılınca eski bilgisayarın yedekleri listede "Kurulum" seçiminden bulunur (şube anahtarı varsa o da yazılır: şube
+anahtarıyla alınmış yedekler onunla, öncekiler ortak anahtarla açılır). Denetim kaydına yazılır. **Başka şubenin
 yedeği** (27 Kasım 2026) şubesi belli kasaya yüklenmez: yedeğin şubesi kasanınkinden farklıysa 409 `wrong_branch`, hazır
 dosya bırakılmaz (`docs/03-ENTEGRASYON.md` §4c).
 

@@ -10,6 +10,7 @@ import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { subeEtiketi } from '@shared/baglanti';
+import { kafeFetch } from '../lib/kafe-anahtari';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
 import { installedVersion, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
@@ -349,7 +350,7 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
   try {
     if (!me.registered) {
       // Kayıt kafenin ortak anahtarıyla imzalı (dışarıdan kimse kurulum açamaz); kurulumun kendi anahtarı içinde
-      const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt, ...kayitSube() }, 8000);
+      const res = await kafeFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt, ...kayitSube() }, 8000);
       if (res.status === 409) {
         // Kimlik başkasınca alınmış (eski rastgele kimlik): yeni anahtar ve ondan türeyen kimlik; sonraki nabız kaydolur
         const key = randomBytes(32).toString('base64url');

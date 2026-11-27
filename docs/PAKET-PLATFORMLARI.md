@@ -315,12 +315,13 @@ eskisininkiler bırakılır (şubesiz eski dosyada da), bir sonraki çekim yenis
 günlükte, denetim kaydında, veritabanında, bulut özetinde ve depoda hiç yazılmaz. İnternet yokken kasa son çekilen
 değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
 
-**Bilinen sınırlar.** Kafe anahtarı (`ASILPOS_CLOUD_SECRET`) bütün şubelerde aynı: `?sube=` imzalıdır (imzadan sonra
-değiştirilemez) ama uç isteyen kasanın gerçekten o şube olduğunu doğrulamaz. Şube adı bir yanlışlık önlemidir (Marina
-kasası Tuzla'nın anahtarını yanlışlıkla almaz), yetki sınırı değildir: kafe anahtarını bilen her şubenin anahtarını
-isteyebilir. Şube başına ayrı anahtar ileride (`docs/KALANLAR.md`). Yemeksepeti ve Getir'in gelen kutusu restorana
-ayrıdır (restoran kimliği Vercel'de tanımlıysa; yukarıda Yemeksepeti ve Getir): kasa yalnız kendi restoranının
-kutusunu çeker ve siler; aynı kafe anahtarıyla bu da yanlışlık önlemidir, yetki sınırı değil.
+**Şube anahtarı (27 Kasım 2026).** Ortak kafe anahtarı (`ASILPOS_CLOUD_SECRET`) bütün şubelerde aynı: onunla `?sube=`
+ve `?restoran=` yalnız yanlışlık önlemidir (Marina kasası Tuzla'nın anahtarını yanlışlıkla almaz), yetki sınırı
+değildir. Sahip bir şubeye kendi anahtarını verince (Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri ›
+AsilPOS Uzaktan › Şube anahtarı; `docs/07-UZAKTAN-ERISIM.md` §6) o şubenin platform anahtarları ve restoranının gelen
+kutusu (restoranın şubesi `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` / `GETIR_<ŞUBE>_RESTAURANT_ID` adından) yalnız bu anahtarla
+imzalı isteğe açılır; ortak anahtarı bilen başka şubenin kasası 403 `branch_key_required` alır, sorgusuz eski kasa o
+restoranın kutusunu görmez. Anahtarı olmayan şube eskisi gibi ortak anahtarla çalışır.
 
 ## Otomatik kabul
 İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik

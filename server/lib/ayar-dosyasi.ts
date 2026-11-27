@@ -2,6 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
+import { subeAnahtariGorunumu } from './kafe-anahtari';
 import { cloudKeys, currentSube, pullState } from './platform-anahtar';
 import { envDegeri, eskiEnvAdi, posEnv, yazilacakEnvAdi, yeniEnvAdi } from '@shared/pos-env';
 
@@ -180,8 +181,9 @@ export function connectionView() {
     /**
      * Son çekim: bu şube için son başarılı çekimin anı (yerel kopyadan; başka şube için çekildiyse null), son denemenin
      * sonucu. `sube`: kasanın şube etiketi, Vercel adındaki ŞUBE (yalnız ad, değer değil; geçersizse null). `uzaktan`:
-     * AsilPOS Uzaktan kurulu mu (değilse buluttan hiçbir şey gelmez)
+     * AsilPOS Uzaktan kurulu mu (değilse buluttan hiçbir şey gelmez). `subeAnahtari`: şube anahtarının durumu ve
+     * Vercel'deki adı (değer değil; server/lib/kafe-anahtari.ts)
      */
-    bulut: { at: forThis ? cloud.at : null, ok: pull.ok, error: pull.error, sube, uzaktan: !!env.cloudUrl && env.cloudSecret.length >= 32 },
+    bulut: { at: forThis ? cloud.at : null, ok: pull.ok, error: pull.error, sube, uzaktan: !!env.cloudUrl && env.cloudSecret.length >= 32, subeAnahtari: subeAnahtariGorunumu() },
   };
 }

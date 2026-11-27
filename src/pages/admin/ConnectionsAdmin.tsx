@@ -25,7 +25,7 @@ interface ConnView {
    * Platform anahtarlarının buluttan son çekimi (#75 İş 2): bu şube için son başarılı çekim, son denemenin sonucu,
    * kasanın şube etiketi (Vercel adındaki ŞUBE; geçersizse null) ve AsilPOS Uzaktan'ın kurulu olup olmadığı
    */
-  bulut?: { at: number | null; ok: boolean | null; error: string | null; sube: string | null; uzaktan: boolean };
+  bulut?: { at: number | null; ok: boolean | null; error: string | null; sube: string | null; uzaktan: boolean; subeAnahtari?: SubeAnahtari };
   /** Şube kurulumu (server/sync/kurulum-kodu.ts `kurulumGorunumu`); eski sunucu göndermez */
   kurulum?: KurulumView;
 }
@@ -42,6 +42,32 @@ interface KurulumView {
   merkezUyarisi: string | null;
 }
 type FieldState = ConnView['groups'][number]['fields'][number];
+
+/** Şube anahtarının durumu (server/lib/kafe-anahtari.ts `subeAnahtariGorunumu`); eski sunucu göndermez */
+interface SubeAnahtari {
+  durum: 'yok' | 'subesiz' | 'kisa' | 'ortakla-ayni' | 'bulutta-yok' | 'kullaniliyor' | 'denenmedi';
+  ad: string | null;
+}
+
+/** AsilPOS Uzaktan kartında şube anahtarının durumu; boşsa satır yok (ortak anahtar, eskisi gibi) */
+function subeAnahtariLine(s: SubeAnahtari | undefined): string | null {
+  if (!s || s.durum === 'yok') return null;
+  const ad = s.ad ?? 'ASILPOS_CLOUD_SECRET_<ŞUBE>';
+  switch (s.durum) {
+    case 'subesiz':
+      return 'Şube anahtarı kullanılmıyor: kasanın şubesi belli değil (Ayarlar ve yedek › Şube kimliği)';
+    case 'kisa':
+      return 'Şube anahtarı kullanılmıyor: en az 32 karakter olmalı';
+    case 'ortakla-ayni':
+      return `Şube anahtarı ortak anahtarla aynı, kullanılmıyor: Vercel'deki ${ad} değerini yazın`;
+    case 'bulutta-yok':
+      return `Şube anahtarı bulutta yok ya da farklı (Vercel'de ${ad}): şimdilik ortak anahtar kullanılıyor`;
+    case 'kullaniliyor':
+      return `Şube anahtarı kullanılıyor (Vercel'de ${ad})`;
+    default:
+      return `Şube anahtarı tanımlı (Vercel'de ${ad}); ilk gönderimde denenir`;
+  }
+}
 
 const QUERY = ['admin', 'baglanti'] as const;
 
@@ -150,6 +176,11 @@ function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGrou
           void save();
         }}
       >
+        {group.id === 'uzaktan' && subeAnahtariLine(bulut?.subeAnahtari) && (
+          <p data-sube-anahtari className="text-[13px] text-[var(--admin-text-soft)] [overflow-wrap:anywhere]">
+            {subeAnahtariLine(bulut?.subeAnahtari)}
+          </p>
+        )}
         {cloudGroup && (
           <div className="space-y-0.5 text-[13px] text-[var(--admin-text-soft)] [overflow-wrap:anywhere]">
             <p data-bulut-sube>{subeLine(group.id, bulut)}</p>

@@ -5,7 +5,7 @@ import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { cloudKeys, saveCloudKeys, setPullState } from '../lib/platform-anahtar';
 import { kasaSubesi } from '../lib/sube';
-import { signedFetch } from '../lib/signature';
+import { kafeFetch } from '../lib/kafe-anahtari';
 
 /**
  * Platform anahtarları buluttan (#75 İş 2): sahip Trendyol ve Yemeksepeti değerlerini bir kez Vercel'deki AsilPOS Uzaktan
@@ -36,15 +36,17 @@ export async function pullPlatformKeys(now = Date.now()): Promise<{ changed: str
   try {
     const url = new URL(`${env.cloudUrl}${CLOUD_KEYS_PATH}`);
     url.searchParams.set('sube', branchId);
-    res = await signedFetch(env.cloudSecret, 'GET', url);
+    res = await kafeFetch(env.cloudSecret, 'GET', url);
   } catch {
     // Hata nesnesi günlüğe yazılmaz: adres ya da yanıt parçası taşıyabilir
     setPullState({ triedAt: now, ok: false, error: 'Uzaktan’a ulaşılamadı' });
     return { skipped: 'ulaşılamadı' };
   }
-  const body = res.json as { anahtarlar?: unknown } | null;
+  const body = res.json as { anahtarlar?: unknown; code?: unknown; error?: unknown } | null;
   if (res.status !== 200 || !body || typeof body.anahtarlar !== 'object') {
-    setPullState({ triedAt: now, ok: false, error: res.status === 401 ? 'İmza geçersiz' : `Uzaktan yanıtı ${res.status}` });
+    // Şube anahtarı sorunu (docs/07-UZAKTAN-ERISIM.md §6): bulutun Türkçe nedeni olduğu gibi gösterilir (değer taşımaz)
+    const subeSorunu = typeof body?.code === 'string' && body.code.startsWith('branch_key') && typeof body.error === 'string';
+    setPullState({ triedAt: now, ok: false, error: res.status === 401 ? 'İmza geçersiz' : subeSorunu ? String(body.error).slice(0, 300) : `Uzaktan yanıtı ${res.status}` });
     return { skipped: `durum ${res.status}` };
   }
   const next = cleanCloudKeys(body.anahtarlar);

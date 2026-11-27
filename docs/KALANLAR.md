@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 26 Kasım 2026.
+Son güncelleme: 27 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -67,6 +67,12 @@ Son güncelleme: 26 Kasım 2026.
   `ESKI_BANKA_KIYAS_BASLIGI`'nde belgeli. ladmin'in kâğıt okuyucusu lafmaliyet#166 ile ikisini de tanır; bu sürüm ondan
   önce kurulursa yalnız yapay zekâ okuması kullanılamadığında kodla okuma kıyas satırlarını banka sayar (düşük güvenli
   tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir.
+- **Şube anahtarı (27 Kasım 2026):** şube başına ayrı AsilPOS Uzaktan anahtarı, isteğe bağlı (`docs/07-UZAKTAN-ERISIM.md`
+  §6). Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri › AsilPOS Uzaktan › Şube anahtarı. O şubenin
+  platform anahtarları, restoranının paket gelen kutusu, dükkânının özeti, raporları ve bulut yedeği, uzaktan yönetim
+  komutları yalnız bu anahtarla; ortak anahtarı bilen başka şubenin kasası açamaz (`?sube=` ve `?restoran=` artık yetki
+  sınırı). Anahtarı olmayan şube ve eski kasa eskisi gibi ortak anahtarla; bulut şube anahtarını tanımıyorsa kasa ortak
+  anahtarla yineler (geçişte sıra önemsiz). ladmin'in dağıttığı ortak anahtar satırı ayrı, şube anahtarına dokunmaz.
 - **Bağımlılık açıkları (27 Kasım 2026, Dependabot):** hono 4.13.23, @hono/node-server 2.1.11; drizzle-kit'in eski
   esbuild'i ve @vercel/blob altındaki eski zod `overrides` ile güncel sürüme bağlı. `npm audit` (üretim ve geliştirme)
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
@@ -148,6 +154,10 @@ PAVO_SERIAL=<cihazın seri numarası>
 - **Kasa hareketi ladmin'e anında mı (25 Kasım 2026):** harcama ve teslim bugün gün sonu paketiyle (Z'den sonra)
   ladmin'e gider. Sahip "girildiği an gitsin" derse sözleşme değişir: lafmaliyet'te açık günün hareketleri için ayrı
   imzalı uç ve AsilPOS'ta senkron bütçesine (AGENTS.md kural 6) uyan itme gerekir. Sorulmadan yapılmaz.
+- **Şube anahtarı kullanılsın mı (27 Kasım 2026):** kod hazır, varsayılan kapalı. Bugün yalnız Marina AsilPOS'ta;
+  ikinci şube (Tuzla) AsilPOS'a geçince ya da paket platformları (Trendyol, Yemeksepeti, Getir) şubeye göre açılınca
+  her şubeye ayrı anahtar verilmesi önerilir. Adımlar `docs/07-UZAKTAN-ERISIM.md` §6 (Vercel'de bir satır, kasada bir
+  alan; birkaç dakika).
 - **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, AsilPOS'un payı çok küçük). Kafe
   bağlanınca bir ay sonra Vercel › Usage ve Upstash › Usage bir kez bakılır.
 
@@ -168,14 +178,11 @@ PAVO_SERIAL=<cihazın seri numarası>
 2. **Ad değişikliğinin kalanları (ladmin ile birlikte):** (a) `docs/hesap-sozlesmesi.md` ladmin'deki kopyasıyla bayt
    bayt aynı kaldığı için eski adla duruyor; iki kopya aynı PR serisinde birlikte yeniden adlandırılır, iki depodaki
    SHA-256 sabiti birlikte değişir (ladmin'in ad değişikliği PR'ı bu dosyayı ya dışarıda bırakır ya da aynı baytlarla
-   değiştirir). (b) bitti (aşağıda). (c) Ayarlar dosyasına
-   yazım eski adla (`shared/pos-env.ts` `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş
-   gerekmeyince yeni ada geçer.
+   değiştirir). (b) bitti (Main'de olanlar, 27 Kasım). (c) Ayarlar dosyasına yazım eski adla (`shared/pos-env.ts`
+   `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş gerekmeyince yeni ada geçer.
 3. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
-4. **Şube başına ayrı kafe anahtarı:** bugün `ASILPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
-   anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
-   başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
+4. **Şube başına ayrı kafe anahtarı:** bitti (Main'de olanlar, 27 Kasım); kullanmak sahibin kararı (§2).
 5. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›

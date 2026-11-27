@@ -8,7 +8,8 @@ import { env } from '../env';
 import type { AuthUser } from '../lib/auth';
 import { bus } from '../lib/events';
 import { getSettings } from '../lib/settings';
-import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
+import { kafeFetch } from '../lib/kafe-anahtari';
+import { MIN_SECRET_LENGTH } from '../lib/signature';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets, pickupBoard } from '../services/floor';
@@ -207,7 +208,7 @@ export async function pushSnapshot(opts: { heartbeat?: boolean } = {}): Promise<
     const keepAlive = startedAt - lastSentAt >= KEEPALIVE_MS - KEEPALIVE_SLACK_MS;
     if (hash === lastHash && !keepAlive && !(opts.heartbeat && snap.patron.dayOpen)) return 'unchanged';
     const packed = (await gzipAsync(JSON.stringify(snap))).toString('base64');
-    const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/push`), { gz: packed }, 15_000, { 'x-laf-dukkan': remoteShop() });
+    const { status } = await kafeFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/push`), { gz: packed }, 15_000, { 'x-laf-dukkan': remoteShop() });
     if (status !== 200) throw new Error(`HTTP ${status}`);
     lastHash = hash;
     lastSentAt = startedAt;

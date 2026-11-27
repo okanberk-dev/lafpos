@@ -8,7 +8,7 @@ import { db, schema } from '../db/client';
 import { env } from '../env';
 import { internetState, onInternetBack } from '../lib/internet';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
-import { signedFetch } from '../lib/signature';
+import { kafeFetch } from '../lib/kafe-anahtari';
 import { getOpenDay } from '../services/orders';
 import { isletmeVeSube } from '@shared/sube';
 import { subeAdi } from '../lib/sube';
@@ -80,7 +80,7 @@ async function send(n: Notice): Promise<SendResult> {
   const shop = isletmeVeSube(getSettings().businessName, subeAdi()) || null;
   const { id: _id, ...notice } = n;
   try {
-    const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/uzaktan/bildirim', env.cloudUrl), { ...notice, shop }, 8000);
+    const res = await kafeFetch(env.cloudSecret, 'POST', new URL('/api/uzaktan/bildirim', env.cloudUrl), { ...notice, shop }, 8000);
     if (res.status === 200) return 'gitti';
     if (res.status === 400 || res.status === 413) {
       console.warn(`[bildirim] site "${n.kind}" bildirimini kabul etmedi (${res.status}); düşürüldü`);

@@ -10,6 +10,24 @@ import { PANEL_ANAHTAR_METNI, yeniEnvAdi } from './pos-env.js';
 
 export type ConnFieldKind = 'url' | 'text' | 'secret';
 
+// ─── Şube anahtarı (docs/07-UZAKTAN-ERISIM.md §6) ───────────────────────────
+
+/**
+ * Kasanın şube anahtarı: ayarlar dosyasında ayrı satır, ladmin'in dağıttığı ortak `ASILPOS_CLOUD_SECRET`'e dokunmaz
+ * (server/sync/baglanti-dagitim.ts yalnız ortak anahtarı yazar). Tanımlıysa kasa AsilPOS Uzaktan'a giden her isteği bu
+ * anahtarla imzalar ve şubesini `SUBE_BASLIGI` ile söyler (server/lib/kafe-anahtari.ts)
+ */
+export const SUBE_ANAHTARI_ENV = 'ASILPOS_CLOUD_SUBE_SECRET';
+/**
+ * Kasanın imzalı isteğindeki şube başlığı (şube etiketi, `subeEtiketi`): bulut imzayı o şubenin kendi anahtarıyla
+ * doğrular. Başlık imzaya girmez; yanlış şubeyi söyleyen istek o şubenin anahtarını bilmeden imzayı tutturamaz
+ */
+export const SUBE_BASLIGI = 'x-laf-sube';
+/** Şubenin kendi anahtarının Vercel'deki adı: `ASILPOS_CLOUD_SECRET_<ŞUBE>` ('marina' → ASILPOS_CLOUD_SECRET_MARINA) */
+export const subeAnahtarAdi = (sube: string) => `ASILPOS_CLOUD_SECRET_${sube}`;
+/** Vercel ortamında şube anahtarı adının kalıbı; 1. grup şube etiketi */
+export const SUBE_ANAHTARI_RE = /^ASILPOS_CLOUD_SECRET_([A-Z0-9]{1,32})$/;
+
 export interface ConnField {
   key: string;
   label: string;
@@ -51,6 +69,14 @@ export const CONN_GROUPS: ConnGroup[] = [
     fields: [
       { key: 'ASILPOS_CLOUD_URL', label: 'Adres', kind: 'url', placeholder: `https://${ALAN_ADI}` },
       { key: 'ASILPOS_CLOUD_SECRET', label: 'Anahtar', kind: 'secret', minLength: 32, hint: 'Vercel’deki ASILPOS_CLOUD_SECRET ile aynı, en az 32 karakter' },
+      {
+        key: SUBE_ANAHTARI_ENV,
+        label: 'Şube anahtarı',
+        kind: 'secret',
+        minLength: 32,
+        optional: true,
+        hint: 'Bu şubenin kendi anahtarı varsa: Vercel’deki ASILPOS_CLOUD_SECRET_<ŞUBE> ile aynı. Boşsa ortak anahtar kullanılır',
+      },
     ],
   },
   {

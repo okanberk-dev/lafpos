@@ -1,6 +1,6 @@
 import { tl } from '@shared/money';
 import { ACCEPT_SECONDS, PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload, REJECT_REASONS } from '@shared/platforms';
-import { signedFetch } from '../lib/signature';
+import { kafeFetch } from '../lib/kafe-anahtari';
 import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
 /**
@@ -677,7 +677,7 @@ function relayUrl(c: GetirConfig, path: string, restaurantId?: string | null): U
 
 /** Gelen kutusunu çeker (imzalı; önce iptaller, en çok 50 kayıt) */
 export async function fetchInbox(c: GetirConfig, restaurantId?: string | null): Promise<InboxItem[]> {
-  const { status, json } = await signedFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox', restaurantId)).catch((e) => {
+  const { status, json } = await kafeFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox', restaurantId)).catch((e) => {
     throw networkError(e, 8000);
   });
   if (status !== 200) throw new GetirHttpError(status, `aktarıcı gelen kutusu alınamadı (${explain(status, json)})`);
@@ -689,7 +689,7 @@ export async function fetchInbox(c: GetirConfig, restaurantId?: string | null): 
 /** İşlenen kayıtları siler (çekimle aynı kutudan); silinemezse bir sonraki çekimde yine gelir (tekilleştirme kasada) */
 export async function ackInbox(c: GetirConfig, ids: string[], restaurantId?: string | null): Promise<void> {
   if (!ids.length) return;
-  const { status } = await signedFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack', restaurantId), { ids });
+  const { status } = await kafeFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack', restaurantId), { ids });
   if (status !== 200) throw new GetirHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 

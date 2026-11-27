@@ -367,7 +367,7 @@ describe('kasanın çekimi', () => {
     const { connectionView } = await import('../server/lib/ayar-dosyasi');
     expect(cloudKeys().sube).toBe('MARINA');
     expect(JSON.parse(readFileSync(join(dataDir, 'platform-anahtarlari.json'), 'utf8'))).toMatchObject({ sube: 'MARINA' });
-    expect(connectionView().bulut).toEqual({ at: expect.any(Number), ok: true, error: null, sube: 'MARINA', uzaktan: true });
+    expect(connectionView().bulut).toEqual({ at: expect.any(Number), ok: true, error: null, sube: 'MARINA', uzaktan: true, subeAnahtari: { durum: 'yok', ad: 'ASILPOS_CLOUD_SECRET_MARINA' } });
     // Uzaktan kurulu değilse görünüm söyler
     const { env } = await import('../server/env');
     env.cloudUrl = '';

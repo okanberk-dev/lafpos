@@ -247,6 +247,11 @@ export interface KontrolDurumu {
    * anahtarı yalnız imza tutarsa verir: Redis'e yazabilen biri anahtarı kendininkiyle değiştirip PIN'i okuyamaz
    */
   anahtarImza?: string;
+  /**
+   * Kasanın şube etiketi (Vercel adındaki ŞUBE), yalnız kasa şube anahtarıyla imzalıyorsa (docs/07-UZAKTAN-ERISIM.md
+   * §6): bulut bu kasanın komutlarını ve açık anahtar imzasını `ASILPOS_CLOUD_SECRET_<ŞUBE>` ile işler. Yoksa ortak anahtar
+   */
+  sube?: string;
   personel: KontrolPersonel[];
   roller: KontrolRol[];
   servisModu: ServiceMode;

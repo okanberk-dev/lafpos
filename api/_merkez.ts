@@ -4,7 +4,7 @@
  *
  * Kurulum kaydı: kasa ilk açılışta gizli anahtar üretir, kurulum kimliği anahtarın özetidir (`installIdFor`; kimliği
  * bilen başkası onu kendi anahtarıyla kaydedemez). İnternete ilk çıktığında `POST merkez/kayit` ile bildirir; istek
- * kafenin ortak anahtarıyla (ASILPOS_CLOUD_SECRET) imzalıdır, dışarıdan kimse kurulum açamaz. Merkez'de "Onay bekliyor"
+ * kafenin ortak anahtarıyla (ASILPOS_CLOUD_SECRET) ya da şubenin kendi anahtarıyla imzalıdır, dışarıdan kimse kurulum açamaz. Merkez'de "Onay bekliyor"
  * görünür. Kayıt bir kez açılır: aynı kimliğe başka anahtar yazılamaz. Sonraki istekler (`merkez/nabiz`) kurulumun
  * kendi anahtarıyla imzalıdır (server/lib/signature.ts kuralı). Kayıt IP başına saatte 10, onay bekleyen en çok 50.
  *
@@ -80,7 +80,10 @@ export interface MerkezDeps {
   redis: (...cmd: (string | number)[]) => Promise<unknown>;
   /** İmzayı verilen anahtarla doğrular (api/uzaktan.ts verifyPush) */
   verify: (key: string, req: Request, url: URL, body: string) => boolean;
-  /** Kafenin ortak anahtarıyla (ASILPOS_CLOUD_SECRET) imzalı mı: kayıt yalnız kasadan */
+  /**
+   * Kafenin anahtarıyla imzalı mı: ortak anahtar (ASILPOS_CLOUD_SECRET) ya da başlıktaki şubenin kendi anahtarı
+   * (ASILPOS_CLOUD_SECRET_<ŞUBE>; api/_kafe.ts). Kayıt yalnız kasadan
+   */
   signedShared: (body: string) => boolean;
   /** Panel için gerçek oturum var mı (üye ya da parolalı giriş) */
   admin: () => Promise<boolean>;

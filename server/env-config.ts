@@ -30,6 +30,11 @@ export function configFrom(vars: Record<string, string | undefined>) {
     cloudUrl: (posEnv(vars, 'CLOUD_URL') ?? '').replace(/\/$/, ''),
     cloudSecret: (posEnv(vars, 'CLOUD_SECRET') ?? '').trim(),
     /**
+     * Şubenin kendi Uzaktan anahtarı (isteğe bağlı; Vercel'deki ASILPOS_CLOUD_SECRET_<ŞUBE>). Tanımlıysa Uzaktan'a giden
+     * istekler bununla imzalanır, ortak anahtar yalnız bulut onu henüz tanımıyorsa kullanılır (server/lib/kafe-anahtari.ts)
+     */
+    cloudSubeSecret: (posEnv(vars, 'CLOUD_SUBE_SECRET') ?? '').trim(),
+    /**
      * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan AsilPOS Uzaktan'ın adresi. ASILPOS_MERKEZ_URL=0 kapatır;
      * ikisi de yoksa lisans uygulanmaz ve güncelleme kanalın son sürümünü izler (server/sync/merkez.ts)
      */
