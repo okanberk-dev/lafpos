@@ -87,6 +87,10 @@ Son güncelleme: 27 Kasım 2026.
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
   (satır sonlu yolda da çalıştığını ve ters eğik çizgili yolun 400 aldığını `tests/bagimlilik-guvenlik.test.ts` denetler).
 
+- **28 Kasım 2026: kasa penceresi kapatınca kapanır** (sahibin isteği). Bekçi (sürüm 6) kullanıcının kapattığı kasa
+  penceresini artık yeniden açmaz ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla açılır. Kısayol
+  sunucuyu beklerken açma isteği bırakır, sunucu gelince pencereyi bekçi açar (`docs/05-KASA-BILGISAYARI.md` §3).
+
 - **28 Kasım 2026: Token kablolu kurulumu "Cihaz görünmedi; Token sürücüsü kuruluyor"da kalmaz.** Token'ın sürücü
   aracı pencereli bir sihirbazmış; kasa onu görünmez oturumda çalıştırıp bekliyordu, sürücü hiç kurulmuyordu. Artık
   aracın içindeki iki kurucu (X30TR libusbK, 300TR FTDI) sessiz kurulur; yarım kalan kurulum kaydı açılışta kapanır

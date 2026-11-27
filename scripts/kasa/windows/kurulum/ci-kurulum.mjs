@@ -10,7 +10,7 @@
 //   D. İlk açılış yeni sürümle (27 Kasım şikâyeti: "güncellemeden sonra ilk açılışta eski sürüm, yenileyince düzeliyor"):
 //      güncellemeden önce açılmış pencere kendiliğinden yeni sürüme geçer; pencere kapanıp (gece) yeni kısayolla açılınca
 //      ilk sayfa yeni derlemedir ve sunucudan gelir (önbellekten değil). Program: kısayollar konsolsuz programa döndü,
-//      eski bekçi yenisiyle değişti, ikinci tıklama ikinci pencere açmaz ve öne getirir, bekçi kapanan pencereyi açar
+//      eski bekçi yenisiyle değişti, ikinci tıklama ikinci pencere açmaz ve öne getirir, bekçi kapanan pencereyi açmaz
 //      (bakım arasında açmaz), Edge kalıcı profille açılır (InPrivate değil).
 //   E. Bozuk derleme: kurulur, açılmaz, eski sürüme dönülür. Sonra gece kapanmış pencere (sayfası eski sunucu gibi
 //      saklanmış), yeni arayüz ve yeni kasa betiğiyle güncelleme: bekçi kendini yeniler, sabah ilk açılış yeni sürüm.
@@ -484,7 +484,7 @@ const kasaD3 = await until('kasa penceresinin süreci yok', () => (kasaSurecleri
 for (const f of ['--kiosk', '--kiosk-printing', `--app=${VEKIL}`]) if (!kasaD3[0].komut.includes(f)) fail(`kasa penceresinde ${f} yok: ${kasaD3[0].komut}`);
 const bekciD3 = await until('yeni bekçi açılmadı', () => {
   const b = bekciler();
-  return b.length === 1 && b[0].komut.includes('-BekciSurum 5') ? b : null;
+  return b.length === 1 && b[0].komut.includes('-BekciSurum 6') ? b : null;
 }, 60_000);
 console.log(`  ilk sayfa ${d3.script}, başlık ${d3.baslik}; bekçi ${bekciD3[0].pid} (${bekciD3[0].komut.replace(/.*-Bekci/, '-Bekci')})`);
 ekran('ilk-acilis-yeni-surum');
@@ -514,17 +514,18 @@ if (masaustu) {
 }
 ekran('ikinci-tiklama-one-getirir');
 
-step('D5. Bekçi kapanan pencereyi yeniden açar; bakım arasında açmaz');
+step('D5. Kapanan pencereyi bekçi yeniden açmaz (sahibin isteği, 28 Kas 2026); kısayol açar');
 await bakim(false);
-const tD5 = Date.now();
-ps('kapat');
-const d5 = await waitSayfa(tD5, () => true, 'bekçi kapanan kasa penceresini açmadı', 90_000);
-if (d5.script !== sYeni) fail(`bekçi pencereyi eski sürümle açtı: ${d5.script}`);
-console.log(`  ${Math.round((d5.t - tD5) / 1000)} sn sonra yeniden açıldı`);
-await bakim(true);
 ps('kapat');
 await sleep(35_000);
-if (kasaSurecleri().length) fail('bakım arasında bekçi pencereyi açtı');
+if (kasaSurecleri().length) fail('bekçi kullanıcının kapattığı kasa penceresini yeniden açtı');
+console.log('  kapanan pencere 35 sn sonra hâlâ kapalı');
+const tD5 = Date.now();
+kasaAc();
+const d5 = await waitSayfa(tD5, () => true, 'kasa kısayolu pencereyi açmadı', 120_000);
+if (d5.script !== sYeni) fail(`kısayol pencereyi eski sürümle açtı: ${d5.script}`);
+await bakim(true);
+ps('kapat');
 
 step('D6. Edge: kalıcı profille tam ekran (InPrivate değil, oturum ve sepet kalır)');
 const tE = Date.now();
@@ -559,7 +560,9 @@ console.log(`  Edge yerel deposu kalıcı (${e2.depo}); ${edge[0].komut.slice(0,
 ekran('edge-tam-ekran');
 ps('kapat', ['-Profil', 'edge']);
 await bakim(false);
-await waitSayfa(Date.now(), () => true, 'bekçi kasa penceresini Chrome ile yeniden açmadı', 90_000);
+const tChrome = Date.now();
+kasaAc();
+await waitSayfa(tChrome, () => true, 'kasa kısayolu pencereyi Chrome ile açmadı', 120_000);
 
 // ─── E. Bozuk derleme, bekçinin kendini yenilemesi ──────────────────────────
 
@@ -613,7 +616,7 @@ const bekciYeni = await until(
   'bekçi kendini yenilemedi (diskteki yeni betikle)',
   () => {
     const b = bekciler();
-    return b.length === 1 && b[0].pid !== bekciE[0].pid && b[0].komut.includes('-BekciSurum 5') ? b : null;
+    return b.length === 1 && b[0].pid !== bekciE[0].pid && b[0].komut.includes('-BekciSurum 6') ? b : null;
   },
   120_000,
 );

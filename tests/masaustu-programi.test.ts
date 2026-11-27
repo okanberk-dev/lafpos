@@ -88,7 +88,13 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     for (const t of ['SetForegroundWindow', 'IsIconic($h)) { [void][AsilPos.Pencere]::ShowWindowAsync($h, 9) }', 'MainWindowHandle']) expect(show, t).toContain(t);
     // Kasa kısayolunun eski yolu da öne getirir; bekçi getirmez (arka planda pencere öne fırlamaz)
     expect(between(ps1, 'if ($KasaAc) {', 'if ($Bekci) {')).toContain('Open-KasaWindow $false $true');
-    expect(between(ps1, 'if ($Bekci) {', 'if ($Ac) {')).toContain('Open-KasaWindow $true | Out-Null');
+    // Bekçi pencereyi yalnız kısayolun isteğiyle açar; kullanıcının kapattığını açmaz, müşteri ekranını kapatır (28 Kas 2026)
+    const bekci = between(ps1, 'if ($Bekci) {', 'if ($Ac) {');
+    expect(bekci).toContain('(Test-KasaAcIstegi) -and -not (Test-KasaWindow)');
+    expect(bekci).toContain('if (Open-KasaWindow $true) { Clear-KasaAcIstegi }');
+    expect(bekci).toContain('} elseif ($kasaAcikti) {');
+    expect(bekci).toContain('Stop-CustomerDisplay');
+    expect(bekci).not.toContain('Open-KasaWindow $true | Out-Null');
     const open = between(ps1, 'function Open-KasaWindow', 'function Remove-TemporaryKasaWatcher');
     expect(open).toContain('if ($OneGetir) { Show-KasaWindow $acik }');
     expect(open).toContain('[bool]$OneGetir = $false');
@@ -99,10 +105,10 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
       "Show-Message (Tr 'Chrome ya da Edge bulunamad{i}.",
       'if (-not $acik) { $splash = Start-Splash }',
       'Start-WatcherIfNeeded',
-      'if (-not $acik) { $hazir = Wait-Server $displayBase 90 }',
+      'if (-not $acik) { Set-KasaAcIstegi; $hazir = Wait-Server $displayBase 90 }',
       'Send-Printers $displayBase',
       'Start-CustomerDisplay $displayBase',
-      'if (-not $acik -and $hazir) { Open-KasaWindow $false $true | Out-Null }',
+      'if (-not $acik -and $hazir) { if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi } }',
       'Stop-Splash $splash',
       'Add-PrepShortcut',
     ];
@@ -166,7 +172,7 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(m).toBe(true);
     const { WATCHER_VERSION } = await load('kurulum-yenile.mjs');
     expect(new RegExp('^\\$BekciSurumu = (\\d+)', 'm').exec(ps1)?.[1]).toBe(String(WATCHER_VERSION));
-    expect(WATCHER_VERSION).toBe(5);
+    expect(WATCHER_VERSION).toBe(6);
   });
 });
 
@@ -486,7 +492,7 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
       "if (d3.script !== sYeni) fail(",
       "e.dest === 'document' && e.status === 200",
       "const kasaD4 = kasaSurecleri();",
-      "'bekçi kapanan kasa penceresini açmadı'",
+      "'bekçi kullanıcının kapattığı kasa penceresini yeniden açtı'",
       "kasaAc({ ASILPOS_TARAYICI: 'edge' });",
       "republish(m1n, b2,",
       "vekil.mode = 'eski';\nawait bakim(true);",
