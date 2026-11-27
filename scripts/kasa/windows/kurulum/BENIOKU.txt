@@ -4,8 +4,11 @@ AsilPOS (Windows)
 NE KURULDU
 - Sunucu: Windows açılınca arka planda kendiliğinden çalışır (Görev Zamanlayıcı: "LafPOS Sunucu").
   Kimse oturum açmasa da tabletler bağlanabilir. Düşerse birkaç saniye içinde yeniden başlar.
-- Kasa ekranı: masaüstündeki "AsilPOS Kasa". Chrome (yoksa Edge) tam ekran açılır, fişler önizlemesiz
-  varsayılan yazıcıdan çıkar. Kiosktan çıkmak için Alt+F4.
+- Kasa ekranı: masaüstündeki "AsilPOS Kasa". Kasa programı tam ekran açılır (Chrome, yoksa Edge; adres çubuğu
+  yok), fişler önizlemesiz varsayılan yazıcıdan çıkar. Açıkken yeniden basmak aynı pencereyi öne getirir; kapanırsa
+  15 saniyede yeniden açılır. Çıkmak için Alt+F4.
+- Siteden kurulum (AsilPOS-Kur.cmd) ve bu kurulum dosyası aynı programı kurar; biriyle kurulanı öbürüyle
+  onarabilir ya da güncelleyebilirsiniz.
 - Veriler: C:\ProgramData\LafPOS (veritabanı, günlük yedekler, ayarlar, sunucu günlüğü). Güncelleme ve
   kaldırma bu klasöre dokunmaz. Klasörü yalnız yöneticiler açabilir.
 
@@ -23,6 +26,8 @@ NE KURULDU
 TABLET VE TELEFONLAR (kafenin ağında)
 - Adres: http://<bu bilgisayarın IP adresi>:4000
   Yönetim › Ağ ve uzaktan erişim sayfasında adres ve karekod yazar; tabletin kamerasıyla okutun.
+- Kurulum gerekmez. Uygulama gibi durması için: kullanıcı menüsü › Ana ekrana ekle (iPad'de Safari › Paylaş ›
+  Ana Ekrana Ekle).
 - Modemde bu bilgisayara sabit IP verin (DHCP rezervasyonu); yoksa adres zamanla değişir.
 
 DIŞARIDAN (İNTERNETTEN) CANLI ERİŞİM

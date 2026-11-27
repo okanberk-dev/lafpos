@@ -207,10 +207,11 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   PowerShell 5.1 iki dilli tek dosyadır: yönetici izni ister, kanalın surum.json'unu okur (okunamazsa içine gömülü
   derlemeyi kullanır), Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama yükünü
   kanaldan SHA-256 ile doğrulayarak indirir, `asilpos.nsi` ile aynı klasörleri, görevi, güvenlik duvarını,
-  kısayolları ve Uygulamalar kaydını yazar. Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa
-  sorar, önce veritabanının kopyasını alır). Kurulum dosyasının Kaldir.exe'si yoksa kaldırma
-  `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (AsilPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
-  Vercel NSIS derleyemez.
+  kısayolları (aynı listeden aynı betikle: `app\kurulum-yenile.mjs kisayollar`) ve Uygulamalar kaydını yazar: kurulan
+  program kurulum dosyasınınkiyle aynıdır, Windows CI ikisini kurup karşılaştırır (`docs/05-KASA-BILGISAYARI.md` §9).
+  Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa sorar, önce veritabanının kopyasını alır).
+  Kurulum dosyasının Kaldir.exe'si yoksa kaldırma `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (AsilPOS-Kurulum.exe)
+  GitHub Releases'ta kalır: depo özel ve Vercel NSIS derleyemez; İndir sayfası iki yolun aynı programı kurduğunu söyler.
 
 - **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
   kural `shared/lisans.ts`, `tests/merkez.test.ts`, `tests/denetim-merkez.test.ts`). Yalnız sahibin oturumuyla
