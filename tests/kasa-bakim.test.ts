@@ -70,7 +70,8 @@ describe('kasa penceresinin bakım arası', () => {
     expect(fn).toContain("'/api/kasa/bakim'");
     expect(fn).toContain('.active');
     expect(fn).toMatch(/catch \{ return \$false \}/);
-    expect(ps1).toContain('if ($tur -gt 0 -and -not (Test-KasaBakim $displayBase)) { Open-KasaWindow $true | Out-Null }');
+    // Bekçi yalnız kısayolun açma isteğiyle açar (28 Kas 2026); bakım arasında istek olsa da açmaz
+    expect(ps1).toContain('if ($tur -gt 0 -and (Test-KasaAcIstegi) -and -not (Test-KasaWindow) -and -not (Test-KasaBakim $displayBase) -and (Test-Server $displayBase)) {');
     // Kasa kısayolunun kendi açışı (-KasaAc) aradan etkilenmez: kullanıcı kasayı açmak istiyor
     const kasaAc = ps1.slice(ps1.indexOf('if ($KasaAc) {'), ps1.indexOf('if ($Bekci) {'));
     expect(kasaAc).not.toContain('Test-KasaBakim');

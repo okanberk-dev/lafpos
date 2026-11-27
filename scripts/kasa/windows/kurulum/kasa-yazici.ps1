@@ -206,7 +206,7 @@ function Test-Server([string]$base) {
 # pencere olmadan devam edilir
 # Kasa penceresi acma istegi (kasa kisayolu birakir, bekci sunucu gelince acar ve siler). Bekci kapanan pencereyi kendiliginden
 # acmaz: yalniz bu istek varken acar. 30 dakikadan eski istek bayat sayilir (kullanici o arada vazgecmistir)
-$KasaAcIstegi = Join-Path $env:LOCALAPPDATA 'LafPOS\kasa-ac.istek'
+$KasaAcIstegi = Join-Path $env:LOCALAPPDATA 'LafPOS\kasa-ac.istek' # eski-ad
 function Set-KasaAcIstegi {
   try {
     New-Item -ItemType Directory -Path (Split-Path $KasaAcIstegi) -Force | Out-Null

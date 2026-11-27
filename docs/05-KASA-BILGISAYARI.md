@@ -244,7 +244,7 @@ menüsündeki ve Başlangıç'taki **AsilPOS Kasa** kısayolu konsolsuz PowerShe
 2. Açık değilse küçük bir **"AsilPOS açılıyor"** penceresi görünür (görev çubuğunda AsilPOS simgesiyle; kendi iş
    parçacığında, bekleme onu dondurmaz). Kasa bekçisi açılır, sunucu en çok 90 sn beklenir, yazıcılar bildirilir,
    müşteri ekranı açılır, kasa penceresi açılır, küçük pencere kapanır. Sunucu 90 sn'de gelmezse pencere açılmaz (hata
-   sayfası kalmaz): kısayol bir açma isteği bırakır (`%LocalAppData%\LafPOS\kasa-ac.istek`), sunucu gelince bekçi
+   sayfası kalmaz): kısayol bir açma isteği bırakır (kasa profilinin yanında `kasa-ac.istek`), sunucu gelince bekçi
    pencereyi açar ve isteği siler (30 dakikadan eski istek sayılmaz).
 
 **Kapatınca kapanır** (sahibin isteği, 28 Kasım 2026; bekçi sürümü 6): kullanıcı kasa penceresini kapatırsa bekçi onu
