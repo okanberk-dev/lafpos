@@ -96,6 +96,10 @@ ekran `src/pages/admin/ConnectionsAdmin.tsx`, testler `tests/baglanti.test.ts` (
   "(deneme bittikten sonra)" gibi notlar düşer, tanınmayan satırlar söylenir.
 - Git ile çalışan sunucuda ve tarayıcı demosunda panelden yazılmaz (`.env` elle); e2e sunucusu veri klasöründe bir
   `ayarlar.env` ile açılır (`ASILPOS_AYAR_DOSYASI`).
+- **Şube kurulumu kartı** (27 Kasım 2026, salt durum): kasanın şubesi (seçilmediyse neyin beklediği), ladmin'e verilmeyi
+  bekleyen kurulum kodu, son denemenin saati ve hatası (kalıcı hata: ladmin › Şubeler'den yeni bağlantı; geçici hata:
+  kod durdukça 5 dakikada bir yeniden denenir) ve Merkez kapalıyken (`ASILPOS_MERKEZ_URL=0`) Marina dışındaki şubenin
+  uyarısı. Görmek ayar yetkisiyle; kod ve anahtar gösterilmez (`docs/03-ENTEGRASYON.md` §4c).
 
 **Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
 (`brew install makensis`, `apt install nsis`; Windows'ta NSIS 3, PATH'te değilse `Program Files\NSIS`'te aranır,
@@ -139,6 +143,15 @@ Yeni şubede kurucu ladmin'den gelir: ana yönetici şubeyi e-postasıyla ekleyi
 Hesabım sayfasına) şubeye özel indirme bağlantısı gider. Kasa bilgisayarında açılıp inen `AsilPOS-Kur-<şube>.cmd`
 çalıştırılır; kurulum bitince kasa şubesini, gün sonu bağlantısını ve AsilPOS Uzaktan'ı kendiliğinden alır, Merkez'e
 şubenin adıyla kaydolur. Şube kimliği ya da anahtar elle yazılmaz (`docs/03-ENTEGRASYON.md` §4b).
+
+**Her şubenin kendi kasası (27 Kasım 2026).** Yeni kurulum şubesiz açılır (eskiden `marina` varsayılırdı): şube ladmin
+kurulumundan gelene dek gün sonu, devir, personel listesi, site ve platform anahtarları bekler; Yönetim › Bağlantı
+bilgileri › Şube kurulumu ve Entegrasyon bunu söyler, hata vermez. Kapanan günler giden kutusunda kalır, şube gelince
+hemen gider. Kurulum kodu olmadan elle kurulan kasada şubeyi patron Yönetim › Ayarlar ve yedek › Şube kimliği'ne yazar.
+Çok şubeli sürümden önce kurulmuş kasa (geçmişi olan, şube satırı olmayan) ilk açılışta `marina`'yı kalıcı yazar ve
+Marina'nın kasası olarak sürer. Bugünkü panel tek AsilPOS şubesinin gününü alır: ikinci şubenin günleri `wrong_branch`
+ile kasada bekler, günde bir yeniden denenir; panel şubeyi kasanın anahtarından tanıyınca kendiliğinden gider. Ayrıntı
+`docs/03-ENTEGRASYON.md` §4c.
 
 ### İlk açılış: deneme modu, sonra gerçek kullanım
 
@@ -334,7 +347,9 @@ seçtirir; seçilen yedek indirilir, çözülür, SQLite olduğu doğrulanır ve
 bekler. Sunucu kapanır; bekçi açmadan önce mevcut veritabanının kopyasını alır
 (`backups\lafpos-geri-yukleme-oncesi-<an>.db`) ve yedeği yerine koyar (`geri-yukle.mjs`), AsilPOS yarım dakikada
 yeniden açılır. **Yeni bilgisayarda:** AsilPOS'u kurup ayarlar.env'e aynı `ASILPOS_CLOUD_URL` ve `ASILPOS_CLOUD_SECRET`
-yazılınca eski bilgisayarın yedekleri listede "Kurulum" seçiminden bulunur. Denetim kaydına yazılır.
+yazılınca eski bilgisayarın yedekleri listede "Kurulum" seçiminden bulunur. Denetim kaydına yazılır. **Başka şubenin
+yedeği** (27 Kasım 2026) şubesi belli kasaya yüklenmez: yedeğin şubesi kasanınkinden farklıysa 409 `wrong_branch`, hazır
+dosya bırakılmaz (`docs/03-ENTEGRASYON.md` §4c).
 
 ### Otomatik güncelleme (anahtarsız)
 
