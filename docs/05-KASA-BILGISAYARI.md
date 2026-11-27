@@ -624,7 +624,10 @@ Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepe
 | Fark | programı içinde taşır (internetsiz kurar); kaldırıcı `Kaldir.exe` | programı indirir; kaldırıcı `LafPOS-Kaldir.ps1`; şube kodu (ladmin) |
 
 Kısayol listesi tek yerde (`kurulum-yenile.mjs` `shortcutSpec`); güncelleme aynı listeyi aynı betikle (`kisayollar.ps1`)
-yeniler. Biri kuruluyken öbürüyle onarılır ya da güncellenir. İndir sayfası (AsilPOS Uzaktan) bunu söyler; kurulum
+yeniler. Biri kuruluyken öbürüyle onarılır ya da güncellenir. Türkçe harfli adlar ("AsilPOS ayarları", "Sunucu günlüğü",
+"AsilPOS'u kaldır"): Windows'un kısayol nesnesi (WScript.Shell) yolu "Unicode olmayan programlar" diline çevirir; Türkçe
+olmayan Windows'ta ad en yakın harfle yazılırdı ("ayarlari.lnk"; Windows CI, 27 Kasım). Kısayol aynı klasörde ASCII adlı
+geçici kopyada yazılıp asıl adına kopyalanır (`kisayollar.ps1`, `web-kurucu.ps1`); Türkçe Windows'ta sonuç aynı. İndir sayfası (AsilPOS Uzaktan) bunu söyler; kurulum
 dosyası hâlâ GitHub'dan (depo özel). Siteden doğrudan `.exe` vermek için iki yol var, ikisi de sahibin bir anahtar
 eklemesini ister: Vercel'de GitHub'ın salt okunur anahtarıyla sürüm dosyasının kısa ömürlü adresine yönlendiren bir uç ya
 da CI'ın dosyayı herkese açık Blob deposuna yüklemesi. Bugün siteden kurulum aynı programı kurduğu için gerekmez.

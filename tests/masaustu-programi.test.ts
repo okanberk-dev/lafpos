@@ -218,7 +218,7 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
   it('kisayollar.ps1: kurulumda grup seçimi, güncellemede koşul; .url ve çalıştırılan dosyanın denetimi', () => {
     const ps = read(`${K}kisayollar.ps1`);
     expect(ps).toContain("[switch]$Kur, [string]$Gruplar = ''");
-    const dongu = between(ps, 'foreach ($k in $items)', '$s = $sh.CreateShortcut($yol)');
+    const dongu = between(ps, 'foreach ($k in $items)', '$s = $sh.CreateShortcut($gecici)');
     const kur = dongu.indexOf('if ($Kur) {');
     const kosul = dongu.indexOf('} elseif ($k.kosul) {');
     expect(kur).toBeGreaterThan(0);
@@ -227,6 +227,25 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     expect(dongu).toContain("Set-Content -LiteralPath $yol -Value @('[InternetShortcut]', ('URL=' + [string]$k.url), ('IconFile=' + [string]$k.ikonDosyasi), 'IconIndex=0') -Encoding ASCII");
     expect(dongu).toContain("if ($k.dosya -and -not (Test-Path -LiteralPath ([string]$k.dosya))) { throw ('dosya yok: ' + $k.dosya) }");
     expect(/^[\x00-\x7f]*$/.test(readFileSync(new URL(`${K}kisayollar.ps1`, root), 'latin1'))).toBe(true);
+  });
+
+  it('Türkçe harfli kısayol adı (AsilPOS ayarları.lnk) Türkçe olmayan Windows\'ta da doğru yazılır ve okunur', () => {
+    // WScript.Shell kısayol yolunu ANSI'ye çevirir: Windows CI'da (27 Kasım) "ayarları" "ayarlari.lnk" diye yazıldı.
+    // Kısayol ASCII adlı geçici kopyada açılıp yazılır, asıl adına .NET kopyalar; WScript.Shell'e asıl ad hiç verilmez
+    const ps = read(`${K}kisayollar.ps1`).replace(/\r\n/g, '\n');
+    expect(ps).toContain("return Join-Path $dir ('~asilpos-' + [guid]::NewGuid().ToString('N') + '.lnk')");
+    expect(ps).not.toMatch(/CreateShortcut\(\$(yol|f\.FullName)\)/);
+    const yaz = between(ps, '$gecici = New-TempLink $dir', 'foreach ($ad in @($k.eski))');
+    for (const t of ['[System.IO.File]::Copy($yol, $gecici, $true)', '$s = $sh.CreateShortcut($gecici)', '$s.Save()', '[System.IO.File]::Copy($gecici, $yol, $true)', 'Remove-Item -LiteralPath $gecici']) expect(yaz, t).toContain(t);
+    expect(yaz.indexOf('$s.Save()')).toBeLessThan(yaz.indexOf('[System.IO.File]::Copy($gecici, $yol, $true)'));
+    // Kaldırma kısayolu (AsilPOS'u kaldır.lnk) da kopyadan okunur
+    expect(ps).toContain('[System.IO.File]::Copy($f.FullName, $gecici, $true)');
+    const web = read(`${K}web-kurucu.ps1`).replace(/\r\n/g, '\n');
+    expect(web).not.toContain('CreateShortcut($Yol)');
+    expect(web).toContain('$k = $kabukNesnesi.CreateShortcut($gecici)');
+    expect(web).toContain('[System.IO.File]::Copy($gecici, $Yol, $true)');
+    const ci = read(`${K}ci-windows.ps1`).replace(/\r\n/g, '\n');
+    expect(between(ci, 'function Read-Link', "switch ($Islem)")).toContain('$l = $sh.CreateShortcut($gecici)');
   });
 
   it('kurulum dosyası kısayolları elle yazmaz: seçilen grupları sondaki bölümde aynı komuta verir', () => {

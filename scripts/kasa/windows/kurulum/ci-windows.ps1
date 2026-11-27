@@ -39,9 +39,17 @@ function Read-Link([string]$yol) {
     $url = (Get-Content -LiteralPath $yol | Where-Object { $_ -like 'URL=*' } | Select-Object -First 1)
     return [ordered]@{ yol = $yol; ad = (Split-Path -Leaf $yol); url = ([string]$url).Substring(4) }
   }
-  $sh = New-Object -ComObject WScript.Shell
-  $l = $sh.CreateShortcut($yol)
-  return [ordered]@{ yol = $yol; ad = (Split-Path -Leaf $yol); hedef = $l.TargetPath; arguman = $l.Arguments; calismaKlasoru = $l.WorkingDirectory; ikon = $l.IconLocation; pencere = $l.WindowStyle }
+  # WScript.Shell kisayol yolunu ANSI'ye cevirir: Turkce harfli ad (AsilPOS ayarlar{i}.lnk) Turkce olmayan Windows'ta
+  # okunamaz (bos doner). ASCII adli gecici kopyadan okunur (kisayollar.ps1 de boyle yazar)
+  $gecici = Join-Path $env:TEMP ('asilpos-ci-' + [guid]::NewGuid().ToString('N') + '.lnk')
+  try {
+    [System.IO.File]::Copy($yol, $gecici, $true)
+    $sh = New-Object -ComObject WScript.Shell
+    $l = $sh.CreateShortcut($gecici)
+    return [ordered]@{ yol = $yol; ad = (Split-Path -Leaf $yol); hedef = $l.TargetPath; arguman = $l.Arguments; calismaKlasoru = $l.WorkingDirectory; ikon = $l.IconLocation; pencere = $l.WindowStyle }
+  } finally {
+    Remove-Item -LiteralPath $gecici -Force -ErrorAction SilentlyContinue
+  }
 }
 
 switch ($Islem) {

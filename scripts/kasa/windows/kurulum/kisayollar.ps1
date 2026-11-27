@@ -20,6 +20,14 @@ param([Parameter(Mandatory = $true)][string]$Liste, [string]$EskiMenu = '', [str
 $ErrorActionPreference = 'Stop'
 $hata = 0
 $secili = @($Gruplar.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+# Kisayol adi Turkce harfli olabilir (AsilPOS ayarlar{i}.lnk). WScript.Shell'in kisayol nesnesi dosya yolunu Windows'un
+# "Unicode olmayan programlar" diline (ANSI) cevirir: Turkce olmayan Windows'ta (Windows CI, 27 Kas 2026) ad en yakin harfle
+# yazilir (ayarlari.lnk), dogru adli kisayol da okunamaz. Kisayol ayni klasorde ASCII adli gecici kopyada acilir ve
+# yazilir; asil adina .NET kopyalar (Unicode). Turkce Windows'ta ad zaten dogruydu: sonuc ayni
+function New-TempLink([string]$dir) {
+  return Join-Path $dir ('~asilpos-' + [guid]::NewGuid().ToString('N') + '.lnk')
+}
 try {
   # PowerShell 5.1'de ConvertFrom-Json diziyi tek nesne olarak verir: ForEach-Object diziyi ogelerine acar
   $parsed = ConvertFrom-Json (Get-Content -LiteralPath $Liste -Raw -Encoding UTF8)
@@ -48,13 +56,22 @@ if ($Kurulum -and $Kayit -and $YeniMenu) {
           $mk = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $m
           if (-not (Test-Path -LiteralPath $mk)) { continue }
           foreach ($f in @(Get-ChildItem -LiteralPath $mk -Filter '*.lnk' -File -Force)) {
-            $l = $sh.CreateShortcut($f.FullName)
-            if ([string]$l.TargetPath -eq $exe) {
-              $l.TargetPath = $psExe
-              $l.Arguments = $psArg
-              $l.WorkingDirectory = $Kurulum
-              if (Test-Path -LiteralPath $ikon) { $l.IconLocation = $ikon + ',0' }
-              $l.Save()
+            if ($f.Name -like '~asilpos-*') { continue }
+            # Kaldirma kisayolunun adi Turkce harfli (AsilPOS'u kald{i}r.lnk): ASCII adli kopyadan okunur
+            $gecici = New-TempLink $mk
+            try {
+              [System.IO.File]::Copy($f.FullName, $gecici, $true)
+              $l = $sh.CreateShortcut($gecici)
+              if ([string]$l.TargetPath -eq $exe) {
+                $l.TargetPath = $psExe
+                $l.Arguments = $psArg
+                $l.WorkingDirectory = $Kurulum
+                if (Test-Path -LiteralPath $ikon) { $l.IconLocation = $ikon + ',0' }
+                $l.Save()
+                [System.IO.File]::Copy($gecici, $f.FullName, $true)
+              }
+            } finally {
+              Remove-Item -LiteralPath $gecici -Force -ErrorAction SilentlyContinue
             }
           }
         }
@@ -99,14 +116,22 @@ foreach ($k in $items) {
     if (-not (Test-Path -LiteralPath ([string]$k.hedef))) { throw ('hedef yok: ' + $k.hedef) }
     if ($k.dosya -and -not (Test-Path -LiteralPath ([string]$k.dosya))) { throw ('dosya yok: ' + $k.dosya) }
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $s = $sh.CreateShortcut($yol)
-    $s.TargetPath = [string]$k.hedef
-    $s.Arguments = [string]$k.arguman
-    $s.WorkingDirectory = [string]$k.calismaKlasoru
-    $s.IconLocation = [string]$k.ikon
-    $s.WindowStyle = [int]$k.pencere
-    $s.Description = [string]$k.aciklama
-    $s.Save()
+    # ASCII adli gecici kopyada yazilir, asil (Turkce harfli olabilen) adina kopyalanir (yukarida New-TempLink)
+    $gecici = New-TempLink $dir
+    try {
+      if (Test-Path -LiteralPath $yol) { [System.IO.File]::Copy($yol, $gecici, $true) }
+      $s = $sh.CreateShortcut($gecici)
+      $s.TargetPath = [string]$k.hedef
+      $s.Arguments = [string]$k.arguman
+      $s.WorkingDirectory = [string]$k.calismaKlasoru
+      $s.IconLocation = [string]$k.ikon
+      $s.WindowStyle = [int]$k.pencere
+      $s.Description = [string]$k.aciklama
+      $s.Save()
+      [System.IO.File]::Copy($gecici, $yol, $true)
+    } finally {
+      Remove-Item -LiteralPath $gecici -Force -ErrorAction SilentlyContinue
+    }
     foreach ($ad in @($k.eski)) {
       if (-not $ad) { continue }
       $eskiYol = Join-Path $kok ([string]$ad)

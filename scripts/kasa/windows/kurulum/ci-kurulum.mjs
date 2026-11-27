@@ -288,7 +288,7 @@ function checkLinks(links, label) {
   const have = new Map(links.map((k) => [low(`${k.klasor}\\${k.goreli}`), k]));
   for (const w of want) {
     const h = have.get(key(w));
-    if (!h) fail(`${label}: kısayol yok: ${w.klasor}\\${w.ad}`);
+    if (!h) fail(`${label}: kısayol yok: ${w.klasor}\\${w.ad} (olanlar: ${links.map((k) => `${k.klasor}\\${k.goreli}`).join(', ')})`);
     if (w.url) {
       if (h.url !== w.url) fail(`${label}: ${w.ad} adresi ${h.url}`);
       continue;

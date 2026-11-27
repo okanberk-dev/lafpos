@@ -378,15 +378,23 @@ try {
   # kurulumun kısayolları silinir. Kaldırma kısayolu kuruluma özgü (kurulum dosyasında Kaldir.exe)
   $ikon = (Join-Path $Kur 'asilpos.ico') + ',0'
   $kabukNesnesi = New-Object -ComObject WScript.Shell
+  # WScript.Shell kısayolun yolunu ANSI'ye çevirir: Türkçe olmayan Windows'ta "AsilPOS'u kaldır.lnk" "kaldir.lnk" diye
+  # yazılırdı (kurulum dosyasınınki doğru adla). ASCII adlı geçici kopyada yazılır, asıl adına .NET kopyalar (kisayollar.ps1)
   function Kisayol([string]$Yol, [string]$Hedef, [string]$Arguman, [string]$Aciklama, [int]$Pencere) {
-    $k = $kabukNesnesi.CreateShortcut($Yol)
-    $k.TargetPath = $Hedef
-    $k.Arguments = $Arguman
-    $k.WorkingDirectory = $Kur
-    $k.IconLocation = $ikon
-    $k.WindowStyle = $Pencere
-    $k.Description = $Aciklama
-    $k.Save()
+    $gecici = Join-Path (Split-Path -Parent $Yol) ('~asilpos-' + [guid]::NewGuid().ToString('N') + '.lnk')
+    try {
+      $k = $kabukNesnesi.CreateShortcut($gecici)
+      $k.TargetPath = $Hedef
+      $k.Arguments = $Arguman
+      $k.WorkingDirectory = $Kur
+      $k.IconLocation = $ikon
+      $k.WindowStyle = $Pencere
+      $k.Description = $Aciklama
+      $k.Save()
+      [System.IO.File]::Copy($gecici, $Yol, $true)
+    } finally {
+      Remove-Item -LiteralPath $gecici -Force -ErrorAction SilentlyContinue
+    }
   }
   $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'AsilPOS'
   $masaustu = [Environment]::GetFolderPath('CommonDesktopDirectory')
