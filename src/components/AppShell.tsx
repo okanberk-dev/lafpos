@@ -1,4 +1,4 @@
-import { Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, SquarePlus, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MoreHorizontal, RotateCw, Search, Shrink, SlidersHorizontal, SquarePlus, WifiOff } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
@@ -134,6 +134,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     document.addEventListener('fullscreenchange', on);
     return () => document.removeEventListener('fullscreenchange', on);
   }, []);
+  /** Sayfayı yeniden yükler (kasa penceresinde tarayıcı düğmesi yok); kaydedilmemiş ayarı tarayıcı sorar (unsavedGuard) */
+  const reload = () => window.location.reload();
   const toggleFull = () => {
     setMenuOpen(false);
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => null);
@@ -453,6 +455,16 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                 </div>
               </>
             )}
+            {/*
+             * Yenile: kasa programının penceresinde tarayıcının yenile düğmesi yok (sahibin isteği, 28 Kas 2026). Sayfa
+             * yeniden yüklenir; gönderilmemiş kalemler cihazda durur (src/lib/cart.ts), kaydedilmemiş ayar varsa tarayıcı sorar
+             */}
+            <button type="button" onClick={reload} title="Ekranı yenile: sayfa yeniden yüklenir, gönderilmemiş kalemler kaybolmaz" aria-label="Ekranı yenile" className="lp-rail-item">
+              <span aria-hidden="true" className="lp-rail-icon">
+                <RotateCw />
+              </span>
+              <span className="lp-rail-label">Yenile</span>
+            </button>
             {/* Üst çubuk yokken kimin oturumda olduğu burada: kişinin avatarı ve adı (menüsünü açar); varken Araçlar */}
             {hasTabs ? (
               <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
@@ -675,6 +687,11 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               <LogOut aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
             </button>
           )}
+          {/* Telefonda ray yok: yenile burada */}
+          <button type="button" onClick={reload} className={drawerRow}>
+            <DrawerLabel hint="Sayfa yeniden yüklenir; gönderilmemiş kalemler kaybolmaz">Ekranı yenile</DrawerLabel>
+            <RotateCw aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
+          </button>
           {themeRow}
           {typeof document !== 'undefined' && document.fullscreenEnabled && (
             <button type="button" onClick={toggleFull} className={drawerRow}>
