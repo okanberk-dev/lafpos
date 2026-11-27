@@ -62,6 +62,11 @@ Son güncelleme: 26 Kasım 2026.
   200 döner, Pavo gün sonu ve kasa farkı bildirimi yine çalışır (otomatik gün sonu süreci düşürmez); lafmaliyet günü
   kalıcı reddederse (400/409/413/422) de sessiz kalmaz. İkisinde denetim kaydına alarm ve patrona bir kez telefon
   bildirimi (tür `lafmaliyet`: gün, neden, "Kasa › Geçmiş günler › Z › Gönder"; `docs/03-ENTEGRASYON.md` §4.11).
+- **Banka gün sonu kâğıdının kıyas başlığı yeni adla (27 Kasım 2026):** "PAVO - ASILPOS KARŞILAŞTIRMA"
+  (`src/lib/print.tsx` `BANKA_KIYAS_BASLIGI`); eski kasaların bastığı eski başlık `shared/eski-adlar.ts`
+  `ESKI_BANKA_KIYAS_BASLIGI`'nde belgeli. ladmin'in kâğıt okuyucusu lafmaliyet#166 ile ikisini de tanır; bu sürüm ondan
+  önce kurulursa yalnız yapay zekâ okuması kullanılamadığında kodla okuma kıyas satırlarını banka sayar (düşük güvenli
+  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir.
 - **Bağımlılık açıkları (27 Kasım 2026, Dependabot):** hono 4.13.23, @hono/node-server 2.1.11; drizzle-kit'in eski
   esbuild'i ve @vercel/blob altındaki eski zod `overrides` ile güncel sürüme bağlı. `npm audit` (üretim ve geliştirme)
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
@@ -163,8 +168,7 @@ PAVO_SERIAL=<cihazın seri numarası>
 2. **Ad değişikliğinin kalanları (ladmin ile birlikte):** (a) `docs/hesap-sozlesmesi.md` ladmin'deki kopyasıyla bayt
    bayt aynı kaldığı için eski adla duruyor; iki kopya aynı PR serisinde birlikte yeniden adlandırılır, iki depodaki
    SHA-256 sabiti birlikte değişir (ladmin'in ad değişikliği PR'ı bu dosyayı ya dışarıda bırakır ya da aynı baytlarla
-   değiştirir). (b) Banka gün sonu kâğıdının kıyas başlığı eski adla basılır (`shared/eski-adlar.ts`
-   `BANKA_KIYAS_BASLIGI`): ladmin'in kâğıt okuyucusu iki adı da tanıyınca yeni ada geçer. (c) Ayarlar dosyasına
+   değiştirir). (b) bitti (aşağıda). (c) Ayarlar dosyasına
    yazım eski adla (`shared/pos-env.ts` `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş
    gerekmeyince yeni ada geçer.
 3. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol

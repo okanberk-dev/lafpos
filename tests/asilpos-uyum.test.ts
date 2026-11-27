@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACILIS_KASA, BANKA_KIYAS_BASLIGI, ESKI_DEPO_ONEKI, ESKI_ENV_ONEKI, ESKI_URUN_ADI, TEL_KAYNAK } from '@shared/eski-adlar';
+import { ACILIS_KASA, ESKI_BANKA_KIYAS_BASLIGI, ESKI_DEPO_ONEKI, ESKI_ENV_ONEKI, ESKI_URUN_ADI, TEL_KAYNAK } from '@shared/eski-adlar';
 import { envDegeri, eskiEnvAdi, posEnv, posEnvAdi, posEnvDolu, yazilacakEnvAdi, yeniAdlarla, yeniEnvAdi } from '@shared/pos-env';
 import { type Harness, startApp } from './harness';
 
@@ -267,18 +267,53 @@ describe('tarayıcı deposu: eski önekli anahtarlar yeni öneke kopyalanır', (
 });
 
 describe("kâğıt: ladmin'in fotoğraftan okuduğu metin", () => {
-  it('banka gün sonu kâğıdının kıyas başlığı eski adla (eski panelin kodla okuyucusu banka satırlarını onda bitirir)', () => {
-    // lafmaliyet src/lib/photo-read/pavo-ocr.ts: katlanmış satır (büyük harf, Türkçe harfsiz, ayraçlar boşluk)
-    const katla = (s: string) =>
-      s
-        .toLocaleUpperCase('tr')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Z0-9 ]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    expect(katla(BANKA_KIYAS_BASLIGI)).toBe(`PAVO ${ESKI_URUN_ADI.toUpperCase()} KARSILASTIRMA`);
+  // lafmaliyet src/lib/photo-read/pavo-ocr.ts: katlanmış satır (büyük harf, Türkçe harfsiz, ayraçlar boşluk)
+  const katla = (s: string) =>
+    s
+      .toLocaleUpperCase('tr')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9 ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  // Fiş arayüz kodudur (tsconfig.app.json, DOM ve JSX): sunucu tsconfig'i onu türlemesin diye yol değişkenle
+  const PRINT = '../src/lib/print';
+  const print = () =>
+    import(/* @vite-ignore */ PRINT) as Promise<{ BANKA_KIYAS_BASLIGI: string; BankEodReceipt: import('react').FC<Record<string, unknown>> }>;
+  /** lafmaliyet#166'daki okuyucunun banka kısmını bitiren işareti (`BANK_END`): iki ad da */
+  const PANEL_BANKA_SONU = new RegExp(`PAVO (?:ASILPOS|${ESKI_URUN_ADI.toUpperCase()}) KARSILASTIRMA|PAVO CIHAZININ`);
+
+  it('banka gün sonu kâğıdının kıyas başlığı yeni adla; eski kasaların eski başlığı değişmez, panel ikisini de tanır', async () => {
+    const { BANKA_KIYAS_BASLIGI } = await print();
+    expect(BANKA_KIYAS_BASLIGI).toBe('PAVO - ASILPOS KARŞILAŞTIRMA');
+    expect(katla(BANKA_KIYAS_BASLIGI)).toBe('PAVO ASILPOS KARSILASTIRMA');
+    expect(katla(ESKI_BANKA_KIYAS_BASLIGI)).toBe(`PAVO ${ESKI_URUN_ADI.toUpperCase()} KARSILASTIRMA`);
+    for (const b of [BANKA_KIYAS_BASLIGI, ESKI_BANKA_KIYAS_BASLIGI]) expect(PANEL_BANKA_SONU.test(katla(b)), b).toBe(true);
     expect(read('src/lib/print.tsx')).toContain('<div className="rc-caption">{BANKA_KIYAS_BASLIGI}</div>');
+  });
+
+  it('basılan kâğıtta banka satırları kıyas başlığından önce biter, kıyas satırları başlıktan sonra', async () => {
+    const { createElement } = await import('react');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { BankEodReceipt } = await print();
+    const html = renderToStaticMarkup(
+      createElement(BankEodReceipt, {
+        boot: h.boot,
+        slip: { batchNo: '12', deviceDateTime: null, grandTotalKurus: 150_000, acquirers: [{ name: 'Akbank', count: 3, totalKurus: 150_000 }], dayCardKurus: 150_000, trigger: 'otomatik', at: Date.now() },
+      }),
+    );
+    // Satır satır (kâğıt okuyucusu gibi): ilk banka sonu işareti kıyas başlığı, Akbank ondan önce, kart toplamları sonra
+    const satirlar = html
+      .replace(/<\/(div|span)>/g, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .split('\n')
+      .map(katla)
+      .filter(Boolean);
+    const son = satirlar.findIndex((l) => PANEL_BANKA_SONU.test(l));
+    expect(satirlar[son]).toBe('PAVO ASILPOS KARSILASTIRMA');
+    expect(satirlar.findIndex((l) => l.startsWith('AKBANK'))).toBeLessThan(son);
+    expect(satirlar.findIndex((l) => l.startsWith('PAVO KART TOPLAMI'))).toBeGreaterThan(son);
+    expect(html).not.toContain(ESKI_BANKA_KIYAS_BASLIGI);
   });
 });
 
