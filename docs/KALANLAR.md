@@ -148,7 +148,7 @@ PAVO_SERIAL=<cihazın seri numarası>
 - **Stok ve reçete düşümü:** lafmaliyet'in tasarımı aylık sayım ve dönemsel FIFO (`docs/STOK-DEGERLEME.md`); satıştan
   anlık düşüm yok. Kritik stok uyarısı isteniyorsa önce lafmaliyet'te anlık stok tasarımı gerekir.
 - **Merkez için iki aşamalı giriş:** üye girişi davet kodu, parola ve deneme sınırıyla korunuyor. Telefonda doğrulama
-  uygulaması (TOTP) eklenebilir; sahip kullanmak isterse.
+  uygulaması (TOTP) isteğe bağlı eklenebilir; tasarım §4 madde 5'te, sahip isterse yapılır.
 - **Kod imzası:** sertifika alınırsa izlenecek yol `docs/05-KASA-BILGISAYARI.md` §2 "Kod imzası"; alınmazsa
   "Yine de çalıştır" anlatımı kalır.
 - **Kasa hareketi ladmin'e anında mı (25 Kasım 2026):** harcama ve teslim bugün gün sonu paketiyle (Z'den sonra)
@@ -183,7 +183,20 @@ PAVO_SERIAL=<cihazın seri numarası>
 3. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
 4. **Şube başına ayrı kafe anahtarı:** bitti (Main'de olanlar, 27 Kasım); kullanmak sahibin kararı (§2).
-5. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
+5. **Merkez için iki aşamalı giriş (TOTP), tasarım notu (27 Kasım 2026; yapılmadı):** isteğe bağlı, üye başına, varsayılan
+   kapalı. Bulut tarafı küçük ve tek yerde (`api/uzaktan.ts` üye girişi): üye kaydına (`UyeKaydi`) isteğe bağlı `t`
+   (TOTP sırrı, `ASILPOS_CLOUD_SECRET`'ten türeyen anahtarla AES-GCM şifreli: Redis tek başına sızarsa sır açılmaz).
+   `uzaktan/giris` parola tuttuktan sonra kayıtta `t` varsa `kod` ister: yoksa 401 `totp_required`, yanlışsa
+   `bad_totp` (IP başına 15 dakikada 8 deneme aynen); RFC 6238, 30 sn, ±1 adım; kullanılan adım
+   `${REDIS_ONEKI}totp:<eposta>` (EX 90) ile ikinci kez geçmez. `t`'siz üyenin girişi bugünkü gibi kalır. Uçlar üyenin
+   kendi oturumuyla: `uzaktan/iki-adim/baslat` (parolayla; sır 10 dk bekler, yanıtta `otpauth://` adresi, karekod `uqr`),
+   `.../onayla` (ilk kodla açar), `.../kapat` (parola ve kodla). **Neden şimdi yapılmadı:** (1) kurulum ekranı gerekir ve
+   bugün her üyenin kendi hesabını yönettiği bir yer yok (Uzaktan yönetim › Erişim yalnız sahibin): yeni "Hesabım" yüzeyi
+   (karekod, kod doğrulama, kapatma) ve giriş ekranında ikinci adım, `e2e/run.mjs` `ROUTES` ve tasarım turu ister;
+   (2) telefon kaybında kurtarma tasarlanmalı: sahip Erişim'de üyenin iki adımını sıfırlar, sahibin kendisi için ortamdan
+   tek seferlik yol (ör. `ASILPOS_UYE_IKI_ADIM_SIFIRLA=<eposta>`); (3) canlı Uzaktan girişini değiştirir: bir hata sahibi
+   dışarıda bırakır, ayrı bir bağımsız inceleme ister. Sıra: bulut uçları ve testleri → giriş ekranında ikinci adım →
+   Hesabım kartı → Erişim'de rozet ve sıfırlama. Örnek: ladmin'in isteğe bağlı iki adımlı girişi (lafmaliyet#154).
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
