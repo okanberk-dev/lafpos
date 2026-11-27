@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { GUN_SONU_OMRU_MS, HIZLI_NABIZ_MS, HIZLI_SURE_MS, KOMUT_ID_RE, type NabizKontrol, type SonucDurumu } from '@shared/kontrol';
 import { GECMIS_KEY, type HistoryDay } from '@shared/gecmis';
 import { type LicenseRecord, type LicenseView, licenseState, normalizeBranchCode, salesAllowed } from '@shared/lisans';
@@ -9,7 +9,8 @@ import { getOpenDay } from '../services/orders';
 import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
-import { subeEtiketi } from '@shared/baglanti';
+import { DUKKAN_KANIT_BASLIGI, dukkanKanitMetni, subeEtiketi } from '@shared/baglanti';
+import { kafeFetch, subeAnahtari } from '../lib/kafe-anahtari';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
 import { installedVersion, readUpdateStatus, UPDATE_CHOICE_KEY, type UpdateChoiceRecord, writeUpdateRequest } from '../lib/surum';
@@ -109,6 +110,18 @@ export const merkezLast = () => getSyncState<MerkezLast>(LAST);
  * Kimlik değişince rapor gönderimi geçmişi baştan iter (server/sync/cloud-reports.ts)
  */
 export const remoteShop = () => (merkezEnabled() ? identity().id : REMOTE_SHOP);
+
+/**
+ * Dükkânın şubeye bağlanma kanıtı (shared/baglanti.ts `DUKKAN_KANIT_BASLIGI`, api/_kafe.ts): kurulumun kendi anahtarıyla
+ * "bu dükkân bu şubenin". Özet ve rapor itmesine eklenir; bulut onu yalnız şube anahtarıyla imzalı istekte, Merkez'deki
+ * kurulum kaydının anahtarıyla doğrular. Şube anahtarı yoksa ya da Merkez kapalıysa (dükkân `default`) boş
+ */
+export function dukkanKaniti(): Record<string, string> {
+  const s = subeAnahtari();
+  if (!s || !merkezEnabled()) return {};
+  const me = identity();
+  return { [DUKKAN_KANIT_BASLIGI]: createHmac('sha256', me.key).update(dukkanKanitMetni(me.id, s.sube)).digest('base64url') };
+}
 
 /**
  * Kasanın şimdiki lisans durumu; Merkez kapalıysa null (uygulanmaz). Son başarılı nabzın anı onay anıdır: kasa Merkez'e
@@ -349,7 +362,7 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
   try {
     if (!me.registered) {
       // Kayıt kafenin ortak anahtarıyla imzalı (dışarıdan kimse kurulum açamaz); kurulumun kendi anahtarı içinde
-      const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt, ...kayitSube() }, 8000);
+      const res = await kafeFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt, ...kayitSube() }, 8000);
       if (res.status === 409) {
         // Kimlik başkasınca alınmış (eski rastgele kimlik): yeni anahtar ve ondan türeyen kimlik; sonraki nabız kaydolur
         const key = randomBytes(32).toString('base64url');

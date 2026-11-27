@@ -74,7 +74,7 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     derlemesinde) etiketi adresle saklar ve `If-None-Match` ile sorar; sürüm aynıysa 304 döner, özet Redis'ten
     okunmaz, ekran aynı nesneyi tutar. `auth/me` ve bar ekranının boş Hazır ve Geçmiş sekmeleri Redis'e hiç gitmez.
   - **Değişmeyen özet yeniden yazılmaz:** kasanın gün açıkken 5 dakikalık nabzı içerik aynıysa yalnız sürümü
-    ilerletir (HGET + HSET); özetin saatleri sunulurken sürümün anına çekilir, "son güncelleme" ve "Kafeden veri
+    ilerletir (HMGET + HSET; aynı okuma dükkânın şube bağını da getirir, §6); özetin saatleri sunulurken sürümün anına çekilir, "son güncelleme" ve "Kafeden veri
     gelmiyor" uyarısı eskisi gibi çalışır. Özetin süresi (7 gün) günde bir uzatılır; özet silinmişse sürüm düşer ve
     kasanın bir sonraki itmesi yazar. Eski ya da yeniden gönderilen özetin denetimi de yalnız sürümü okur.
   - **Yoklama:** gün açıkken 15 sn (kasa en sık 15 sn'de bir iter: satıştan ekrana en geç ~30 sn), gün kapalıyken
@@ -297,7 +297,8 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
 |---|---|
 | Vercel › `lafpos` projesi › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
 | Vercel › `lafpos` projesi › Environment Variables | Ad değişikliğinden önce girilen `LAFPOS_*` adları da okunur (aynı ayar iki adla girilirse `ASILPOS_*` geçer). `ASILPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `ASILPOS_UYE_EPOSTA` ve gizli `ASILPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `ASILPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `ASILPOS_UZAKTAN_PAROLA` (en az 10) |
-| Kafede `ayarlar.env` / `.env` | `ASILPOS_CLOUD_URL=https://lafpos.vercel.app`, `ASILPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
+| Kafede `ayarlar.env` / `.env` | `ASILPOS_CLOUD_URL=https://lafpos.vercel.app`, `ASILPOS_CLOUD_SECRET` (Vercel'dekiyle aynı); isteğe bağlı şube anahtarı `ASILPOS_CLOUD_SUBE_SECRET` (§6) |
+| Vercel › `lafpos` projesi › Environment Variables (şube anahtarı) | İsteğe bağlı, şube başına `ASILPOS_CLOUD_SECRET_<ŞUBE>` (ör. `ASILPOS_CLOUD_SECRET_MARINA`; en az 32 karakter, ortak anahtardan ve öbür şubelerinkinden farklı); §6 |
 | Vercel › `lafpos` projesi › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` (eski öneksiz `YEMEKSEPETI_REMOTE_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 | Vercel › `lafpos` projesi › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `ASILPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_<ŞUBE>_RESTAURANT_ID` (eski öneksiz `GETIR_RESTAURANT_ID` de sayılır; tanımlı her restoranın kendi gelen kutusu olur); aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
@@ -333,8 +334,80 @@ adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz
 | "Bu işlem için yetkiniz yok" | Uzaktan da rol yetkileri geçerli (Yönetim › Roller ve yetkiler) |
 | AsilPOS Uzaktan "Kafeden henüz veri gelmedi" | Kafede `ASILPOS_CLOUD_URL` ve `ASILPOS_CLOUD_SECRET`, Vercel'de aynı anahtar; Yönetim › Ağ'daki son hata |
 | AsilPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › `lafpos` projesi › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
+| Bağlantı bilgileri "Şube anahtarı bulutta yok ya da farklı" | Vercel'deki `ASILPOS_CLOUD_SECRET_<ŞUBE>` adı ve değeri kasadaki Şube anahtarıyla aynı mı, yeniden yayımlandı mı (§6) |
+| Platform kartında "Bu şubenin kendi anahtarı var" | Vercel'de şube anahtarı var ama kasada Şube anahtarı boş: aynı değeri kasaya yazın (§6) |
 
 Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts`, `server/sync/cloud.ts` ve `server/sync/cloud-reports.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`, `tests/uzaktan-raporlar.test.ts`.
+
+## 6. Şube anahtarı (şube başına ayrı Uzaktan anahtarı)
+
+Ortak anahtar (`ASILPOS_CLOUD_SECRET`) bütün şubelerin kasalarında aynıdır. Tek başına o, bir şubenin kasasının öbür
+şubenin platform anahtarlarını (Trendyol, Yemeksepeti), paket gelen kutusunu ve uzaktan görünümünü de isteyebilmesi
+demektir (`?sube=` ve `?restoran=` yalnız yanlışlık önlemiydi). Şube anahtarı bunu yetki sınırı yapar. İsteğe bağlıdır:
+anahtarı olmayan şube her şeyi eskisi gibi ortak anahtarla yapar; hiçbir şubeye anahtar verilmezse hiçbir şey değişmez.
+
+**Sahibin yapacağı (bir şube için, birkaç dakika; sıra önemli):**
+
+1. Bütün kasalar bu sürümde olmalı (Merkez'de her kasanın sürümü; kasa güncellemeyi yalnız gün kapalıyken kurar).
+   Eski kasada Şube anahtarı alanı yoktur: Vercel'e önce girilirse o şubenin kasası güncellenene dek ortak anahtarla
+   kalır ve şubenin paket siparişleri ile platform anahtarları gelmez (403 `branch_key_required`).
+2. Yeni bir anahtar üretin (en az 32 karakter; ör. Mac'te Terminal'de `openssl rand -hex 32`). Bunu yalnız bu şube
+   kullanacak: ortak anahtarla ya da başka şubeninkiyle aynı olmamalı.
+3. Önce kasa: o şubenin kasasında Yönetim › Bağlantı bilgileri › AsilPOS Uzaktan › **Şube anahtarı** alanına değeri
+   yapıştırıp Kaydet. Ortak anahtar alanına dokunmayın (ladmin onu güncel tutar). Vercel'de henüz yokken kasa ortak
+   anahtarla sürer, hiçbir şey kesilmez; kartta "Bulutta yok ya da farklı" yazması bu adımda normaldir.
+4. Sonra Vercel › `lafpos` projesi › Settings › Environment Variables › Add: ad `ASILPOS_CLOUD_SECRET_` ve şubenin adı
+   büyük harfle, Türkçe harfsiz (Marina için `ASILPOS_CLOUD_SECRET_MARINA`; adı kasada Yönetim › Bağlantı bilgileri'ndeki
+   platform kartı "Şube: MARINA" diye gösterir), değer kasaya yazılanla aynı, ortam Production, "Sensitive" işaretli.
+   Kaydedip Deployments › son Production dağıtımı › Redeploy.
+5. En geç 10 dakika sonra kasadaki kartta "Şube anahtarı kullanılıyor (Vercel'de ASILPOS_CLOUD_SECRET_MARINA)" yazmalı.
+   Hâlâ "Bulutta yok ya da farklı" yazıyorsa Vercel'deki ad ya da değer kasadakiyle aynı değildir. Bu durumda kasa
+   ortak anahtarla sürer, satış ve gün sonu etkilenmez, ama Vercel'de şube anahtarı olduğu için o şubenin paket
+   siparişleri ve platform anahtarları gelmez: değerleri hemen eşitleyin (ya da Vercel'deki satırı silip yeniden
+   yayımlayın).
+
+Geri almak: önce Vercel'deki satırı silip yeniden yayımlayın, sonra kasadaki Şube anahtarı alanını boşaltın. Anahtar
+kaybolursa yenisini üretip 3. ve 4. adımı yineleyin (Vercel'deki değer "Sensitive" olduğu için geri okunamaz).
+
+**Ne değişir (anahtarı olan şube için):**
+- Platform anahtarları (`GET /api/uzaktan/anahtarlar?sube=`) ve restoranının paket gelen kutusu (`?restoran=`, restoran
+  kimliği `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` / `GETIR_<ŞUBE>_RESTAURANT_ID` adındaki şubeden) yalnız bu anahtarla imzalı
+  isteğe açılır; ortak anahtarla gelen istek 403 `branch_key_required` alır (neden kasada Bağlantı bilgileri'nde görünür).
+  Sorgusuz eski kasa ortak listelerle yalnız açık restoranlarınkini görür.
+- Kasanın dükkânı (Merkez kurulum kimliği) şubeye bağlanır: kasa bu anahtarla imzalı özet ve rapor itmesine dükkânın
+  kendisi olduğunun kanıtını ekler (`x-laf-dukkan-kanit`: kurulumun kendi anahtarıyla HMAC; bulut Merkez'deki kurulum
+  kaydının anahtarıyla doğrular). Sonra o dükkânın özetini, raporlarını ve bulut yedeklerini başka kasa yazamaz,
+  listeleyemez, indiremez. Dükkân kimliği görünümün dükkân listesinden okunabilir ama kurulumun anahtarı yalnız o
+  kasada: kendi anahtarı olan başka şubenin kasası başkasının dükkânını kendine bağlayamaz (kanıtsız istek bağ kuramaz,
+  bağı değiştiremez). Aynı kurulum başka şubenin anahtarıyla kanıt getirirse (bilgisayar şube değiştirdi) bağ taşınır.
+  Bağ sürüm hash'inde (`lafpos:surum`) ayrı alanda (`sube:<dükkân>`), süresiz: özetin süresi dolup görünüm sürümü
+  silince de kalır. Kanıt yalnız bağ yokken ya da başka şubedeyken okunur (bir GET, bir HSET); bağlı dükkânın özet
+  itmesinde ve yedek uçlarında ek komut yok (sürümle aynı HMGET), rapor itmesinde bir HGET. Merkez kapalı kasanın
+  `default` dükkânı bağlanmaz.
+- İleri tarihli özet ya da rapor (kasanın saatinden 5 dakikadan fazla ileride) saklanmaz (400 `future`): saklansaydı
+  kasanın gerçek itmeleri "eski" sayılıp yazılmazdı. Daha önce yazılmış ileri tarihli kayıt yenisini kilitlemez.
+- Uzaktan yönetimin komutları ve kasanın açık anahtar imzası (`anahtarImza`) bu anahtarla, ama yalnız bulut onu kabul
+  ettikten sonra: kasa özetinde şubesini (`sube`) o zaman söyler, bulut imzayı ona göre seçer (`docs/UZAKTAN-YONETIM.md`).
+  Kabul kasada kalıcıdır (yeniden başlayınca da); bulut reddedince ortak anahtara döner.
+- Bulut yedeği bu anahtarla şifrelenir; geri yüklemede önce şube anahtarı, sonra ortak anahtar denenir (şube anahtarından
+  önce alınmış yedekler ortak anahtarla şifreli). Yeni bilgisayarda iki anahtar da yazılınca bütün yedekler açılır.
+- Merkez kaydı ve telefon bildirimi ikisini de kabul eder.
+
+**Nasıl çalışır.** Kasa (`server/lib/kafe-anahtari.ts`) şube anahtarı tanımlıysa ve şubesi belliyse Uzaktan'a giden her
+isteği onunla imzalar ve şubesini `x-laf-sube` başlığıyla söyler. Bulut (`api/_kafe.ts`) başlıktaki şubenin
+`ASILPOS_CLOUD_SECRET_<ŞUBE>`'si varsa yalnız onunla, yoksa ortak anahtarla doğrular; başlık imzaya girmez ama yanlış şubeyi
+söyleyen o şubenin anahtarını bilmeden imzayı tutturamaz. Başlıksız istek ortak anahtarla doğrulanır. Bulut şube
+anahtarını tanımıyorsa (401 `bad_signature`) kasa aynı isteği ortak anahtarla başlıksız yineler ve 10 dakika ortak
+anahtarla sürer, sonra şube anahtarını yeniden dener. Uzaktan yönetim bu denemeye katılmaz, bulutun son kabulüne bakar
+(yoksa deneme anında kasa şube anahtarına, bulut ortak anahtara bakar, komut reddedilirdi). Şube anahtarı geçersizse
+(32'den kısa, ortakla ya da başka şubeninkiyle aynı) bulut o şubeye 503 `branch_key_invalid` der, yedek, bildirim ve
+Merkez kaydında da: yanlışlık sessizce ortak anahtara düşmez, kasa nedeni Bağlantı bilgileri'nde gösterir. Neden yalnız
+imzası Vercel'deki değerle ya da ortak anahtarla tutan isteğe söylenir; anahtarı bilmeyen düz 401 alır. Getir'e verilen anahtar bir şube anahtarıyla aynıysa aktarıcı kurulmamış sayılır.
+
+Şube anahtarı ladmin'in dağıttığı satırdan ayrıdır (`ASILPOS_CLOUD_SUBE_SECRET`; ayarlar dosyasında eski önekle de
+okunur): ladmin ortak anahtarı değiştirse de şube anahtarına dokunmaz. Ortak anahtar kasada kalır (Uzaktan'ın açık olup
+olmadığı ve geçişteki yineleme ona bakar). Güvencenin sınırı: Vercel ortamını ele geçiren her şubeyi açar; şube anahtarı
+ortak anahtarı bilen başka şubenin kasasına karşıdır. Testler: `tests/sube-anahtari.test.ts`.
 
 ## Geçmiş ciro (AsilPOS'tan önceki kasa programı)
 

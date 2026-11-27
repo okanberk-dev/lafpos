@@ -42,7 +42,7 @@ import {
 import { ALL_PERMISSIONS, type Role, ROLES, rolePermissions } from '@shared/permissions';
 import { serviceModeOf } from '@shared/service-mode';
 import { db, schema, tx } from '../db/client';
-import { env } from '../env';
+import { kontrolAnahtari } from '../lib/kafe-anahtari';
 import { internalActors, isValidPin, remoteActor } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
@@ -138,14 +138,19 @@ export function kontrolDurumu(now = Date.now()): KontrolDurumu {
     .all();
   const matrix = s.rolePermissions;
   const pub = anahtar().pub;
+  const kafe = kontrolAnahtari();
   return {
     v: KONTROL_SURUM,
     at: now,
     acik: s.remoteControl !== false,
     turler: [...KOMUT_TURLERI],
     anahtar: pub,
-    // Bulut anahtarı panele yalnız bu imza tutarsa verir: Redis'e yazabilen biri anahtarı kendininkiyle değiştiremez
-    ...(env.cloudSecret.length >= MIN_SECRET_LENGTH ? { anahtarImza: createHmac('sha256', env.cloudSecret).update(anahtarImzaMetni(identity(now).id, pub)).digest('base64url') } : {}),
+    // Bulut anahtarı panele yalnız bu imza tutarsa verir: Redis'e yazabilen biri anahtarı kendininkiyle değiştiremez.
+    // İmza uzaktan yönetimin anahtarıyla (bulut kabul ettiyse şube anahtarı, değilse ortak; server/lib/kafe-anahtari.ts
+    // kontrolAnahtari); şube anahtarıyla imzalıysa şube de yazılır: bulut bu kasanın komutlarını o şubenin anahtarıyla
+    // imzalar, açık anahtarı onunla doğrular
+    ...(kafe.key.length >= MIN_SECRET_LENGTH ? { anahtarImza: createHmac('sha256', kafe.key).update(anahtarImzaMetni(identity(now).id, pub)).digest('base64url') } : {}),
+    ...(kafe.sube ? { sube: kafe.sube } : {}),
     personel: users.map((u) => ({ id: u.id, ad: u.name, rol: u.role, renk: u.color, aktif: u.active, indirim: u.maxDiscountPct, sonGiris: saatBasi(u.lastLoginAt) })),
     // Yetkiler listedeki sırayla: aynı set her zaman aynı parmak izini verir
     roller: ROLES.map((rol) => {
@@ -193,12 +198,15 @@ export function nabizIletildi(giden: NabizKontrol) {
 // ─── Komutlar ────────────────────────────────────────────────────────────────
 
 /**
- * İmza: doğrulanmış veriden imza metni, kafenin ortak anahtarıyla HMAC-SHA256 (base64url), sabit zamanlı karşılaştırma.
- * Kurulum kasanın kendi kimliği: başka şubenin kuyruğundan kopyalanan komut tutmaz
+ * İmza: doğrulanmış veriden imza metni, uzaktan yönetimin anahtarıyla (şube anahtarı varsa ve bulut onu kabul ettiyse o,
+ * yoksa ortak; server/lib/kafe-anahtari.ts kontrolAnahtari, özetteki `sube` ile aynı) HMAC-SHA256 (base64url), sabit
+ * zamanlı karşılaştırma. Şube anahtarı kullanılırken ortak anahtarla imzalı komut tutmaz. Kurulum kasanın kendi kimliği:
+ * başka şubenin kuyruğundan kopyalanan komut tutmaz
  */
 function imzaTutar(k: { id: string; tur: KomutTuru; veri: KomutVerisi; at: number; kim: string; rol: UyeRolu }, imza: string): boolean {
-  if (env.cloudSecret.length < MIN_SECRET_LENGTH) return false;
-  const beklenen = Buffer.from(createHmac('sha256', env.cloudSecret).update(imzaMetni({ ...k, kurulum: identity().id })).digest('base64url'));
+  const key = kontrolAnahtari().key;
+  if (key.length < MIN_SECRET_LENGTH) return false;
+  const beklenen = Buffer.from(createHmac('sha256', key).update(imzaMetni({ ...k, kurulum: identity().id })).digest('base64url'));
   const gelen = Buffer.from(imza.replace(/=+$/, ''));
   return gelen.length === beklenen.length && timingSafeEqual(gelen, beklenen);
 }

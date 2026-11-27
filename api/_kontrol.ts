@@ -76,6 +76,11 @@ export interface KontrolDeps {
   dukkan: () => Promise<string>;
   /** Kafenin ortak anahtarı (ASILPOS_CLOUD_SECRET): komut imzası */
   secret: string;
+  /**
+   * Kasanın şubesine göre imza anahtarı (api/_kafe.ts kafeAnahtari): kasa özetinde şubesini söylüyorsa (`sube`, yalnız
+   * şube anahtarıyla imzalarken) o şubenin kendi anahtarı, yoksa ortak anahtar. Verilmezse hep ortak anahtar
+   */
+  anahtar?: (sube: string | undefined) => string;
   /** Vercel ortamındaki sahip e-postaları (ASILPOS_UYE_EPOSTA); boşsa üyelik kapalı (parolalı ya da parolasız görünüm) */
   sahipler: string[];
   /** Üye kaydı değişti ya da silindi: oturum önbelleğinden düşsün */
@@ -162,7 +167,10 @@ async function govde(req: Request): Promise<Record<string, unknown> | Response> 
   return fail(400, 'İstek okunamadı', 'bad_body');
 }
 
-/** Komutun imzası: HMAC-SHA256(ASILPOS_CLOUD_SECRET, imzaMetni), base64url; kasa aynı metinden sabit zamanlı karşılaştırır */
+/**
+ * Komutun imzası: HMAC-SHA256(anahtar, imzaMetni), base64url; anahtar ASILPOS_CLOUD_SECRET ya da kasa şube anahtarıyla
+ * çalışıyorsa şubesininki (KontrolDeps.anahtar). Kasa aynı metinden sabit zamanlı karşılaştırır
+ */
 export const komutImzasi = (secret: string, k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>) => createHmac('sha256', secret).update(imzaMetni(k)).digest('base64url');
 
 /** Kasanın açık anahtarı kasadan mı geldi: imzası kafenin ortak anahtarıyla ve bu kurulumla tutuyor mu (sabit zamanlı) */
@@ -220,7 +228,7 @@ function alanlar<T>(o: Record<string, unknown>, keys: readonly (keyof T & string
 }
 function durumTemiz(d: KontrolDurumu): KontrolDurumu {
   return {
-    ...alanlar<KontrolDurumu>(d as unknown as Record<string, unknown>, ['v', 'at', 'acik', 'turler', 'anahtar', 'anahtarImza', 'servisModu']),
+    ...alanlar<KontrolDurumu>(d as unknown as Record<string, unknown>, ['v', 'at', 'acik', 'turler', 'anahtar', 'anahtarImza', 'servisModu', 'sube']),
     personel: (d.personel as unknown[]).filter(isRecord).map((p) => alanlar<KontrolPersonel>(p, ['id', 'ad', 'rol', 'renk', 'aktif', 'indirim', 'sonGiris'])),
     roller: (d.roller as unknown[]).filter(isRecord).map((r) => alanlar<KontrolRol>(r, ['rol', 'izinler', 'ozel', 'kisi'])),
   };
@@ -409,7 +417,7 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   const ad = typeof body.ad === 'string' ? ozetAdi(body.ad) : '';
   if (ad && veri.id && (d.tur === 'urun.satis' || d.tur === 'urun.gorunum' || d.tur === 'urun.gorsel' || d.tur === 'secenek.satis')) adlar[d.tur === 'secenek.satis' ? 'secenek' : 'urun'] = adHaritasi([[veri.id, ad]]);
   const temel = { id: `k_${randomBytes(18).toString('base64url')}`, tur: d.tur, veri: d.veri, at: now, kim, kurulum: id, rol: ben.rol };
-  const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.secret, temel) };
+  const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.anahtar?.(durum.sube) ?? deps.secret, temel) };
   await deps.redis('HSET', komutKey(id), kayit.id, JSON.stringify(kayit));
   await deps.redis('SET', varKey(id), '1');
   // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı yol (hedef, gönderim anı ve istek), bu gün sonuna
@@ -472,11 +480,11 @@ function kasaBilgisi(rawKurulum: unknown, rawNabiz: unknown): KontrolPaneli['kas
  * Panele giden özet: açık anahtar yalnız kasanın imzası (anahtarImza) tutarsa verilir, yoksa boş (arayüz PIN işlemlerini
  * kapatır, kasa bir sonraki özetinde imzalı anahtarı yeniden gönderir). İmzanın kendisi panele gitmez
  */
-function panelDurumu(raw: unknown, secret: string, kurulum: string): KontrolDurumu | null {
+function panelDurumu(raw: unknown, anahtar: (sube: string | undefined) => string, kurulum: string): KontrolDurumu | null {
   const d = parse<unknown>(raw);
   if (!durumGecerli(d)) return null;
   const { anahtarImza: _imza, ...rest } = d;
-  return { ...rest, anahtar: anahtarTutar(secret, kurulum, d) ? d.anahtar : '' };
+  return { ...rest, anahtar: anahtarTutar(anahtar(d.sube), kurulum, d) ? d.anahtar : '' };
 }
 
 async function panelVerisi(deps: KontrolDeps, ben: KontrolOturumu): Promise<KontrolPaneli> {
@@ -487,7 +495,7 @@ async function panelVerisi(deps: KontrolDeps, ben: KontrolOturumu): Promise<Kont
   const [rawDurum, rawVar, rawKurulum, rawNabiz] = ((await deps.redis('MGET', durumKey(id), varKey(id), ...merkezKeys(id))) as unknown[] | null) ?? [];
   const gecmis = gecmisOku(await deps.redis('LRANGE', gecmisKey(id), 0, GECMIS_EN_COK - 1));
   const bekleyen = rawVar != null ? (await kuyruk(deps.redis, id)).map((k) => satir(k)) : [];
-  return { ben, durum: panelDurumu(rawDurum, deps.secret, id), bekleyen, gecmis, kasa: kasaBilgisi(rawKurulum, rawNabiz) };
+  return { ben, durum: panelDurumu(rawDurum, (sube) => deps.anahtar?.(sube) ?? deps.secret, id), bekleyen, gecmis, kasa: kasaBilgisi(rawKurulum, rawNabiz) };
 }
 
 // ─── Uçlar ───────────────────────────────────────────────────────────────────

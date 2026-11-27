@@ -93,12 +93,13 @@ export const SITE_ISTEMCI = 'LafPOS/0.1 (+kafe kasasi)';
 /** Sitenin (laffogato) kasa belgesi: site deposu yeniden adlandırılmadı, belge bu adla durur */
 export const SITE_BELGESI = 'docs/LAFPOS.md';
 /**
- * Banka gün sonu kâğıdındaki (Pavo) kıyas bölümünün başlığı. ladmin kâğıdın fotoğrafını okur: kodla okuyucusu (yapay
- * zekâ kullanılamayınca) banka satırlarını bu başlıkta bitirir (lafmaliyet src/lib/photo-read/pavo-ocr.ts). Yeni adla
- * basılırsa eski panel kıyas satırlarını (Pavo ve kasa kart toplamı, FARK) banka sayar, tutarlar düşük güvenli olur.
- * Panel iki adı da tanıyınca (plan A1) yeni ada geçilebilir
+ * Banka gün sonu kâğıdındaki (Pavo) kıyas bölümünün eski başlığı: 27 Kasım 2026'ya kadarki kasalar bunu basar, eski
+ * fotoğraflarda da bu var. Yeni kasa yeni adla basar (src/lib/print.tsx `BANKA_KIYAS_BASLIGI`). ladmin kâğıdın
+ * fotoğrafını okur: kodla okuyucusu (yapay zekâ kullanılamayınca) banka satırlarını bu başlıkta bitirir; lafmaliyet#166
+ * ile iki adı da tanır (`PAVO (ASILPOS|<eski ad>) KARSILASTIRMA`, src/lib/photo-read/pavo-ocr.ts). O birleşmeden önceki
+ * panel yeni başlığı tanımaz: kıyas satırlarını banka sayar, tutarlar düşük güvenli olur (yapay zekâ okuması etkilenmez)
  */
-export const BANKA_KIYAS_BASLIGI = 'PAVO - LAFPOS KARŞILAŞTIRMA';
+export const ESKI_BANKA_KIYAS_BASLIGI = 'PAVO - LAFPOS KARŞILAŞTIRMA';
 
 // ─── Veritabanında duran değerler ────────────────────────────────────────────
 

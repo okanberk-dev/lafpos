@@ -100,8 +100,9 @@ describe('eski ad (ad değişikliği: ürün AsilPOS)', () => {
         .filter(([, v]) => typeof v === 'string')
         .sort(([a], [b]) => (a < b ? -1 : 1)),
     );
-    // Yeni bir eski ad eklenince bu özet bilerek güncellenir; var olan bir değer değişmemeli
-    expect(createHash('sha256').update(JSON.stringify(degerler)).digest('hex')).toBe('37b689ec43a1ff56c8846fd766c7e153d8137e6e59ab69fe0d5273978e3fdc8e');
+    // Yeni bir eski ad eklenince bu özet bilerek güncellenir; var olan bir değer değişmemeli. 27 Kasım 2026: yalnız ad
+    // değişti (BANKA_KIYAS_BASLIGI → ESKI_BANKA_KIYAS_BASLIGI, değer aynı; eski adla özet 37b689ec…)
+    expect(createHash('sha256').update(JSON.stringify(degerler)).digest('hex')).toBe('fc0866b4dff36e303f4549aa719955c9baa4180ac39cf7354220b774dfcc9d57');
   });
 
   it('tel altın dosyaları ladmin ile bayt bayt aynı kalır', () => {

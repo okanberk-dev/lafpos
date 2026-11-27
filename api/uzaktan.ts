@@ -2,7 +2,8 @@
  * AsilPOS Uzaktan (Vercel işlevi). Kafedeki AsilPOS sunucusu canlı özetini imzalı olarak buraya iter
  * (server/sync/cloud.ts); patron parolasıyla giren tarayıcı aynı arayüzü salt okunur görür. Kasa yerelde kalır.
  *
- * Ortam: ASILPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32), ASILPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
+ * Ortam: ASILPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32; isteğe bağlı şube başına ASILPOS_CLOUD_SECRET_<ŞUBE>,
+ * api/_kafe.ts), ASILPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
  * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
  * isteğe bağlı YEMEKSEPETI_<ŞUBE>_REMOTE_ID (ve eski öneksiz YEMEKSEPETI_REMOTE_ID; yalnız bu restoranların
@@ -19,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bildirim, broadcast } from './_bildirim.js';
 import { yedek } from './_yedek.js';
-import { merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './_merkez.js';
+import { kurulumAnahtari, merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './_merkez.js';
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
@@ -27,9 +28,10 @@ import { fillHistory, type HistoryDay, historyFlag, historyKey, type HistoryProd
 import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
-import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
+import { CLOUD_KEYS, DUKKAN_KANIT_BASLIGI, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 import { eskiEnvAdi } from '../shared/pos-env.js';
 import { REDIS_ONEKI } from '../shared/eski-adlar.js';
+import { dukkanKanitiTutar, type Kafe, kafeAnahtari, kafeKimligi, subeAnahtarlari, subeErisimi } from './_kafe.js';
 
 const SNAPSHOT_KEY = `${REDIS_ONEKI}snapshot`;
 const TOKEN_HOURS = 12;
@@ -333,6 +335,7 @@ async function loadVersions(): Promise<Versions> {
       if (Number(raw) > 0) gecmis[shop.slice(flag.length)] = Number(raw);
       continue;
     }
+    if (shop.startsWith(BAG_ONEKI)) continue;
     const v = parseVersion(raw);
     if (v && SHOP_RE.test(shop)) map[shop] = v;
   }
@@ -398,12 +401,21 @@ function freshen(snap: Snapshot, v: SnapVersion | null | undefined): Snapshot {
  * yalnız sürüm ilerler; süresi günde bir uzatılır (yoksa yazılır). Sürüm özetten sonra yazılır: görünüm sürümü görünce
  * özet hep yerindedir. Sürümü olmayan dükkân (bu sürümden önce itmiş) bir kez özetin kendisinden denetlenir
  */
-async function storeSnapshot(shop: string, snap: Snapshot): Promise<Response> {
-  const prev = parseVersion(await redis('HGET', VERSIONS_KEY, shop));
-  const prevAt = prev ? prev.at : ((await snapshot(shop))?.at ?? null);
+async function storeSnapshot(req: Request, shop: string, snap: Snapshot, kafe: Kafe): Promise<Response> {
+  const now = Date.now();
+  // İleri tarihli özet saklanmaz: saklansaydı kasanın gerçek itmeleri "eski" sayılıp hiç yazılmazdı. İmza zaten saati
+  // SKEW_S içinde olan kasadan gelir; özetin anı da en çok o kadar ileride olabilir
+  if (typeof snap.at === 'number' && snap.at > now + SKEW_S * 1000) return fail(400, 'Özetin saati sunucudan ileride', 'future');
+  // Sürüm ve dükkânın şube bağı tek okumada (aynı hash'in iki alanı: ek komut yok)
+  const [rawPrev, rawBag] = ((await redis('HMGET', VERSIONS_KEY, shop, bagAlani(shop))) as unknown[] | null) ?? [];
+  const prev = parseVersion(rawPrev);
+  // Şubeye bağlı dükkânı yalnız o şubenin kendi anahtarı yazar; bağ "eski özet" denetiminden önce (api/_kafe.ts)
+  const red = await dukkanErisimi(req, kafe, shop, rawBag);
+  if (red) return red;
+  // Önceki sürümün anı ileride (bu düzeltmeden önce yazılmış ileri tarihli özet) ise yok sayılır
+  const prevAt = ileriyiAt(prev ? prev.at : ((await snapshot(shop))?.at ?? null), now);
   if (prevAt != null && typeof snap.at === 'number' && snap.at <= prevAt) return json({ ok: true, stale: true });
   const sums = snapshotSums(snap);
-  const now = Date.now();
   const same = !!prev && prev.h === sums.h;
   let w = prev?.w ?? 0;
   if (same && now - w > SNAPSHOT_REFRESH_MS) {
@@ -422,6 +434,51 @@ async function storeSnapshot(shop: string, snap: Snapshot): Promise<Response> {
   return json({ ok: true, ...(write ? {} : { unchanged: true }) });
 }
 
+/**
+ * Dükkânın şube bağı (api/_kafe.ts, docs/07-UZAKTAN-ERISIM.md §6): sürüm hash'inde (`VERSIONS_KEY`) `sube:<dükkân>`
+ * alanı, değeri şube etiketi. Süresiz; görünüm (süresi dolan özetin sürümünü silerken) ve özetin kendisi ona dokunmaz.
+ * Alan adı dükkân kimliği kalıbına (`SHOP_RE`) uymaz: dükkân başlığıyla gelen hiçbir yazma ya da silme onu tutturamaz
+ */
+const BAG_ONEKI = 'sube:';
+const bagAlani = (shop: string) => `${BAG_ONEKI}${shop}`;
+const bagOf = (raw: unknown): string | null => (typeof raw === 'string' && raw ? raw : null);
+/** Saklı anın sunucu saatinden SKEW_S'den fazla ileride olanı yok sayılır (null): ileri tarihli kayıt yenisini kilitlemez */
+const ileriyiAt = (at: number | null | undefined, now: number): number | null => (typeof at === 'number' && at <= now + SKEW_S * 1000 ? at : null);
+
+/**
+ * Kasanın dükkâna yazma hakkı ve dükkânın şubeye bağlanması. Şube anahtarıyla imzalı istek dükkânın kendisi olduğunu
+ * kanıtlarsa (`DUKKAN_KANIT_BASLIGI`: kurulumun kendi anahtarıyla imzalı, Merkez kaydındaki anahtarla doğrulanır) dükkân
+ * o şubeye bağlanır (bilgisayar şube değiştirdiyse taşınır); kanıtsız istek bağ kuramaz, bağı değiştiremez. Dükkân kimliği
+ * görünümün dükkân listesinden okunabilir; kurulumun anahtarı yalnız o kasada. Kanıt yalnız bağ yokken ya da başka
+ * şubedeyken okunur (bağlı dükkânın itmesinde ek komut yok). Sonra erişim: bağlı dükkân yalnız o şubenin kendi anahtarıyla
+ */
+async function dukkanErisimi(req: Request, kafe: Kafe, shop: string, rawBag: unknown): Promise<Response | null> {
+  const bag = bagOf(rawBag);
+  if (kafe.kendi && kafe.sube && bag !== kafe.sube && shop !== REPORT_SHOP) {
+    const kanit = req.headers.get(DUKKAN_KANIT_BASLIGI);
+    const anahtar = kanit ? await kurulumAnahtari(redis, shop) : null;
+    if (anahtar && dukkanKanitiTutar(anahtar, shop, kafe.sube, kanit)) {
+      await redis('HSET', VERSIONS_KEY, bagAlani(shop), kafe.sube);
+      return null;
+    }
+  }
+  return subeErisimi(kafe, bag, secret());
+}
+
+/**
+ * Bulut yedeği: dükkânlardan bu kasanın açabildikleri. Şubeye bağlı dükkân (`bagAlani`) yalnız o şubenin kendi
+ * anahtarıyla; bağsız dükkân ortak anahtarla imzalı her kasaya (eskisi gibi). Tek HMGET (api/_kafe.ts)
+ */
+async function openShops(kafe: Kafe, shops: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!shops.length) return out;
+  const raw = (await redis('HMGET', VERSIONS_KEY, ...shops.map(bagAlani))) as unknown[] | null;
+  shops.forEach((shop, i) => {
+    if (!subeErisimi(kafe, bagOf(raw?.[i]), secret())) out.add(shop);
+  });
+  return out;
+}
+
 /** İstek boyunca bir kez: aynı istekte demo kapısı ve görünüm sürümü ayrı ayrı okumaz */
 const once = <T>(f: () => Promise<T>) => {
   let p: Promise<T> | null = null;
@@ -438,12 +495,16 @@ const once = <T>(f: () => Promise<T>) => {
 export async function platformKeys(req: Request, url: URL): Promise<Response> {
   if (secret().length < 32) return fail(503, 'AsilPOS Uzaktan kurulmamış (ASILPOS_CLOUD_SECRET)', 'not_configured');
   if (req.method !== 'GET') return fail(405, 'Yalnız GET', 'method_not_allowed');
-  if (!verifyPush(secret(), req, url, '')) return fail(401, 'İmza geçersiz', 'bad_signature');
+  const kafe = kafeKimligi(req, url, '', secret(), verifyPush);
+  if (kafe instanceof Response) return kafe;
   // Şubeye göre: kasa kendi şubesini imzalı sorguda gönderir (?sube=marina); yalnız <PLATFORM>_<ŞUBE>_<ALAN> okunur,
-  // öneksiz eski adlar kimseye gitmez, şubesiz (eski) istemci boş alır. Yanıtta adlar kasanın bildiği öneksiz biçimde
+  // öneksiz eski adlar kimseye gitmez, şubesiz (eski) istemci boş alır. Yanıtta adlar kasanın bildiği öneksiz biçimde.
+  // Şubenin kendi anahtarı varsa (ASILPOS_CLOUD_SECRET_<ŞUBE>) yalnız onunla imzalı istek alır (api/_kafe.ts)
   const sube = subeEtiketi(url.searchParams.get('sube'));
   const anahtarlar: Record<string, string> = {};
   if (sube) {
+    const red = subeErisimi(kafe, sube, secret());
+    if (red) return red;
     for (const key of CLOUD_KEYS) {
       const v = env(subeKeyName(key, sube));
       if (v) anahtarlar[key] = v;
@@ -502,12 +563,13 @@ export function pushLists(base: InboxLists, known: ReadonlySet<string>, id: unkn
  * listesi, tanımlı değilse ortak iki liste. Sorgusuz eski kasa ortak listelerle birlikte bütün tanımlı restoranlarınkini
  * görür: güncellenene dek siparişi kaçmasın (eskisi gibi hepsini çeker)
  */
-export function pullLists(base: InboxLists, known: ReadonlySet<string>, restoran: string | null): string[] {
+export function pullLists(base: InboxLists, known: ReadonlySet<string>, restoran: string | null, acik: (id: string) => boolean = () => true): string[] {
   if (restoran != null) {
     const own = pushLists(base, known, restoran);
     return [own.status, own.inbox];
   }
-  const all = [base, ...[...known].sort().map((id) => restaurantLists(base, id))];
+  // Sorgusuz istekte kendi anahtarı olan şubenin restoranı yalnız o şubenin imzasına açılır (`acik`, api/_kafe.ts)
+  const all = [base, ...[...known].filter(acik).sort().map((id) => restaurantLists(base, id))];
   return [...all.map((l) => l.status), ...all.map((l) => l.inbox)];
 }
 
@@ -526,6 +588,31 @@ function envIds(legacy: string, pattern: RegExp): Set<string> {
     if (id) ids.add(id);
   }
   return ids;
+}
+
+/**
+ * Restoranın şubesi: değeri bu kimlik olan ilk `<PLATFORM>_<ŞUBE>_<ALAN>` adındaki ŞUBE (adlar sıralı); öneksiz eski
+ * addaki ya da tanımsız kimlikte null (şubesiz: ortak anahtarla imzalı her kasaya açık)
+ */
+export function restoranSubesi(pattern: RegExp, id: string, vars: Readonly<Record<string, string | undefined>> = process.env): string | null {
+  for (const name of Object.keys(vars).sort()) {
+    const m = pattern.exec(name);
+    if (m && (vars[name] ?? '').trim() === id) return m[1]!;
+  }
+  return null;
+}
+
+/**
+ * Kasanın çekebileceği gelen kutusu listeleri (api/_kafe.ts): sorgudaki restoranın şubesinin kendi anahtarı varsa yalnız
+ * o şubenin imzası; sorgusuz istekte erişemediği restoranlar listeden düşer
+ */
+function inboxListsFor(kafe: Kafe, base: InboxLists, known: ReadonlySet<string>, restoran: string | null, subeKalibi: RegExp): string[] | Response {
+  const subesi = (id: string) => restoranSubesi(subeKalibi, id);
+  if (restoran != null) {
+    const red = subeErisimi(kafe, subesi(restoran), secret());
+    if (red) return red;
+  }
+  return pullLists(base, known, restoran, (id) => !subeErisimi(kafe, subesi(id), secret()));
 }
 
 /** Kaydın yaşı süreyi aştı mı (`receivedAt`; okunamayan kayıt yaşlı sayılmaz, bozuksa çekimde silinir) */
@@ -561,19 +648,22 @@ async function inboxPush(item: Record<string, unknown>, key: string, maxAgeMs?: 
 }
 
 /**
- * Kasanın çekimi ve silmesi (kafe anahtarıyla imzalı, ASILPOS_CLOUD_SECRET): `GET <prefix>/inbox` önce durum (iptal)
+ * Kasanın çekimi ve silmesi (kafe anahtarıyla imzalı: ASILPOS_CLOUD_SECRET ya da şubenin kendi anahtarı): `GET <prefix>/inbox` önce durum (iptal)
  * listesini sonra siparişleri verir (en çok 50 kayıt ve 2 MB; bozuk ya da tek başına sınırı aşan kayıt silinir),
  * `POST <prefix>/inbox/ack` {ids} işlenenleri siler. İkisi de `lists`'in verdiği listelerde (`pullLists`: kasanın
  * restoranınınkiler), başka restoranın listesine dokunmaz. `maxAgeMs` verilmişse süresi geçmiş kayıt verilmez, silinir.
  * Yol bu ikisinden değilse null
  */
-async function inboxRoutes(req: Request, url: URL, path: string, prefix: string, lists: () => readonly string[], maxAgeMs?: number): Promise<Response | null> {
+async function inboxRoutes(req: Request, url: URL, path: string, prefix: string, lists: (kafe: Kafe) => readonly string[] | Response, maxAgeMs?: number): Promise<Response | null> {
   if (path !== `${prefix}/inbox` && path !== `${prefix}/inbox/ack`) return null;
   if (!secret() || secret().length < 32) return fail(503, 'AsilPOS Uzaktan kurulmamış (ASILPOS_CLOUD_SECRET)', 'not_configured');
   const body = await req.text();
-  if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
-  // Kasanın restoranının listeleri (eski kasada ortak listeyle bütün restoranlarınki): çekim ve silme aynı listelerde
-  const keys = lists();
+  const kafe = kafeKimligi(req, url, body, secret(), verifyPush);
+  if (kafe instanceof Response) return kafe;
+  // Kasanın restoranının listeleri (eski kasada ortak listeyle bütün restoranlarınki): çekim ve silme aynı listelerde.
+  // Kendi anahtarı olan şubenin restoranı yalnız o şubenin imzasıyla (api/_kafe.ts)
+  const keys = lists(kafe);
+  if (keys instanceof Response) return keys;
   if (path === `${prefix}/inbox` && req.method === 'GET') {
     const items: unknown[] = [];
     let bytes = 0;
@@ -663,14 +753,15 @@ export function verifyMiddlewareJwt(secret: string, authorization: string | null
  * atılır; hiçbiri yoksa süzgeç yok (her remoteId kabul, kayıt ortak listeye). Tanımlı her restoranın kendi gelen kutusu
  * var (`pushLists`); kasa kimliğini aynı ortam değişkeninden alır (`GET /api/uzaktan/anahtarlar?sube=`)
  */
-export const yemeksepetiRemoteIds = (): Set<string> => envIds('YEMEKSEPETI_REMOTE_ID', /^YEMEKSEPETI_[A-Z0-9]{1,32}_REMOTE_ID$/);
+export const yemeksepetiRemoteIds = (): Set<string> => envIds('YEMEKSEPETI_REMOTE_ID', YS_SUBE_RE);
+const YS_SUBE_RE = /^YEMEKSEPETI_([A-Z0-9]{1,32})_REMOTE_ID$/;
 
 async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
   const pluginSecret = env('YEMEKSEPETI_PLUGIN_SECRET');
   const wantRemote = yemeksepetiRemoteIds();
   const now = Date.now();
-  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (ASILPOS_CLOUD_SECRET)
-  const inbox = await inboxRoutes(req, url, path, 'yemeksepeti', () => pullLists(YS_LISTS, wantRemote, restoranOf(url)));
+  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (ASILPOS_CLOUD_SECRET ya da şubenin kendi anahtarı, api/_kafe.ts)
+  const inbox = await inboxRoutes(req, url, path, 'yemeksepeti', (kafe) => inboxListsFor(kafe, YS_LISTS, wantRemote, restoranOf(url), YS_SUBE_RE));
   if (inbox) return inbox;
   // Delivery Hero'nun itmesi: JWT
   if (!pluginSecret) return fail(503, 'Yemeksepeti aktarıcısı kurulmamış (YEMEKSEPETI_PLUGIN_SECRET)', 'not_configured');
@@ -740,13 +831,13 @@ const GETIR_MAX_AGE_MS = 86_400_000;
 const GETIR_LIST_TTL_S = 86_400;
 
 /**
- * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET) ve Yemeksepeti'nin
- * anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse
+ * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET), şube anahtarlarından
+ * ve Yemeksepeti'nin anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse
  * aktarıcı kurulmamış sayılır (boş döner)
  */
 function getirKey(): string {
   const key = env('GETIR_WEBHOOK_SECRET');
-  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET')) return '';
+  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET') || [...subeAnahtarlari().values()].includes(key)) return '';
   return key;
 }
 
@@ -755,7 +846,8 @@ function getirKey(): string {
  * `GETIR_<ŞUBE>_RESTAURANT_ID`'si (Yemeksepeti'ndeki gibi). Hiçbiri yoksa süzgeç yok (kayıt ortak listeye); tanımlı her
  * restoranın kendi gelen kutusu var. Kasa kimliğini Getir girişinde öğrenir (server/delivery/getir.ts)
  */
-export const getirRestaurantIds = (): Set<string> => envIds('GETIR_RESTAURANT_ID', /^GETIR_[A-Z0-9]{1,32}_RESTAURANT_ID$/);
+export const getirRestaurantIds = (): Set<string> => envIds('GETIR_RESTAURANT_ID', GETIR_SUBE_RE);
+const GETIR_SUBE_RE = /^GETIR_([A-Z0-9]{1,32})_RESTAURANT_ID$/;
 
 type GetirPush = { id?: unknown; deliveryType?: unknown; restaurant?: { id?: unknown }; client?: Record<string, unknown>; courier?: unknown; cancelNote?: unknown; cancelReason?: { messages?: { tr?: unknown; en?: unknown } } };
 
@@ -782,9 +874,9 @@ export function verifyApiKey(expected: string, given: string | null): boolean {
 
 async function getir(req: Request, url: URL, path: string): Promise<Response> {
   const now = Date.now();
-  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (ASILPOS_CLOUD_SECRET)
+  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (ASILPOS_CLOUD_SECRET ya da şubenin kendi anahtarı, api/_kafe.ts)
   const wantRestaurant = getirRestaurantIds();
-  const inbox = await inboxRoutes(req, url, path, 'getir', () => pullLists(GETIR_LISTS, wantRestaurant, restoranOf(url)), GETIR_MAX_AGE_MS);
+  const inbox = await inboxRoutes(req, url, path, 'getir', (kafe) => inboxListsFor(kafe, GETIR_LISTS, wantRestaurant, restoranOf(url), GETIR_SUBE_RE), GETIR_MAX_AGE_MS);
   if (inbox) return inbox;
   // Getir'in itmesi: x-api-key
   const key = getirKey();
@@ -1244,7 +1336,7 @@ function validDay(d: unknown): d is DayRep {
 }
 
 /** Kasanın itmesi: imzalı, gzip; eski özet (aynı günün daha önce kurulmuşu) yenisini ezmez */
-async function storeReports(body: string): Promise<Response> {
+async function storeReports(req: Request, body: string, kafe: Kafe): Promise<Response> {
   let push: RemoteReportPush;
   try {
     push = JSON.parse(gunzipSync(Buffer.from((JSON.parse(body) as { gz: string }).gz, 'base64')).toString('utf8')) as RemoteReportPush;
@@ -1255,6 +1347,11 @@ async function storeReports(body: string): Promise<Response> {
     return fail(400, 'Rapor biçimi geçersiz', 'bad_body');
   }
   if (push.days.length > REPORT_PUSH_MAX_DAYS) return fail(413, 'Bir itmede en çok 31 gün', 'too_large');
+  // İleri tarihli itme ya da gün saklanmaz: saklansaydı kasanın gerçek itmeleri eski sayılıp yazılmazdı (özetteki kural)
+  const nowMs = Date.now();
+  if (push.at > nowMs + SKEW_S * 1000 || push.days.some((d) => typeof (d as { at?: unknown } | null)?.at === 'number' && (d as { at: number }).at > nowMs + SKEW_S * 1000)) {
+    return fail(400, 'Raporun saati sunucudan ileride', 'future');
+  }
   // Ek sekmelerin verisi ayrı anahtarda (Ciro ve Ürünler her açılışta onu okumaz)
   const extras = new Map<string, RemoteDayExtra>();
   /** Saklanmayan günler ve neden (kasa ekranda gösterir): gün özeti ya da ek veri sınırı aştı */
@@ -1274,10 +1371,13 @@ async function storeReports(body: string): Promise<Response> {
       skippedDates.push({ date: d.date, why: 'day' });
       return false;
     });
-  const nowS = Math.floor(Date.now() / 1000);
+  const nowS = Math.floor(nowMs / 1000);
   const keys = days.map((d) => reportDayKey(push.shop, d.date));
-  // Kasanın "bugün"ü ve günlerin eski hâli tek okumada
-  const [meta, ...existing] = await mgetAll([reportMetaKey(push.shop), ...keys]);
+  // Kasanın "bugün"ü ve günlerin eski hâli tek okumada; dükkânın şube bağı aynı anda (sürüm hash'inde, `bagAlani`)
+  const [[meta, ...existing], rawBag] = await Promise.all([mgetAll([reportMetaKey(push.shop), ...keys]), redis('HGET', VERSIONS_KEY, bagAlani(push.shop))]);
+  // Şubeye bağlı dükkânın raporunu yalnız o şubenin kendi anahtarı yazar (api/_kafe.ts)
+  const red = await dukkanErisimi(req, kafe, push.shop, rawBag);
+  if (red) return red;
   let stored = 0;
   for (const [i, d] of days.entries()) {
     const expireAt = Math.floor(dayStartMs(addDays(d.date, REPORT_KEEP_DAYS)) / 1000);
@@ -1285,7 +1385,9 @@ async function storeReports(body: string): Promise<Response> {
     const old = existing[i];
     if (old) {
       try {
-        if ((JSON.parse(old) as DayRep).at > d.at) continue;
+        // İleri tarihli eski kayıt (bu düzeltmeden önce) yenisini kilitlemez
+        const oldAt = ileriyiAt((JSON.parse(old) as DayRep).at, nowMs);
+        if (oldAt != null && oldAt > d.at) continue;
       } catch {
         /* bozuksa üzerine yazılır */
       }
@@ -1297,7 +1399,7 @@ async function storeReports(body: string): Promise<Response> {
     else await redis('DEL', reportExtraKey(push.shop, d.date));
     stored += 1;
   }
-  const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
+  const prevAt = (meta ? ileriyiAt((JSON.parse(meta) as { at?: number }).at, nowMs) : null) ?? 0;
   const cat = push.cat && typeof push.cat === 'object' ? push.cat : undefined;
   // Geçmiş gün yeniden geldiyse (ilk bağlanışta 31 gün) bu örnekteki kıyas belleği eskidir
   for (const k of statsDayCache.keys()) if (k.startsWith(`${push.shop}|`)) statsDayCache.delete(k);
@@ -1740,11 +1842,29 @@ async function handle(req: Request): Promise<Response> {
     if (memberMode) return ((await session())?.rol ?? 'sahip') !== 'sahip';
     return !passwordRequired() && tokenValid(secret(), auth);
   };
-  const bildirimDeps = { redis, admin, viewer: viewerSession, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
+  /**
+   * Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı; api/_kafe.ts): tutarsa kasanın kimliği, tutmazsa null.
+   * Şube anahtarı geçersizse ya da şube başlığı anlaşılmazsa kafeKimligi'nin yanıtı (503, 400) aynen döner: düz 401
+   * olsaydı kasa onu "bulut anahtarı tanımıyor" sanıp sessizce ortak anahtara düşerdi, Bağlantı bilgileri asıl nedeni göremezdi
+   */
+  const kafeOf = (body: string): Kafe | Response | null => {
+    if (secret().length < 32) return null;
+    const k = kafeKimligi(req, url, body, secret(), verifyPush);
+    return k instanceof Response && k.status === 401 ? null : k;
+  };
+  const bildirimDeps = {
+    redis,
+    admin,
+    viewer: viewerSession,
+    signed: (body: string): boolean | Response => {
+      const k = kafeOf(body);
+      return k instanceof Response ? k : k != null;
+    },
+  };
   // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
   if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
   // Bulut yedeği: kasanın imzalı istekleri (yükleme ve indirme adresi, liste)
-  if (path.startsWith('uzaktan/yedek/')) return yedek(req, path, { signed: bildirimDeps.signed, shop: shopHeader(req) ?? REPORT_SHOP });
+  if (path.startsWith('uzaktan/yedek/')) return yedek(req, path, { kafe: kafeOf, shop: shopHeader(req) ?? REPORT_SHOP, acik: openShops });
   // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
   if (path.startsWith('merkez/')) {
     const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle';
@@ -1772,6 +1892,8 @@ async function handle(req: Request): Promise<Response> {
       demo,
       dukkan: async () => shopHeader(req) ?? viewShop(req, await versions()),
       secret: secret(),
+      // Şube anahtarı olan kasanın komutu ve açık anahtar imzası o şubenin anahtarıyla (api/_kafe.ts)
+      anahtar: (sube) => kafeAnahtari(sube, secret()),
       sahipler: members,
       uyeDegisti: (email) => memberCache.delete(email),
       // "Gün sonu al ve güncelle": Merkez'in "Şimdi güncelle"siyle aynı kayıt (hedef, gönderim, istek), gün sonuna bağlı
@@ -1798,22 +1920,24 @@ async function handle(req: Request): Promise<Response> {
   if (path === 'uzaktan/push' && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 4_000_000) return fail(413, 'Özet çok büyük', 'too_large');
-    if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    const kafe = kafeKimligi(req, url, body, secret(), verifyPush);
+    if (kafe instanceof Response) return kafe;
     let snap: Snapshot;
     try {
       snap = JSON.parse(gunzipSync(Buffer.from((JSON.parse(body) as { gz: string }).gz, 'base64')).toString('utf8')) as Snapshot;
     } catch {
       return fail(400, 'Özet okunamadı', 'bad_body');
     }
-    return storeSnapshot(shopHeader(req) ?? REPORT_SHOP, snap);
+    return storeSnapshot(req, shopHeader(req) ?? REPORT_SHOP, snap, kafe);
   }
 
   // Kasanın günlük rapor özetleri: imzalı
   if (path === 'uzaktan/rapor' && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 4_000_000) return fail(413, 'Rapor çok büyük', 'too_large');
-    if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
-    return storeReports(body);
+    const kafe = kafeKimligi(req, url, body, secret(), verifyPush);
+    if (kafe instanceof Response) return kafe;
+    return storeReports(req, body, kafe);
   }
 
   // Üyelik: ilk girişte üye parolasını belirler (yalnız izinli e-posta, yalnız bir kez), sonra e-posta ve parola

@@ -117,10 +117,11 @@ describe('uzaktan ekran: Upstash komutu', () => {
     const first = await view(token, 'reports/patron');
     const boot = await view(token, 'bootstrap');
 
-    // Beş dakikalık nabız: içerik aynı, yalnız zaman damgaları ilerledi
+    // Beş dakikalık nabız: içerik aynı, yalnız zaman damgaları ilerledi. Sürüm ve dükkânın şube bağı tek HMGET'te
+    // (aynı hash'in iki alanı, api/_kafe.ts)
     log.length = 0;
     expect(await push(snap(T + 300_000))).toMatchObject({ ok: true, unchanged: true });
-    expect(cmds()).toEqual(['HGET', 'HSET']);
+    expect(cmds()).toEqual(['HMGET', 'HSET']);
     expect((JSON.parse(store.get(`${REDIS_ONEKI}snapshot`)!) as { at: number }).at).toBe(T);
     // Patron paneli yeni sürümü alır; saat nabzın saati (kafe sessiz sayılmaz)
     const beat = await view(token, 'reports/patron', first.tag);
@@ -135,7 +136,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
     // Satış: içerik değişti, özet yazılır, görünüm yeni ciroyu alır
     log.length = 0;
     expect(await push(snap(T + 320_000, 125_000))).toEqual({ ok: true });
-    expect(cmds()).toEqual(['HGET', 'SET', 'HSET']);
+    expect(cmds()).toEqual(['HMGET', 'SET', 'HSET']);
     const sale = await view(token, 'reports/patron', beat.tag);
     expect(sale.body!.netSales).toBe(125_000);
     expect(sale.body!.now).toBe(T + 320_000);
@@ -143,7 +144,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
     // Yeniden gönderilen eski özet yenisini ezmez (yalnız sürüm okunur)
     log.length = 0;
     expect(await push(snap(T + 310_000, 90_000))).toMatchObject({ stale: true });
-    expect(cmds()).toEqual(['HGET']);
+    expect(cmds()).toEqual(['HMGET']);
     expect((await view(token, 'reports/patron', sale.tag)).status).toBe(304);
   });
 
@@ -156,7 +157,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
       vi.setSystemTime(T + 25 * 3600_000);
       log.length = 0;
       expect(await push(snap(T + 25 * 3600_000))).toMatchObject({ unchanged: true });
-      expect(cmds()).toEqual(['HGET', 'EXPIRE', 'HSET']);
+      expect(cmds()).toEqual(['HMGET', 'EXPIRE', 'HSET']);
 
       // Özet bir yolla silindi (süresi doldu): görünüm 503 der, sürümü siler; kasanın ilk itmesi özeti yeniden yazar
       store.delete(`${REDIS_ONEKI}snapshot`);
@@ -166,7 +167,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
       expect(store.has(`${REDIS_ONEKI}surum`)).toBe(false);
       log.length = 0;
       expect(await push(snap(T + 25 * 3600_000 + 300_000))).toEqual({ ok: true });
-      expect(cmds()).toEqual(['HGET', 'GET', 'SET', 'HSET']);
+      expect(cmds()).toEqual(['HMGET', 'GET', 'SET', 'HSET']);
       expect((await view(token, 'floor')).status).toBe(200);
 
       // Uzatma anında anahtar yoksa (EXPIRE 0) yazılır
@@ -174,7 +175,7 @@ describe('uzaktan ekran: Upstash komutu', () => {
       vi.setSystemTime(T + 50 * 3600_000);
       log.length = 0;
       expect(await push(snap(T + 50 * 3600_000))).toEqual({ ok: true });
-      expect(cmds()).toEqual(['HGET', 'EXPIRE', 'SET', 'HSET']);
+      expect(cmds()).toEqual(['HMGET', 'EXPIRE', 'SET', 'HSET']);
       expect(store.has(`${REDIS_ONEKI}snapshot`)).toBe(true);
     } finally {
       vi.useRealTimers();

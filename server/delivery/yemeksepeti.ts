@@ -1,6 +1,6 @@
 import { tl } from '@shared/money';
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
-import { signedFetch } from '../lib/signature';
+import { kafeFetch } from '../lib/kafe-anahtari';
 import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
 /**
@@ -373,7 +373,7 @@ function relayUrl(c: YemeksepetiConfig, path: string): URL {
 
 /** Gelen kutusunu çeker (imzalı; en çok 50 kayıt) */
 export async function fetchInbox(c: YemeksepetiConfig): Promise<InboxItem[]> {
-  const { status, json } = await signedFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox')).catch((e) => {
+  const { status, json } = await kafeFetch(c.cloudSecret, 'GET', relayUrl(c, 'inbox')).catch((e) => {
     throw networkError(e, 8000);
   });
   if (status !== 200) throw new YemeksepetiHttpError(status, `aktarıcı gelen kutusu alınamadı (${explain(status, json)})`);
@@ -385,7 +385,7 @@ export async function fetchInbox(c: YemeksepetiConfig): Promise<InboxItem[]> {
 /** İşlenen kayıtları siler; silinemezse bir sonraki çekimde yine gelir (tekilleştirme kasada) */
 export async function ackInbox(c: YemeksepetiConfig, ids: string[]): Promise<void> {
   if (!ids.length) return;
-  const { status } = await signedFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack'), { ids });
+  const { status } = await kafeFetch(c.cloudSecret, 'POST', relayUrl(c, 'inbox/ack'), { ids });
   if (status !== 200) throw new YemeksepetiHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 

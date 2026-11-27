@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 26 Kasım 2026.
+Son güncelleme: 27 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -62,6 +62,30 @@ Son güncelleme: 26 Kasım 2026.
   200 döner, Pavo gün sonu ve kasa farkı bildirimi yine çalışır (otomatik gün sonu süreci düşürmez); lafmaliyet günü
   kalıcı reddederse (400/409/413/422) de sessiz kalmaz. İkisinde denetim kaydına alarm ve patrona bir kez telefon
   bildirimi (tür `lafmaliyet`: gün, neden, "Kasa › Geçmiş günler › Z › Gönder"; `docs/03-ENTEGRASYON.md` §4.11).
+- **Banka gün sonu kâğıdının kıyas başlığı yeni adla (27 Kasım 2026):** "PAVO - ASILPOS KARŞILAŞTIRMA"
+  (`src/lib/print.tsx` `BANKA_KIYAS_BASLIGI`); eski kasaların bastığı eski başlık `shared/eski-adlar.ts`
+  `ESKI_BANKA_KIYAS_BASLIGI`'nde belgeli. ladmin'in kâğıt okuyucusu lafmaliyet#166 ile ikisini de tanır; bu sürüm ondan
+  önce kurulursa yalnız yapay zekâ okuması kullanılamadığında kodla okuma kıyas satırlarını banka sayar (düşük güvenli
+  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir. Kalan (lafmaliyet'te, bu repoda değil): yapay zekâ
+  okumasının istemi (`src/lib/photo-read/prompts.ts`) kıyas başlığını hâlâ yalnız eski adla anıyor ve
+  `src/lib/asilpos/eski-adlar.ts` notu "yeni kasa da eski adla basar" diyor; istem yeni başlığı ("PAVO - ASILPOS
+  KARŞILAŞTIRMA") anıp eski kasaların eski adla bastığını söylemeli.
+- **Şube anahtarı (27 Kasım 2026):** şube başına ayrı AsilPOS Uzaktan anahtarı, isteğe bağlı (`docs/07-UZAKTAN-ERISIM.md`
+  §6). Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri › AsilPOS Uzaktan › Şube anahtarı. O şubenin
+  platform anahtarları, restoranının paket gelen kutusu, dükkânının özeti, raporları ve bulut yedeği, uzaktan yönetim
+  komutları yalnız bu anahtarla; ortak anahtarı bilen başka şubenin kasası açamaz (`?sube=` ve `?restoran=` artık yetki
+  sınırı). Anahtarı olmayan şube ve eski kasa eskisi gibi ortak anahtarla; bulut şube anahtarını tanımıyorsa kasa ortak
+  anahtarla yineler. Geçiş sırası önemli: önce bütün kasalar bu sürüme, sonra kasaya şube anahtarı, en son Vercel
+  (Vercel önce girilirse o şubenin paket siparişleri ve platform anahtarları kasa anahtarı alana dek durur). ladmin'in
+  dağıttığı ortak anahtar satırı ayrı, şube anahtarına dokunmaz. İnceleme düzeltmeleri (27 Kasım 2026): dükkân şubeye
+  yalnız kendi kasasının kanıtıyla bağlanır (kurulumun anahtarıyla; başka şube başkasının dükkânını kendine bağlayamaz),
+  bağ süresiz ayrı alanda (görünüm silmez), ileri tarihli özet ve rapor saklanmaz; uzaktan yönetim şube anahtarına
+  yalnız bulut kabul edince geçer; geçersiz anahtarın nedeni yedek, bildirim ve Merkez kaydında da görünür, imzasız
+  isteğe söylenmez.
+- **Bağımlılık açıkları (27 Kasım 2026, Dependabot):** hono 4.13.23, @hono/node-server 2.1.11; drizzle-kit'in eski
+  esbuild'i ve @vercel/blob altındaki eski zod `overrides` ile güncel sürüme bağlı. `npm audit` (üretim ve geliştirme)
+  0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
+  (satır sonlu yolda da çalıştığını ve ters eğik çizgili yolun 400 aldığını `tests/bagimlilik-guvenlik.test.ts` denetler).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -133,12 +157,16 @@ PAVO_SERIAL=<cihazın seri numarası>
 - **Stok ve reçete düşümü:** lafmaliyet'in tasarımı aylık sayım ve dönemsel FIFO (`docs/STOK-DEGERLEME.md`); satıştan
   anlık düşüm yok. Kritik stok uyarısı isteniyorsa önce lafmaliyet'te anlık stok tasarımı gerekir.
 - **Merkez için iki aşamalı giriş:** üye girişi davet kodu, parola ve deneme sınırıyla korunuyor. Telefonda doğrulama
-  uygulaması (TOTP) eklenebilir; sahip kullanmak isterse.
+  uygulaması (TOTP) isteğe bağlı eklenebilir; tasarım §4 madde 5'te, sahip isterse yapılır.
 - **Kod imzası:** sertifika alınırsa izlenecek yol `docs/05-KASA-BILGISAYARI.md` §2 "Kod imzası"; alınmazsa
   "Yine de çalıştır" anlatımı kalır.
 - **Kasa hareketi ladmin'e anında mı (25 Kasım 2026):** harcama ve teslim bugün gün sonu paketiyle (Z'den sonra)
   ladmin'e gider. Sahip "girildiği an gitsin" derse sözleşme değişir: lafmaliyet'te açık günün hareketleri için ayrı
   imzalı uç ve AsilPOS'ta senkron bütçesine (AGENTS.md kural 6) uyan itme gerekir. Sorulmadan yapılmaz.
+- **Şube anahtarı kullanılsın mı (27 Kasım 2026):** kod hazır, varsayılan kapalı. Bugün yalnız Marina AsilPOS'ta;
+  ikinci şube (Tuzla) AsilPOS'a geçince ya da paket platformları (Trendyol, Yemeksepeti, Getir) şubeye göre açılınca
+  her şubeye ayrı anahtar verilmesi önerilir. Adımlar `docs/07-UZAKTAN-ERISIM.md` §6 (Vercel'de bir satır, kasada bir
+  alan; birkaç dakika).
 - **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, AsilPOS'un payı çok küçük). Kafe
   bağlanınca bir ay sonra Vercel › Usage ve Upstash › Usage bir kez bakılır.
 
@@ -159,16 +187,25 @@ PAVO_SERIAL=<cihazın seri numarası>
 2. **Ad değişikliğinin kalanları (ladmin ile birlikte):** (a) `docs/hesap-sozlesmesi.md` ladmin'deki kopyasıyla bayt
    bayt aynı kaldığı için eski adla duruyor; iki kopya aynı PR serisinde birlikte yeniden adlandırılır, iki depodaki
    SHA-256 sabiti birlikte değişir (ladmin'in ad değişikliği PR'ı bu dosyayı ya dışarıda bırakır ya da aynı baytlarla
-   değiştirir). (b) Banka gün sonu kâğıdının kıyas başlığı eski adla basılır (`shared/eski-adlar.ts`
-   `BANKA_KIYAS_BASLIGI`): ladmin'in kâğıt okuyucusu iki adı da tanıyınca yeni ada geçer. (c) Ayarlar dosyasına
-   yazım eski adla (`shared/pos-env.ts` `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş
-   gerekmeyince yeni ada geçer.
+   değiştirir). (b) bitti (Main'de olanlar, 27 Kasım). (c) Ayarlar dosyasına yazım eski adla (`shared/pos-env.ts`
+   `yazilacakEnvAdi`); bütün kasalar bu sürümü geçince ve eski sürüme dönüş gerekmeyince yeni ada geçer.
 3. **Tasarım turu:** dil AsilPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `asilpos-design` kontrol
    listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
-4. **Şube başına ayrı kafe anahtarı:** bugün `ASILPOS_CLOUD_SECRET` bütün şubelerde ortak; `?sube=` (platform
-   anahtarları) ve `?restoran=` (paket gelen kutusu) yanlışlık önlemi, yetki sınırı değil. Sahibin Vercel'de şube
-   başına yeni sır üretip o şubenin kasasına yapıştırması gerekir (`docs/PAKET-PLATFORMLARI.md` › Bilinen sınırlar).
-5. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
+4. **Şube başına ayrı kafe anahtarı:** bitti (Main'de olanlar, 27 Kasım); kullanmak sahibin kararı (§2).
+5. **Merkez için iki aşamalı giriş (TOTP), tasarım notu (27 Kasım 2026; yapılmadı):** isteğe bağlı, üye başına, varsayılan
+   kapalı. Bulut tarafı küçük ve tek yerde (`api/uzaktan.ts` üye girişi): üye kaydına (`UyeKaydi`) isteğe bağlı `t`
+   (TOTP sırrı, `ASILPOS_CLOUD_SECRET`'ten türeyen anahtarla AES-GCM şifreli: Redis tek başına sızarsa sır açılmaz).
+   `uzaktan/giris` parola tuttuktan sonra kayıtta `t` varsa `kod` ister: yoksa 401 `totp_required`, yanlışsa
+   `bad_totp` (IP başına 15 dakikada 8 deneme aynen); RFC 6238, 30 sn, ±1 adım; kullanılan adım
+   `${REDIS_ONEKI}totp:<eposta>` (EX 90) ile ikinci kez geçmez. `t`'siz üyenin girişi bugünkü gibi kalır. Uçlar üyenin
+   kendi oturumuyla: `uzaktan/iki-adim/baslat` (parolayla; sır 10 dk bekler, yanıtta `otpauth://` adresi, karekod `uqr`),
+   `.../onayla` (ilk kodla açar), `.../kapat` (parola ve kodla). **Neden şimdi yapılmadı:** (1) kurulum ekranı gerekir ve
+   bugün her üyenin kendi hesabını yönettiği bir yer yok (Uzaktan yönetim › Erişim yalnız sahibin): yeni "Hesabım" yüzeyi
+   (karekod, kod doğrulama, kapatma) ve giriş ekranında ikinci adım, `e2e/run.mjs` `ROUTES` ve tasarım turu ister;
+   (2) telefon kaybında kurtarma tasarlanmalı: sahip Erişim'de üyenin iki adımını sıfırlar, sahibin kendisi için ortamdan
+   tek seferlik yol (ör. `ASILPOS_UYE_IKI_ADIM_SIFIRLA=<eposta>`); (3) canlı Uzaktan girişini değiştirir: bir hata sahibi
+   dışarıda bırakır, ayrı bir bağımsız inceleme ister. Sıra: bulut uçları ve testleri → giriş ekranında ikinci adım →
+   Hesabım kartı → Erişim'de rozet ve sıfırlama. Örnek: ladmin'in isteğe bağlı iki adımlı girişi (lafmaliyet#154).
 6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
