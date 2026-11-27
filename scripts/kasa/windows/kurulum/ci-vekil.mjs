@@ -9,8 +9,15 @@
 // sormadan açar; güncellemeden sonra eski arayüzün görünmesinin nedeni buydu. `gercek` kipi başlıklara dokunmaz.
 import { createServer, request } from 'node:http';
 
+/**
+ * Yerel depo denemesinin anahtarı: sayfa ilk açılışta yazar, sonraki açılışta okur. Chromium yerel depoyu profilin
+ * `Default\Local Storage\leveldb` klasörüne yazar (anahtar Latin-1 ise baytları olduğu gibi): CI yazımın diske geçtiğini
+ * bu adla görür (ci-kurulum.mjs D6)
+ */
+export const CI_DEPO_ANAHTARI = 'asilpos.ci-depo';
+
 /** Sayfaya eklenen betik: ana betik, başlık, yerel depolama, ekran ölçüsü; vekile bildirir */
-export const INJECT = `<script>(function(){try{var s=document.querySelector('script[type="module"][src]');var k='asilpos.ci-depo',v='';try{v=localStorage.getItem(k)||'';if(!v)localStorage.setItem(k,String(Date.now()))}catch(e){v='yok'}var q='script='+encodeURIComponent(s?new URL(s.src,location.href).pathname:'')+'&depo='+encodeURIComponent(v)+'&baslik='+encodeURIComponent(document.title)+'&yol='+encodeURIComponent(location.pathname)+'&ekran='+screen.width+'x'+screen.height+'&ic='+innerWidth+'x'+innerHeight;fetch('/__ci/sayfa?'+q,{method:'POST',keepalive:true})}catch(e){}})();</script>`;
+export const INJECT = `<script>(function(){try{var s=document.querySelector('script[type="module"][src]');var k='${CI_DEPO_ANAHTARI}',v='';try{v=localStorage.getItem(k)||'';if(!v)localStorage.setItem(k,String(Date.now()))}catch(e){v='yok'}var q='script='+encodeURIComponent(s?new URL(s.src,location.href).pathname:'')+'&depo='+encodeURIComponent(v)+'&baslik='+encodeURIComponent(document.title)+'&yol='+encodeURIComponent(location.pathname)+'&ekran='+screen.width+'x'+screen.height+'&ic='+innerWidth+'x'+innerHeight;fetch('/__ci/sayfa?'+q,{method:'POST',keepalive:true})}catch(e){}})();</script>`;
 
 /** index.html'in ana modül betiğinin yolu */
 export function mainScript(html) {

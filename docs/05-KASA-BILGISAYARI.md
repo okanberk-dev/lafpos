@@ -259,9 +259,16 @@ pencereyi öne getirir (ikinci pencere ya da Edge açılmaz; `tests/masaustu-pro
 
 **Edge (Chrome yoksa ya da `ASILPOS_TARAYICI=edge`):** Edge'in kiosk kipi her zaman InPrivate açar: pencere her yeniden
 açılışta oturumu, gönderilmemiş sepeti ve tercihleri kaybediyordu. Artık Edge kalıcı profille tam ekran uygulama
-penceresi (`--app=<adres> --start-fullscreen --kiosk-printing`, profil `…\LafPOS\edge`); adres çubuğu yine yok, F11
-tam ekrandan çıkar. Chrome kiosk kipinde kalır (Chrome'un kiosk'u kalıcı profille). Kullanıcı ortam değişkeni
-`ASILPOS_TARAYICI=edge` Chrome kurulu olsa da Edge'i seçer.
+penceresi (`--app=<adres> --start-fullscreen --kiosk-printing`, profil `…\LafPOS\edge`, `--kiosk` ve `--inprivate`
+yok); adres çubuğu yine yok, F11 tam ekrandan çıkar. Chrome kiosk kipinde kalır (Chrome'un kiosk'u kalıcı profille).
+Kullanıcı ortam değişkeni `ASILPOS_TARAYICI=edge` Chrome kurulu olsa da Edge'i seçer.
+
+Oturum, sepet ve tercihler pencere kapanıp açılınca (kasiyer kapatır, bekçi açar; ya da kısayol) yerinde kalır. Yerel
+depoyu Chromium (Chrome da Edge de) diske toplu yazar: değişiklikten yaklaşık 5 sn sonra. Pencere düzgün kapanınca
+hepsi yazılır; elektrik kesilir ya da tarayıcı zorla kapatılırsa yalnız son birkaç saniyenin değişikliği kaybolabilir
+(Chrome'da da böyle). Windows CI bunu gerçek Edge'le dener (§9): sayfanın yazdığı değer profilin diskine
+(`Default\Local Storage\leveldb`) geçince pencere zorla kapatılır, yeniden açılan pencere değeri okur. 27 Kasım'ın ilk
+koşusu pencereyi yazımdan 2 sn sonra kapattığı için "tutmadı" görünmüştü; profil kalıcıydı, beklenen deneme yanlıştı.
 
 | Bayrak | Neden |
 |---|---|
@@ -642,7 +649,9 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
 3. Güncellemeden önce açılmış pencere kendiliğinden yeni sürüme geçer; kısayollar programa döner; kapanan pencereyi yeni
    kısayol açar (ilk sayfa yeni sürüm ve sunucudan, yerel depo kalıcı, eski bekçi yenisiyle değişir); ikinci tıklama
    ikinci pencere açmaz ve öne getirir (masaüstü varsa); bekçi kapanan pencereyi açar, bakım arasında açmaz; Edge kalıcı
-   profille tam ekran.
+   profille tam ekran (`--kiosk` ve InPrivate yok): sayfanın yerel depoya yazdığı değer diske geçince (en çok 30 sn
+   beklenir) pencere zorla kapatılıp yeniden açılır, değer yerindedir. Tutmazsa profilin depo dosyaları ve Edge
+   politikaları (kayıt defteri) yazılır.
 4. Bozuk derleme: geri dönüş. Gece kapanan pencere (sayfası eski sunucu gibi saklanmış), yeni arayüz ve yeni kasa betiğiyle
    güncelleme: bekçi kendini yeniler, sabah kısayolla açılan ilk sayfa yeni sürüm ve sunucudan.
 5. Kafedeki kaldırıcı (önceki sürümün `Kaldir.exe`'si) iz bırakmaz, veriler kalır. Bu derlemenin kurulum dosyası ve

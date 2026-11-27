@@ -409,7 +409,7 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
 describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurulum.mjs)', () => {
   it('vekil eski sunucuyu taklit eder, sayfaya gösterilen derlemeyi bildiren betiği ekler; API\'ye dokunmaz', async () => {
     const { createServer } = await import('node:http');
-    const { startProxy, mainScript, eskiBasliklar, INJECT } = await load('ci-vekil.mjs');
+    const { startProxy, mainScript, eskiBasliklar, INJECT, CI_DEPO_ANAHTARI } = await load('ci-vekil.mjs');
     const html = '<!doctype html><html><head><script type="module" crossorigin src="/assets/index-AbC12345.js"></script><title>AsilPOS</title></head><body><div id="root"></div></body></html>';
     expect(mainScript(html)).toBe('/assets/index-AbC12345.js');
     expect(eskiBasliklar({ 'cache-control': 'no-store', etag: 'x' }, Date.UTC(2026, 10, 27))).toEqual({ etag: 'x', 'last-modified': new Date(Date.UTC(2026, 9, 28)).toUTCString() });
@@ -449,6 +449,7 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
     }
     // Eklenen betik sayfanın ana betiğini, başlığı ve yerel deponun kalıcılığını bildirir
     for (const t of ["querySelector('script[type=\"module\"][src]')", "localStorage.getItem(k)", "'/__ci/sayfa?'", 'document.title']) expect(INJECT, t).toContain(t);
+    expect(INJECT).toContain(`var k='${CI_DEPO_ANAHTARI}'`);
   });
 
   it('kafedeki yolu yürür: önceki sürüm, kısayolla pencere, güncelleme, ilk açılış yeni sürüm, program, geri dönüş, kaldırma, iki kurulum', () => {
@@ -485,6 +486,14 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     // Kasa penceresi kısayolun kendisiyle açılır (hedefi ve argümanları), vekilden bağlanır
     expect(ci).toContain("ps('ac', ['-Kisayol', KASA_KISAYOLU], { ASILPOS_URL: VEKIL, ...env })");
+    // Edge'in yerel deposu: Chromium yazımı ~5 sn sonra diske geçirir; zorla kapatmadan önce sayfanın yazımı diskte
+    // beklenir (yoksa kalıcı profil de "tutmadı" görünür; 27 Kasım'ın ilk koşusu)
+    const edgeAc = ci.indexOf("kasaAc({ ASILPOS_TARAYICI: 'edge' });");
+    const diskte = ci.indexOf("disk = depoDiski('edge');", edgeAc);
+    const edgeKapat = ci.indexOf("ps('kapat', ['-Profil', 'edge']);", edgeAc);
+    expect(diskte).toBeGreaterThan(edgeAc);
+    expect(edgeKapat).toBeGreaterThan(diskte);
+    expect(ci).toContain('while (!disk.anahtar && Date.now() - tYaz < 30_000)');
     const helper = read(`${K}ci-windows.ps1`);
     expect(helper).toContain('$l = $sh.CreateShortcut($Kisayol)');
     expect(helper).toContain('-ArgumentList $l.Arguments -WorkingDirectory $wd');

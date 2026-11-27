@@ -12,6 +12,7 @@
 #   bekci-kapat  kasa bekcilerini kapatir
 #   not-defteri  Not Defteri'ni acip one getirir (one getirme denemesi icin)
 #   ekran        ekranin goruntusunu -Dosya'ya yazar
+#   politika     Edge ve Chrome politikalari (HKLM ve HKCU): InPrivate'i zorlayan ya da cikista veriyi silen ayar var mi
 # Yalniz ASCII (Windows PowerShell 5.1).
 param([Parameter(Mandatory = $true)][string]$Islem, [string]$Kisayol = '', [string]$Dosya = '', [string]$Klasor = '', [string]$Profil = 'chrome')
 $ErrorActionPreference = 'Stop'
@@ -156,6 +157,17 @@ switch ($Islem) {
     } catch {
       Json ('ekran alinamadi: ' + $_.Exception.Message)
     }
+  }
+  'politika' {
+    $o = [ordered]@{}
+    foreach ($k in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKCU:\SOFTWARE\Policies\Microsoft\Edge', 'HKLM:\SOFTWARE\Policies\Google\Chrome', 'HKCU:\SOFTWARE\Policies\Google\Chrome')) {
+      if (-not (Test-Path -LiteralPath $k)) { continue }
+      $d = [ordered]@{}
+      $v = Get-ItemProperty -LiteralPath $k -ErrorAction SilentlyContinue
+      if ($v) { foreach ($p in $v.PSObject.Properties) { if ($p.Name -notlike 'PS*') { $d[$p.Name] = [string]$p.Value } } }
+      $o[$k] = $d
+    }
+    Json $o
   }
   default { throw ('bilinmeyen islem: ' + $Islem) }
 }

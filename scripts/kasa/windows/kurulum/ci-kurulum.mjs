@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractZip, zipFiles } from './arsiv.mjs';
-import { mainScript, startProxy } from './ci-vekil.mjs';
+import { CI_DEPO_ANAHTARI, mainScript, startProxy } from './ci-vekil.mjs';
 import { buildInfo, ROOT } from './paket.mjs';
 import { NODE_VERSION } from './surumler.mjs';
 
@@ -185,6 +185,36 @@ const bekciler = () => ps('surecler').bekci ?? [];
 /** Vekilin kasa sayfası bildirimleri (müşteri ekranı hariç) */
 const sayfalar = (since) => vekil.log.filter((e) => e.tur === 'sayfa' && e.t >= since && !String(e.yol).startsWith('/musteri-ekrani'));
 const waitSayfa = (since, pred, label, ms) => until(label, () => sayfalar(since).find(pred) ?? null, ms, 1000);
+
+/** Kasa profilinin yerel deposunun dosyaları (Chromium: Default\Local Storage\leveldb) ve sayfanın anahtarı diskte mi */
+function depoDiski(profil) {
+  const dir = join(process.env.LOCALAPPDATA ?? '', 'LafPOS', profil, 'Default', 'Local Storage', 'leveldb'); // eski-ad: profil klasörü
+  let adlar = [];
+  try {
+    adlar = readdirSync(dir);
+  } catch {
+    return { dir, dosyalar: [], anahtar: false };
+  }
+  const dosyalar = adlar.map((ad) => {
+    try {
+      // Tarayıcı açıkken de okunur (LevelDB paylaşımlı yazar); kilitli dosya (LOCK) atlanır
+      const b = readFileSync(join(dir, ad));
+      return { ad, boyut: b.length, anahtar: b.includes(CI_DEPO_ANAHTARI) };
+    } catch {
+      return { ad, boyut: null, anahtar: false };
+    }
+  });
+  return { dir, dosyalar, anahtar: dosyalar.some((d) => d.anahtar) };
+}
+
+/** Edge ve Chrome politikaları (kayıt defteri): InPrivate'ı zorlayan ya da çıkışta veriyi silen bir ayar var mı */
+function politikalar() {
+  try {
+    return JSON.stringify(ps('politika'));
+  } catch (e) {
+    return `(okunamadı: ${e.message})`;
+  }
+}
 
 /** dist/web'i (güncelleme kanalı dahil) yalnız bu bilgisayara sunar */
 function serveWeb() {
@@ -485,13 +515,29 @@ kasaAc({ ASILPOS_TARAYICI: 'edge' });
 const e1 = await waitSayfa(tE, () => true, 'Edge kasa penceresini açmadı', 180_000);
 const edge = await until('Edge kasa süreci yok', () => (kasaSurecleri('edge').length === 1 ? kasaSurecleri('edge') : null), 30_000);
 if (!/msedge\.exe/i.test(edge[0].ad) || /--kiosk(\s|$)/.test(edge[0].komut) || !edge[0].komut.includes('--start-fullscreen') || !edge[0].komut.includes('--kiosk-printing')) fail(`Edge argümanları: ${edge[0].komut}`);
+if (/--inprivate/i.test(edge[0].komut)) fail(`Edge InPrivate açıldı: ${edge[0].komut}`);
 if (e1.script !== sYeni) fail(`Edge eski sürümü gösterdi: ${e1.script}`);
+if (e1.depo === 'yok') fail('Edge sayfası yerel depoya yazamadı');
+// Chromium (Chrome da Edge de) yerel depoyu diske toplu yazar: değişiklikten yaklaşık 5 sn sonra. Süreç zorla kapanınca
+// (Stop-Process; elektrik kesintisi gibi) yalnız diske geçmemiş son birkaç saniye kaybolur. İlk koşu (27 Kas 2026) Edge'i
+// sayfanın yazımından 2 sn sonra kapatıyordu: iki okuma da boştu, profil kalıcıydı. Kasiyer de pencereyi kapatmadan önce
+// sayfada çalışmıştır: sayfanın yazdığı değer profilin diskine geçene dek beklenir (en çok 30 sn), sonra zorla kapatılır
+const tYaz = Date.now();
+let disk = depoDiski('edge');
+while (!disk.anahtar && Date.now() - tYaz < 30_000) {
+  await sleep(1000);
+  disk = depoDiski('edge');
+}
+if (disk.anahtar) console.log(`  sayfanın yazımı ${Math.round((Date.now() - e1.t) / 1000)} sn içinde Edge profilinin diskinde`);
+else console.log(`::warning title=Edge yerel deposu diskte görülmedi::${JSON.stringify(disk)}`);
 ps('kapat', ['-Profil', 'edge']);
 await sleep(3000);
 const tE2 = Date.now();
 kasaAc({ ASILPOS_TARAYICI: 'edge' });
 const e2 = await waitSayfa(tE2, () => true, 'Edge yeniden açılmadı', 120_000);
-if (!e2.depo || e2.depo === 'yok' || (e1.depo && e2.depo !== e1.depo)) fail(`Edge yerel depoyu tutmadı (InPrivate): ilk "${e1.depo}", sonra "${e2.depo}"`);
+if (!e2.depo || e2.depo === 'yok' || (e1.depo && e2.depo !== e1.depo)) {
+  fail(`Edge yerel depoyu tutmadı: ilk "${e1.depo}", sonra "${e2.depo}"; disk ${JSON.stringify(depoDiski('edge'))}; tarayıcı politikaları ${politikalar()}`);
+}
 console.log(`  Edge yerel deposu kalıcı (${e2.depo}); ${edge[0].komut.slice(0, 160)}…`);
 ekran('edge-tam-ekran');
 ps('kapat', ['-Profil', 'edge']);
