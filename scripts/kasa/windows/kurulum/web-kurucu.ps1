@@ -2,7 +2,12 @@
 # çalışmaz: web-kurucu.mjs onu .cmd başlığının ardına koyar, iki yer tutucunun ($Gomulu ve $Dosyalar) yerine
 # derlemenin değerlerini yazar. Kanal derlemesi (kanal.mjs) çıktıyı dist/web/guncelleme/AsilPOS-Kur.cmd'ye yazar.
 #
-# Ne yapar (asilpos.nsi ile aynı düzen): yönetici izni ister; güncelleme kanalının surum.json'unu okur (okunamazsa
+# Kurulum dosyasıyla (asilpos.nsi) aynı programı kurar: aynı klasörler, görev, güvenlik duvarı, kısayollar (aynı listeden
+# aynı betikle: app\kurulum-yenile.mjs kisayollar), Uygulamalar kaydı ve güncelleme kanalı. Farkı yalnız kaynağı (bu dosya
+# programı internetten indirir, kurulum dosyası içinde taşır) ve kaldırıcısı (LafPOS-Kaldir.ps1, kurulum dosyasında
+# Kaldir.exe). Testi tests/web-kurucu.test.ts ve tests/masaustu-programi.test.ts; gerçek Windows'ta CI (ci-kurulum.mjs).
+#
+# Ne yapar: yönetici izni ister; güncelleme kanalının surum.json'unu okur (okunamazsa
 # dosyaya gömülü derlemeyi kullanır); Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama
 # yükünü kanaldan indirir ve üçünü de SHA-256 ile doğrular; çalışan sunucuyu durdurur, veritabanının kopyasını alır,
 # Program Files\LafPOS'u kurar, "LafPOS Sunucu" görevini, güvenlik duvarı iznini, kısayolları, güç ayarlarını ve
@@ -18,6 +23,10 @@ try { $Host.UI.RawUI.WindowTitle = 'AsilPOS kurulumu' } catch { }
 
 $Kaynak = $env:ASILPOS_KUR
 $Kanal = @('https://lafpos.laffogato.net/guncelleme/', 'https://lafpos.vercel.app/guncelleme/')
+# Yalnız CI denemesi (ci-kurulum.mjs): kanal bu bilgisayardaki yerel sunucudan okunur (başka adres kabul edilmez) ve
+# kurulum soru sormadan biter (gün açıksa kurmaz, sonda Enter beklemez, kasa ekranını açmaz)
+if ([string]$env:ASILPOS_KUR_KANAL -match '^http://127\.0\.0\.1:[0-9]{2,5}/[A-Za-z0-9/_-]*/$') { $Kanal = @([string]$env:ASILPOS_KUR_KANAL) }
+$Sessiz = ([string]$env:ASILPOS_KUR_SESSIZ -eq '1')
 $Gorev = 'LafPOS Sunucu'
 $Port = 4000
 $Gomulu = __GOMULU__
@@ -44,6 +53,7 @@ function Adim([string]$Metin) {
 }
 
 function Bekle {
+  if ($Sessiz) { return }
   Write-Host ''
   try { [void](Read-Host 'Pencereyi kapatmak için Enter tuşuna basın') } catch { }
 }
@@ -91,7 +101,7 @@ function Dur([string]$Metin) {
 $kimlik = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $kimlik.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   Write-Host 'AsilPOS yönetici izniyle kurulur. Windows "değişiklik yapmasına izin verilsin mi" diye soracak: Evet deyin.'
-  if (-not $Kaynak) { Dur 'Kurulum dosyası bulunamadı. AsilPOS-Kur.cmd dosyasına çift tıklayarak çalıştırın.' }
+  if (-not $Kaynak -or $Sessiz) { Dur 'Kurulum dosyası bulunamadı. AsilPOS-Kur.cmd dosyasına çift tıklayarak çalıştırın.' }
   try { Unblock-File -LiteralPath $Kaynak } catch { }
   try {
     Start-Process -FilePath $Kaynak -Verb RunAs | Out-Null
@@ -236,7 +246,8 @@ try {
   if ($gun.dayOpen -eq $true) {
     Write-Host ''
     Write-Host 'Kasada gün açık. Kurulum sırasında AsilPOS bir dakika kadar kapanır, tabletler o sırada bağlanamaz.' -ForegroundColor Yellow
-    $cevap = Read-Host 'Yine de şimdi kurulsun mu? (E/H)'
+    $cevap = 'H'
+    if (-not $Sessiz) { $cevap = Read-Host 'Yine de şimdi kurulsun mu? (E/H)' }
     if ($cevap -notmatch '^\s*[eEyY]') {
       Sil $Gecici
       Write-Host 'Kurulum bırakıldı. Gün sonundan sonra dosyayı yeniden çalıştırın.'
@@ -362,7 +373,9 @@ try {
     [void](Calistir $netsh @('advfirewall', 'firewall', 'add', 'rule', ('name=' + $Gorev), 'dir=in', 'action=allow', 'protocol=TCP', ('localport=' + $Port), ('remoteip=' + $uzak), 'profile=any'))
   }
 
-  # Kısayollar: Başlat menüsü (herkese), masaüstü, oturum açılınca kasa ekranı
+  # Kısayollar: kurulum dosyasıyla ve güncellemeyle aynı liste, aynı betik (app\kurulum-yenile.mjs kisayollar; kasa
+  # kısayolları konsolsuz kasa programını açar). Önce eski Başlat menüsü ve ad değişikliğinden (26 Kasım 2026) önceki
+  # kurulumun kısayolları silinir. Kaldırma kısayolu kuruluma özgü (kurulum dosyasında Kaldir.exe)
   $ikon = (Join-Path $Kur 'asilpos.ico') + ',0'
   $kabukNesnesi = New-Object -ComObject WScript.Shell
   function Kisayol([string]$Yol, [string]$Hedef, [string]$Arguman, [string]$Aciklama, [int]$Pencere) {
@@ -379,22 +392,15 @@ try {
   $masaustu = [Environment]::GetFolderPath('CommonDesktopDirectory')
   $baslangic = [Environment]::GetFolderPath('CommonStartup')
   Sil $menu
-  # Ad değişikliğinden (26 Kasım 2026) önceki kurulumun Başlat menüsü ve kısayolları (yenileri aşağıda yazılır)
   $EskiAd = 'LafPOS' # eski-ad: shared/eski-adlar.ts
   Sil (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $EskiAd)
   foreach ($eski in @((Join-Path $masaustu ($EskiAd + ' Kasa.lnk')), (Join-Path $baslangic ($EskiAd + ' Kasa.lnk')), (Join-Path $baslangic ($EskiAd + ' Kasa Bekcisi.lnk')))) {
     Remove-Item -LiteralPath $eski -Force -ErrorAction SilentlyContinue
   }
   New-Item -ItemType Directory -Path $menu | Out-Null
-  $kasa = Join-Path $Kur 'AsilPOS-Kasa.bat'
   $ps = Join-Path $Sys 'WindowsPowerShell\v1.0\powershell.exe'
-  $yonet = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'yonet.ps1') + '" '
-  Kisayol (Join-Path $menu 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
-  Kisayol (Join-Path $menu 'AsilPOS ayarları.lnk') $ps ($yonet + 'ayarlar') 'Site, lafmaliyet ve yazarkasa ayarları' 7
-  Kisayol (Join-Path $menu 'Sunucuyu yeniden başlat.lnk') $ps ($yonet + 'yeniden-baslat') '' 7
-  Kisayol (Join-Path $menu 'Sunucu günlüğü.lnk') $ps ($yonet + 'gunluk') '' 7
-  Kisayol (Join-Path $menu 'Kasa hazırlığı.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-hazirla.ps1') + '"') 'Ekran, Windows Update, ağ kartı, otomatik oturum' 7
-  Kisayol (Join-Path $menu 'Kurulum notları.lnk') (Join-Path $Kur 'BENIOKU.txt') '' '' 1
+  $kisayolKodu = Calistir (Join-Path $Kur 'node\node.exe') @((Join-Path $Kur 'app\kurulum-yenile.mjs'), 'kisayollar', '--gruplar', 'masaustu,baslangic')
+  if ($kisayolKodu -ne 0) { Write-Host ('  Kısayollar yazılamadı (kod ' + $kisayolKodu + '); AsilPOS açılınca Başlat menüsündekiler yeniden denenir.') -ForegroundColor Yellow }
   $kaldirExe = Join-Path $Kur 'Kaldir.exe'
   $kaldirPs = Join-Path $Kur 'LafPOS-Kaldir.ps1'
   $anahtar = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS'
@@ -412,12 +418,6 @@ try {
     Kisayol (Join-Path $menu 'AsilPOS''u kaldır.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $kaldirPs + '"') '' 1
     $kaldirKomutu = '"' + $ps + '" -NoProfile -ExecutionPolicy Bypass -File "' + $kaldirPs + '"'
   }
-  $url = @('[InternetShortcut]', ('URL=http://localhost:' + $Port + '/'), ('IconFile=' + (Join-Path $Kur 'asilpos.ico')), 'IconIndex=0')
-  Set-Content -LiteralPath (Join-Path $menu 'AsilPOS (tarayıcıda).url') -Value $url -Encoding ASCII
-  Kisayol (Join-Path $masaustu 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
-  Kisayol (Join-Path $baslangic 'AsilPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
-  # Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
-  Kisayol (Join-Path $baslangic 'AsilPOS Kasa Bekcisi.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-yazici.ps1') + '" -Bekci -BekciSurum 4') 'Kasa ve müşteri ekranı açık kalsın' 7
 
   # Prizdeyken uyku kapalı: uyuyan bilgisayara tabletler bağlanamaz; USB aygıtları (yazıcı, dokunmatik) askıya alınmaz
   $powercfg = Join-Path $Sys 'powercfg.exe'
@@ -465,11 +465,14 @@ if ($acildi) {
   Write-Host 'Kasa ekranı masaüstündeki "AsilPOS Kasa" kısayoluyla açılır; şimdi açılıyor.'
   Write-Host 'Ayarlar: Başlat > AsilPOS > AsilPOS ayarları. Tabletler için adres ve karekod: Yönetim > Ağ ve uzaktan erişim.'
   # Kurulum yönetici olarak çalışır; kasa ekranı Gezgin üzerinden normal kullanıcı olarak açılır
-  try { Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('"' + (Join-Path $menu 'AsilPOS Kasa.lnk') + '"') } catch { }
+  if (-not $Sessiz) {
+    try { Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('"' + (Join-Path $menu 'AsilPOS Kasa.lnk') + '"') } catch { }
+  }
 } else {
   Write-Host 'AsilPOS kuruldu ama sunucu 90 saniyede açılmadı.' -ForegroundColor Yellow
   Write-Host 'Bir dakika sonra masaüstündeki "AsilPOS Kasa"yı açın. Açılmazsa bilgisayarı yeniden başlatın;'
   Write-Host 'sunucu günlüğü: Başlat > AsilPOS > Sunucu günlüğü.'
 }
 Bekle
+if (-not $acildi -and $Sessiz) { exit 4 }
 exit 0

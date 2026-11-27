@@ -25,7 +25,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const WIN = process.platform === 'win32';
 const OUT = join(ROOT, 'dist/windows');
 const STAGE = join(OUT, 'stage');
-const APP = join(STAGE, 'app');
+/**
+ * Paket iki klasör (asilpos.nsi): yuk\ kurulumda yan klasöre açılıp eskisiyle yer değiştiren app\ ve node\, kok\ kurulum
+ * klasörünün kök dosyaları (başlatıcı, kasa kısayolunun eski yolu, yönetim betiği, simge, notlar, ayar örneği)
+ */
+const YUK = join(STAGE, 'yuk');
+const KOK = join(STAGE, 'kok');
+const APP = join(YUK, 'app');
 const CACHE = join(ROOT, 'node_modules/.cache/asilpos-windows');
 const fast = process.argv.includes('--hizli');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -86,7 +92,8 @@ async function bundleServer() {
   const meta = await stageApp({ appDir: APP, webDir: join(ROOT, 'dist/web'), ...BUILD });
   if (meta.version !== pkg.version) throw new Error('package.json sürümü okunamadı');
   // Zamanlanmış görev bekçiyi bu başlatıcıdan açar: güncelleme node.exe'yi değiştirdiyse yenisini yerine koyar
-  writeFileSync(join(STAGE, 'baslat.cmd'), crlf(readFileSync(join(HERE, 'baslat.cmd'), 'utf8')));
+  mkdirSync(KOK, { recursive: true });
+  writeFileSync(join(KOK, 'baslat.cmd'), crlf(readFileSync(join(HERE, 'baslat.cmd'), 'utf8')));
 }
 
 async function nativeSqlite() {
@@ -121,24 +128,24 @@ async function windowsNode() {
   const members = [`node-v${NODE_VERSION}-win-x64/node.exe`, `node-v${NODE_VERSION}-win-x64/LICENSE`];
   if (process.platform === 'linux') run('unzip', ['-q', '-o', zip, ...members, '-d', tmp]);
   else run(TAR, ['-xf', zip, '-C', tmp, ...members]);
-  mkdirSync(join(STAGE, 'node'), { recursive: true });
-  for (const m of members) cpSync(join(tmp, m), join(STAGE, 'node', m.split('/').pop()));
+  mkdirSync(join(YUK, 'node'), { recursive: true });
+  for (const m of members) cpSync(join(tmp, m), join(YUK, 'node', m.split('/').pop()));
   rmTree(tmp);
-  assertWinX64(join(STAGE, 'node/node.exe'));
+  assertWinX64(join(YUK, 'node/node.exe'));
 }
 
 function windowsFiles() {
   step('Kısayollar, yönetim betiği, notlar');
-  cpSync(join(ROOT, 'scripts/kasa/windows/AsilPOS-Kasa.bat'), join(STAGE, 'AsilPOS-Kasa.bat'));
-  cpSync(join(HERE, 'asilpos.ico'), join(STAGE, 'asilpos.ico'));
+  cpSync(join(ROOT, 'scripts/kasa/windows/AsilPOS-Kasa.bat'), join(KOK, 'AsilPOS-Kasa.bat'));
+  cpSync(join(HERE, 'asilpos.ico'), join(KOK, 'asilpos.ico'));
   // Ad değişikliğinden önceki kısayollar ve Uygulamalar kaydı eski adları çağırır: kasa kısayolu yenisine yönlendirir,
   // simge aynı dosyanın kopyası (web-kurucu.mjs shellFiles ile aynı)
-  cpSync(join(ROOT, 'scripts/kasa/windows/LafPOS-Kasa.bat'), join(STAGE, 'LafPOS-Kasa.bat'));
-  cpSync(join(HERE, 'asilpos.ico'), join(STAGE, 'lafpos.ico'));
-  writeFileSync(join(STAGE, 'yonet.ps1'), crlf(readFileSync(join(HERE, 'yonet.ps1'), 'utf8')));
+  cpSync(join(ROOT, 'scripts/kasa/windows/LafPOS-Kasa.bat'), join(KOK, 'LafPOS-Kasa.bat'));
+  cpSync(join(HERE, 'asilpos.ico'), join(KOK, 'lafpos.ico'));
+  writeFileSync(join(KOK, 'yonet.ps1'), crlf(readFileSync(join(HERE, 'yonet.ps1'), 'utf8')));
   // Eski Not Defteri UTF-8'i BOM'la tanır
-  writeFileSync(join(STAGE, 'BENIOKU.txt'), `\uFEFF${crlf(readFileSync(join(HERE, 'BENIOKU.txt'), 'utf8'))}`);
-  writeFileSync(join(STAGE, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample(readFileSync(join(ROOT, '.env.example'), 'utf8')))}`);
+  writeFileSync(join(KOK, 'BENIOKU.txt'), `\uFEFF${crlf(readFileSync(join(HERE, 'BENIOKU.txt'), 'utf8'))}`);
+  writeFileSync(join(KOK, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample(readFileSync(join(ROOT, '.env.example'), 'utf8')))}`);
 }
 
 /**
@@ -155,7 +162,7 @@ async function smokeTest() {
     if (!WIN) cpSync(join(ROOT, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), join(tmp, 'app/node_modules/better-sqlite3/build/Release/better_sqlite3.node'));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
-    const node = WIN ? join(STAGE, 'node', 'node.exe') : process.execPath;
+    const node = WIN ? join(YUK, 'node', 'node.exe') : process.execPath;
     // ASILPOS_PAKET_DENEME: bekçi kurulumu yenilemez. Yenilese kök dosyaları deneme klasörüne koyar ve (yönetici
     // kabuğunda) bu bilgisayarda kurulu AsilPOS'un Başlat menüsü, masaüstü ve Başlangıç kısayollarını deneme bitince
     // silinen klasöre çevirirdi (inceleme, 23 Kas 2026)
@@ -225,6 +232,11 @@ async function smokeTest() {
     } finally {
       await stopWatchdog(child);
     }
+    // Kurulumların kısayol adımı pakette çalışır (iki kurulum aynı listeyi buradan yazar): yalnız liste, Windows'a dokunmaz
+    const liste = JSON.parse(execFileSync(node, [join(tmp, 'app/kurulum-yenile.mjs'), 'kisayollar', '--gruplar', 'masaustu,baslangic', '--yalniz-liste', '--kurulum', 'C:\\Program Files\\LafPOS'], { encoding: 'utf8' }));
+    const kasa = liste.filter((k) => k.ad.endsWith('AsilPOS Kasa.lnk'));
+    if (kasa.length !== 3 || !kasa.every((k) => k.arguman.endsWith('kasa-yazici.ps1" -Ac'))) throw new Error(`Kısayol listesi beklenmedik: ${JSON.stringify(kasa)}`);
+    console.log(`  tamam: kurulumların kısayol listesi pakette (${liste.length} kısayol)`);
     const log = readFileSync(join(home, 'logs/sunucu.log'), 'utf8');
     if (!log.includes('AsilPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
     for (const f of ['lafpos.db', 'secret.key']) if (!existsSync(join(home, f))) throw new Error(`${f} veri klasöründe yok`);
@@ -268,7 +280,7 @@ function makeInstaller() {
   // macOS ve Linux'ta makensis Türkçe harfleri ancak UTF-8 yereliyle okur ("Bad text encoding")
   const utf8 = /utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '');
   const locale = process.platform === 'win32' || utf8 ? undefined : { LC_ALL: process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8' };
-  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${VERSION}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'asilpos.nsi')], locale);
+  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${VERSION}`, `-DBUILD=${BUILD.build}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'asilpos.nsi')], locale);
   const mb = (statSync(outfile).size / 1024 / 1024).toFixed(1);
   console.log(`\n✓ ${outfile}\n  ${mb} MB · SHA-256 ${sha256(outfile)}`);
 }

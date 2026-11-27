@@ -121,30 +121,33 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     expect(readFileSync(join(dir, kaldirici), 'utf8')).toBe('yeni kaldirici');
   });
 
-  it('kısayollar kurulumdakiyle aynı adda; masaüstü ve Başlangıç yalnız varsa; bekçi Başlangıç\'ta kasa varsa', async () => {
+  it('kısayollar iki kurulumda ve güncellemede tek listeden; masaüstü ve Başlangıç yalnız varsa; bekçi Başlangıç\'ta kasa varsa', async () => {
     const { shortcutSpec, WATCHER_LINK, WATCHER_VERSION } = await load('kurulum-yenile.mjs');
     const kur = `C:\\Program Files\\${KURULUM_KLASORU}`;
     const spec = shortcutSpec(kur, 'C:\\Windows');
     const nsi = read('scripts/kasa/windows/kurulum/asilpos.nsi');
     const web = read('scripts/kasa/windows/kurulum/web-kurucu.ps1');
-    for (const k of spec) {
-      const name = k.ad.split('\\').pop();
-      expect(nsi, name).toContain(name);
-      expect(web, name).toContain(name);
-    }
+    // Kurulumlar listeyi elle yazmaz: kurulan app\ içindeki aynı komutu çalıştırır (tests/masaustu-programi.test.ts)
+    expect(nsi).toContain('"$INSTDIR\\app\\kurulum-yenile.mjs" kisayollar --gruplar "$GRUPLAR"');
+    expect(web).toContain("(Join-Path $Kur 'app\\kurulum-yenile.mjs'), 'kisayollar', '--gruplar', 'masaustu,baslangic'");
+    // Kurulu kaldırıcılar (eski Kaldir.exe dahil) sabit adları siler: adlar değişmedi
+    for (const ad of ['AsilPOS Kasa.lnk', WATCHER_LINK]) expect(spec.some((k: any) => k.ad.endsWith(ad)), ad).toBe(true);
+    expect(nsi).toContain('Delete "$SMSTARTUP\\AsilPOS Kasa Bekcisi.lnk"');
+    expect(nsi).toContain('RMDir /r "$SMPROGRAMS\\AsilPOS"');
     // Masaüstü ve Başlangıç: eski adlı kasa kısayolu da koşulu sağlar; yenisi yazılınca eskisi silinir (ad değişikliği)
     const eskiKasa = `${ESKI_URUN_ADI} Kasa.lnk`;
     for (const k of spec.filter((x: any) => x.klasor !== 'CommonPrograms')) {
       expect(k.kosul, k.ad).toEqual(['AsilPOS Kasa.lnk', eskiKasa]);
       expect(k.eski, k.ad).toEqual([k.ad === WATCHER_LINK ? `${ESKI_URUN_ADI} Kasa Bekcisi.lnk` : eskiKasa]);
+      expect(k.grup, k.ad).toBe(k.klasor === 'CommonStartup' ? 'baslangic' : 'masaustu');
     }
     expect(spec.filter((x: any) => x.klasor === 'CommonPrograms').every((x: any) => x.ad.startsWith('AsilPOS\\'))).toBe(true);
     const watcher = spec.find((k: any) => k.ad === WATCHER_LINK);
     expect(watcher).toMatchObject({ klasor: 'CommonStartup', hedef: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', calismaKlasoru: kur });
     expect(watcher.arguman).toBe(`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${kur}\\app\\kasa-yazici.ps1" -Bekci -BekciSurum ${WATCHER_VERSION}`);
-    // Kurulum dosyası ve siteden kurulum bekçiyi aynı argümanla koyar; betik aynı sürümü tanır
-    expect(nsi).toContain(`kasa-yazici.ps1" -Bekci -BekciSurum ${WATCHER_VERSION}'`);
-    expect(web).toContain(`" -Bekci -BekciSurum ${WATCHER_VERSION}'`);
+    // Bekçi sürümü yalnız listede ve betikte: kurulumlar bekçi kısayolunu elle yazmaz
+    expect(nsi).not.toContain('-Bekci -BekciSurum');
+    expect(web).not.toContain('-Bekci -BekciSurum');
     const ps1 = read('scripts/kasa/windows/kurulum/kasa-yazici.ps1');
     expect(ps1).toContain(`$BekciSurumu = ${WATCHER_VERSION}`);
     expect(ps1).toContain(`'${WATCHER_LINK}'`);
@@ -317,16 +320,24 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     expect(re.test(`--user-data-dir="${profil}\\chrome-musteri" --kiosk`)).toBe(false);
   });
 
-  it('kasa penceresi bat\'in argümanlarıyla açılır (aynı profil, sessiz yazdırma)', () => {
-    for (const a of ['--kiosk-printing', `'${ESKI_URUN_ADI}\\chrome'`, `'${ESKI_URUN_ADI}\\edge'`, '--edge-kiosk-type=fullscreen', '--disable-session-crashed-bubble', '--noerrdialogs']) expect(ps1, a).toContain(a);
-    for (const a of ['--kiosk-printing', `${ESKI_URUN_ADI}\\chrome"`, `${ESKI_URUN_ADI}\\edge"`, '--edge-kiosk-type=fullscreen']) expect(bat, a).toContain(a);
+  it('kasa penceresi bat\'in eski yoluyla aynı argümanlarla açılır (aynı profil, sessiz yazdırma; Edge InPrivate değil)', () => {
+    for (const a of ['--kiosk-printing', `'${ESKI_URUN_ADI}\\chrome'`, `'${ESKI_URUN_ADI}\\edge'`, '--start-fullscreen', '--disable-session-crashed-bubble', '--noerrdialogs']) expect(ps1, a).toContain(a);
+    for (const a of ['--kiosk-printing', `${ESKI_URUN_ADI}\\chrome"`, `${ESKI_URUN_ADI}\\edge"`, '--start-fullscreen']) expect(bat, a).toContain(a);
+    // Edge'in kiosk kipi her zaman InPrivate: oturum ve sepet her açılışta giderdi (Chrome'un kiosk'u kalıcı profille)
+    for (const t of [ps1, bat]) expect(t).not.toContain('--edge-kiosk-type');
+    const edge = ps1.slice(ps1.indexOf("if ($exe -like '*msedge.exe') {"), ps1.indexOf('} else {', ps1.indexOf("if ($exe -like '*msedge.exe') {")));
+    expect(edge).toContain("@(('--app=' + $kasaUrl), '--start-fullscreen', '--kiosk-printing'");
+    expect(edge).not.toContain("'--kiosk'");
+    expect(bat.slice(bat.indexOf(':edge'))).not.toMatch(/--kiosk /);
   });
 
-  it('bat kasa penceresini betikle açar (bekçiyle çakışmaz); betik yoksa eski yol', () => {
-    const ac = bat.indexOf('kasa-yazici.ps1" -KasaAc');
-    expect(ac).toBeGreaterThan(bat.indexOf('kasa-yazici.ps1"'));
-    expect(ac).toBeLessThan(bat.indexOf(':chrome'));
-    expect(bat).toContain('if not errorlevel 1 exit /b 0');
+  it('bat eski kısayollar için programı konsolsuz açıp hemen kapanır; betik yoksa eski yol', () => {
+    const ac = bat.indexOf('kasa-yazici.ps1" -Ac');
+    expect(ac).toBeGreaterThan(0);
+    expect(ac).toBeLessThan(bat.indexOf(':eski'));
+    expect(bat).toContain('start "" "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\\kasa-yazici.ps1" -Ac');
+    expect(bat).toContain('if not exist "%~dp0app\\kasa-yazici.ps1" goto eski');
+    expect(bat.indexOf(':eski')).toBeLessThan(bat.indexOf(':chrome'));
     expect(ASCII.test(read('scripts/kasa/windows/AsilPOS-Kasa.bat', 'latin1'))).toBe(true);
   });
 
@@ -353,7 +364,7 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     for (const kalir of ['Local Storage', 'Cookies', 'IndexedDB', 'Service Worker']) expect(temizle.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')).not.toContain(kalir);
     // Kasa penceresi: tarayıcı yokken (kilit ve Test-KasaWindow'dan sonra), Start-Process'ten hemen önce, kendi profiliyle
     const kasa = ps1.slice(ps1.indexOf('function Open-KasaWindow'), ps1.indexOf('function Remove-TemporaryKasaWatcher'));
-    const kontrol = kasa.indexOf('if (Test-KasaWindow) { return $true }');
+    const kontrol = kasa.indexOf('$acik = Get-KasaProcess');
     const sil = kasa.indexOf('Clear-BrowserCache $kasaProfil');
     expect(kontrol).toBeGreaterThan(kasa.indexOf('WaitOne('));
     expect(sil).toBeGreaterThan(kontrol);
@@ -393,12 +404,13 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
 
   it('eski bekçi yenisiyle değişir; Başlangıç kısayolu yoksa kullanıcı düzeyinde konur', () => {
     expect(ps1).toContain("-notlike $surumli } | ForEach-Object { Stop-Process");
-    expect(ps1).toContain("'-Bekci', '-BekciSurum', [string]$BekciSurumu");
+    expect(ps1).toContain("'-Bekci', '-BekciSurum', [string]$surum");
+    expect(ps1).toContain('if ($PSCommandPath -and -not $watching) { Start-WatcherProcess $BekciSurumu }');
     expect(ps1).toContain("Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Startup'");
   });
 
   it('geçici kasa denetçisinin yalnız kısayolu ve klasörü kaldırılır', () => {
-    const fn = ps1.slice(ps1.indexOf('function Remove-TemporaryKasaWatcher'), ps1.indexOf('$displayBase = $Url'));
+    const fn = ps1.slice(ps1.indexOf('function Remove-TemporaryKasaWatcher'), ps1.indexOf('function Read-ScriptBytes'));
     const removed = [...fn.matchAll(/Remove-Item -LiteralPath \$(\w+)/g)].map((m) => m[1]);
     expect(removed).toEqual(['lnk', 'dir']);
     expect(fn).toContain(`'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\${ESKI_URUN_ADI} Kasa Kontrol.lnk'`);

@@ -1,8 +1,11 @@
-; AsilPOS Windows kurulumu (NSIS 3). Derleme: npm run kurulum:windows (derle.mjs STAGE ve VERSION verir).
-; Kurar: Program Files\LafPOS (Node, sunucu, arayüz, kasa kısayolu), veri C:\ProgramData\LafPOS (yalnız SYSTEM
+; AsilPOS Windows kurulumu (NSIS 3). Derleme: npm run kurulum:windows (derle.mjs STAGE, VERSION ve BUILD verir).
+; Kurar: Program Files\LafPOS (Node, sunucu, arayüz, kasa programı), veri C:\ProgramData\LafPOS (yalnız SYSTEM
 ; ve yöneticiler), açılışta SYSTEM olarak çalışan "LafPOS Sunucu" görevi, güvenlik duvarında yerel ağ ve
 ; Tailscale izni. Görev bekçiyi başlatıcıdan (baslat.cmd) açar; bekçi yeni sürümü kendiliğinden kurar (guncelle.mjs).
 ; Bu dosyayla elle güncellemede önce veritabanını kopyalar. Kaldırma verilere dokunmaz.
+; Siteden kurulumla (web-kurucu.ps1) aynı programı kurar (27 Kasım 2026): gün açıksa sorar, yeni dosyaları yan klasöre
+; açıp eskisiyle yer değiştirir (yarıda kalırsa eski sürüm döner), kısayolları aynı listeden aynı betikle yazar
+; (app\kurulum-yenile.mjs kisayollar), sunucunun yeni sürümle açıldığını bekler.
 ; Ayrıntı: docs/05-KASA-BILGISAYARI.md
 
 Unicode true
@@ -19,6 +22,9 @@ SetCompressorDictSize 64
 !ifndef OUTFILE
   !error "OUTFILE verilmedi"
 !endif
+!ifndef BUILD
+  !error "BUILD verilmedi"
+!endif
 
 ; Klasör ayırıcı: Windows'taki makensis ters bölü ister (STAGE de ters bölülü gelir), macOS ve Linux'takiler düz bölü
 !ifdef NSIS_WIN32_MAKENSIS
@@ -30,6 +36,7 @@ SetCompressorDictSize 64
 !define TASK "LafPOS Sunucu"
 !define FIREWALL "LafPOS Sunucu"
 !define PORT 4000
+!define PS "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LafPOS"
 
 Name "AsilPOS"
@@ -47,9 +54,11 @@ BrandingText "AsilPOS ${VERSION}"
 !include x64.nsh
 
 Var DATA ; C:\ProgramData\LafPOS
+Var GRUPLAR ; seçilen isteğe bağlı kısayol grupları (kurulum-yenile.mjs INSTALL_GROUPS): ,masaustu,baslangic
 
-!define MUI_ICON "${STAGE}${SEP}asilpos.ico"
-!define MUI_UNICON "${STAGE}${SEP}asilpos.ico"
+; Paket iki klasör (derle.mjs): yuk\ (app\ ve node\, yan klasöre açılır) ve kok\ (kurulum klasörünün kök dosyaları)
+!define MUI_ICON "${STAGE}${SEP}kok${SEP}asilpos.ico"
+!define MUI_UNICON "${STAGE}${SEP}kok${SEP}asilpos.ico"
 !define MUI_ABORTWARNING
 
 !define MUI_WELCOMEPAGE_TITLE "AsilPOS kurulumu"
@@ -107,6 +116,41 @@ Function RestoreServer
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
 FunctionEnd
 
+; Yeni dosyalar yerine konamadıysa eski sürüm geri gelir (yan klasör silinir): kasa programsız kalmaz
+Function RollbackFiles
+  SetOutPath "$INSTDIR"
+  ${If} ${FileExists} "$INSTDIR\app.eski\*.*"
+    RMDir /r "$INSTDIR\app"
+    Rename "$INSTDIR\app.eski" "$INSTDIR\app"
+  ${EndIf}
+  ${If} ${FileExists} "$INSTDIR\node.eski\*.*"
+    RMDir /r "$INSTDIR\node"
+    Rename "$INSTDIR\node.eski" "$INSTDIR\node"
+  ${EndIf}
+  RMDir /r "$INSTDIR\kurulum.gecici"
+FunctionEnd
+
+; Klasör adını değiştirir; olmazsa $R8 = 1 (ilk hatadan sonra bir şey denenmez). Sunucu yeni durdu: Windows ya da virüs
+; taraması dosyayı bir an tutabilir, 10 sn'ye kadar yeniden denenir (güncelleyici de böyle, guncelle.mjs retry)
+!macro Tasi FROM TO
+  ${If} $R8 == 0
+    StrCpy $R7 0
+    ${Do}
+      ClearErrors
+      Rename "${FROM}" "${TO}"
+      ${IfNot} ${Errors}
+        ${Break}
+      ${EndIf}
+      IntOp $R7 $R7 + 1
+      ${If} $R7 >= 10
+        StrCpy $R8 1
+        ${Break}
+      ${EndIf}
+      Sleep 1000
+    ${Loop}
+  ${EndIf}
+!macroend
+
 ; Ad değişikliğinden (26 Kasım 2026) önceki kurulumun kısayolları (eski-ad; shared/eski-adlar.ts). Kurulum ve kaldırma
 ; ikisini de siler: otomatik güncellenmiş kasada yenileri, eski kaldırıcının bıraktıkları
 !macro EskiKisayollariSil
@@ -119,6 +163,27 @@ FunctionEnd
 Section "AsilPOS sunucusu ve kasa ekranı" SecMain
   SectionIn RO
   InitPluginsDir
+  StrCpy $GRUPLAR ""
+
+  ; Gün açıksa sorulur (siteden kurulumla aynı): kurulum sırasında AsilPOS bir dakika kadar kapanır. Soru yalnız bu
+  ; bilgisayardaki sunucuya gider (yerel ağ 403 alır); sunucu yoksa ya da yanıt yoksa sorulmaz. Sessiz kurulumda (/S) gün
+  ; açıksa kurulmaz
+  nsExec::ExecToStack '"${PS}" -NoProfile -ExecutionPolicy Bypass -Command "try { if ((Invoke-RestMethod -UseBasicParsing -TimeoutSec 5 -Uri http://127.0.0.1:${PORT}/api/kasa/guncelleme-durumu).dayOpen -eq $$true) { exit 3 } } catch { }; exit 0"'
+  Pop $0
+  Pop $1
+  ${If} $0 == 3
+    MessageBox MB_YESNO|MB_ICONEXCLAMATION "Kasada gün açık. Kurulum sırasında AsilPOS bir dakika kadar kapanır, tabletler o sırada bağlanamaz.$\r$\n$\r$\nYine de şimdi kurulsun mu? Hayır: gün sonundan sonra kurulumu yeniden çalıştırın." /SD IDNO IDYES gun_devam
+    Abort "Kurulum bırakıldı: kasada gün açık"
+    gun_devam:
+  ${EndIf}
+
+  ; Yeni sürüm önce yan klasöre açılır (sunucu o sırada çalışmaya devam eder); eskisiyle yer değiştirmesi aşağıda
+  DetailPrint "Yeni sürüm hazırlanıyor"
+  SetOutPath "$INSTDIR"
+  RMDir /r "$INSTDIR\kurulum.gecici"
+  SetOutPath "$INSTDIR\kurulum.gecici"
+  File /r "${STAGE}${SEP}yuk${SEP}*"
+  SetOutPath "$INSTDIR"
 
   ; Güncellemede çalışan sunucuyu durdur: dosyalar kilitli kalmasın, veritabanı kopyası tutarlı olsun. Önce görev
   ; kapatılır, yoksa beş dakikalık güvence tetiği kurulum sürerken eski sürümü yeniden başlatabilir
@@ -140,6 +205,7 @@ Section "AsilPOS sunucusu ve kasa ekranı" SecMain
     ${If} ${Errors}
     ${OrIfNot} ${FileExists} "$8"
       MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Veritabanının kopyası alınamadı ($8). Güncelleme yeni sürümde veritabanını dönüştürebilir.$\r$\n$\r$\nTamam: kopyasız devam et. İptal: güncellemeyi bırak, eski sürüm çalışmaya devam etsin." /SD IDCANCEL IDOK backup_skip
+      RMDir /r "$INSTDIR\kurulum.gecici"
       ${If} $R9 == 0
         Call RestoreServer
       ${EndIf}
@@ -150,16 +216,36 @@ Section "AsilPOS sunucusu ve kasa ekranı" SecMain
     ${EndIf}
   ${EndIf}
 
-  ; Uygulama klasörlerinde veri yok; eski sürümün ve otomatik güncellemenin bıraktığı klasörler kalmasın
-  RMDir /r "$INSTDIR\app"
-  RMDir /r "$INSTDIR\node"
+  ; Uygulama klasörlerinde veri yok; otomatik güncellemenin bıraktığı klasörler kalmasın (node.yeni kalırsa başlatıcı
+  ; onu Node'un yerine koyardı). Sonra yer değiştirme: app → app.eski, yeni app yerine (node da); olmazsa eskiler döner
   RMDir /r "$INSTDIR\app.eski"
   RMDir /r "$INSTDIR\app.yeni"
   RMDir /r "$INSTDIR\app.bozuk"
   RMDir /r "$INSTDIR\node.eski"
   RMDir /r "$INSTDIR\node.yeni"
+  StrCpy $R8 0
+  ${If} ${FileExists} "$INSTDIR\app\*.*"
+    !insertmacro Tasi "$INSTDIR\app" "$INSTDIR\app.eski"
+  ${EndIf}
+  ${If} ${FileExists} "$INSTDIR\node\*.*"
+    !insertmacro Tasi "$INSTDIR\node" "$INSTDIR\node.eski"
+  ${EndIf}
+  !insertmacro Tasi "$INSTDIR\kurulum.gecici\app" "$INSTDIR\app"
+  !insertmacro Tasi "$INSTDIR\kurulum.gecici\node" "$INSTDIR\node"
+  ${If} $R8 != 0
+    Call RollbackFiles
+    ${If} $R9 == 0
+      Call RestoreServer
+    ${EndIf}
+    MessageBox MB_ICONSTOP "Program klasörü yazılamadı (bir program kullanıyor olabilir). Eski sürüm çalışmaya devam ediyor; bilgisayarı yeniden başlatıp kurulumu yeniden çalıştırın." /SD IDOK
+    Abort "Kurulum yarıda kaldı; eski sürüm çalışıyor"
+  ${EndIf}
+  RMDir /r "$INSTDIR\app.eski"
+  RMDir /r "$INSTDIR\node.eski"
+  RMDir /r "$INSTDIR\kurulum.gecici"
+  ; Kök dosyalar (başlatıcı, kasa kısayolunun eski yolu, yönetim betiği, simge, notlar, ayar örneği)
   SetOutPath "$INSTDIR"
-  File /r "${STAGE}${SEP}*"
+  File "${STAGE}${SEP}kok${SEP}*"
 
   ; Veri klasörü: yalnız SYSTEM (sunucu) ve Yöneticiler. Türkçe Windows'ta grup adı farklı, SID kullanılır
   CreateDirectory "$DATA"
@@ -219,23 +305,15 @@ Section "AsilPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro Run '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FIREWALL}" dir=in action=allow protocol=TCP localport=${PORT} remoteip=localsubnet profile=any'
   !insertmacro Run '"$SYSDIR\netsh.exe" advfirewall firewall add rule name="${FIREWALL}" dir=in action=allow protocol=TCP localport=${PORT} remoteip=100.64.0.0/10 profile=any'
 
-  ; Başlat menüsü; isteğe bağlı kısayollar aşağıdaki bölümlerde yeniden konur. Ad değişikliğinden (26 Kasım 2026)
-  ; önceki kurulumun kısayolları da silinir (eski-ad)
+  ; Kısayollar sonda (Kisayollar bölümü), siteden kurulum ve güncellemeyle aynı listeden. Önce eskileri silinir:
+  ; seçilmeyen masaüstü ve Başlangıç kısayolu kalmasın. Ad değişikliğinden (26 Kasım 2026) önceki kurulumun
+  ; kısayolları da (eski-ad). Kaldırma kısayolu kuruluma özgü (siteden kurulumda PowerShell kaldırıcısı)
   Delete "$DESKTOP\AsilPOS Kasa.lnk"
   Delete "$SMSTARTUP\AsilPOS Kasa.lnk"
   Delete "$SMSTARTUP\AsilPOS Kasa Bekcisi.lnk"
   RMDir /r "$SMPROGRAMS\AsilPOS"
   !insertmacro EskiKisayollariSil
   CreateDirectory "$SMPROGRAMS\AsilPOS"
-  CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
-  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "URL" "http://localhost:${PORT}/"
-  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "IconFile" "$INSTDIR\asilpos.ico"
-  WriteINIStr "$SMPROGRAMS\AsilPOS\AsilPOS (tarayıcıda).url" "InternetShortcut" "IconIndex" "0"
-  CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS ayarları.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" ayarlar' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Site, lafmaliyet ve yazarkasa ayarları"
-  CreateShortcut "$SMPROGRAMS\AsilPOS\Sunucuyu yeniden başlat.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" yeniden-baslat' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED
-  CreateShortcut "$SMPROGRAMS\AsilPOS\Sunucu günlüğü.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" gunluk' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED
-  CreateShortcut "$SMPROGRAMS\AsilPOS\Kasa hazırlığı.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-hazirla.ps1"' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Ekran, Windows Update, ağ kartı, otomatik oturum"
-  CreateShortcut "$SMPROGRAMS\AsilPOS\Kurulum notları.lnk" "$INSTDIR\BENIOKU.txt"
   CreateShortcut "$SMPROGRAMS\AsilPOS\AsilPOS'u kaldır.lnk" "$INSTDIR\Kaldir.exe"
 
   WriteUninstaller "$INSTDIR\Kaldir.exe"
@@ -250,19 +328,16 @@ Section "AsilPOS sunucusu ve kasa ekranı" SecMain
   WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $1 $2 $3
   WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" $1
-
-  DetailPrint "AsilPOS sunucusu başlatılıyor"
-  !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
 SectionEnd
 
+; İsteğe bağlı kısayollar: bölüm yalnız grubu seçer, kısayolları sondaki bölüm yazar (bölümler sırayla çalışır)
 Section "Masaüstüne kısayol" SecDesktop
-  CreateShortcut "$DESKTOP\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
+  StrCpy $GRUPLAR "$GRUPLAR,masaustu"
 SectionEnd
 
+; Kasa kısayolu ve kasa bekçisi (pencere kapanırsa yeniden açar) Başlangıç'a
 Section "Oturum açılınca kasa ekranını aç" SecStartup
-  CreateShortcut "$SMSTARTUP\AsilPOS Kasa.lnk" "$INSTDIR\AsilPOS-Kasa.bat" "" "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ekranı (tam ekran)"
-  ; Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
-  CreateShortcut "$SMSTARTUP\AsilPOS Kasa Bekcisi.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-yazici.ps1" -Bekci -BekciSurum 4' "$INSTDIR\asilpos.ico" 0 SW_SHOWMINIMIZED "" "Kasa ve müşteri ekranı açık kalsın"
+  StrCpy $GRUPLAR "$GRUPLAR,baslangic"
 SectionEnd
 
 Section "Prizdeyken uyku kapalı" SecPower
@@ -275,10 +350,35 @@ Section "Prizdeyken uyku kapalı" SecPower
   !insertmacro Run '"$SYSDIR\powercfg.exe" /setactive SCHEME_CURRENT'
 SectionEnd
 
+; Kısayollar ve açılış: seçimlerden sonra. Kısayollar güncellemenin yenilediği listenin aynısı (kurulum-yenile.mjs
+; shortcutSpec), aynı betikle (kisayollar.ps1 -Kur); siteden kurulum da bunu çalıştırır. Kasa kısayolları konsolsuz
+; kasa programını açar (kasa-yazici.ps1 -Ac)
+Section "-Kisayollar ve sunucu" SecSon
+  DetailPrint "Kısayollar yazılıyor"
+  nsExec::ExecToLog '"$INSTDIR\node\node.exe" "$INSTDIR\app\kurulum-yenile.mjs" kisayollar --gruplar "$GRUPLAR"'
+  Pop $0
+  ${If} $0 != 0
+    MessageBox MB_ICONEXCLAMATION "Kısayollar yazılamadı (kod $0). Başlat menüsündekiler AsilPOS açılınca yeniden denenir; masaüstü ve Başlangıç için kurulumu yeniden çalıştırın." /SD IDOK
+  ${EndIf}
+
+  DetailPrint "AsilPOS sunucusu başlatılıyor"
+  !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
+  ; Sunucunun bu sürümle açıldığı beklenir (siteden kurulumla aynı; en çok 2 dakika): kasa ekranı yeni sürümle açılır
+  DetailPrint "Yeni sürümün açılması bekleniyor (derleme ${BUILD})"
+  nsExec::ExecToStack '"${PS}" -NoProfile -ExecutionPolicy Bypass -Command "for ($$i = 0; $$i -lt 120; $$i++) { try { if ((Invoke-RestMethod -UseBasicParsing -TimeoutSec 2 -Uri http://127.0.0.1:${PORT}/api/health).build -eq ${BUILD}) { exit 0 } } catch { }; Start-Sleep -Seconds 1 }; exit 1"'
+  Pop $0
+  Pop $1
+  ${If} $0 == 0
+    DetailPrint "AsilPOS ${VERSION} çalışıyor"
+  ${Else}
+    DetailPrint "Sunucu iki dakikada açılmadı; kasa ekranı açılınca bekler. Açılmazsa Başlat › AsilPOS › Sunucu günlüğü"
+  ${EndIf}
+SectionEnd
+
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Sunucu (açılışta SYSTEM olarak), kasa ekranı, güvenlik duvarında yerel ağ ve Tailscale izni."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Masaüstüne AsilPOS Kasa kısayolu."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Windows'a girilince kasa ekranı tam ekran açılır."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Windows'a girilince kasa ekranı tam ekran açılır; kapanırsa yeniden açılır."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPower} "Bilgisayar prizdeyken uykuya ve hazırda bekletmeye geçmez, USB aygıtları (yazıcı, dokunmatik ekran) askıya alınmaz; tabletler sunucuyu hep bulur."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
@@ -293,6 +393,10 @@ Function un.onInit
 FunctionEnd
 
 Section "Uninstall"
+  ; Kasa penceresi, müşteri ekranı ve kasa bekçisi (oturumdaki kullanıcının süreçleri) kapanır: kaldırınca bekçi ve boş
+  ; tam ekran kalmasın
+  nsExec::ExecToLog `"${PS}" -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ProcessId -ne $$PID -and $$_.CommandLine -and ($$_.CommandLine -match 'kasa-yazici\.ps1' -or $$_.CommandLine -match '\\LafPOS\\(chrome|edge)') } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+  Pop $0
   !insertmacro Run '"$SYSDIR\schtasks.exe" /End /TN "${TASK}"'
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Delete /TN "${TASK}" /F'
   Sleep 2000
@@ -311,6 +415,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\app.bozuk"
   RMDir /r "$INSTDIR\node.eski"
   RMDir /r "$INSTDIR\node.yeni"
+  RMDir /r "$INSTDIR\kurulum.gecici"
   Delete "$INSTDIR\baslat.cmd"
   Delete "$INSTDIR\AsilPOS-Kasa.bat"
   Delete "$INSTDIR\LafPOS-Kasa.bat"
