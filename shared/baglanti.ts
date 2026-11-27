@@ -27,10 +27,16 @@ export const SUBE_BASLIGI = 'x-laf-sube';
 export const subeAnahtarAdi = (sube: string) => `ASILPOS_CLOUD_SECRET_${sube}`;
 /**
  * Anahtar değişiminde önceki değerin adı (docs/07-UZAKTAN-ERISIM.md §7): `<ad>_ONCEKI`. Bulut birkaç gün yeni değerle
- * birlikte bunu da kabul eder; kasalar yeni değere gece geçer. Ortak anahtarınki `ASILPOS_CLOUD_SECRET_ONCEKI` (eski
- * adıyla da), şubeninki `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`
+ * birlikte bunu da kabul eder; kasalar yeni değere gece geçer. Ortak anahtarınki `ASILPOS_CLOUD_SECRET_ONCEKI` ya da
+ * eski önekli adı (ikisi birden tanımlıysa ikisi de), şubeninki `ASILPOS_CLOUD_SECRET_<ŞUBE>_ONCEKI`
  */
 export const ONCEKI_EKI = '_ONCEKI';
+/**
+ * Kasa imzalı isteğe 2xx yanıtında bulutun imzayı hangi değerle doğruladığı (api/_kafe.ts `anahtarBasligi`):
+ * `simdiki` ya da `onceki` (yalnız `_ONCEKI` ile tuttu). Sır taşımaz; ladmin'in anahtar sınaması kendi değerinin yalnız
+ * önceki değer olarak kabul edildiğini bundan anlar (docs/03-ENTEGRASYON.md §4b)
+ */
+export const ANAHTAR_BASLIGI = 'x-laf-anahtar';
 /** Şube anahtarının önceki değerinin Vercel'deki adı ('MARINA' → ASILPOS_CLOUD_SECRET_MARINA_ONCEKI) */
 export const subeOncekiAdi = (sube: string) => `${subeAnahtarAdi(sube)}${ONCEKI_EKI}`;
 /**

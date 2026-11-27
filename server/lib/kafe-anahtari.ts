@@ -86,8 +86,18 @@ export function kontrolAnahtari(): { key: string; sube: string | null } {
 
 /** Bulut yedeğini şifreleyen anahtar: şube anahtarı varsa o (başka şubenin kasası çözemez), yoksa ortak anahtar */
 export const yedekAnahtari = () => subeAnahtari()?.key ?? env.cloudSecret;
-/** Yedeği çözmeyi denenecek anahtarlar: önce şube anahtarı, sonra ortak (şube anahtarından önce alınmış yedekler) */
-export const yedekCozmeAnahtarlari = () => [...new Set([subeAnahtari()?.key, env.cloudSecret].filter((k): k is string => !!k && k.length >= MIN_SECRET_LENGTH))];
+/**
+ * Yedeği şifreleyen anahtarın izi (değerin özeti, anahtarın kendisi değil): son yüklenen yedeğin hangi anahtarla
+ * şifrelendiği (server/sync/yedek.ts). Anahtar değişince yeni anahtarla hemen bir yedek yüklenir
+ */
+export const yedekAnahtarIzi = (key = yedekAnahtari()) => createHash('sha256').update(`asilpos-yedek-anahtari:${key}`).digest('hex').slice(0, 32);
+/**
+ * Yedeği çözmeyi denenecek anahtarlar: önce şube anahtarı, sonra ortak (şube anahtarından önce alınmış yedekler), sonra
+ * ikisinin bir önceki değeri (anahtar değişiminden önce alınmış yedekler; ayarlar dosyasındaki `_ONCEKI` satırları,
+ * server/lib/ayar-dosyasi.ts)
+ */
+export const yedekCozmeAnahtarlari = () =>
+  [...new Set([subeAnahtari()?.key, env.cloudSecret, env.cloudSubeSecretOnceki, env.cloudSecretOnceki].filter((k): k is string => !!k && k.length >= MIN_SECRET_LENGTH))];
 
 const imzaReddi = (status: number, json: unknown) => status === 401 && !!json && typeof json === 'object' && (json as { code?: unknown }).code === 'bad_signature';
 

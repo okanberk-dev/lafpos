@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Harness, startApp } from './harness';
-import { ALAN_ADI } from '@shared/eski-adlar';
+import { ALAN_ADI, ESKI_ENV_ONEKI } from '@shared/eski-adlar';
 
 /**
  * Anahtar değişimi (docs/03-ENTEGRASYON.md §4b): kasa Uzaktan ve site bağlantısını ladmin'den sorar, değişeni bekletir,
@@ -75,6 +75,9 @@ describe('çekme ve gün kapanınca yazma', () => {
     db.update(schema.businessDays).set({ closedAt: Date.now() }).run();
     expect(applyPendingConnections()).toBe(true);
     expect(readFileSync(envFile, 'utf8')).toContain(`ASILPOS_CLOUD_SECRET=${NEW}`);
+    // Eski değer önceki satırında kalır: değişimden önce alınmış bulut yedekleri bu kasada açılabilsin (yazım kuralıyla
+    // eski önekli ad; iki adla da okunur)
+    expect(readFileSync(envFile, 'utf8')).toContain(`${ESKI_ENV_ONEKI}CLOUD_SECRET_ONCEKI=${OLD}`);
     expect(bekleyenBaglanti()).toBeNull();
     const rows = db.select().from(schema.auditLog).all();
     expect(rows.some((r) => r.action === 'settings.connections' && r.message.includes('ASILPOS_CLOUD_SECRET') && !r.message.includes(NEW))).toBe(true);

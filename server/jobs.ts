@@ -233,8 +233,9 @@ async function backupTick() {
     }
     dailyMaintenance(day);
   }
-  // Günün yedeği şifrelenip buluta (Uzaktan kuruluysa; gidemezse yarım saatte bir yeniden)
-  if (existsSync(file)) afterDailyBackup(file, day);
+  // Günün yedeği şifrelenip buluta (Uzaktan kuruluysa; gidemezse yarım saatte bir yeniden). Anahtar bugünkü yüklemeden
+  // sonra değiştiyse (gün sonunda uygulanan yeni değer) veritabanının şimdiki hâli yeni anahtarla hemen gider
+  if (existsSync(file)) afterDailyBackup(file, day, Date.now(), () => backupNamed('anahtar-degisimi'));
 }
 
 let lastAutoWarn = 0;

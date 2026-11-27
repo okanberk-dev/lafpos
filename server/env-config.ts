@@ -35,6 +35,14 @@ export function configFrom(vars: Record<string, string | undefined>) {
      */
     cloudSubeSecret: (posEnv(vars, 'CLOUD_SUBE_SECRET') ?? '').trim(),
     /**
+     * Ortak ve şube anahtarının bir önceki değeri: ayarlar dosyasındaki değer değişince sunucu eskisini
+     * `ASILPOS_CLOUD_SECRET_ONCEKI` / `ASILPOS_CLOUD_SUBE_SECRET_ONCEKI` satırına yazar (server/lib/ayar-dosyasi.ts). Yalnız
+     * değişimden önce alınmış bulut yedeklerini açmak için (server/lib/kafe-anahtari.ts `yedekCozmeAnahtarlari`); hiçbir
+     * istek bununla imzalanmaz
+     */
+    cloudSecretOnceki: (posEnv(vars, 'CLOUD_SECRET_ONCEKI') ?? '').trim(),
+    cloudSubeSecretOnceki: (posEnv(vars, 'CLOUD_SUBE_SECRET_ONCEKI') ?? '').trim(),
+    /**
      * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan AsilPOS Uzaktan'ın adresi. ASILPOS_MERKEZ_URL=0 kapatır;
      * ikisi de yoksa lisans uygulanmaz ve güncelleme kanalın son sürümünü izler (server/sync/merkez.ts)
      */

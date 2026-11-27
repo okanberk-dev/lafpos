@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
 import { subeAnahtariGorunumu } from './kafe-anahtari';
+import { MIN_SECRET_LENGTH } from './signature';
 import { cloudKeys, currentSube, pullState } from './platform-anahtar';
 import { envDegeri, eskiEnvAdi, posEnv, yazilacakEnvAdi, yeniEnvAdi } from '@shared/pos-env';
 
@@ -139,12 +140,40 @@ function readFile(path: string): string {
   }
 }
 
-/** Dosyaya yazar: önce geçici dosya, sonra yerine (bekçi yarım dosya okumasın) */
+/**
+ * Değeri değişince eskisi `<ad>_ONCEKI` satırında tutulan kafe anahtarları (Uzaktan'ın ortak anahtarı ve şube anahtarı).
+ * Kasa bulut yedeğini bu anahtarla şifreler (server/sync/yedek.ts): anahtar değişince (ladmin'in dağıtımı gün sonunda,
+ * Bağlantı bilgileri, kurulum kodu) değişimden önce alınmış yedekler eski değerle şifreli kalır, geri yükleme onu da
+ * dener (server/lib/kafe-anahtari.ts `yedekCozmeAnahtarlari`). Yalnız bir önceki değer tutulur
+ */
+export const ONCEKISI_TUTULAN = ['ASILPOS_CLOUD_SECRET', 'ASILPOS_CLOUD_SUBE_SECRET'] as const;
+
+/**
+ * Değişikliklerle birlikte yazılacak `_ONCEKI` satırları (saf): `ONCEKISI_TUTULAN`'dan biri dosyadaki dolu, en az 32
+ * karakterlik değerinden başka bir değere (ya da boşa) geçiyorsa eski değer `<ad>_ONCEKI` olur. Ad yeni ya da eski önekle
+ * gelebilir, dosyadaki değer de (`yazilacakEnvAdi` gibi `_ONCEKI` de dosyanın adlandırmasıyla yazılır)
+ */
+export function oncekiSatirlari(dosya: Readonly<Record<string, string>>, edits: Readonly<Record<string, string | null>>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const ad of ONCEKISI_TUTULAN) {
+    const eskiAd = eskiEnvAdi(ad)!;
+    if (!(ad in edits) && !(eskiAd in edits)) continue;
+    const simdiki = ((dosya[ad] ?? '').trim() || (dosya[eskiAd] ?? '').trim());
+    const yeni = ((ad in edits ? edits[ad] : edits[eskiAd]) ?? '').trim();
+    if (simdiki.length >= MIN_SECRET_LENGTH && simdiki !== yeni) out[`${ad}_ONCEKI`] = simdiki;
+  }
+  return out;
+}
+
+/**
+ * Dosyaya yazar: önce geçici dosya, sonra yerine (bekçi yarım dosya okumasın). Değişen kafe anahtarının eski değeri
+ * `_ONCEKI` satırına (`oncekiSatirlari`)
+ */
 export function writeEnvEdits(file: SettingsFile, edits: Record<string, string | null>) {
   const before = readFile(file.path);
   // Yeni dosya Not Defteri'nde Türkçe karakterleri doğru göstersin (Windows): BOM ve CRLF
   const base = before || (process.platform === 'win32' ? '\uFEFF\r\n' : '');
-  const next = applyEnvEdits(base, edits);
+  const next = applyEnvEdits(base, { ...oncekiSatirlari(readEnvText(before), edits), ...edits });
   writeFileSync(`${file.path}.yeni`, next, { mode: 0o600 });
   renameSync(`${file.path}.yeni`, file.path);
 }

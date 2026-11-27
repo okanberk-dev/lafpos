@@ -82,10 +82,11 @@ export interface KontrolDeps {
    */
   anahtar?: (sube: string | undefined) => string;
   /**
-   * `anahtar`'ın önceki değeri (anahtar değişimi, api/_kafe.ts kafeOncekiAnahtari; docs/07-UZAKTAN-ERISIM.md §7): kasa yeni
-   * değere geçene dek açık anahtar imzası onunla da tutar, komut kasanın imzaladığı anahtarla imzalanır. Yoksa null
+   * `anahtar`'ın önceki değerleri (anahtar değişimi, api/_kafe.ts kafeOncekiAnahtarlari; docs/07-UZAKTAN-ERISIM.md §7):
+   * kasa yeni değere geçene dek açık anahtar imzası onlardan biriyle de tutar, komut kasanın imzaladığı anahtarla
+   * imzalanır. Yoksa boş
    */
-  onceki?: (sube: string | undefined) => string | null;
+  onceki?: (sube: string | undefined) => readonly string[];
   /** Vercel ortamındaki sahip e-postaları (ASILPOS_UYE_EPOSTA); boşsa üyelik kapalı (parolalı ya da parolasız görünüm) */
   sahipler: string[];
   /** Üye kaydı değişti ya da silindi: oturum önbelleğinden düşsün */
@@ -179,13 +180,12 @@ async function govde(req: Request): Promise<Record<string, unknown> | Response> 
 export const komutImzasi = (secret: string, k: Pick<KomutKaydi, 'id' | 'tur' | 'veri' | 'at' | 'kim' | 'kurulum' | 'rol'>) => createHmac('sha256', secret).update(imzaMetni(k)).digest('base64url');
 
 /**
- * Kasanın imza anahtarları: şimdiki (şubenin ya da ortak), varsa önceki değeri (anahtar değişimi; kasa yeni değere gün
- * kapanınca geçer)
+ * Kasanın imza anahtarları: önce şimdiki (şubenin ya da ortak), sonra varsa önceki değerleri (anahtar değişimi; kasa yeni
+ * değere gün kapanınca geçer)
  */
 function imzaAnahtarlari(deps: Pick<KontrolDeps, 'secret' | 'anahtar' | 'onceki'>, sube: string | undefined): string[] {
   const simdiki = deps.anahtar?.(sube) ?? deps.secret;
-  const onceki = deps.onceki?.(sube) ?? null;
-  return onceki && onceki.length >= 32 && onceki !== simdiki ? [simdiki, onceki] : [simdiki];
+  return [...new Set([simdiki, ...(deps.onceki?.(sube) ?? []).filter((k) => k.length >= 32)])];
 }
 
 /**

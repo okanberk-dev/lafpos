@@ -79,17 +79,49 @@ const istek = (url: URL, key: string, sube?: string) => ({ method: 'POST', heade
 
 describe('bulut: önceki değerin geçerliliği', () => {
   it('ortak anahtarın önceki değeri: kısa, şimdikiyle ya da bir şube anahtarıyla aynıysa yok sayılır; eski adla da okunur', async () => {
-    const { ortakOnceki } = await import('../api/_kafe');
-    expect(ortakOnceki(YENI, {})).toBeNull();
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: ESKI })).toBe(ESKI);
-    // Vercel'deki değişken ad değişikliğinden önceki adla da girilebilir; yeni ad geçer
-    expect(ortakOnceki(YENI, { [ESKI_ADLA_ONCEKI]: ESKI })).toBe(ESKI);
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: ` ${ESKI} `, [ESKI_ADLA_ONCEKI]: 'z'.repeat(40) })).toBe(ESKI);
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: 'kisa' })).toBeNull();
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: YENI })).toBeNull();
+    const { ortakOncekiler } = await import('../api/_kafe');
+    expect(ortakOncekiler(YENI, {})).toEqual([]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: ESKI })).toEqual([ESKI]);
+    // Vercel'deki değişken ad değişikliğinden önceki adla da girilebilir (ladmin'in uyarısı bu adı yazar)
+    expect(ortakOncekiler(YENI, { [ESKI_ADLA_ONCEKI]: ESKI })).toEqual([ESKI]);
+    // İki ad birden: ikisi de sayılır, aynı değer bir kez
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: ` ${ESKI} `, [ESKI_ADLA_ONCEKI]: 'z'.repeat(40) })).toEqual([ESKI, 'z'.repeat(40)]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: ESKI, [ESKI_ADLA_ONCEKI]: ESKI })).toEqual([ESKI]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: 'kisa' })).toEqual([]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: YENI })).toEqual([]);
+    // Biri geçersizse öbürü yine sayılır, geçersizi değil
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: 'kisa', [ESKI_ADLA_ONCEKI]: ESKI })).toEqual([ESKI]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: YENI, [ESKI_ADLA_ONCEKI]: ESKI })).toEqual([ESKI]);
     // Bir şubenin anahtarıyla aynıysa: o şubenin anahtarıyla imzalı istek başlıksız gelip ortak anahtar sayılmasın
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: K_M, ASILPOS_CLOUD_SECRET_MARINA: K_M })).toBeNull();
-    expect(ortakOnceki(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: K_M, ASILPOS_CLOUD_SECRET_MARINA: K_M_YENI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_M })).toBeNull();
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: K_M, ASILPOS_CLOUD_SECRET_MARINA: K_M })).toEqual([]);
+    expect(ortakOncekiler(YENI, { [ESKI_ADLA_ONCEKI]: K_M, ASILPOS_CLOUD_SECRET_MARINA: K_M })).toEqual([]);
+    expect(ortakOncekiler(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: K_M, ASILPOS_CLOUD_SECRET_MARINA: K_M_YENI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_M })).toEqual([]);
+  });
+
+  it('sağlık yanıtı: ortak anahtarın geçerli önceki değeri tanımlı mı ve adları (değer yok); Uzaktan kurulmamışsa yok', async () => {
+    const { oncekiDurumu } = await import('../api/_kafe');
+    expect(oncekiDurumu(YENI, {})).toEqual({ onceki: false, oncekiAdlari: [] });
+    expect(oncekiDurumu(YENI, { [ESKI_ADLA_ONCEKI]: ESKI })).toEqual({ onceki: true, oncekiAdlari: [ESKI_ADLA_ONCEKI] });
+    expect(oncekiDurumu(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: 'z'.repeat(40), [ESKI_ADLA_ONCEKI]: ESKI })).toEqual({ onceki: true, oncekiAdlari: ['ASILPOS_CLOUD_SECRET_ONCEKI', ESKI_ADLA_ONCEKI] });
+    expect(oncekiDurumu(YENI, { ASILPOS_CLOUD_SECRET_ONCEKI: 'kisa' })).toEqual({ onceki: false, oncekiAdlari: [] });
+    expect(oncekiDurumu('', { ASILPOS_CLOUD_SECRET_ONCEKI: ESKI })).toEqual({ onceki: false, oncekiAdlari: [] });
+    // Şubenin önceki değeri bu bayrağa girmez (ladmin yalnız ortak anahtarı dağıtır)
+    expect(oncekiDurumu(YENI, { ASILPOS_CLOUD_SECRET_MARINA: K_M_YENI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_M }).onceki).toBe(false);
+
+    // Uç: herkese açık, değer taşımaz
+    const health = async () => {
+      const res = await asVercel(() => api.GET(new Request(`${CLOUD}/api/health`)));
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-laf-anahtar')).toBeNull();
+      return (await res.json()) as Record<string, unknown>;
+    };
+    vercel = { [ESKI_ADLA]: YENI };
+    expect(await health()).toMatchObject({ ok: true, onceki: false, oncekiAdlari: [] });
+    vercel = { [ESKI_ADLA]: YENI, [ESKI_ADLA_ONCEKI]: ESKI };
+    const h = await health();
+    expect(h).toMatchObject({ ok: true, onceki: true, oncekiAdlari: [ESKI_ADLA_ONCEKI] });
+    expect(JSON.stringify(h)).not.toContain(ESKI);
+    expect(JSON.stringify(h)).not.toContain(YENI);
   });
 
   it('ONCEKI şube adı değil: ortak anahtarın önceki değeri şube anahtarı sayılmaz', async () => {
@@ -109,6 +141,8 @@ describe('bulut: önceki değerin geçerliliği', () => {
     expect(subeOncekiAnahtari('MARINA', YENI, { ...base, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: YENI })).toBeNull();
     expect(subeOncekiAnahtari('MARINA', YENI, { ...base, ASILPOS_CLOUD_SECRET_ONCEKI: ESKI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: ESKI })).toBeNull();
     expect(subeOncekiAnahtari('MARINA', YENI, { ...base, [ESKI_ADLA_ONCEKI]: ESKI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: ESKI })).toBeNull();
+    // İki ad birden tanımlıyken ikisinin değeri de (yalnız geçeni değil)
+    expect(subeOncekiAnahtari('MARINA', YENI, { ...base, ASILPOS_CLOUD_SECRET_ONCEKI: 'z'.repeat(40), [ESKI_ADLA_ONCEKI]: ESKI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: ESKI })).toBeNull();
     // Tuzla'nın anahtarı (şimdiki ya da önceki) Marina'yı açamaz
     expect(subeOncekiAnahtari('MARINA', YENI, { ...base, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_T })).toBeNull();
     expect(subeOncekiAnahtari('MARINA', YENI, { ...base, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_M, ASILPOS_CLOUD_SECRET_TUZLA_ONCEKI: K_M })).toBeNull();
@@ -139,6 +173,13 @@ describe('bulut: imzalı istek önceki değerle de tutar', () => {
     // Vercel'de bugünkü gibi ad değişikliğinden önceki adlarla
     vercel = { [ESKI_ADLA]: YENI, [ESKI_ADLA_ONCEKI]: ESKI };
     expect(await id(ESKI)).toEqual({ sube: null, kendi: false, onceki: true });
+    // İnceleme bulgusu 4: önceki bir değişimden yeni adla kalmış _ONCEKI, ladmin'in öğrettiği eski adla girilen gerçek
+    // önceki değeri gölgelemez; ikisi de tutar
+    const ESKIDEN_KALAN = 'k'.repeat(40);
+    vercel = { [ESKI_ADLA]: YENI, ASILPOS_CLOUD_SECRET_ONCEKI: ESKIDEN_KALAN, [ESKI_ADLA_ONCEKI]: ESKI };
+    expect(await id(ESKI)).toEqual({ sube: null, kendi: false, onceki: true });
+    expect(await id(ESKIDEN_KALAN)).toEqual({ sube: null, kendi: false, onceki: true });
+    expect(await id(YENI)).toEqual({ sube: null, kendi: false });
     // _ONCEKI silinince eski anahtar yeniden 401
     vercel = { ASILPOS_CLOUD_SECRET: YENI };
     expect(((await id(ESKI)) as Response).status).toBe(401);
@@ -167,6 +208,35 @@ describe('bulut: imzalı istek önceki değerle de tutar', () => {
     expect(((await res.json()) as { anahtarlar: Record<string, string> }).anahtarlar).toEqual({ TRENDYOL_API_KEY: 'anahtar-1' });
     expect((await get('x'.repeat(40))).status).toBe(401);
   });
+
+  it('2xx yanıt imzanın hangi değerle tuttuğunu söyler (x-laf-anahtar); ret ve imzasız yanıtta başlık yok', async () => {
+    // ladmin'in sınaması: şubesiz imzalı GET /api/uzaktan/anahtarlar (Redis'e dokunmaz)
+    const u = new URL(`${CLOUD}/api/uzaktan/anahtarlar`);
+    const get = (key: string, sube?: string) =>
+      asVercel(() => api.GET(new Request(u, { headers: { ...signedHeaders(key, 'GET', u, ''), ...(sube ? { 'x-laf-sube': sube } : {}) } })));
+    vercel = { [ESKI_ADLA]: YENI, [ESKI_ADLA_ONCEKI]: ESKI };
+    const yeni = await get(YENI);
+    expect(yeni.status).toBe(200);
+    expect(yeni.headers.get('x-laf-anahtar')).toBe('simdiki');
+    expect(await yeni.json()).toEqual({ anahtarlar: {} });
+    // Panel güncellenmeden _ONCEKI'ye yazılan değer: kabul, ama "onceki" (silinirse kesilir)
+    const eski = await get(ESKI);
+    expect(eski.status).toBe(200);
+    expect(eski.headers.get('x-laf-anahtar')).toBe('onceki');
+    expect(eski.headers.get('content-type')).toBe('application/json');
+    expect(eski.headers.get('cache-control')).toBe('no-store');
+    const red = await get('x'.repeat(40));
+    expect(red.status).toBe(401);
+    expect(red.headers.get('x-laf-anahtar')).toBeNull();
+    // Şube anahtarı da (kendi anahtarı olan şubenin önceki değeri)
+    vercel = { [ESKI_ADLA]: YENI, ASILPOS_CLOUD_SECRET_MARINA: K_M_YENI, ASILPOS_CLOUD_SECRET_MARINA_ONCEKI: K_M };
+    expect((await get(K_M_YENI, 'MARINA')).headers.get('x-laf-anahtar')).toBe('simdiki');
+    expect((await get(K_M, 'MARINA')).headers.get('x-laf-anahtar')).toBe('onceki');
+    // İmza tuttu ama erişim yok (403): başlık yok
+    const yasak = await asVercel(() => api.GET(new Request(new URL(`${CLOUD}/api/uzaktan/anahtarlar?sube=marina`), { headers: signedHeaders(YENI, 'GET', new URL(`${CLOUD}/api/uzaktan/anahtarlar?sube=marina`), '') })));
+    expect(yasak.status).toBe(403);
+    expect(yasak.headers.get('x-laf-anahtar')).toBeNull();
+  });
 });
 
 describe('kasa ve bulut birlikte: değişimin her anında Uzaktan çalışır', () => {
@@ -192,6 +262,17 @@ describe('kasa ve bulut birlikte: değişimin her anında Uzaktan çalışır', 
     expect(await it_()).toBe('sent');
     env.cloudSecret = ESKI;
     expect(await it_()).toBe('failed');
+  });
+
+  it('ladmin uyarısının adıyla (eski önekli ad) girilen önceki değer, eskiden kalan ASILPOS_CLOUD_SECRET_ONCEKI varken de çalışır', async () => {
+    const cloud = await import('../server/sync/cloud');
+    const it_ = async () => {
+      cloud.resetCloudSync();
+      return cloud.pushSnapshot();
+    };
+    vercel = { [ESKI_ADLA]: YENI, ASILPOS_CLOUD_SECRET_ONCEKI: 'k'.repeat(40), [ESKI_ADLA_ONCEKI]: ESKI };
+    expect(await it_()).toBe('sent');
+    expect(sent.at(-1)).toMatchObject({ path: '/api/uzaktan/push', status: 200 });
   });
 
   it('sahibin uzaktan oturumu anahtar değişince düşmez (_ONCEKI varken); yeni oturum yeni anahtarla verilir', async () => {
@@ -232,8 +313,8 @@ describe('bulut: uzaktan yönetim komutu kasanın kullandığı anahtarla imzala
   async function panel(d: unknown) {
     const kstore = new Map<string, string>([[`${REDIS_ONEKI}kontrol:durum:${ID}`, JSON.stringify(d)]]);
     const { kontrol } = await import('../api/_kontrol');
-    const { kafeAnahtari, kafeOncekiAnahtari } = await import('../api/_kafe');
-    const secret = () => process.env.ASILPOS_CLOUD_SECRET ?? '';
+    const { kafeAnahtari, kafeOncekiAnahtarlari } = await import('../api/_kafe');
+    const secret = () => process.env.ASILPOS_CLOUD_SECRET || process.env[ESKI_ADLA] || '';
     const deps = {
       redis: async (...cmd: (string | number)[]) => upstashCommand(kstore, cmd.map(String)),
       oturum: async () => ({ eposta: 'sahip@ornek.test', rol: 'sahip' as const }),
@@ -244,7 +325,7 @@ describe('bulut: uzaktan yönetim komutu kasanın kullandığı anahtarla imzala
       },
       sahipler: ['sahip@ornek.test'],
       anahtar: (sube: string | undefined) => kafeAnahtari(sube, secret()),
-      onceki: (sube: string | undefined) => kafeOncekiAnahtari(sube, secret()),
+      onceki: (sube: string | undefined) => kafeOncekiAnahtarlari(sube, secret()),
     };
     const run = (r: Request) => asVercel(() => kontrol(r, new URL(r.url), r.url.includes('/komut') ? 'kontrol/komut' : 'kontrol/durum', deps));
     const durumRes = (await (await run(new Request(`${CLOUD}/api/kontrol/durum`))).json()) as KontrolPaneli;
@@ -270,6 +351,16 @@ describe('bulut: uzaktan yönetim komutu kasanın kullandığı anahtarla imzala
     // _ONCEKI silinince eski anahtarlı kasanın açık anahtarı da tutmaz
     vercel = { ASILPOS_CLOUD_SECRET: YENI };
     expect((await panel(durum(ESKI))).anahtar).toBe('');
+  });
+
+  it('önceki değer iki adla tanımlıyken komut kasanın kullandığıyla imzalanır (eskiden kalan değil)', async () => {
+    const ESKIDEN_KALAN = 'k'.repeat(40);
+    vercel = { [ESKI_ADLA]: YENI, ASILPOS_CLOUD_SECRET_ONCEKI: ESKIDEN_KALAN, [ESKI_ADLA_ONCEKI]: ESKI };
+    const eski = await panel(durum(ESKI));
+    expect(eski.anahtar).toBe('ACIK-ANAHTAR');
+    expect(eski.komut.imza).toBe(imza(eski.komut, ESKI));
+    const yeni = await panel(durum(YENI));
+    expect(yeni.komut.imza).toBe(imza(yeni.komut, YENI));
   });
 
   it('şube anahtarıyla çalışan kasa: şubenin önceki değeri; ortak anahtarın önceki değeri o şubede tutmaz', async () => {

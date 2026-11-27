@@ -344,6 +344,30 @@ describe('kasa ekranı bekçisi (kasa-yazici.ps1)', () => {
     expect(WATCHER_VERSION).toBeGreaterThanOrEqual(3);
   });
 
+  it('yeni tarayıcı açılmadan profilin HTTP önbelleği silinir (güncellemeden sonra eski arayüz önbellekten açılmasın)', () => {
+    // 27 Kasım 2026 incelemesi, bulgu 5: eski sunucunun başlıksız verdiği index.html kiosk profilinde kalmış olabilir
+    const temizle = ps1.slice(ps1.indexOf('function Clear-BrowserCache'), ps1.indexOf('function Test-CustomerDisplay'));
+    expect(temizle).toContain("Join-Path $profileDir 'Default\\Cache'");
+    expect(temizle).toContain('Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue');
+    // Yalnız HTTP önbelleği: oturum ve yerel depolama kalır
+    for (const kalir of ['Local Storage', 'Cookies', 'IndexedDB', 'Service Worker']) expect(temizle.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')).not.toContain(kalir);
+    // Kasa penceresi: tarayıcı yokken (kilit ve Test-KasaWindow'dan sonra), Start-Process'ten hemen önce, kendi profiliyle
+    const kasa = ps1.slice(ps1.indexOf('function Open-KasaWindow'), ps1.indexOf('function Remove-TemporaryKasaWatcher'));
+    const kontrol = kasa.indexOf('if (Test-KasaWindow) { return $true }');
+    const sil = kasa.indexOf('Clear-BrowserCache $kasaProfil');
+    expect(kontrol).toBeGreaterThan(kasa.indexOf('WaitOne('));
+    expect(sil).toBeGreaterThan(kontrol);
+    expect(sil).toBeLessThan(kasa.indexOf('Start-Process'));
+    expect(kasa).toContain(`$kasaProfil = Join-Path $env:LOCALAPPDATA '${ESKI_URUN_ADI}\\chrome'`);
+    expect(kasa).toContain(`$kasaProfil = Join-Path $env:LOCALAPPDATA '${ESKI_URUN_ADI}\\edge'`);
+    // Müşteri ekranı: kendi profili, açık değilken
+    const musteri = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
+    const msil = musteri.indexOf('Clear-BrowserCache $profileDir');
+    expect(msil).toBeGreaterThan(musteri.indexOf('if (Test-CustomerDisplay) { return }'));
+    expect(msil).toBeLessThan(musteri.indexOf('Start-Process'));
+    expect(ASCII.test(read('scripts/kasa/windows/kurulum/kasa-yazici.ps1', 'latin1'))).toBe(true);
+  });
+
   it('müşteri ekranı kilit altında açılır: oturum açılınca bat ile bekçi aynı anda iki pencere açmaz', () => {
     const fn = ps1.slice(ps1.indexOf('function Start-CustomerDisplay'), ps1.indexOf('function Stop-TemporaryDisplayWatcher'));
     // Kasa penceresinden ayrı kilit: biri açılırken öteki beklemesin

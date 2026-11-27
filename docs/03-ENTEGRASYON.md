@@ -1386,9 +1386,28 @@ açılmaz. Böylece anahtar değiştirmek satış gününü bozmaz (`uygulanan` 
 kasalar gece alır, sunucudaki anahtar sonra değişir" iki anı eşlemeyi sahibe bırakıyordu: 26 Kasım'da kasalar gün sonunda
 geçti, Uzaktan ve site eski değerde kaldı, kasanın bütün istekleri reddedildi. Artık karşı taraf iki değeri birden kabul
 eder: önce Uzaktan'da (Vercel `lafpos`) ve sitede yeni değer şimdiki, eski değer `_ONCEKI` adıyla
-(`ASILPOS_CLOUD_SECRET_ONCEKI` ya da `LAFPOS_CLOUD_SECRET_ONCEKI`; sitede `LAFPOS_SYNC_SECRET` adına `_ONCEKI` eklenmiş
-adla), yeniden yayım; sonra ladmin'de yeni değer; kasalar gün kapanınca geçer; birkaç gün sonra `_ONCEKI` silinir. Önce
-karşı taraf: gün kapalıyken kasa yeni değeri 10 dakika içinde yazar, karşı taraf onu henüz bilmeseydi kasa reddedilirdi.
+(`LAFPOS_CLOUD_SECRET_ONCEKI`; yeni adıyla `ASILPOS_CLOUD_SECRET_ONCEKI` da, ikisi birden tanımlıysa ikisi de sayılır;
+sitede `LAFPOS_SYNC_SECRET` adına `_ONCEKI` eklenmiş adla), yeniden yayım; sonra ladmin'de yeni değer; kasalar gün
+kapanınca geçer; birkaç gün sonra `_ONCEKI` silinir. Önce karşı taraf: gün kapalıyken kasa yeni değeri 10 dakika içinde
+yazar, karşı taraf onu henüz bilmeseydi kasa reddedilirdi.
+
+**Değişimin izlenmesi (ladmin ↔ Uzaktan; 27 Kasım 2026 incelemesi).** ladmin dağıttığı Uzaktan anahtarını şubesiz imzalı
+`GET <Uzaktan adresi>/api/uzaktan/anahtarlar` ile sınar (veri vermez, Redis'e dokunmaz). Uzaktan'ın iki ek alanı, ikisi
+de sır taşımaz:
+
+```
+200 (kasa imzası tuttu)   x-laf-anahtar: simdiki | onceki
+                          (onceki: imza yalnız _ONCEKI değerle tuttu; ret, 4xx/5xx ve imzasız yanıtta başlık yok)
+GET <Uzaktan adresi>/api/health   (oturumsuz)
+200 { "ok": true, "remote": true, "time": …, "onceki": false | true, "oncekiAdlari": ["LAFPOS_CLOUD_SECRET_ONCEKI", "ASILPOS_CLOUD_SECRET_ONCEKI"] }
+                          (onceki: ortak anahtarın geçerli bir önceki değeri tanımlı; oncekiAdlari: tanımlı ve
+                          geçerli olanların adları, değer değil; çoğu zaman tek ad. Şube
+                          anahtarlarınınki girmez. Uzaktan kurulmamışsa false)
+```
+
+`onceki` başlığı ladmin'in değerinin yalnız önceki değer olarak kabul edildiğini söyler (ladmin güncellenmemiş: `_ONCEKI`
+silinirse kasalar kesilir). Sağlıktaki `onceki: true` bütün kasalar uyguladıktan sonra da duruyorsa `_ONCEKI` unutulmuştur.
+Eski Uzaktan (bu alanlardan önceki sürüm) ikisini de göndermez: başlıksız 2xx ve alansız sağlık "bilinmiyor" sayılır.
 
 **Sınır:** lafmaliyet bugün tek AsilPOS şubesinin gününü alır (§4 "Şube"); Marina AsilPOS'tayken ikinci şubenin kasası
 kurulur ve çalışır ama gün sonu `wrong_branch` ile kasada bekler, günde bir yeniden denenir (§4c). Panel şubeyi kasanın

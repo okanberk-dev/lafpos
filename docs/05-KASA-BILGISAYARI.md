@@ -344,6 +344,17 @@ Günlük yedek (`backups\lafpos-<tarih>.db`) alınınca kasada sıkıştırılı
 (Vercel Blob, özel depo `lafpos-yedek`; `server/sync/yedek.ts`, `api/_yedek.ts`). Dükkân başına son 30 yedek kalır;
 gidemezse yarım saatte bir yeniden denenir. Durum ve "Şimdi yedekle": Yönetim › Ayarlar ve yedek › Bulut yedeği.
 
+**Anahtar değişince** (27 Kasım 2026 incelemesi; `docs/07-UZAKTAN-ERISIM.md` §7): ladmin'in dağıttığı yeni Uzaktan anahtarı
+gün sonunda yazılır, günün yedeği ise gün içinde eski anahtarla gitmiştir. Ertesi günün yedeğine dek buluttaki bütün
+yedekler eski anahtarla şifreli kalırdı: o arada yeni anahtarla kurulan bilgisayar hiçbirini açamazdı. Artık:
+- Sunucu yeni anahtarla açılınca ilk yedek turunda (yarım dakika) veritabanının şimdiki hâli yeni anahtarla hemen
+  yüklenir. Son yüklemenin anahtarı izinden (`yedek.bulut` `lastKey`: anahtarın özeti, kendisi değil) bilinir; yükleme
+  gidemezse yarım saatte bir yeniden denenir. Anlık kopya yükleme bitince silinir.
+- Ayarlar dosyasındaki ortak ya da şube anahtarı başka değere geçince (ladmin'in dağıtımı, Bağlantı bilgileri, kurulum
+  kodu) eski değer `ASILPOS_CLOUD_SECRET_ONCEKI` / `ASILPOS_CLOUD_SUBE_SECRET_ONCEKI` satırında kalır (dosyanın
+  adlandırmasıyla; kurulu kasada eski önekle). Geri yükleme önce şimdiki anahtarları, sonra bunları dener: değişimden
+  önce alınmış yedek de aynı kasada açılır. Yalnız bir önceki değer tutulur; bu satırla hiçbir istek imzalanmaz.
+
 **Geri yükleme** (yalnız patron, kendi PIN'iyle, gün kapalıyken, Windows kurulumunda): "Buluttan geri yükle" yedeği
 seçtirir; seçilen yedek indirilir, çözülür, SQLite olduğu doğrulanır ve veri klasöründe `geri-yukle\hazir.db` olarak
 bekler. Sunucu kapanır; bekçi açmadan önce mevcut veritabanının kopyasını alır
@@ -452,9 +463,18 @@ Otomatik güncellemeden sonra sahip kasayı (kiosk penceresi ya da tarayıcı) i
    bir, ekrana dönünce ve canlı bağlantı her kurulduğunda. Farklıysa sayfa bir kez kendiliğinden yenilenir (açık pencere
    kapanınca; oturum varsa "Yeni sürüm kuruldu" der); yenilemeden sonra da farklıysa döngüye girmez.
 
+**Tarayıcının kendi önbelleği** (27 Kasım 2026 incelemesi): kasa bekçisi ve kasa kısayolu kasa penceresini ya da müşteri
+ekranını yeni bir tarayıcı süreciyle açmadan önce o profilin HTTP önbelleğini (`%LocalAppData%\LafPOS\chrome`, `\edge`
+ve `\chrome-musteri` altında `Default\Cache`) siler (`app\kasa-yazici.ps1` `Clear-BrowserCache`). Yalnız o profilin
+tarayıcısı açık değilken, pencere kilidinin altında; oturum, ayarlar ve yerel depolama kalır. Dosyalar yerel sunucudan
+geldiği için bedeli ilk yüklemenin yeniden yapılmasıdır. Böylece eski sunucunun başlıksız verdiği ve profilde kalmış
+`index.html` bilgisayar yeniden açılınca ya da pencere yeniden açılınca kullanılmaz.
+
 **Bu sürüme geçişte bir kez:** yeni denetim yeni sürümün betiğindedir. Bu düzeltmeyi getiren güncelleme kurulurken eski
-sürümün giriş ekranı açıksa (ya da tarayıcıda eski başlıksız `index.html` saklıysa) o sayfa bir kez daha eski
-görünebilir; elle yenileyince (F5) düzelir. Sonraki güncellemelerde görünmez. Testler:
+sürümün giriş ekranı açıksa o açık sayfa bir kez daha eski görünebilir: elle yenileyince (F5) düzelir. Bilgisayar
+yeniden başlayınca ya da pencere kasa kısayoluyla açılınca önbellek silindiği için görünmez (güncellemeden önce başlamış
+bekçi eski betiği çalıştırmaya devam eder, yenisini bilgisayar yeniden açılınca alır). Sonraki güncellemelerde görünmez.
+Testler:
 `tests/arayuz-onbellek.test.ts`; e2e akışları "Güncellemeden sonra ilk açılış", "Eski sürümle açılan sayfa" ve "Giriş
 ekranı güncellemeden sonra".
 

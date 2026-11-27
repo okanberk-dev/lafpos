@@ -9,7 +9,7 @@ import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { ESKI_KASA_DENETIMI, ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
-import { kafeFetch, yedekAnahtari, yedekCozmeAnahtarlari } from '../lib/kafe-anahtari';
+import { kafeFetch, yedekAnahtari, yedekAnahtarIzi, yedekCozmeAnahtarlari } from '../lib/kafe-anahtari';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
 import { posEnv } from '@shared/pos-env';
@@ -37,9 +37,14 @@ export interface CloudBackupState {
   lastError: string | null;
   /** Son başarılı yüklemenin iş günü: günde bir yüklenir */
   lastDay: string | null;
+  /**
+   * Son başarılı yüklemenin şifre anahtarının izi (server/lib/kafe-anahtari.ts `yedekAnahtarIzi`; anahtarın kendisi
+   * değil). Bu sürümden önceki kayıtta yok (null): bilinmiyor, anahtar değişmiş sayılmaz
+   */
+  lastKey: string | null;
 }
 
-export const cloudBackupState = (): CloudBackupState => ({ lastAt: null, lastName: null, lastSize: null, lastError: null, lastDay: null, ...(getSyncState<Partial<CloudBackupState>>(STATE) ?? {}) });
+export const cloudBackupState = (): CloudBackupState => ({ lastAt: null, lastName: null, lastSize: null, lastError: null, lastDay: null, lastKey: null, ...(getSyncState<Partial<CloudBackupState>>(STATE) ?? {}) });
 const saveState = (patch: Partial<CloudBackupState>) => setSyncState(STATE, { ...cloudBackupState(), ...patch });
 
 const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, YEDEK_SIFRE_BILGISI, 32));
@@ -111,11 +116,12 @@ async function cloud<T>(path: string, body: unknown): Promise<T> {
 export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
   if (!cloudEnabled()) throw new Error('AsilPOS Uzaktan kurulu değil');
   try {
-    const sealed = await sealBackupAsync(readFileSync(file), yedekAnahtari());
+    const key = yedekAnahtari();
+    const sealed = await sealBackupAsync(readFileSync(file), key);
     const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });
     const res = await fetch(url, { method: 'PUT', body: new Uint8Array(sealed), headers: { 'content-type': 'application/octet-stream' }, signal: AbortSignal.timeout(10 * 60_000) });
     if (!res.ok) throw new Error(`Yedek yüklenemedi (${res.status})`);
-    saveState({ lastAt: Date.now(), lastName: pathname, lastSize: sealed.length, lastError: null, ...(day ? { lastDay: day } : {}) });
+    saveState({ lastAt: Date.now(), lastName: pathname, lastSize: sealed.length, lastError: null, lastKey: yedekAnahtarIzi(key), ...(day ? { lastDay: day } : {}) });
     return { name: pathname, size: sealed.length };
   } catch (e) {
     saveState({ lastError: e instanceof Error ? e.message : String(e) });
@@ -126,12 +132,37 @@ export async function uploadBackup(file: string, day: string | null = null): Pro
 let lastTryAt = 0;
 let busy = false;
 
-/** Günlük yedekten sonra: bugün yüklenmediyse yükler; gidemezse yarım saatte bir yeniden dener */
-export function afterDailyBackup(file: string, day: string, now = Date.now()) {
-  if (!cloudEnabled() || busy || cloudBackupState().lastDay === day || now - lastTryAt < 30 * 60_000) return;
+/**
+ * Son yüklenen yedek şimdiki anahtardan başka bir anahtarla mı şifreli: anahtar değişti (ladmin'in dağıttığı yeni değer
+ * gün sonunda yazıldı, şube anahtarı girildi). İz yoksa (eski kayıt) bilinmiyor: hayır
+ */
+export const yedekAnahtariDegisti = (st: CloudBackupState = cloudBackupState()) => !!st.lastKey && st.lastKey !== yedekAnahtarIzi();
+
+/**
+ * Günlük yedekten sonra: bugün yüklenmediyse yükler; gidemezse yarım saatte bir yeniden dener. Bugün yüklendi ama anahtar
+ * o yüklemeden sonra değiştiyse (27 Kasım 2026 incelemesi: anahtar gün sonunda değişir, ertesi günün yedeğine dek buluttaki
+ * bütün yedekler eski anahtarla şifreli kalır; yeni anahtarla kurulan bilgisayar hiçbirini açamazdı) veritabanının şimdiki
+ * hâli yeni anahtarla hemen yüklenir: `taze` bir anlık kopya alır (yükleme bitince silinir); verilmezse günün dosyası
+ * yeni anahtarla yeniden yüklenir
+ */
+export function afterDailyBackup(file: string, day: string, now = Date.now(), taze?: () => Promise<string>) {
+  if (!cloudEnabled() || busy || now - lastTryAt < 30 * 60_000) return;
+  const st = cloudBackupState();
+  const yeniAnahtar = st.lastDay === day && yedekAnahtariDegisti(st);
+  if (st.lastDay === day && !yeniAnahtar) return;
   lastTryAt = now;
   busy = true;
-  void uploadBackup(file, day)
+  const yukle = async () => {
+    if (!yeniAnahtar || !taze) return uploadBackup(file, day);
+    const kopya = await taze();
+    try {
+      return await uploadBackup(kopya, day);
+    } finally {
+      rmSync(kopya, { force: true });
+    }
+  };
+  void yukle()
+    .then(() => yeniAnahtar && console.log('[bulut yedeği] anahtar değişti: yeni anahtarla yedek yüklendi'))
     .catch((e) => console.warn('[bulut yedeği]', e instanceof Error ? e.message : e))
     .finally(() => (busy = false));
 }
