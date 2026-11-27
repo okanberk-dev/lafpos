@@ -41,6 +41,11 @@ window.addEventListener('vite:preloadError', (e) => {
 // Tablet ve telefonda ana ekrana ekleme: tarayıcının "yükle" olayı sayfa açılır açılmaz gelir (kullanıcı menüsü sunar)
 listenInstallPrompt();
 
+// Yalnız Windows CI (scripts/kasa/windows/kurulum/ci-kurulum.mjs): güncelleme kanalının denemelik derlemesine verilen
+// işaret ana betiğin içeriğini, dolayısıyla adını derlemeye göre değiştirir; denetim güncellemeden sonra kasa penceresinin
+// yeni derlemeyi gösterdiğini ana betikten anlar. Gerçek derlemede tanımsızdır
+if (import.meta.env.VITE_ASILPOS_CI_DERLEME) document.documentElement.dataset.ciDerleme = String(import.meta.env.VITE_ASILPOS_CI_DERLEME);
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 15_000 },

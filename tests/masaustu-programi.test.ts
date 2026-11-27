@@ -360,3 +360,108 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
     expect(pwa).toContain('if (!isLoopbackHost(window.location.hostname)) usePrompt.setState(');
   });
 });
+
+describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurulum.mjs)', () => {
+  it('vekil eski sunucuyu taklit eder, sayfaya gösterilen derlemeyi bildiren betiği ekler; API\'ye dokunmaz', async () => {
+    const { createServer } = await import('node:http');
+    const { startProxy, mainScript, eskiBasliklar, INJECT } = await load('ci-vekil.mjs');
+    const html = '<!doctype html><html><head><script type="module" crossorigin src="/assets/index-AbC12345.js"></script><title>AsilPOS</title></head><body><div id="root"></div></body></html>';
+    expect(mainScript(html)).toBe('/assets/index-AbC12345.js');
+    expect(eskiBasliklar({ 'cache-control': 'no-store', etag: 'x' }, Date.UTC(2026, 10, 27))).toEqual({ etag: 'x', 'last-modified': new Date(Date.UTC(2026, 9, 28)).toUTCString() });
+    const up = createServer((req, res) => {
+      if (req.url === '/api/health') return res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end('{"ok":true}');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': String(Buffer.byteLength(html)) }).end(html);
+    });
+    await new Promise<void>((ok) => up.listen(0, '127.0.0.1', () => ok()));
+    const v = await startProxy({ port: 0, upstreamPort: (up.address() as { port: number }).port });
+    const base = `http://127.0.0.1:${v.port}`;
+    try {
+      // Eski kip: arayüz sayfası önbellek başlıksız, eski Last-Modified'la (Chrome saklar); sayfaya betik eklenir
+      const doc = await fetch(`${base}/`, { headers: { 'sec-fetch-dest': 'document' } });
+      const body = await doc.text();
+      expect(doc.headers.get('cache-control')).toBeNull();
+      expect(Date.parse(doc.headers.get('last-modified')!)).toBeLessThan(Date.now() - 29 * 86_400_000);
+      expect(body).toContain(`${INJECT}</body>`);
+      expect(Number(doc.headers.get('content-length'))).toBe(Buffer.byteLength(body));
+      // API'ye dokunulmaz; sayfanın kendi denetimi (fetch) betiksiz
+      expect((await fetch(`${base}/api/health`)).headers.get('cache-control')).toBe('no-store');
+      expect(await (await fetch(`${base}/`)).text()).toBe(html);
+      // Gerçek kip: başlıklar olduğu gibi
+      v.mode = 'gercek';
+      expect((await fetch(`${base}/`, { headers: { 'sec-fetch-dest': 'document' } })).headers.get('cache-control')).toBe('no-store');
+      // Sayfanın bildirimi
+      await fetch(`${base}/__ci/sayfa?script=%2Fassets%2Findex-AbC12345.js&depo=1&baslik=AsilPOS`, { method: 'POST' });
+      const sayfa = v.log.find((e: any) => e.tur === 'sayfa');
+      expect(sayfa).toMatchObject({ script: '/assets/index-AbC12345.js', depo: '1', baslik: 'AsilPOS' });
+      const docs = v.log.filter((e: any) => e.tur === 'istek' && e.dest === 'document');
+      expect(docs.map((e: any) => [e.mode, e.cc, e.script])).toEqual([
+        ['eski', null, '/assets/index-AbC12345.js'],
+        ['gercek', 'no-store', '/assets/index-AbC12345.js'],
+      ]);
+    } finally {
+      await v.close();
+      up.close();
+    }
+    // Eklenen betik sayfanın ana betiğini, başlığı ve yerel deponun kalıcılığını bildirir
+    for (const t of ["querySelector('script[type=\"module\"][src]')", "localStorage.getItem(k)", "'/__ci/sayfa?'", 'document.title']) expect(INJECT, t).toContain(t);
+  });
+
+  it('kafedeki yolu yürür: önceki sürüm, kısayolla pencere, güncelleme, ilk açılış yeni sürüm, program, geri dönüş, kaldırma, iki kurulum', () => {
+    const ci = read(`${K}ci-kurulum.mjs`);
+    const order = [
+      'kur(ONCEKI_EXE);',
+      'vekil = await startProxy(',
+      'kasaAc();',
+      "waitSayfa(tB, (s) => s.script === sOnceki",
+      'kanal(b1, b1);',
+      "vekil.mode = 'gercek';",
+      "waitSayfa(tB, (s) => s.script === sYeni, 'açık kasa penceresi yeni sürüme geçmedi'",
+      "checkLinks(ps('kisayollar'), 'güncellemeden sonra')",
+      "ps('kapat');",
+      "if (d3.script !== sYeni) fail(",
+      "e.dest === 'document' && e.status === 200",
+      "const kasaD4 = kasaSurecleri();",
+      "'bekçi kapanan kasa penceresini açmadı'",
+      "kasaAc({ ASILPOS_TARAYICI: 'edge' });",
+      "republish(m1n, b2,",
+      "vekil.mode = 'eski';\nawait bakim(true);",
+      'kanal(b3, b3);',
+      "'bekçi kendini yenilemedi (diskteki yeni betikle)'",
+      "if (sabah.script !== s3) fail(",
+      "checkUninstalled('önceki sürümün kaldırıcısı');",
+      'kur(BU_EXE);',
+      "'elle güncellemeden sonra sunucu açılmadı'",
+      "checkUninstalled('bu sürümün kaldırıcısı');",
+      "ASILPOS_KUR_SESSIZ: '1'",
+      'compareInstalls(exeDurum, webDurum);',
+    ];
+    const at = order.map((t) => ci.indexOf(t));
+    expect(at.every((i) => i > 0), JSON.stringify(order.filter((_, i) => at[i]! <= 0))).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // Kasa penceresi kısayolun kendisiyle açılır (hedefi ve argümanları), vekilden bağlanır
+    expect(ci).toContain("ps('ac', ['-Kisayol', KASA_KISAYOLU], { ASILPOS_URL: VEKIL, ...env })");
+    const helper = read(`${K}ci-windows.ps1`);
+    expect(helper).toContain('$l = $sh.CreateShortcut($Kisayol)');
+    expect(helper).toContain('-ArgumentList $l.Arguments -WorkingDirectory $wd');
+    // Kanal derlemesinin işareti ana betiği değiştirir (yeni sürüm penceredeki betikten ayırt edilir); gerçek derlemede yok
+    expect(ci).toContain('env.VITE_ASILPOS_CI_DERLEME = String(isaret)');
+    expect(read('src/main.tsx')).toContain('if (import.meta.env.VITE_ASILPOS_CI_DERLEME)');
+    expect(read('scripts/kasa/windows/kurulum/kanal.mjs')).not.toContain('VITE_ASILPOS_CI_DERLEME');
+    expect(/^[\x00-\x7f]*$/.test(readFileSync(new URL(`${K}ci-windows.ps1`, root), 'latin1'))).toBe(true);
+  });
+
+  it('iş akışı kafedeki sürümü (GitHub\'daki son kurulum dosyası) indirir, denemeyi koşar, ekran görüntülerini yükler', () => {
+    const wf = read('.github/workflows/windows.yml');
+    const indir = wf.indexOf('gh release download --pattern AsilPOS-Kurulum.exe --dir dist/onceki');
+    const kos = wf.indexOf('node scripts/kasa/windows/kurulum/ci-kurulum.mjs');
+    const yayim = wf.indexOf('gh release create');
+    expect(indir).toBeGreaterThan(0);
+    expect(kos).toBeGreaterThan(indir);
+    // Kurulamayan ya da güncellenemeyen dosya yayımlanmaz
+    expect(yayim).toBeGreaterThan(kos);
+    expect(wf).toContain('path: dist/ci-ekran');
+    expect(wf).toContain('if: always()');
+    // Arayüzün ilk açılışını etkileyen dosyalar da Windows denetimini koşturur
+    for (const p of ["- 'index.html'", "- 'public/**'", "- 'src/lib/buildWatch.ts'", "- 'src/main.tsx'"]) expect(wf, p).toContain(p);
+  });
+});
