@@ -472,7 +472,8 @@ geçer geçmez `_ONCEKI`'yi silin. Önceki değer tanımlı oldukça onu bilen h
 - Önceki değer yetki genişletemez: 32 karakterden kısa, şimdikiyle aynı ya da başka bir anahtarın aynısıysa (ortak
   anahtarınki bir şube anahtarıyla; şubeninki ortak anahtarın şimdiki ya da önceki değeriyle ya da başka şubeninkiyle)
   yok sayılır. Şubenin önceki değeri yalnız şubenin şimdiki anahtarı geçerliyken sayılır, yalnız o şubeyi açar. `ONCEKI`
-  şube adı olamaz (`ASILPOS_CLOUD_SECRET_ONCEKI` ortak anahtarın önceki değeridir).
+  şube adı olamaz (`ASILPOS_CLOUD_SECRET_ONCEKI` ortak anahtarın önceki değeridir). Getir'e verilen anahtar
+  (`GETIR_WEBHOOK_SECRET`) önceki değerlerden biriyle de aynı olamaz: aynıysa Getir aktarıcısı kurulmamış sayılır.
 - **Bulut yedeği:** kasa yedeği kafe anahtarıyla şifreler (§6). Değişimden önce alınmış yedekler eski değerle şifreli
   kalır; kasa geri yüklerken yalnız elindeki (yeni) anahtarları dener. Eski değeri saklayın: değişimden önceki bir yedeği
   açmak gerekirse lazım olur.

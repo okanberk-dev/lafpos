@@ -32,7 +32,7 @@ import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js
 import { CLOUD_KEYS, DUKKAN_KANIT_BASLIGI, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 import { eskiEnvAdi } from '../shared/pos-env.js';
 import { REDIS_ONEKI } from '../shared/eski-adlar.js';
-import { dukkanKanitiTutar, type Kafe, kafeAnahtari, kafeKimligi, kafeOncekiAnahtari, ortakOnceki, subeAnahtarlari, subeErisimi } from './_kafe.js';
+import { dukkanKanitiTutar, type Kafe, kafeAnahtarDegerleri, kafeAnahtari, kafeKimligi, kafeOncekiAnahtari, ortakOnceki, subeErisimi } from './_kafe.js';
 
 const SNAPSHOT_KEY = `${REDIS_ONEKI}snapshot`;
 const TOKEN_HOURS = 12;
@@ -839,13 +839,14 @@ const GETIR_MAX_AGE_MS = 86_400_000;
 const GETIR_LIST_TTL_S = 86_400;
 
 /**
- * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET), şube anahtarlarından
- * ve Yemeksepeti'nin anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse
- * aktarıcı kurulmamış sayılır (boş döner)
+ * Getir'e verilen anahtar: en az 16 karakter ve kafenin ana imza anahtarından (ASILPOS_CLOUD_SECRET), şube anahtarlarından,
+ * bunların anahtar değişimindeki önceki değerlerinden (`_ONCEKI`, docs/07-UZAKTAN-ERISIM.md §7) ve Yemeksepeti'nin
+ * anahtarından ayrı. Üçüncü tarafa verilen değer gelen kutularını okuyup silen, özeti ezen anahtar olamaz: eşitse aktarıcı
+ * kurulmamış sayılır (boş döner)
  */
 function getirKey(): string {
   const key = env('GETIR_WEBHOOK_SECRET');
-  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET') || [...subeAnahtarlari().values()].includes(key)) return '';
+  if (key.length < GETIR_SECRET_MIN || key === secret() || key === env('YEMEKSEPETI_PLUGIN_SECRET') || kafeAnahtarDegerleri().has(key)) return '';
   return key;
 }
 

@@ -5,7 +5,7 @@ import { signedHeaders } from '../server/lib/signature';
 import { anahtarImzaMetni, imzaMetni, KOMUT_TURLERI, komutDogrula, type KomutKaydi, KONTROL_SURUM, type KontrolPaneli } from '../shared/kontrol';
 import { upstashCommand } from './fake-upstash';
 import { type Harness, startApp } from './harness';
-import { REDIS_ONEKI } from '@shared/eski-adlar';
+import { ESKI_ENV_ONEKI, REDIS_ONEKI } from '@shared/eski-adlar';
 import { dukkanKanitMetni } from '@shared/baglanti';
 
 /**
@@ -231,6 +231,19 @@ describe('bulut: paket gelen kutusu restoranın şubesinin anahtarıyla', () => 
   it('Getir’e verilen anahtar bir şube anahtarıyla aynıysa aktarıcı kurulmamış sayılır', async () => {
     vercel = { ASILPOS_CLOUD_SECRET_MARINA: WEBHOOK.padEnd(40, 'x'), GETIR_WEBHOOK_SECRET: WEBHOOK.padEnd(40, 'x') };
     expect((await push('rest-m', 'ord-x')).status).toBe(503);
+  });
+
+  it('Getir’e verilen anahtar bir anahtarın değişimdeki önceki değeriyle (_ONCEKI) aynıysa da aktarıcı kurulmamış sayılır', async () => {
+    const k = WEBHOOK.padEnd(40, 'o');
+    const gonder = (id: string) =>
+      asVercel(() => api.POST(new Request(`${CLOUD}/api/getir/order`, { method: 'POST', headers: { 'x-api-key': k, 'content-type': 'application/json' }, body: JSON.stringify({ id, restaurant: { id: 'rest-m' } }) })));
+    for (const ad of ['ASILPOS_CLOUD_SECRET_ONCEKI', `${ESKI_ENV_ONEKI}CLOUD_SECRET_ONCEKI`, 'ASILPOS_CLOUD_SECRET_MARINA_ONCEKI']) {
+      vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M, [ad]: k, GETIR_WEBHOOK_SECRET: k };
+      expect((await gonder(`ord-${ad}`)).status, ad).toBe(503);
+    }
+    // Önceki değer başka olunca aktarıcı çalışır
+    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M, ASILPOS_CLOUD_SECRET_ONCEKI: 'p'.repeat(40), GETIR_WEBHOOK_SECRET: k };
+    expect((await gonder('ord-ayri')).status).toBe(200);
   });
 });
 

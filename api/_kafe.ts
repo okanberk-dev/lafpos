@@ -116,6 +116,18 @@ export function subeOncekiAnahtari(sube: string | null, ortak: string, vars: Rea
   return v;
 }
 
+/**
+ * Kafe anahtarlarının ortamdaki bütün değerleri, denetimsiz: ortak ve şube anahtarlarının şimdiki ve önceki (`_ONCEKI`)
+ * değerleri. Üçüncü tarafa verilen anahtar (Getir) bunlardan biri olamaz: önceki değer de değişim süresince kasa imzası
+ * sayılır
+ */
+export function kafeAnahtarDegerleri(vars: Readonly<Record<string, string | undefined>> = process.env): Set<string> {
+  const ortak = (vars.ASILPOS_CLOUD_SECRET ?? '').trim() || (vars[eskiEnvAdi('ASILPOS_CLOUD_SECRET')!] ?? '').trim();
+  const out = new Set([ortak, ortakOncekiHam(vars), ...subeAnahtarlari(vars).values(), ...subeOncekiDegerleri(vars).values()]);
+  out.delete('');
+  return out;
+}
+
 /** Şubenin anahtarı tanımlı mı (geçerli ya da geçersiz): tanımlıysa kaynakları yalnız kendi imzasıyla açılır */
 export const subeAnahtariVar = (sube: string | null, ortak: string) => subeAnahtariDurumu(sube, ortak).durum !== 'yok';
 
