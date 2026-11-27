@@ -94,6 +94,11 @@ let wired = false;
 export function syncTokenKablo() {
   if (!wired) {
     wired = true;
+    try {
+      closeStaleSetup();
+    } catch (e) {
+      console.error('[token-kablo] yarım kalan kurulum kaydı', e);
+    }
     kablo.on('connected', (st: KabloState) => {
       try {
         kabloConnected(st);
@@ -176,6 +181,30 @@ class Steps {
   }
 }
 
+/** Yarıda kesilen koşu (saf): süren adım hata, bekleyenler atlandı; düğme yeniden basılabilir olur */
+export function interruptedRun(run: SetupRun, now = Date.now()): SetupRun {
+  return {
+    ...run,
+    running: false,
+    ok: false,
+    finishedAt: now,
+    steps: run.steps.map((s) =>
+      s.status === 'suruyor' ? { ...s, status: 'hata', detail: 'Kasa yeniden başladığı için yarım kaldı; yeniden “Kurulumu yap”a basın' } : s.status === 'bekliyor' ? { ...s, status: 'atlandi' } : s,
+    ),
+  };
+}
+
+/**
+ * Kurulum sürerken sunucu kapandıysa (güncelleme, yeniden başlatma) kayıt "sürüyor" kalır: kart sonsuza dek "Kurulum
+ * sürüyor" der ve düğme basılamaz. Açılışta böyle bir kayıt yarım kaldı diye kapatılır
+ */
+export function closeStaleSetup(now = Date.now()): boolean {
+  const run = getSyncState<SetupRun>(SETUP_KEY);
+  if (!run?.running || setupRunning) return false;
+  setSyncState(SETUP_KEY, interruptedRun(run, now));
+  return true;
+}
+
 /** Kablo takılıp cihaz bağlanana dek bekler (en çok `ms`) */
 function waitConnected(ms: number): Promise<boolean> {
   if (kablo.connected) return Promise.resolve(true);
@@ -233,12 +262,17 @@ export function startTokenKabloSetup(actor: Actor): SetupRun {
     if (!started) return st.finish(false);
     const found = await st.step('cihaz', async () => {
       if (await waitConnected(20_000)) return `${kablo.state.model ?? 'Token'} · ${kablo.state.fiscalId ?? ''}`.trim();
-      // Cihaz görünmüyor: Token'ın sürücüsü (bir kez) kurulur, köprü yeniden başlar
+      // Cihaz görünmüyor: Token'ın sürücüleri (bir kez) kurulur, köprü yeniden başlar
       if (!driverInstalled()) {
         st.set('cihaz', 'suruyor', 'Cihaz görünmedi; Token sürücüsü kuruluyor (birkaç dakika sürebilir)');
-        await installDriver();
+        const driver = await installDriver();
         kablo.restart();
         if (await waitConnected(45_000)) return `Sürücü kuruldu · ${kablo.state.model ?? 'Token'} · ${kablo.state.fiscalId ?? ''}`.trim();
+        // Yeni sürücü çoğu zaman kablo çıkarılıp takılınca (Token'ın aracı da bunu ister), bazen yeniden başlatınca etkinleşir
+        const missing = driver.errors.length ? ` (${driver.errors.join('; ')})` : '';
+        throw new Error(
+          `Sürücü kuruldu${missing} ama cihaz hâlâ görünmüyor: kabloyu çıkarıp yeniden takın${driver.reboot ? ', olmazsa bilgisayarı yeniden başlatın' : ''}. ${CABLE_HINT}. Kablo takılınca AsilPOS kendiliğinden bağlanır; bağlanmazsa yeniden “Kurulumu yap”a basın`,
+        );
       }
       throw new Error(`Cihaz görünmüyor. ${CABLE_HINT}. Sonra yeniden “Kurulumu yap”a basın; kablo takılınca AsilPOS kendiliğinden de bağlanır`);
     });
