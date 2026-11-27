@@ -1,0 +1,36 @@
+# Token yazarkasa POS'larının (Beko 300TR, X30TR) kablolu sürücüleri gerçek Windows'ta sessiz kurulabiliyor mu
+# (server/okc/token-kablo-kurulum.ts › installDriver; scripts/kasa/windows/surucu-dene.ts). Token'ın "sürücü kurulum
+# aracı" pencereli bir sihirbaz olduğu için kasa onu çalıştırmaz, içindeki kurucuları kendisi çalıştırır; bu yol Linux
+# denetiminde (ci.yml) sınanamaz. Yalnız kurulum kodu değişince koşar (57 MB indirir, sürücü kurar); gerekirse Actions ›
+# Token sürücü kurulumu › Run workflow ile elle. Cihaz takılı olmadığı için bağlantının kendisi sınanmaz.
+name: Token sürücü kurulumu
+
+on:
+  pull_request:
+    paths:
+      - 'server/okc/token-kablo-kurulum.ts'
+      - 'scripts/kasa/windows/surucu-dene.ts'
+      - '.github/workflows/token-surucu.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: token-surucu-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  surucu:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Sürücüleri sessiz kur ve denetle
+        run: npx tsx scripts/kasa/windows/surucu-dene.ts

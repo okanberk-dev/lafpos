@@ -16,4 +16,9 @@ export function gunzipSync(): never {
   throw new Error('Tarayıcı demosunda bulut yedeği yok');
 }
 
-export default { gzipSync, gzip, gunzipSync };
+/** Token sürücü arşivinin açılması (server/okc/token-kablo-kurulum.ts): yalnız Windows kasada, demoda çağrılmaz */
+export function inflateRawSync(): never {
+  throw new Error('Tarayıcı demosunda sürücü kurulumu yok');
+}
+
+export default { gzipSync, gzip, gunzipSync, inflateRawSync };

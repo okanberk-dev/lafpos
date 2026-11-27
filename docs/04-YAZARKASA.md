@@ -582,12 +582,31 @@ Kasa bilgisayarına AsilPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS 
 2. **Token kütüphanesi** (IntegrationHub.dll v2.5.5) Token'ın açık örnek projesinden sabit commit ve SHA-256 ile
    indirilir (`HUB_DLL`); özet tutmazsa yazılmaz.
 3. **Köprü** başlar.
-4. **Cihaz** 20 sn beklenir. Görünmezse Token'ın sürücü kurulum aracı (v2.9.3; 300TR FTDI, X30TR libusbK) sabit SHA-256
-   ile indirilip sessiz kurulur (bir kez), köprü yeniden başlar, 45 sn daha beklenir. Yine görünmezse cihazdaki ayar
-   söylenir: 300TR'de Menü › Ayarlar › Harici Cihaz Modu › GMP3 › TOKENX CONNECT, kablo beşikte RS232'de, cihaz satış
+4. **Cihaz** 20 sn beklenir. Görünmezse iki modelin sürücüsü de kurulur (bir kez), köprü yeniden başlar, 45 sn daha
+   beklenir. Sürücüler Token'ın sürücü kurulum aracından (v2.9.3, sabit SHA-256) gelir ama **araç çalıştırılmaz**: araç
+   pencereli bir sihirbazdır, komut satırı okumaz ve kasa sunucusunun görünmez oturumunda (SYSTEM) hiç kapanmaz (28
+   Kasım 2026'ya kadar böyle çalıştırılıyordu; adım "Cihaz görünmedi; Token sürücüsü kuruluyor"da kalıyor, sürücü hiç
+   kurulmuyordu). Aracın içindeki iki kurucu dosyadaki yerinden alınır, her biri kendi SHA-256'sıyla doğrulanır
+   (`DRIVER_TOOL.parts`):
+   - **X30TR (libusbK):** Token'ın wdi-simple'ı argümansız, pencere açmadan çalışır; sürücü deposuna koyduğu .inf'ler
+     `pnputil /add-driver … /install` ile kurulur.
+   - **300TR (FTDI):** FTDI'nin kendi kendini açan paketindeki zip'ten `ftdibus.inf` ve `ftdiport.inf` pnputil ile kurulur.
+
+   İki arşiv de sunucuda açılır (`unzip`), Windows'un `Expand-Archive`'i ile değil: o komut Token'ın arşivinde hata
+   veriyor (gerçek Windows denemesinde görüldü). Aracın kendisi diske yazılmaz.
+
+   Biri kurulamazsa öteki yine kurulur ve eksik kalan sonraki "Kurulumu yap"ta yeniden denenir (`surucu.json` model
+   başına tutar). Süre aşımında kurucu, başlattıklarıyla birlikte kapatılır; kurulumun başında sürücü klasöründen
+   çalışan eski süreçler (önceki sürümün asılı bıraktığı sihirbaz) kapatılır. Gerçek Windows'taki deneme:
+   `.github/workflows/token-surucu.yml` (`scripts/kasa/windows/surucu-dene.ts`). Sürücü kurulduğu hâlde cihaz
+   görünmezse önce kablonun çıkarılıp yeniden takılması istenir (yeni sürücü çoğu zaman böyle etkinleşir), sonra cihazdaki
+   ayar söylenir: 300TR'de Menü › Ayarlar › Harici Cihaz Modu › GMP3 › TOKENX CONNECT, kablo beşikte RS232'de, cihaz satış
    ekranında; X30TR'de Satış Uygulamaları › "TokenX Connect Uygulaması (Kablolu)" açık ("Sepet bekleniyor"), ADB kapalı,
    cihazdaki izin sorusu onaylı.
 5. **Kısımlar, yemek kartları ve bağlantı** (§9.1); patron bastıysa bağlantı her durumda Token kabloluya geçer.
+
+Kurulum sürerken kasa yeniden başlarsa (güncelleme) kayıtlı koşu açılışta "yarım kaldı" diye kapatılır; yoksa kart
+"Kurulum sürüyor"da kalır ve düğmeye basılamazdı (`closeStaleSetup`).
 
 Kurulumdan sonra köprü her açılışta kendiliğinden başlar (Token kablolu seçiliyken ya da kendiliğinden geçiş açıkken
 Kapalı ve eğitim cihazında); kablo takılınca cihaz tanınır. Windows dışında (geliştirme, tarayıcı demosu) köprü çalışmaz,

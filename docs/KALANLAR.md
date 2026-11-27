@@ -87,6 +87,11 @@ Son güncelleme: 27 Kasım 2026.
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
   (satır sonlu yolda da çalıştığını ve ters eğik çizgili yolun 400 aldığını `tests/bagimlilik-guvenlik.test.ts` denetler).
 
+- **28 Kasım 2026: Token kablolu kurulumu "Cihaz görünmedi; Token sürücüsü kuruluyor"da kalmaz.** Token'ın sürücü
+  aracı pencereli bir sihirbazmış; kasa onu görünmez oturumda çalıştırıp bekliyordu, sürücü hiç kurulmuyordu. Artık
+  aracın içindeki iki kurucu (X30TR libusbK, 300TR FTDI) sessiz kurulur; yarım kalan kurulum kaydı açılışta kapanır
+  (`docs/04-YAZARKASA.md` §9.2 adım 4). Gerçek Windows denemesi: "Token sürücü kurulumu" iş akışı.
+
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
