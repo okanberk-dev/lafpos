@@ -32,14 +32,23 @@ import { parsePrinters, pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from
 
 /**
  * Arayüz dosyalarının önbellek kuralı (27 Kasım 2026: otomatik güncellemeden sonra sahip kasayı ilk açtığında eski sürümü,
- * ör. eski yeşil kenar çubuğunu görüyor, elle yenileyince düzeliyordu). Neden: serveStatic index.html'i önbellek başlığı
- * olmadan, yalnız Last-Modified ile veriyordu; tarayıcı böyle yanıtı "sezgisel" olarak, son değişikliğin yaşının onda biri
- * kadar (birkaç gün önce kurulmuş sürümde saatlerce) sunucuya sormadan önbellekten açar. Güncellemeden sonraki ilk
- * açılışta eski index.html eski betiği yüklüyordu. Artık index.html ve adı içerik özeti taşımayan her dosya (sw.js,
- * manifest, simgeler, arayüz yolları) her açılışta sunucuya sorulur (`no-cache`); adına Vite'ın içerik özetini koyduğu
- * /assets/ dosyaları değişmez, bir yıl önbellekte kalır
+ * ör. eski yeşil kenar çubuğunu görüyor, elle yenileyince düzeliyordu). Neden: serveStatic kökü (`/`, kasa penceresinin
+ * adresi) ve /assets/ dosyalarını önbellek başlığı olmadan, yalnız Last-Modified ile veriyordu; tarayıcı böyle yanıtı
+ * "sezgisel" olarak, son değişikliğin yaşının onda biri kadar (birkaç gün önce kurulmuş sürümde saatlerce) sunucuya
+ * sormadan önbellekten açar. Güncellemeden sonraki ilk açılışta eski index.html eski betiği önbellekten yüklüyordu.
+ * Artık:
+ * - arayüz sayfası (index.html: kök, /index.html ve uzantısız arayüz yolları) hiç saklanmaz (`no-store`): `no-cache`
+ *   yeni açılışta sunucuya sordururdu ama tarayıcı geri gelişte ve oturum geri yüklemesinde (sekmeleri geri açan
+ *   tarayıcı, telefonda arka planda kapatılıp geri açılan sekme) saklı sayfayı sormadan açar;
+ * - adı içerik özeti taşımayan öbür dosyalar (sw.js, manifest, simgeler) her açılışta sunucuya sorulur (`no-cache`);
+ * - adına Vite'ın içerik özetini koyduğu /assets/ dosyaları değişmez, bir yıl önbellekte kalır (sayfa her seferinde
+ *   sunucudan geldiği için hep doğru özeti ister)
  */
-export const arayuzOnbellegi = (path: string) => (path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+export function arayuzOnbellegi(path: string): string {
+  if (path.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
+  const ad = path.slice(path.lastIndexOf('/') + 1);
+  return ad.includes('.') && !ad.endsWith('.html') ? 'no-cache' : 'no-store';
+}
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -175,7 +184,7 @@ export function createApp() {
   if (existsSync(env.webDist)) {
     const root = relative(process.cwd(), env.webDist) || '.';
     const indexHtml = readFileSync(resolve(env.webDist, 'index.html'), 'utf8');
-    // Önbellek başlığı dosya bulunmadan önce konur: serveStatic ve arayüz sayfası (index.html) onu taşır
+    // Önbellek başlığı dosya bulunmadan önce konur: serveStatic ve arayüz sayfası (index.html) onu taşır (arayuzOnbellegi)
     app.use('/*', async (c, next) => {
       c.header('cache-control', arayuzOnbellegi(c.req.path));
       await next();

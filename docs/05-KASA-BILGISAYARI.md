@@ -423,17 +423,6 @@ Yeni sürüm indirilip gün açıkken beklediğinde kasada (gün açıp kapatan 
   yerden devam eder** (`src/lib/buildWatch.ts`): açık masalar ve adisyonlar veritabanında, gönderilmemiş sepet ve oturum
   cihazda, açık ekran adreste durur. Kurulum sorun çıkarırsa eski sürüme dönülür (aşağıdaki geri dönüş) ve kasiyere
   söylenir.
-- **Güncellemeden sonraki ilk açılış yeni sürümle** (27 Kasım 2026 düzeltmesi): kasa penceresi (kiosk) ya da tarayıcı
-  güncellemeden sonra ilk açıldığında eski sürüm (eski yeşil kenar çubuğu) görünüyor, elle yenileyince düzeliyordu.
-  Neden: sunucu `index.html`'i önbellek başlığı olmadan, yalnız Last-Modified ile veriyordu; Chrome böyle yanıtı
-  sezgisel olarak (son değişikliğin yaşının onda biri kadar, birkaç gün önce kurulmuş sürümde saatlerce) sunucuya sormadan
-  açar, eski sayfa eski betiği yükler. Açılan eski sayfa da sunucunun yeni derlemesini "bu sürüm" sandığı için kendini
-  yenilemiyordu. Artık `index.html` ve adı içerik özeti taşımayan her dosya her açılışta sunucuya sorulur (`no-cache`),
-  `/assets/` (adında Vite'ın içerik özeti) bir yıl önbellekte kalır (`server/app.ts` `arayuzOnbellegi`). Ayrıca açılışta
-  sayfa sunucunun verdiği `index.html`'in ana betiğine bakar; farklıysa bir kez kendiliğinden yenilenir, yenilemeden
-  sonra da farklıysa döngüye girmez (`src/lib/buildWatch.ts`). Bu sürüme geçişte tarayıcı önbelleğinde eski başlıksız
-  `index.html` duruyorsa o bir açılış daha eski görünebilir; sonraki güncellemelerde görünmez. Testler:
-  `tests/arayuz-onbellek.test.ts`, e2e akışları "Güncellemeden sonra ilk açılış" ve "Eski sürümle açılan sayfa".
 - **Gün sonunda güncelle:** eski davranış; gün kapatılınca (Z'den sonra) kurulur. Gün kapanınca yazarkasada banka gün
   sonu başladıysa güncelleyici onun bitmesini bekler (en çok 3 dk; 5 dk'da bir yeniden sorar), sonra kurar.
 
@@ -441,6 +430,33 @@ Seçim sürüme bağlıdır (yeni sürümde yeniden sorulur) ve Merkez'e nabızl
 **Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı** olarak görünür. Uzaktan › Merkez ›
 **Güncellemeyi şimdi gönder** kasaya en geç 5 dakikada ulaşır ve aynı pencereyi çıkarır (gün kapalıysa hemen kurulur).
 Zorunlu test: `e2e/flows.mjs` "Şimdi güncelle: kasa yeni sürümle açılınca aynı masa ve aynı sepetle devam eder".
+
+### Güncellemeden sonraki ilk açılış yeni sürümle (27 Kasım 2026 düzeltmesi)
+
+Otomatik güncellemeden sonra sahip kasayı (kiosk penceresi ya da tarayıcı) ilk açtığında eski sürüm (eski yeşil kenar
+çubuğu) görünüyor, elle yenileyince düzeliyordu. İki yol vardı:
+
+1. **Tarayıcı önbelleği.** Sunucu kökü (`/`, kasa penceresinin adresi) ve derleme dosyalarını önbellek başlığı olmadan,
+   yalnız Last-Modified ile veriyordu. Chrome böyle yanıtı sezgisel olarak, son değişikliğin yaşının onda biri kadar
+   (birkaç gün önce kurulmuş sürümde saatlerce) sunucuya sormadan açar: güncellemeden sonraki ilk açılışta eski
+   `index.html` eski betiği önbellekten yüklüyordu. Artık arayüz sayfası (kök, `/index.html`, arayüz yolları) hiç
+   saklanmaz (`no-store`; `no-cache` yeni açılışta sordururdu ama geri gelişte ve oturum geri yüklemesinde tarayıcı saklı
+   sayfayı sormadan açar), adı içerik özeti taşımayan dosyalar (sw.js, manifest, simgeler) her açılışta sorulur
+   (`no-cache`), adına Vite'ın özetini koyduğu `/assets/` dosyaları bir yıl önbellekte kalır (`server/app.ts`
+   `arayuzOnbellegi`).
+2. **Güncellemeden hemen önce açılmış sayfa.** Kasa sabah açılınca kasa penceresi eski sunucudan gelir; güncelleme
+   (gece kapalıysa) açılıştan 2 dakika sonra kurulur. Giriş ekranında canlı bağlantı olmadığı için sayfa sunucunun
+   yenilendiğini görmüyor, girişten sonraki ilk derleme sorusu yeni sunucuya gidiyor ve eski sayfa yeni derlemeyi "bu
+   sürüm" sanıp hiç yenilenmiyordu. Artık sayfa kendi ana betiğini sunucunun `index.html`'indekiyle karşılaştırır
+   (`src/lib/buildWatch.ts`): açılışta, canlı bağlantı yokken (giriş ekranı, müşteri ve çağrı ekranı, kopukluk) dakikada
+   bir, ekrana dönünce ve canlı bağlantı her kurulduğunda. Farklıysa sayfa bir kez kendiliğinden yenilenir (açık pencere
+   kapanınca; oturum varsa "Yeni sürüm kuruldu" der); yenilemeden sonra da farklıysa döngüye girmez.
+
+**Bu sürüme geçişte bir kez:** yeni denetim yeni sürümün betiğindedir. Bu düzeltmeyi getiren güncelleme kurulurken eski
+sürümün giriş ekranı açıksa (ya da tarayıcıda eski başlıksız `index.html` saklıysa) o sayfa bir kez daha eski
+görünebilir; elle yenileyince (F5) düzelir. Sonraki güncellemelerde görünmez. Testler:
+`tests/arayuz-onbellek.test.ts`; e2e akışları "Güncellemeden sonra ilk açılış", "Eski sürümle açılan sayfa" ve "Giriş
+ekranı güncellemeden sonra".
 
 ### İnternet yokken ve internet gelince
 
