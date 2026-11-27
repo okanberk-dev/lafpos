@@ -244,7 +244,13 @@ menüsündeki ve Başlangıç'taki **AsilPOS Kasa** kısayolu konsolsuz PowerShe
 2. Açık değilse küçük bir **"AsilPOS açılıyor"** penceresi görünür (görev çubuğunda AsilPOS simgesiyle; kendi iş
    parçacığında, bekleme onu dondurmaz). Kasa bekçisi açılır, sunucu en çok 90 sn beklenir, yazıcılar bildirilir,
    müşteri ekranı açılır, kasa penceresi açılır, küçük pencere kapanır. Sunucu 90 sn'de gelmezse pencere açılmaz (hata
-   sayfası kalmaz): sunucu gelince bekçi açar.
+   sayfası kalmaz): kısayol bir açma isteği bırakır (`%LocalAppData%\LafPOS\kasa-ac.istek`), sunucu gelince bekçi
+   pencereyi açar ve isteği siler (30 dakikadan eski istek sayılmaz).
+
+**Kapatınca kapanır** (sahibin isteği, 28 Kasım 2026; bekçi sürümü 6): kullanıcı kasa penceresini kapatırsa bekçi onu
+yeniden açmaz (eskiden 15 sn içinde açıyordu) ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla
+yeniden açılır. Bekçi müşteri ekranını yalnız kasa penceresi açıkken açık tutar. Güncelleme pencereyi kapatmaz
+(sayfa yeni sürümü kendisi yükler); güncellemeyle gelen yeni betik bekçiyi oturum kapanmadan yeniler.
 3. Chrome ya da Edge yoksa Windows uyarısı ("Chrome ya da Edge bulunamadı").
 
 Pencerenin başlığı "AsilPOS", görev çubuğunda ve Alt+Tab'da AsilPOS simgesi (`public/favicon.ico` ve 32 px PNG; sekmede
@@ -306,7 +312,8 @@ müşterinin adı yalnız Yönetim › Ayarlar › İşletme ve fiş › "Fişte
 Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması için Windows'ta ayrı bir standart
 kullanıcı hesabı önerilir.
 
-Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini 15 sn içinde yeniden açar.
+Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini yeniden açmaz (28 Kasım 2026'dan
+beri; önceden 15 sn içinde açıyordu, §3 "Kapatınca kapanır"); yalnız kasa kısayolunun bıraktığı açma isteğini yerine getirir.
 Bakım için (Windows ayarı, yazıcı kurulumu, başka bir program) Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
 **15 dakika bakım arası** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca pencereyi açmaz
 (`GET /api/kasa/bakim`, oturumsuz, yalnız bu bilgisayardan; sunucuya ulaşılamazsa ara yok sayılır). Süre bitince ya da
@@ -612,7 +619,7 @@ aynı şekilde kurup çalıştırabilmeli; bu iki şeye de uyumlu olsun."_
 
 **Program.** Kasa ekranı bir program gibi davranır (§3): kendi kısayolu ve simgesi, konsolsuz açılış ve "AsilPOS
 açılıyor" penceresi, tek pencere (ikinci tıklama öne getirir), Windows açılınca kendiliğinden (Başlangıç; oturum açılması
-gerekir: otomatik oturum Başlat › AsilPOS › Kasa hazırlığı'nda), kapanırsa bekçi 15 sn'de yeniden açar, adres çubuğu yok,
+gerekir: otomatik oturum Başlat › AsilPOS › Kasa hazırlığı'nda), kullanıcı kapatınca kapanır (bekçi yeniden açmaz, müşteri ekranı da kapanır), adres çubuğu yok,
 Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepet kalır.
 
 **Aynı program, iki yol.** Kurulum dosyası (`AsilPOS-Kurulum.exe`, `asilpos.nsi`) ve siteden kurulum (`AsilPOS-Kur.cmd`,

@@ -56,8 +56,10 @@ export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
  * (inceleme, 23 Kas 2026); kasada çalışan eski bekçi, kasa kısayolunun bir sonraki açılışında yenisiyle değişir. 4: bakım
  * arasında (Yönetim › Ağ) kasa penceresi yeniden açılmaz. 5: program (27 Kas 2026): Edge InPrivate olmayan tam ekran
  * pencerede; bekçi diskteki betik değişince (güncelleme) yenisiyle yeniden başlar, sonraki sürümler oturum kapanmayı beklemez
+ * 6 (28 Kas 2026): bekçi kapanan kasa penceresini yeniden açmaz, yalnız kasa kısayolunun isteğiyle açar; kasa penceresi
+ * kapanınca müşteri ekranını da kapatır (sahibin isteği: "kapatınca kapansın, ben açınca açılsın")
  */
-export const WATCHER_VERSION = 5;
+export const WATCHER_VERSION = 6;
 /** Kurulumların isteğe bağlı kısayol grupları: masaüstündeki kasa ve oturum açılınca kasa (bekçisiyle) */
 export const INSTALL_GROUPS = ['masaustu', 'baslangic'];
 /** Kasa kısayollarının açtığı program kipi (kasa-yazici.ps1) */
@@ -108,7 +110,7 @@ export function shortcutSpec(installDir, systemRoot = 'C:\\Windows') {
       hedef: ps,
       dosya: j(installDir, launcher),
       arguman: psFile(launcher, ` -Bekci -BekciSurum ${WATCHER_VERSION}`),
-      aciklama: 'Kasa ve müşteri ekranı açık kalsın (kapanırsa yeniden açar)',
+      aciklama: 'Kasa kısayolunun istediği pencereyi sunucu gelince açar; müşteri ekranını kasa açıkken tutar',
       pencere: 7,
     },
   ];

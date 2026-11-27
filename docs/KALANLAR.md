@@ -87,6 +87,10 @@ Son güncelleme: 27 Kasım 2026.
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında
   (satır sonlu yolda da çalıştığını ve ters eğik çizgili yolun 400 aldığını `tests/bagimlilik-guvenlik.test.ts` denetler).
 
+- **28 Kasım 2026: kasa penceresi kapatınca kapanır** (sahibin isteği). Bekçi (sürüm 6) kullanıcının kapattığı kasa
+  penceresini artık yeniden açmaz ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla açılır. Kısayol
+  sunucuyu beklerken açma isteği bırakır, sunucu gelince pencereyi bekçi açar (`docs/05-KASA-BILGISAYARI.md` §3).
+
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.

@@ -335,7 +335,7 @@ Section "Masaüstüne kısayol" SecDesktop
   StrCpy $GRUPLAR "$GRUPLAR,masaustu"
 SectionEnd
 
-; Kasa kısayolu ve kasa bekçisi (pencere kapanırsa yeniden açar) Başlangıç'a
+; Kasa kısayolu ve kasa bekçisi (kısayolun istediği pencereyi sunucu gelince açar) Başlangıç'a
 Section "Oturum açılınca kasa ekranını aç" SecStartup
   StrCpy $GRUPLAR "$GRUPLAR,baslangic"
 SectionEnd

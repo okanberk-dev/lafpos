@@ -8,7 +8,9 @@
 #            zaten aciksa one getirir (tek pencere, ikinci tiklama yeni pencere acmaz). Yoksa kucuk "AsilPOS aciliyor"
 #            penceresi gorunur; sunucu beklenir (en cok 90 sn), yazicilar bildirilir, musteri ekrani ve bekci acilir, kasa
 #            penceresi acilir. Sunucu 90 sn'de acilmazsa pencere acilmaz: bekci sunucu gelince acar (hata sayfasi kalmaz).
-#   -Bekci   Arka plan bekcisi: kapanan kasa penceresini ve musteri ekranini 15 sn icinde yeniden acar (tek bekci). Diskteki
+#   -Bekci   Arka plan bekcisi: kisayolun istedigi kasa penceresini sunucu gelince acar, musteri ekranini kasa penceresi
+#            aciktayken acik tutar (tek bekci). Kullanici kasa penceresini kapatirsa yeniden ACMAZ, musteri ekranini da kapatir
+#            (sahibin istegi, 28 Kas 2026: kapatinca kapansin, ben acinca acilsin). Diskteki
 #            betik degisirse (otomatik guncelleme) yenisiyle yeniden baslar: yeni surum oturum kapanmayi beklemez.
 #   -KasaAc  27 Kasim oncesinin kasa kisayolu (AsilPOS-Kasa.bat): kasa penceresini acar ya da one getirir.
 #   (kipsiz) Ayni eski kisayolun ilk adimi: yazicilar, musteri ekrani, bekci.
@@ -23,8 +25,9 @@
 # yapilir (Screen.Bounds gercek piksel). Sahadaki gecici bekci (%LocalAppData%\LafPOS-MusteriEkrani,
 # Baslangic'ta "LafPOS Musteri Ekrani") kapatilir: iki pencere acilmaz.
 #
-# Kasa ekrani bekcisi (22 Kas 2026): kasa penceresi (%LocalAppData%\LafPOS\chrome ya da \edge profiliyle calisan Chrome/Edge)
-# yoksa ve sunucu aciksa acar; kapanirsa en gec 15 sn'de yeniden acar. Bekci iki yoldan baslar: kasa kisayolu (-Ac) ve ortak
+# Kasa ekrani bekcisi (22 Kas 2026; 28 Kas 2026'dan beri kapanani yeniden acmaz): kasa kisayolu acarken sunucu henuz
+# gelmediyse istek dosyasi birakir (kasa-ac.istek); bekci sunucu gelince pencereyi acar ve istegi siler. Kullanici kasa
+# penceresini (%LocalAppData%\LafPOS\chrome ya da \edge profiliyle calisan Chrome/Edge) kapatirsa bekci yeniden acmaz. Bekci iki yoldan baslar: kasa kisayolu (-Ac) ve ortak
 # Baslangic'taki "AsilPOS Kasa Bekcisi" kisayolu (guncelleme yazar, kurulum-yenile.mjs; o yoksa kullanici Baslangic'ina
 # burada konur). Tek bekci calisir (ad verilmis mutex); eski surum bekci (-BekciSurum farkli) kapatilip yenisi acilir. Kasa
 # penceresini acmak da mutex altinda: kisayol ile bekci ayni anda iki pencere acmaz. Bekci kalici kurulunca sahadaki gecici
@@ -148,8 +151,9 @@ function Stop-TemporaryDisplayWatcher {
 
 # Kasa bekcisinin surumu (kurulum-yenile.mjs WATCHER_VERSION ile ayni). 3: musteri ekrani sunucu cevap verince acilir;
 # 4: bakim arasinda (Yonetim > Ag > Bu bilgisayar) kasa penceresi yeniden acilmaz; 5: program (27 Kas 2026): Edge
-# InPrivate olmayan tam ekran pencerede, diskteki betik degisince bekci yenisiyle yeniden baslar
-$BekciSurumu = 5
+# InPrivate olmayan tam ekran pencerede, diskteki betik degisince bekci yenisiyle yeniden baslar; 6 (28 Kas 2026): kapanan
+# kasa penceresini yeniden acmaz (yalniz kisayolun istegiyle acar), kasa penceresi kapaninca musteri ekranini da kapatir
+$BekciSurumu = 6
 $BekciKisayolu = 'AsilPOS Kasa Bekcisi.lnk'
 $EskiAd = 'LafPOS' # eski-ad: ad degisikliginden onceki kisayol ve menu adi
 $EskiBekciKisayolu = $EskiAd + ' Kasa Bekcisi.lnk'
@@ -200,6 +204,33 @@ function Test-Server([string]$base) {
 # "AsilPOS aciliyor" penceresi (kasa kisayolu, -Ac): sunucu beklenirken ve yazicilar bildirilirken gorev cubugunda AsilPOS
 # simgesiyle gorunur, kasa penceresi acilinca kapanir. Kendi is parcaciginda calisir (bekleme onu dondurmaz). Hata olursa
 # pencere olmadan devam edilir
+# Kasa penceresi acma istegi (kasa kisayolu birakir, bekci sunucu gelince acar ve siler). Bekci kapanan pencereyi kendiliginden
+# acmaz: yalniz bu istek varken acar. 30 dakikadan eski istek bayat sayilir (kullanici o arada vazgecmistir)
+$KasaAcIstegi = Join-Path $env:LOCALAPPDATA 'LafPOS\kasa-ac.istek'
+function Set-KasaAcIstegi {
+  try {
+    New-Item -ItemType Directory -Path (Split-Path $KasaAcIstegi) -Force | Out-Null
+    Set-Content -LiteralPath $KasaAcIstegi -Value ((Get-Date).ToString('o')) -Encoding ASCII
+  } catch { }
+}
+function Clear-KasaAcIstegi {
+  try { if (Test-Path -LiteralPath $KasaAcIstegi) { Remove-Item -LiteralPath $KasaAcIstegi -Force } } catch { }
+}
+function Test-KasaAcIstegi {
+  try {
+    if (-not (Test-Path -LiteralPath $KasaAcIstegi)) { return $false }
+    if (((Get-Date) - (Get-Item -LiteralPath $KasaAcIstegi).LastWriteTime).TotalMinutes -gt 30) { Clear-KasaAcIstegi; return $false }
+    return $true
+  } catch { return $false }
+}
+
+# Musteri ekranini kapatir (kasa penceresi kullanici tarafindan kapatilinca: uygulama butunuyle kapansin)
+function Stop-CustomerDisplay {
+  try {
+    Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*chrome-musteri*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch { }
+}
+
 function Start-Splash {
   try {
     $durum = [hashtable]::Synchronized(@{ kapat = $false })
@@ -398,7 +429,7 @@ function Start-WatcherIfNeeded {
       $k.WorkingDirectory = $KurulumKlasoru
       $k.IconLocation = (Join-Path $KurulumKlasoru 'asilpos.ico') + ',0'
       $k.WindowStyle = 7
-      $k.Description = 'Kasa ve musteri ekrani acik kalsin (kapanirsa yeniden acar)'
+      $k.Description = 'Kasa kisayolunun istedigi pencereyi sunucu gelince acar; musteri ekranini kasa acikken tutar'
       $k.Save()
     }
   } catch { }
@@ -462,12 +493,12 @@ $displayBase = ($displayBase -replace '//localhost', '//127.0.0.1').TrimEnd('/')
 
 if ($KasaAc) {
   # Eski kasa kisayolu (AsilPOS-Kasa.bat): kasa penceresini ac ya da one getir; tarayici yoksa 1 (bat uyarir)
-  if (Open-KasaWindow $false $true) { exit 0 }
+  if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi; exit 0 }
   exit 1
 }
 
 if ($Bekci) {
-  # Arka plan bekcisi: musteri ekrani ve kasa penceresini acik tutar (kasa bilgisayari kapanana dek). Tek bekci
+  # Arka plan bekcisi: kisayolun istedigi kasa penceresini acar, musteri ekranini kasa acikken tutar. Tek bekci
   $tek = New-Object System.Threading.Mutex($false, 'Local\LafPOS-KasaBekci')
   $own = $false
   try { $own = $tek.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $own = $true }
@@ -475,10 +506,20 @@ if ($Bekci) {
   Remove-TemporaryKasaWatcher
   $ilkOzet = Get-ScriptHash $PSCommandPath
   $tur = 0
+  $kasaAcikti = $false
   while ($true) {
-    Start-CustomerDisplay $displayBase
-    # Ilk turda kasa penceresine kisayolun kendisi acsin diye bakilmaz (en gec 15 sn sonra bekci bakar)
-    if ($tur -gt 0 -and -not (Test-KasaBakim $displayBase)) { Open-KasaWindow $true | Out-Null }
+    # Kisayolun istegi: sunucu gelince kasa penceresi acilir, istek silinir. Ilk turda kisayolun kendisi acsin diye bakilmaz
+    if ($tur -gt 0 -and (Test-KasaAcIstegi) -and -not (Test-KasaWindow) -and -not (Test-KasaBakim $displayBase) -and (Test-Server $displayBase)) {
+      if (Open-KasaWindow $true) { Clear-KasaAcIstegi }
+    }
+    $kasaAcik = Test-KasaWindow
+    if ($kasaAcik) {
+      Start-CustomerDisplay $displayBase
+    } elseif ($kasaAcikti) {
+      # Kullanici kasa penceresini kapatti: yeniden acilmaz, musteri ekrani da kapanir (sahibin istegi, 28 Kas 2026)
+      Stop-CustomerDisplay
+    }
+    $kasaAcikti = $kasaAcik
     $tur++
     Start-Sleep -Seconds 15
     # Kendini yenileme (27 Kas 2026): otomatik guncelleme app\'i degistirince bu betigin diskteki hali degisir. Bekci
@@ -518,12 +559,13 @@ if ($Ac) {
     Stop-TemporaryDisplayWatcher
     Start-WatcherIfNeeded
     $hazir = $true
-    if (-not $acik) { $hazir = Wait-Server $displayBase 90 }
+    # Istek once: sunucu 90 sn'de gelmezse pencereyi bekci acar (istek yoksa bekci acmaz)
+    if (-not $acik) { Set-KasaAcIstegi; $hazir = Wait-Server $displayBase 90 }
     if ($hazir) {
       Send-Printers $displayBase
       Start-CustomerDisplay $displayBase
     }
-    if (-not $acik -and $hazir) { Open-KasaWindow $false $true | Out-Null }
+    if (-not $acik -and $hazir) { if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi } }
   } finally {
     Stop-Splash $splash
   }
