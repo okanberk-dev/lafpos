@@ -66,13 +66,22 @@ Son güncelleme: 27 Kasım 2026.
   (`src/lib/print.tsx` `BANKA_KIYAS_BASLIGI`); eski kasaların bastığı eski başlık `shared/eski-adlar.ts`
   `ESKI_BANKA_KIYAS_BASLIGI`'nde belgeli. ladmin'in kâğıt okuyucusu lafmaliyet#166 ile ikisini de tanır; bu sürüm ondan
   önce kurulursa yalnız yapay zekâ okuması kullanılamadığında kodla okuma kıyas satırlarını banka sayar (düşük güvenli
-  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir.
+  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir. Kalan (lafmaliyet'te, bu repoda değil): yapay zekâ
+  okumasının istemi (`src/lib/photo-read/prompts.ts`) kıyas başlığını hâlâ yalnız eski adla anıyor ve
+  `src/lib/asilpos/eski-adlar.ts` notu "yeni kasa da eski adla basar" diyor; istem yeni başlığı ("PAVO - ASILPOS
+  KARŞILAŞTIRMA") anıp eski kasaların eski adla bastığını söylemeli.
 - **Şube anahtarı (27 Kasım 2026):** şube başına ayrı AsilPOS Uzaktan anahtarı, isteğe bağlı (`docs/07-UZAKTAN-ERISIM.md`
   §6). Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri › AsilPOS Uzaktan › Şube anahtarı. O şubenin
   platform anahtarları, restoranının paket gelen kutusu, dükkânının özeti, raporları ve bulut yedeği, uzaktan yönetim
   komutları yalnız bu anahtarla; ortak anahtarı bilen başka şubenin kasası açamaz (`?sube=` ve `?restoran=` artık yetki
   sınırı). Anahtarı olmayan şube ve eski kasa eskisi gibi ortak anahtarla; bulut şube anahtarını tanımıyorsa kasa ortak
-  anahtarla yineler (geçişte sıra önemsiz). ladmin'in dağıttığı ortak anahtar satırı ayrı, şube anahtarına dokunmaz.
+  anahtarla yineler. Geçiş sırası önemli: önce bütün kasalar bu sürüme, sonra kasaya şube anahtarı, en son Vercel
+  (Vercel önce girilirse o şubenin paket siparişleri ve platform anahtarları kasa anahtarı alana dek durur). ladmin'in
+  dağıttığı ortak anahtar satırı ayrı, şube anahtarına dokunmaz. İnceleme düzeltmeleri (27 Kasım 2026): dükkân şubeye
+  yalnız kendi kasasının kanıtıyla bağlanır (kurulumun anahtarıyla; başka şube başkasının dükkânını kendine bağlayamaz),
+  bağ süresiz ayrı alanda (görünüm silmez), ileri tarihli özet ve rapor saklanmaz; uzaktan yönetim şube anahtarına
+  yalnız bulut kabul edince geçer; geçersiz anahtarın nedeni yedek, bildirim ve Merkez kaydında da görünür, imzasız
+  isteğe söylenmez.
 - **Bağımlılık açıkları (27 Kasım 2026, Dependabot):** hono 4.13.23, @hono/node-server 2.1.11; drizzle-kit'in eski
   esbuild'i ve @vercel/blob altındaki eski zod `overrides` ile güncel sürüme bağlı. `npm audit` (üretim ve geliştirme)
   0. Kodumuz `csrf()`, `validator()`, `mount()`, `css` ve WebSocket kullanmıyor; yetki `/api/*` joker ara katmanında

@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bildirim, broadcast } from './_bildirim.js';
 import { yedek } from './_yedek.js';
-import { merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './_merkez.js';
+import { kurulumAnahtari, merkez, type Release, requestUpdateNow, withdrawLinkedUpdate } from './_merkez.js';
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
@@ -28,10 +28,10 @@ import { fillHistory, type HistoryDay, historyFlag, historyKey, type HistoryProd
 import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
-import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
+import { CLOUD_KEYS, DUKKAN_KANIT_BASLIGI, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 import { eskiEnvAdi } from '../shared/pos-env.js';
 import { REDIS_ONEKI } from '../shared/eski-adlar.js';
-import { type Kafe, kafeAnahtari, kafeKimligi, subeAnahtarlari, subeErisimi, yeniBag } from './_kafe.js';
+import { dukkanKanitiTutar, type Kafe, kafeAnahtari, kafeKimligi, subeAnahtarlari, subeErisimi } from './_kafe.js';
 
 const SNAPSHOT_KEY = `${REDIS_ONEKI}snapshot`;
 const TOKEN_HOURS = 12;
@@ -292,11 +292,6 @@ export interface SnapVersion {
   d?: string | null;
   /** Özetin son yazıldığı ya da süresinin uzatıldığı an (sunucu saati) */
   w?: number;
-  /**
-   * Dükkânın bağlı olduğu şube (etiket): kendi şube anahtarıyla imzalı ilk itmede bağlanır, sonra özet, rapor ve yedek
-   * yalnız o şubenin anahtarıyla yazılır ve okunur (api/_kafe.ts, docs/07-UZAKTAN-ERISIM.md §6)
-   */
-  s?: string;
 }
 interface Versions {
   map: Record<string, SnapVersion>;
@@ -340,6 +335,7 @@ async function loadVersions(): Promise<Versions> {
       if (Number(raw) > 0) gecmis[shop.slice(flag.length)] = Number(raw);
       continue;
     }
+    if (shop.startsWith(BAG_ONEKI)) continue;
     const v = parseVersion(raw);
     if (v && SHOP_RE.test(shop)) map[shop] = v;
   }
@@ -405,16 +401,21 @@ function freshen(snap: Snapshot, v: SnapVersion | null | undefined): Snapshot {
  * yalnız sürüm ilerler; süresi günde bir uzatılır (yoksa yazılır). Sürüm özetten sonra yazılır: görünüm sürümü görünce
  * özet hep yerindedir. Sürümü olmayan dükkân (bu sürümden önce itmiş) bir kez özetin kendisinden denetlenir
  */
-async function storeSnapshot(shop: string, snap: Snapshot, kafe: Kafe): Promise<Response> {
-  const prev = parseVersion(await redis('HGET', VERSIONS_KEY, shop));
-  // Şubeye bağlı dükkânı yalnız o şubenin kendi anahtarı yazar (bağ bu okumada: ek komut yok)
-  const red = subeErisimi(kafe, prev?.s ?? null, secret());
+async function storeSnapshot(req: Request, shop: string, snap: Snapshot, kafe: Kafe): Promise<Response> {
+  const now = Date.now();
+  // İleri tarihli özet saklanmaz: saklansaydı kasanın gerçek itmeleri "eski" sayılıp hiç yazılmazdı. İmza zaten saati
+  // SKEW_S içinde olan kasadan gelir; özetin anı da en çok o kadar ileride olabilir
+  if (typeof snap.at === 'number' && snap.at > now + SKEW_S * 1000) return fail(400, 'Özetin saati sunucudan ileride', 'future');
+  // Sürüm ve dükkânın şube bağı tek okumada (aynı hash'in iki alanı: ek komut yok)
+  const [rawPrev, rawBag] = ((await redis('HMGET', VERSIONS_KEY, shop, bagAlani(shop))) as unknown[] | null) ?? [];
+  const prev = parseVersion(rawPrev);
+  // Şubeye bağlı dükkânı yalnız o şubenin kendi anahtarı yazar; bağ "eski özet" denetiminden önce (api/_kafe.ts)
+  const red = await dukkanErisimi(req, kafe, shop, rawBag);
   if (red) return red;
-  const bag = yeniBag(kafe, prev?.s);
-  const prevAt = prev ? prev.at : ((await snapshot(shop))?.at ?? null);
+  // Önceki sürümün anı ileride (bu düzeltmeden önce yazılmış ileri tarihli özet) ise yok sayılır
+  const prevAt = ileriyiAt(prev ? prev.at : ((await snapshot(shop))?.at ?? null), now);
   if (prevAt != null && typeof snap.at === 'number' && snap.at <= prevAt) return json({ ok: true, stale: true });
   const sums = snapshotSums(snap);
-  const now = Date.now();
   const same = !!prev && prev.h === sums.h;
   let w = prev?.w ?? 0;
   if (same && now - w > SNAPSHOT_REFRESH_MS) {
@@ -428,21 +429,52 @@ async function storeSnapshot(shop: string, snap: Snapshot, kafe: Kafe): Promise<
     w = now;
   }
   const day = (snap.bootstrap as { day?: { date?: unknown } | null } | undefined)?.day?.date;
-  const version: SnapVersion = { at: typeof snap.at === 'number' ? snap.at : now, ...sums, d: typeof day === 'string' ? day : null, w, ...(bag ? { s: bag } : {}) };
+  const version: SnapVersion = { at: typeof snap.at === 'number' ? snap.at : now, ...sums, d: typeof day === 'string' ? day : null, w };
   await redis('HSET', VERSIONS_KEY, shop, JSON.stringify(version));
   return json({ ok: true, ...(write ? {} : { unchanged: true }) });
 }
 
 /**
- * Bulut yedeği: dükkânlardan bu kasanın açabildikleri. Şubeye bağlı dükkân (sürüm kaydında `s`) yalnız o şubenin kendi
+ * Dükkânın şube bağı (api/_kafe.ts, docs/07-UZAKTAN-ERISIM.md §6): sürüm hash'inde (`VERSIONS_KEY`) `sube:<dükkân>`
+ * alanı, değeri şube etiketi. Süresiz; görünüm (süresi dolan özetin sürümünü silerken) ve özetin kendisi ona dokunmaz.
+ * Alan adı dükkân kimliği kalıbına (`SHOP_RE`) uymaz: dükkân başlığıyla gelen hiçbir yazma ya da silme onu tutturamaz
+ */
+const BAG_ONEKI = 'sube:';
+const bagAlani = (shop: string) => `${BAG_ONEKI}${shop}`;
+const bagOf = (raw: unknown): string | null => (typeof raw === 'string' && raw ? raw : null);
+/** Saklı anın sunucu saatinden SKEW_S'den fazla ileride olanı yok sayılır (null): ileri tarihli kayıt yenisini kilitlemez */
+const ileriyiAt = (at: number | null | undefined, now: number): number | null => (typeof at === 'number' && at <= now + SKEW_S * 1000 ? at : null);
+
+/**
+ * Kasanın dükkâna yazma hakkı ve dükkânın şubeye bağlanması. Şube anahtarıyla imzalı istek dükkânın kendisi olduğunu
+ * kanıtlarsa (`DUKKAN_KANIT_BASLIGI`: kurulumun kendi anahtarıyla imzalı, Merkez kaydındaki anahtarla doğrulanır) dükkân
+ * o şubeye bağlanır (bilgisayar şube değiştirdiyse taşınır); kanıtsız istek bağ kuramaz, bağı değiştiremez. Dükkân kimliği
+ * görünümün dükkân listesinden okunabilir; kurulumun anahtarı yalnız o kasada. Kanıt yalnız bağ yokken ya da başka
+ * şubedeyken okunur (bağlı dükkânın itmesinde ek komut yok). Sonra erişim: bağlı dükkân yalnız o şubenin kendi anahtarıyla
+ */
+async function dukkanErisimi(req: Request, kafe: Kafe, shop: string, rawBag: unknown): Promise<Response | null> {
+  const bag = bagOf(rawBag);
+  if (kafe.kendi && kafe.sube && bag !== kafe.sube && shop !== REPORT_SHOP) {
+    const kanit = req.headers.get(DUKKAN_KANIT_BASLIGI);
+    const anahtar = kanit ? await kurulumAnahtari(redis, shop) : null;
+    if (anahtar && dukkanKanitiTutar(anahtar, shop, kafe.sube, kanit)) {
+      await redis('HSET', VERSIONS_KEY, bagAlani(shop), kafe.sube);
+      return null;
+    }
+  }
+  return subeErisimi(kafe, bag, secret());
+}
+
+/**
+ * Bulut yedeği: dükkânlardan bu kasanın açabildikleri. Şubeye bağlı dükkân (`bagAlani`) yalnız o şubenin kendi
  * anahtarıyla; bağsız dükkân ortak anahtarla imzalı her kasaya (eskisi gibi). Tek HMGET (api/_kafe.ts)
  */
 async function openShops(kafe: Kafe, shops: string[]): Promise<Set<string>> {
   const out = new Set<string>();
   if (!shops.length) return out;
-  const raw = (await redis('HMGET', VERSIONS_KEY, ...shops)) as unknown[] | null;
+  const raw = (await redis('HMGET', VERSIONS_KEY, ...shops.map(bagAlani))) as unknown[] | null;
   shops.forEach((shop, i) => {
-    if (!subeErisimi(kafe, parseVersion(raw?.[i])?.s ?? null, secret())) out.add(shop);
+    if (!subeErisimi(kafe, bagOf(raw?.[i]), secret())) out.add(shop);
   });
   return out;
 }
@@ -1304,7 +1336,7 @@ function validDay(d: unknown): d is DayRep {
 }
 
 /** Kasanın itmesi: imzalı, gzip; eski özet (aynı günün daha önce kurulmuşu) yenisini ezmez */
-async function storeReports(body: string, kafe: Kafe): Promise<Response> {
+async function storeReports(req: Request, body: string, kafe: Kafe): Promise<Response> {
   let push: RemoteReportPush;
   try {
     push = JSON.parse(gunzipSync(Buffer.from((JSON.parse(body) as { gz: string }).gz, 'base64')).toString('utf8')) as RemoteReportPush;
@@ -1315,6 +1347,11 @@ async function storeReports(body: string, kafe: Kafe): Promise<Response> {
     return fail(400, 'Rapor biçimi geçersiz', 'bad_body');
   }
   if (push.days.length > REPORT_PUSH_MAX_DAYS) return fail(413, 'Bir itmede en çok 31 gün', 'too_large');
+  // İleri tarihli itme ya da gün saklanmaz: saklansaydı kasanın gerçek itmeleri eski sayılıp yazılmazdı (özetteki kural)
+  const nowMs = Date.now();
+  if (push.at > nowMs + SKEW_S * 1000 || push.days.some((d) => typeof (d as { at?: unknown } | null)?.at === 'number' && (d as { at: number }).at > nowMs + SKEW_S * 1000)) {
+    return fail(400, 'Raporun saati sunucudan ileride', 'future');
+  }
   // Ek sekmelerin verisi ayrı anahtarda (Ciro ve Ürünler her açılışta onu okumaz)
   const extras = new Map<string, RemoteDayExtra>();
   /** Saklanmayan günler ve neden (kasa ekranda gösterir): gün özeti ya da ek veri sınırı aştı */
@@ -1334,21 +1371,13 @@ async function storeReports(body: string, kafe: Kafe): Promise<Response> {
       skippedDates.push({ date: d.date, why: 'day' });
       return false;
     });
-  const nowS = Math.floor(Date.now() / 1000);
+  const nowS = Math.floor(nowMs / 1000);
   const keys = days.map((d) => reportDayKey(push.shop, d.date));
-  // Kasanın "bugün"ü ve günlerin eski hâli tek okumada
-  const [meta, ...existing] = await mgetAll([reportMetaKey(push.shop), ...keys]);
-  // Şubeye bağlı dükkânın raporunu yalnız o şubenin kendi anahtarı yazar (bağ rapor kaydında, bu okumada)
-  let metaSube: string | null = null;
-  try {
-    const m = meta ? (JSON.parse(meta) as { s?: unknown }) : null;
-    metaSube = typeof m?.s === 'string' ? m.s : null;
-  } catch {
-    metaSube = null;
-  }
-  const red = subeErisimi(kafe, metaSube, secret());
+  // Kasanın "bugün"ü ve günlerin eski hâli tek okumada; dükkânın şube bağı aynı anda (sürüm hash'inde, `bagAlani`)
+  const [[meta, ...existing], rawBag] = await Promise.all([mgetAll([reportMetaKey(push.shop), ...keys]), redis('HGET', VERSIONS_KEY, bagAlani(push.shop))]);
+  // Şubeye bağlı dükkânın raporunu yalnız o şubenin kendi anahtarı yazar (api/_kafe.ts)
+  const red = await dukkanErisimi(req, kafe, push.shop, rawBag);
   if (red) return red;
-  const bag = yeniBag(kafe, metaSube);
   let stored = 0;
   for (const [i, d] of days.entries()) {
     const expireAt = Math.floor(dayStartMs(addDays(d.date, REPORT_KEEP_DAYS)) / 1000);
@@ -1356,7 +1385,9 @@ async function storeReports(body: string, kafe: Kafe): Promise<Response> {
     const old = existing[i];
     if (old) {
       try {
-        if ((JSON.parse(old) as DayRep).at > d.at) continue;
+        // İleri tarihli eski kayıt (bu düzeltmeden önce) yenisini kilitlemez
+        const oldAt = ileriyiAt((JSON.parse(old) as DayRep).at, nowMs);
+        if (oldAt != null && oldAt > d.at) continue;
       } catch {
         /* bozuksa üzerine yazılır */
       }
@@ -1368,11 +1399,11 @@ async function storeReports(body: string, kafe: Kafe): Promise<Response> {
     else await redis('DEL', reportExtraKey(push.shop, d.date));
     stored += 1;
   }
-  const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
+  const prevAt = (meta ? ileriyiAt((JSON.parse(meta) as { at?: number }).at, nowMs) : null) ?? 0;
   const cat = push.cat && typeof push.cat === 'object' ? push.cat : undefined;
   // Geçmiş gün yeniden geldiyse (ilk bağlanışta 31 gün) bu örnekteki kıyas belleği eskidir
   for (const k of statsDayCache.keys()) if (k.startsWith(`${push.shop}|`)) statsDayCache.delete(k);
-  if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at, ...(cat ? { cat } : {}), ...(bag ? { s: bag } : {}) }), 'EX', REPORT_KEEP_DAYS * 86400);
+  if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at, ...(cat ? { cat } : {}) }), 'EX', REPORT_KEEP_DAYS * 86400);
   return json({ ok: true, stored, skipped: push.days.length - stored, skippedDates });
 }
 
@@ -1811,13 +1842,25 @@ async function handle(req: Request): Promise<Response> {
     if (memberMode) return ((await session())?.rol ?? 'sahip') !== 'sahip';
     return !passwordRequired() && tokenValid(secret(), auth);
   };
-  /** Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı; api/_kafe.ts): tutarsa kasanın kimliği */
-  const kafeOf = (body: string): Kafe | null => {
+  /**
+   * Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı; api/_kafe.ts): tutarsa kasanın kimliği, tutmazsa null.
+   * Şube anahtarı geçersizse ya da şube başlığı anlaşılmazsa kafeKimligi'nin yanıtı (503, 400) aynen döner: düz 401
+   * olsaydı kasa onu "bulut anahtarı tanımıyor" sanıp sessizce ortak anahtara düşerdi, Bağlantı bilgileri asıl nedeni göremezdi
+   */
+  const kafeOf = (body: string): Kafe | Response | null => {
     if (secret().length < 32) return null;
     const k = kafeKimligi(req, url, body, secret(), verifyPush);
-    return k instanceof Response ? null : k;
+    return k instanceof Response && k.status === 401 ? null : k;
   };
-  const bildirimDeps = { redis, admin, viewer: viewerSession, signed: (body: string) => kafeOf(body) != null };
+  const bildirimDeps = {
+    redis,
+    admin,
+    viewer: viewerSession,
+    signed: (body: string): boolean | Response => {
+      const k = kafeOf(body);
+      return k instanceof Response ? k : k != null;
+    },
+  };
   // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
   if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
   // Bulut yedeği: kasanın imzalı istekleri (yükleme ve indirme adresi, liste)
@@ -1885,7 +1928,7 @@ async function handle(req: Request): Promise<Response> {
     } catch {
       return fail(400, 'Özet okunamadı', 'bad_body');
     }
-    return storeSnapshot(shopHeader(req) ?? REPORT_SHOP, snap, kafe);
+    return storeSnapshot(req, shopHeader(req) ?? REPORT_SHOP, snap, kafe);
   }
 
   // Kasanın günlük rapor özetleri: imzalı
@@ -1894,7 +1937,7 @@ async function handle(req: Request): Promise<Response> {
     if (body.length > 4_000_000) return fail(413, 'Rapor çok büyük', 'too_large');
     const kafe = kafeKimligi(req, url, body, secret(), verifyPush);
     if (kafe instanceof Response) return kafe;
-    return storeReports(body, kafe);
+    return storeReports(req, body, kafe);
   }
 
   // Üyelik: ilk girişte üye parolasını belirler (yalnız izinli e-posta, yalnız bir kez), sonra e-posta ve parola

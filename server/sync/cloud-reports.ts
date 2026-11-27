@@ -10,7 +10,7 @@ import { env } from '../env';
 import { bus } from '../lib/events';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { kafeFetch } from '../lib/kafe-anahtari';
-import { remoteShop } from './merkez';
+import { dukkanKaniti, remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
 import { historyFor, type HistoryIn } from '../services/gecmis';
 import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListReport, platformReport, prepRaw, productReport, refundReport, reportToday, staffReport, summaryReport } from '../services/reports';
@@ -342,7 +342,7 @@ export function historyDayReport(h: HistoryDay, kaynak: string, pushed: PushedBl
 async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<{ date: string; why: string }[]> {
   const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days, cat: categoryMap() };
   const gz = (await gzipAsync(JSON.stringify(body))).toString('base64');
-  const { status, json } = await kafeFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
+  const { status, json } = await kafeFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000, dukkanKaniti());
   if (status !== 200) throw new Error(`HTTP ${status}`);
   const skipped = (json as { skippedDates?: unknown } | null)?.skippedDates;
   return Array.isArray(skipped) ? skipped.filter((x): x is { date: string; why: string } => !!x && typeof (x as { date?: unknown }).date === 'string') : [];

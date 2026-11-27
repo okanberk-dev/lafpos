@@ -96,11 +96,13 @@ ikisinde de işler.
   özete, geçmişe, denetim kaydına, hata iletisine girmez (testle). Özel anahtar yalnız kasanın veritabanında.
 - Güvencenin sınırı: Redis'e yazabilen ama ortak anahtarı bilmeyen saldırgana karşıdır. Vercel ortamını (ortak anahtar)
   ele geçiren her şeyi yapabilir; anahtar kasada ve Vercel'de saklı tutulur.
-- Şube anahtarı (27 Kasım 2026, `docs/07-UZAKTAN-ERISIM.md` §6): kasa şube anahtarıyla çalışıyorsa özetinde şubesini
-  söyler (`sube`); bulut o kasanın komutlarını ve açık anahtar imzasını `ASILPOS_CLOUD_SECRET_<ŞUBE>` ile işler (yoksa
-  ortak anahtar). Kasa o sırada ortak anahtarla imzalı komutu reddeder: ortak anahtarı bilen ve Redis'e yazabilen biri
-  şube anahtarlı kasaya komut sokamaz. Bulut şube anahtarını henüz tanımıyorsa kasa ortak anahtara döner ve özetinde
-  şubesini söylemez (iki taraf aynı anahtarda kalır).
+- Şube anahtarı (27 Kasım 2026, `docs/07-UZAKTAN-ERISIM.md` §6): bulut kasanın şube anahtarını kabul ettiyse kasa
+  özetinde şubesini söyler (`sube`); bulut o kasanın komutlarını ve açık anahtar imzasını `ASILPOS_CLOUD_SECRET_<ŞUBE>`
+  ile işler (yoksa ortak anahtar). Kasa o sırada ortak anahtarla imzalı komutu reddeder: ortak anahtarı bilen ve
+  Redis'e yazabilen biri şube anahtarlı kasaya komut sokamaz. Uzaktan yönetim şube anahtarına yalnız bulutun kabulüyle
+  geçer (`server/lib/kafe-anahtari.ts` `kontrolAnahtari`; kabul kasada kalıcı, retle silinir): bulut tanımıyorken
+  kasanın 10 dakikada bir yaptığı yeniden deneme özeti ve komut imzasını değiştirmez, iki taraf aynı anahtarda kalır.
+  Anahtarın başladığı ya da kaldırıldığı anda kuyrukta bekleyen bir komut reddedilebilir; panelden yeniden gönderilir.
 - Kuyruk dükkân başına en çok `KUYRUK_EN_COK` (son 10 yer sahibe ayrılır), saatte üye başına `SAATLIK_EN_COK` komut:
   bir yönetici sınırı doldurup sahibin acil işlemini (hesabı kapat) bekletemez.
 

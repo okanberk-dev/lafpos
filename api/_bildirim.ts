@@ -36,8 +36,11 @@ export interface BildirimDeps {
   admin: () => Promise<boolean>;
   /** Geçerli ama yönetici olmayan oturum (parolasız görünüm): 401 yerine 403, uzaktan oturum düşmez */
   viewer?: () => Promise<boolean>;
-  /** Kasanın imzası (gönderim için) */
-  signed: (body: string) => boolean;
+  /**
+   * Kasanın imzası (gönderim için). Yanıt dönerse (şube anahtarı geçersiz, şube başlığı anlaşılmadı; api/_kafe.ts) o
+   * yanıt aynen gider: kasa onu "bulut anahtarı tanımıyor" sanıp ortak anahtara düşmez
+   */
+  signed: (body: string) => boolean | Response;
 }
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -121,7 +124,9 @@ export async function bildirim(req: Request, path: string, deps: BildirimDeps): 
   if (path === 'uzaktan/bildirim' && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 4000) return fail(413, 'Bildirim çok uzun', 'too_large');
-    if (!deps.signed(body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    const imza = deps.signed(body);
+    if (imza instanceof Response) return imza;
+    if (!imza) return fail(401, 'İmza geçersiz', 'bad_signature');
     let n: Partial<Notice>;
     try {
       n = JSON.parse(body) as Partial<Notice>;

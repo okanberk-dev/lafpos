@@ -6,13 +6,14 @@ import { anahtarImzaMetni, imzaMetni, KOMUT_TURLERI, komutDogrula, type KomutKay
 import { upstashCommand } from './fake-upstash';
 import { type Harness, startApp } from './harness';
 import { REDIS_ONEKI } from '@shared/eski-adlar';
+import { dukkanKanitMetni } from '@shared/baglanti';
 
 /**
  * Şube anahtarı (docs/07-UZAKTAN-ERISIM.md §6): Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri ›
  * AsilPOS Uzaktan › Şube anahtarı. Kendi anahtarı olan şubenin platform anahtarları, restoranının gelen kutusu ve
  * bağlandığı dükkânın özeti, raporu ve yedeği yalnız bu anahtarla imzalı istekle açılır; ortak anahtarı bilen başka şubenin
  * kasası onlara ulaşamaz. Kendi anahtarı olmayan şube ve başlıksız eski kasa eskisi gibi ortak anahtarla çalışır. Kasa şube
- * anahtarını bulut tanımıyorsa ortak anahtarla yineler (geçişte sıra önemsiz).
+ * anahtarını bulut tanımıyorsa ortak anahtarla yineler (geçiş sırası: kasalar bu sürüme, kasaya anahtar, en son Vercel).
  */
 const CLOUD = 'https://sube-anahtari.test';
 const SHARED = 's'.repeat(40);
@@ -125,6 +126,35 @@ describe('bulut: şube anahtarının geçerliliği ve imza', () => {
     const bad = (await id(SHARED, 'MARINA')) as Response;
     expect(bad.status).toBe(503);
     expect(((await bad.json()) as { code: string }).code).toBe('branch_key_invalid');
+    // Anahtarı bilmeyen başlıkla hangi şubenin anahtarının bozuk olduğunu, nedenini öğrenemez: düz 401 (inceleme)
+    vercel = { ASILPOS_CLOUD_SECRET_A: 'a'.repeat(40), ASILPOS_CLOUD_SECRET_B: 'a'.repeat(40), ASILPOS_CLOUD_SECRET_KISA: 'kisa' };
+    for (const sube of ['A', 'KISA']) {
+      const r = (await id('x'.repeat(40), sube)) as Response;
+      expect(r.status).toBe(401);
+      expect(JSON.stringify(await r.json())).not.toContain('ASILPOS_CLOUD_SECRET');
+    }
+    // Vercel'deki (geçersiz) değerle ya da ortak anahtarla imzalayan kasa nedeni görür
+    const a = (await id('a'.repeat(40), 'A')) as Response;
+    expect(a.status).toBe(503);
+    expect(((await a.json()) as { error: string }).error).toContain('ASILPOS_CLOUD_SECRET_B');
+    expect(((await id('kisa', 'KISA')) as Response).status).toBe(503);
+    expect(((await id(SHARED, 'KISA')) as Response).status).toBe(503);
+  });
+
+  it('geçersiz şube anahtarının yanıtı yedek, bildirim ve Merkez kaydında da aynen döner (düz 401 kasayı sessizce ortak anahtara düşürürdü)', async () => {
+    const K_X = 'x'.repeat(40);
+    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_X, ASILPOS_CLOUD_SECRET_TUZLA: K_X };
+    const yollar: [string, unknown][] = [
+      ['uzaktan/yedek/liste', {}],
+      ['uzaktan/bildirim', { kind: 'deneme', title: 'Deneme', body: 'Deneme', at: Date.now() }],
+      ['merkez/kayit', { id: 'a'.repeat(24), anahtar: 'b'.repeat(40) }],
+    ];
+    for (const [yol, body] of yollar) {
+      const r = await cloud('POST', yol, K_X, { sube: 'MARINA', body, headers: { 'x-laf-dukkan': 'kurulummarina000000000001' } });
+      expect([yol, r.status, r.json.code]).toEqual([yol, 503, 'branch_key_invalid']);
+      expect([yol, (await cloud('POST', yol, K_M, { sube: 'MARINA', body })).status]).toEqual([yol, 401]);
+      expect([yol, (await cloud('POST', yol, SHARED, { sube: '***', body })).status]).toEqual([yol, 400]);
+    }
   });
 
   it('şubeye ait kaynak: kendi anahtarı olan şube yalnız kendi imzasıyla; şube anahtarı başka şubeyi açmaz; şubesiz kaynak herkese', async () => {
@@ -204,58 +234,135 @@ describe('bulut: paket gelen kutusu restoranın şubesinin anahtarıyla', () => 
   });
 });
 
-describe('bulut: dükkân (özet, rapor, yedek) şubenin anahtarıyla ilk itmede şubeye bağlanır', () => {
-  const SHOP = 'dukkan-marina-1';
+describe('bulut: dükkân (özet, rapor, yedek) kendi kasasının kanıtıyla şubeye bağlanır', () => {
+  // Dükkân kimliği Merkez kurulum kimliğidir; kurulumun anahtarı yalnız o kasada ve Merkez kaydında
+  const SHOP = 'kurulummarina000000000001';
+  const SHOP_T = 'kurulumtuzla0000000000001';
+  const KUR_M = 'kurulum-anahtari-marina-'.padEnd(43, 'm');
+  const KUR_T = 'kurulum-anahtari-tuzla-'.padEnd(43, 't');
+  const kanit = (kurulum: string, shop: string, sube: string) => ({ 'x-laf-dukkan-kanit': createHmac('sha256', kurulum).update(dukkanKanitMetni(shop, sube)).digest('base64url') });
   const snap = (at: number) => ({ gz: gzipSync(JSON.stringify({ v: 1, at, bootstrap: {}, patron: {}, floor: {}, kitchen: [], board: {}, orders: {} })).toString('base64') });
-  const rapor = (at: number) => ({ gz: gzipSync(JSON.stringify({ v: 1, shop: SHOP, today: '2026-11-27', at, days: [] })).toString('base64') });
-  const bag = () => (JSON.parse(JSON.parse(store.get(`${REDIS_ONEKI}surum`) ?? '{}')[SHOP] ?? '{}') as { s?: string }).s;
-
-  it('özet: ortak anahtarla bağsız dükkân eskisi gibi; Marina’nın anahtarıyla itilince bağlanır, sonra ortak anahtar ve başka şube yazamaz', async () => {
+  const gun = (date: string, at: number) => ({ v: 1, date, at, n: 1, s: { rev: 1 }, pay: [], types: [], kdv: [], closes: [], prod: [], hours: [], clock: [], staff: [], z: [] });
+  const rapor = (at: number, shop = SHOP, days: unknown[] = []) => ({ gz: gzipSync(JSON.stringify({ v: 1, shop, today: '2026-11-27', at, days })).toString('base64') });
+  const surum = () => JSON.parse(store.get(`${REDIS_ONEKI}surum`) ?? '{}') as Record<string, string>;
+  const bag = (shop = SHOP) => surum()[`sube:${shop}`];
+  const m = { 'x-laf-dukkan': SHOP };
+  const mKanit = { ...m, ...kanit(KUR_M, SHOP, 'MARINA') };
+  beforeEach(() => {
     store.clear();
-    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M };
-    const d = { headers: { 'x-laf-dukkan': SHOP } };
-    expect((await cloud('POST', 'uzaktan/push', SHARED, { ...d, body: snap(1000) })).status).toBe(200);
-    expect(bag()).toBeUndefined();
-    expect((await cloud('POST', 'uzaktan/push', K_M, { ...d, sube: 'MARINA', body: snap(2000) })).status).toBe(200);
-    expect(bag()).toBe('MARINA');
-    expect((await cloud('POST', 'uzaktan/push', SHARED, { ...d, body: snap(3000) })).json).toMatchObject({ code: 'branch_key_required' });
-    expect((await cloud('POST', 'uzaktan/push', SHARED, { ...d, sube: 'TUZLA', body: snap(3000) })).status).toBe(403);
-    // Bağ kalıcı: Marina'nın sonraki itmeleri sürer
-    expect((await cloud('POST', 'uzaktan/push', K_M, { ...d, sube: 'MARINA', body: snap(4000) })).status).toBe(200);
-    expect(bag()).toBe('MARINA');
-    // Sahip Marina'nın anahtarını Vercel'den kaldırırsa (geri dönüş) dükkân yine ortak anahtarla yazılır
-    vercel = {};
-    expect((await cloud('POST', 'uzaktan/push', SHARED, { ...d, body: snap(5000) })).status).toBe(200);
+    blobs.clear();
+    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M, ASILPOS_CLOUD_SECRET_TUZLA: K_T };
+    store.set(`${REDIS_ONEKI}merkez:kurulum:${SHOP}`, JSON.stringify({ id: SHOP, key: KUR_M }));
+    store.set(`${REDIS_ONEKI}merkez:kurulum:${SHOP_T}`, JSON.stringify({ id: SHOP_T, key: KUR_T }));
   });
 
-  it('rapor: aynı kural (bağ rapor kaydında)', async () => {
-    store.clear();
-    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M };
-    expect((await cloud('POST', 'uzaktan/rapor', SHARED, { body: rapor(1000) })).status).toBe(200);
-    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(2000) })).status).toBe(200);
-    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${SHOP}:son`)!)).toMatchObject({ s: 'MARINA', at: 2000 });
-    expect((await cloud('POST', 'uzaktan/rapor', SHARED, { body: rapor(3000) })).json).toMatchObject({ code: 'branch_key_required' });
-    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(3000) })).status).toBe(200);
+  it('özet: ortak anahtarla bağsız dükkân eskisi gibi; kanıtsız şube anahtarı bağlamaz; Marina’nın kasası kanıtla bağlar, sonra başkası yazamaz', async () => {
+    const now = Date.now();
+    expect((await cloud('POST', 'uzaktan/push', SHARED, { headers: m, body: snap(now - 5000) })).status).toBe(200);
+    expect(bag()).toBeUndefined();
+    // Şube anahtarı tek başına bağlamaz (dükkânın kendisi olduğunu kanıtlamadı)
+    expect((await cloud('POST', 'uzaktan/push', K_M, { headers: m, sube: 'MARINA', body: snap(now - 4000) })).status).toBe(200);
+    expect(bag()).toBeUndefined();
+    expect((await cloud('POST', 'uzaktan/push', K_M, { headers: mKanit, sube: 'MARINA', body: snap(now - 3000) })).status).toBe(200);
+    expect(bag()).toBe('MARINA');
+    expect((await cloud('POST', 'uzaktan/push', SHARED, { headers: m, body: snap(now - 2000) })).json).toMatchObject({ code: 'branch_key_required' });
+    expect((await cloud('POST', 'uzaktan/push', K_T, { headers: m, sube: 'TUZLA', body: snap(now - 2000) })).status).toBe(403);
+    // Bağlı dükkânın kendi itmeleri kanıtsız da sürer (bağ okunan hash'te: ek komut yok)
+    expect((await cloud('POST', 'uzaktan/push', K_M, { headers: m, sube: 'MARINA', body: snap(now - 1000) })).status).toBe(200);
+    // Sahip Marina'nın anahtarını Vercel'den kaldırırsa (geri dönüş) dükkân yine ortak anahtarla yazılır
+    vercel = {};
+    expect((await cloud('POST', 'uzaktan/push', SHARED, { headers: m, body: snap(now) })).status).toBe(200);
+  });
+
+  it('kendi anahtarı olan başka şube başkasının bağsız dükkânını kendine bağlayamaz (inceleme: dükkân kimliği görünümden okunur)', async () => {
+    const now = Date.now();
+    blobs.set(`yedek/${SHOP}/20261126-230000.lpy`, Buffer.from('x'));
+    expect((await cloud('POST', 'uzaktan/push', SHARED, { headers: m, body: snap(now - 5000) })).status).toBe(200);
+    // Tuzla'nın kasası Marina'nın dükkânına kendi anahtarıyla: kanıtsız, kendi kurulumunun kanıtıyla ya da Marina adına
+    // uydurulmuş kanıtla bağlayamaz
+    for (const h of [{}, kanit(KUR_T, SHOP_T, 'TUZLA'), kanit(KUR_T, SHOP, 'TUZLA'), kanit(KUR_M, SHOP, 'MARINA')]) {
+      await cloud('POST', 'uzaktan/push', K_T, { headers: { ...m, ...h }, sube: 'TUZLA', body: snap(now - 4000) });
+      expect(bag()).toBeUndefined();
+    }
+    // Marina'nın kendi kasası bağlar; Tuzla artık ne yazar ne yedeğe ulaşır, Marina'nınkiler açık
+    expect((await cloud('POST', 'uzaktan/push', K_M, { headers: mKanit, sube: 'MARINA', body: snap(now - 3000) })).status).toBe(200);
+    expect(bag()).toBe('MARINA');
+    expect((await cloud('POST', 'uzaktan/push', K_T, { headers: { ...m, ...kanit(KUR_T, SHOP, 'TUZLA') }, sube: 'TUZLA', body: snap(now - 2000) })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/liste', K_T, { sube: 'TUZLA', body: { dukkan: SHOP } })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/yukle', K_T, { headers: m, sube: 'TUZLA', body: { boyut: 10 } })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/liste', K_M, { headers: m, sube: 'MARINA' })).status).toBe(200);
+    // Bilgisayar şube değiştirdi (aynı kurulum, Tuzla'nın anahtarı ve kendi kanıtı): bağ taşınır
+    expect((await cloud('POST', 'uzaktan/push', K_T, { headers: { ...m, ...kanit(KUR_M, SHOP, 'TUZLA') }, sube: 'TUZLA', body: snap(now - 1000) })).status).toBe(200);
+    expect(bag()).toBe('TUZLA');
+  });
+
+  it('bağ özetin süresi dolup görünüm sürümü silince de kalır; ileri tarihli özet saklanmaz ve kasanın itmesini kilitlemez', async () => {
+    const now = Date.now();
+    blobs.set(`yedek/${SHOP}/20261126-230000.lpy`, Buffer.from('x'));
+    expect((await cloud('POST', 'uzaktan/push', K_M, { headers: mKanit, sube: 'MARINA', body: snap(now - 3000) })).status).toBe(200);
+    // 7 gün itme yok: özetin süresi doldu; parolasız görünüm dükkânı açınca sürüm kaydı silinir
+    store.delete(`${REDIS_ONEKI}snapshot:${SHOP}`);
+    const giris = await cloud('POST', 'uzaktan/giris', SHARED, { body: {} });
+    const token = giris.json.token as string;
+    const goruntu = await asVercel(() => api.GET(new Request(`${CLOUD}/api/bootstrap`, { headers: { authorization: `Bearer ${token}`, 'x-laf-dukkan': SHOP } })));
+    expect(goruntu.status).toBe(503);
+    expect(surum()[SHOP]).toBeUndefined();
+    expect(bag()).toBe('MARINA');
+    expect((await cloud('POST', 'uzaktan/yedek/liste', SHARED, { body: { dukkan: SHOP } })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/indir', SHARED, { body: { pathname: `yedek/${SHOP}/20261126-230000.lpy` } })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/yukle', SHARED, { headers: m, body: { boyut: 10 } })).status).toBe(403);
+    // İleri tarihli özet (ortak anahtarla bağsız dükkâna da) saklanmaz
+    store.delete(`${REDIS_ONEKI}surum`);
+    const ileri = await cloud('POST', 'uzaktan/push', SHARED, { headers: m, body: snap(now + 10 * 365 * 86_400_000) });
+    expect(ileri).toMatchObject({ status: 400, json: { code: 'future' } });
+    // Bu düzeltmeden önce yazılmış ileri tarihli sürüm kasanın gerçek itmesini "eski" saydırmaz; bağ yine kurulur
+    store.set(`${REDIS_ONEKI}surum`, JSON.stringify({ [SHOP]: JSON.stringify({ at: now + 10 * 365 * 86_400_000 }) }));
+    const gercek = await cloud('POST', 'uzaktan/push', K_M, { headers: mKanit, sube: 'MARINA', body: snap(now) });
+    expect(gercek.json).toEqual({ ok: true });
+    expect(JSON.parse(surum()[SHOP]!).at).toBe(now);
+    expect(bag()).toBe('MARINA');
+  });
+
+  it('rapor: aynı bağ (sürüm hash’inde); kanıtla bağlanır, eski rapordan önce; ileri tarihli rapor ve gün saklanmaz', async () => {
+    const now = Date.now();
+    expect((await cloud('POST', 'uzaktan/rapor', SHARED, { body: rapor(now - 5000) })).status).toBe(200);
+    expect(bag()).toBeUndefined();
+    expect((await cloud('POST', 'uzaktan/rapor', K_T, { sube: 'TUZLA', headers: kanit(KUR_T, SHOP, 'TUZLA'), body: rapor(now - 4000) })).status).toBe(200);
+    expect(bag()).toBeUndefined();
+    // Eski (daha önceki anlı) rapor bile bağı kurar: bağ "eski" denetiminden önce
+    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', headers: kanit(KUR_M, SHOP, 'MARINA'), body: rapor(now - 9000) })).status).toBe(200);
+    expect(bag()).toBe('MARINA');
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${SHOP}:son`)!)).not.toHaveProperty('s');
+    expect((await cloud('POST', 'uzaktan/rapor', SHARED, { body: rapor(now - 3000) })).json).toMatchObject({ code: 'branch_key_required' });
+    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(now - 2000) })).status).toBe(200);
+    // İleri tarihli itme ya da gün
+    const ileri = now + 365 * 86_400_000;
+    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(ileri) })).json).toMatchObject({ code: 'future' });
+    expect((await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(now - 1000, SHOP, [gun('2026-11-26', ileri)]) })).json).toMatchObject({ code: 'future' });
+    // Önceden yazılmış ileri tarihli gün ve "bugün" kaydı kasanın gerçek itmesini kilitlemez
+    store.set(`${REDIS_ONEKI}rapor:${SHOP}:son`, JSON.stringify({ today: '2030-01-01', at: ileri }));
+    store.set(`${REDIS_ONEKI}rapor:${SHOP}:gun:2026-11-26`, JSON.stringify(gun('2026-11-26', ileri)));
+    const gercek = await cloud('POST', 'uzaktan/rapor', K_M, { sube: 'MARINA', body: rapor(now, SHOP, [gun('2026-11-26', now)]) });
+    expect(gercek.json).toMatchObject({ ok: true, stored: 1 });
+    expect(JSON.parse(store.get(`${REDIS_ONEKI}rapor:${SHOP}:son`)!)).toMatchObject({ today: '2026-11-27', at: now });
   });
 
   it('yedek: bağlı dükkânın yedeğini başka kasa listeleyemez, indiremez, yükleyemez; listede bağlı dükkân görünmez', async () => {
-    store.clear();
-    blobs.clear();
-    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M };
     blobs.set(`yedek/${SHOP}/20261126-230000.lpy`, Buffer.from('x'));
-    blobs.set('yedek/dukkan-tuzla-1/20261126-230000.lpy', Buffer.from('y'));
-    await cloud('POST', 'uzaktan/push', K_M, { headers: { 'x-laf-dukkan': SHOP }, sube: 'MARINA', body: snap(1000) });
-    const tuzla = { headers: { 'x-laf-dukkan': 'dukkan-tuzla-1' } };
+    blobs.set(`yedek/${SHOP_T}/20261126-230000.lpy`, Buffer.from('y'));
+    await cloud('POST', 'uzaktan/push', K_M, { headers: mKanit, sube: 'MARINA', body: snap(Date.now()) });
+    vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M };
+    const tuzla = { headers: { 'x-laf-dukkan': SHOP_T } };
     const liste = await cloud('POST', 'uzaktan/yedek/liste', SHARED, tuzla);
     expect(liste.status).toBe(200);
-    expect(liste.json.dukkanlar).toEqual(['dukkan-tuzla-1']);
+    expect(liste.json.dukkanlar).toEqual([SHOP_T]);
     expect((await cloud('POST', 'uzaktan/yedek/liste', SHARED, { ...tuzla, body: { dukkan: SHOP } })).status).toBe(403);
     expect((await cloud('POST', 'uzaktan/yedek/indir', SHARED, { ...tuzla, body: { pathname: `yedek/${SHOP}/20261126-230000.lpy` } })).status).toBe(403);
-    expect((await cloud('POST', 'uzaktan/yedek/yukle', SHARED, { headers: { 'x-laf-dukkan': SHOP }, body: { boyut: 10 } })).status).toBe(403);
+    expect((await cloud('POST', 'uzaktan/yedek/yukle', SHARED, { headers: m, body: { boyut: 10 } })).status).toBe(403);
     // Marina'nın kasası (yeni bilgisayarda da) kendi dükkânını ve bağsız dükkânları görür
     const own = await cloud('POST', 'uzaktan/yedek/liste', K_M, { headers: { 'x-laf-dukkan': 'yeni-kurulum-1' }, sube: 'MARINA', body: { dukkan: SHOP } });
     expect(own.status).toBe(200);
-    expect((own.json.dukkanlar as string[]).sort()).toEqual(['dukkan-tuzla-1', SHOP].sort());
+    expect((own.json.dukkanlar as string[]).sort()).toEqual([SHOP_T, SHOP].sort());
     expect((await cloud('POST', 'uzaktan/yedek/indir', K_M, { sube: 'MARINA', body: { pathname: `yedek/${SHOP}/20261126-230000.lpy` } })).status).toBe(200);
   });
 });
@@ -365,22 +472,33 @@ describe('kasa: şube anahtarıyla istek, bulut tanımıyorsa ortak anahtarla', 
     expect(kafeAnahtari()).toEqual({ key: SHARED, sube: null });
   });
 
-  it('uzaktan yönetim: şube anahtarıyla çalışırken özet şubeyi söyler, komutu o anahtarla doğrular; ortak anahtarlı komut tutmaz', async () => {
+  /** Bulutun imzaladığı gibi komut (`key` ile) */
+  const komut = async (key: string, n: number) => {
+    const { identity } = await import('../server/sync/merkez');
+    const v = komutDogrula('ayar.servis', { mod: n % 2 ? 'self' : 'masa' });
+    if (!v.ok) throw new Error(v.hata);
+    const base = { id: `k_sube${String(n).padStart(4, '0')}abcdefghijklm`, tur: v.tur, veri: v.veri, at: Date.now(), kim: 'sahip@ornek.test', kurulum: identity().id, rol: 'sahip' as const };
+    return { ...base, ozet: 'x', imza: createHmac('sha256', key).update(imzaMetni(base)).digest('base64url') } as KomutKaydi;
+  };
+
+  it('uzaktan yönetim: bulut şube anahtarını kabul edince özet şubeyi söyler, komutu o anahtarla doğrular; ortak anahtarlı komut tutmaz', async () => {
     vercel = { ASILPOS_CLOUD_SECRET_MARINA: K_M };
     await setSube(K_M);
     const k = await import('../server/sync/kontrol');
     const { identity } = await import('../server/sync/merkez');
+    // Bulut henüz kabul etmedi (istek gitmedi): ortak anahtar
+    expect(k.kontrolDurumu().sube).toBeUndefined();
+    await pull();
     const d = k.kontrolDurumu();
     expect(d.sube).toBe('MARINA');
     expect(d.anahtarImza).toBe(createHmac('sha256', K_M).update(anahtarImzaMetni(identity().id, d.anahtar)).digest('base64url'));
-    const komut = (key: string, n: number) => {
-      const v = komutDogrula('ayar.servis', { mod: n % 2 ? 'self' : 'masa' });
-      if (!v.ok) throw new Error(v.hata);
-      const base = { id: `k_sube${String(n).padStart(4, '0')}abcdefghijklm`, tur: v.tur, veri: v.veri, at: Date.now(), kim: 'sahip@ornek.test', kurulum: identity().id, rol: 'sahip' as const };
-      return { ...base, ozet: 'x', imza: createHmac('sha256', key).update(imzaMetni(base)).digest('base64url') } as KomutKaydi;
-    };
-    const a = komut(K_M, 1);
-    const b = komut(SHARED, 2);
+    // Kabul kalıcı (kasa yeniden başlayınca da): değerin izi, anahtarın kendisi değil
+    const { getSyncState } = await import('../server/lib/settings');
+    const iz = getSyncState<string>('uzaktan.subeAnahtariOnay');
+    expect(iz).toMatch(/^[0-9a-f]{32}$/);
+    expect(iz).not.toContain(K_M.slice(0, 8));
+    const a = await komut(K_M, 1);
+    const b = await komut(SHARED, 2);
     await k.kontrolYaniti({ durumIste: false, komutlar: [a, b] });
     expect(k.komutDurumu(a.id)).toBe('uygulandi');
     expect(k.komutDurumu(b.id)).toBe('reddedildi');
@@ -388,9 +506,33 @@ describe('kasa: şube anahtarıyla istek, bulut tanımıyorsa ortak anahtarla', 
     vercel = {};
     await pull();
     expect(k.kontrolDurumu().sube).toBeUndefined();
-    const c = komut(SHARED, 3);
+    expect(getSyncState<string>('uzaktan.subeAnahtariOnay')).toBe('');
+    const c = await komut(SHARED, 3);
     await k.kontrolYaniti({ durumIste: false, komutlar: [c] });
     expect(k.komutDurumu(c.id)).toBe('uygulandi');
+  });
+
+  it('kasada şube anahtarı var, Vercel’de yok: 10 dakikalık yeniden denemede de uzaktan yönetim ortak anahtarla (inceleme)', async () => {
+    vercel = {};
+    await setSube(K_M);
+    await pull();
+    const k = await import('../server/sync/kontrol');
+    const { identity } = await import('../server/sync/merkez');
+    const { kafeAnahtari, GERI_DONUS_MS } = await import('../server/lib/kafe-anahtari');
+    const later = Date.now() + GERI_DONUS_MS + 1000;
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(later);
+    try {
+      // İstekler şube anahtarını yeniden dener; uzaktan yönetim bulutla aynı (ortak) anahtarda kalır
+      expect(kafeAnahtari().sube).toBe('MARINA');
+      const d = k.kontrolDurumu();
+      expect(d.sube).toBeUndefined();
+      expect(d.anahtarImza).toBe(createHmac('sha256', SHARED).update(anahtarImzaMetni(identity().id, d.anahtar)).digest('base64url'));
+      const c = await komut(SHARED, 5);
+      await k.kontrolYaniti({ durumIste: false, komutlar: [c] }, later);
+      expect(k.komutDurumu(c.id)).toBe('uygulandi');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('bulut yedeği şube anahtarıyla şifrelenir; çözerken önce şube anahtarı, sonra ortak (eski yedekler)', async () => {

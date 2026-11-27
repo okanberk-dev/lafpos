@@ -82,9 +82,10 @@ export interface MerkezDeps {
   verify: (key: string, req: Request, url: URL, body: string) => boolean;
   /**
    * Kafenin anahtarıyla imzalı mı: ortak anahtar (ASILPOS_CLOUD_SECRET) ya da başlıktaki şubenin kendi anahtarı
-   * (ASILPOS_CLOUD_SECRET_<ŞUBE>; api/_kafe.ts). Kayıt yalnız kasadan
+   * (ASILPOS_CLOUD_SECRET_<ŞUBE>; api/_kafe.ts). Kayıt yalnız kasadan. Yanıt dönerse (şube anahtarı geçersiz, şube
+   * başlığı anlaşılmadı) o yanıt aynen gider: kasa onu "bulut anahtarı tanımıyor" sanıp ortak anahtara düşmez
    */
-  signedShared: (body: string) => boolean;
+  signedShared: (body: string) => boolean | Response;
   /** Panel için gerçek oturum var mı (üye ya da parolalı giriş) */
   admin: () => Promise<boolean>;
   /** Geçerli ama yönetici olmayan oturum (parolasız görünüm): 401 yerine 403 döner, uzaktan oturum düşmez */
@@ -122,6 +123,21 @@ const BEAT_MAX = 20_000 + NABIZ_KONTROL_PAYI;
 
 /** Kurulum kimliği anahtarın özetidir: kimliği bilen başkası onu kendi anahtarıyla kaydedemez (server/sync/merkez.ts) */
 export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
+
+/**
+ * Kurulumun kayıtlı imza anahtarı (kurulum yoksa ya da kayıt okunamazsa null). Dükkânın şubeye bağlanma kanıtı bununla
+ * doğrulanır (api/_kafe.ts `dukkanKanitiTutar`): dükkân kimliği kurulum kimliğidir, anahtarı yalnız o kasa bilir
+ */
+export async function kurulumAnahtari(redis: MerkezDeps['redis'], id: string): Promise<string | null> {
+  if (!ID_RE.test(id)) return null;
+  try {
+    const raw = (await redis('GET', installKey(id))) as string | null;
+    const key = raw ? (JSON.parse(raw) as Partial<Install>).key : null;
+    return typeof key === 'string' && key.length >= MIN_KEY ? key : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Nabzın yazdığı alanlar (ayrı anahtar) */
 type Beat = Pick<Install, 'lastSeen' | 'surum' | 'build' | 'gunAcik' | 'guncelleme' | 'istekAlindi' | 'kesinHedef'>;
@@ -308,7 +324,9 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
   if (path === 'merkez/kayit' && req.method === 'POST') {
     const raw = await req.text();
     if (raw.length > 4000) return fail(413, 'Kayıt çok büyük', 'too_large');
-    if (!deps.signedShared(raw)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    const imza = deps.signedShared(raw);
+    if (imza instanceof Response) return imza;
+    if (!imza) return fail(401, 'İmza geçersiz', 'bad_signature');
     let body: Record<string, unknown>;
     try {
       body = JSON.parse(raw) as Record<string, unknown>;

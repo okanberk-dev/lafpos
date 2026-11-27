@@ -11,8 +11,14 @@
  *
  * Şube anahtarı geçerli sayılmaz (o şubeye istek 503 `branch_key_invalid`): 32 karakterden kısa, ortak anahtarla ya da
  * başka bir şubeninkiyle aynı. Böyle bir yanlışlık sessizce ortak anahtara düşmez: şubenin kaynakları açılmaz, neden yanıtta.
+ * Neden yalnız imzası (Vercel'deki geçersiz değerle ya da ortak anahtarla) tutan isteğe söylenir; imzasız istek düz 401 alır.
+ *
+ * Dükkânın (Merkez kurulum kimliği) şubesi: kendi anahtarıyla imzalı istek dükkânın kendisi olduğunu kanıtlarsa
+ * (`dukkanKanitiTutar`: kurulumun kendi anahtarıyla imzalı kanıt, Merkez kaydındaki anahtarla doğrulanır) dükkân o şubeye
+ * bağlanır. Bağ api/uzaktan.ts'te `${REDIS_ONEKI}surum` hash'inin `sube:<dükkân>` alanında, süresiz.
  */
-import { SUBE_ANAHTARI_RE, SUBE_BASLIGI, subeAnahtarAdi, subeEtiketi } from '../shared/baglanti.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { SUBE_ANAHTARI_RE, SUBE_BASLIGI, dukkanKanitMetni, subeAnahtarAdi, subeEtiketi } from '../shared/baglanti.js';
 
 /** İmzalı isteği yapan kasa: söylediği şube (başlıksız istekte null) ve imzanın o şubenin kendi anahtarıyla olup olmadığı */
 export interface Kafe {
@@ -67,8 +73,9 @@ export function kafeAnahtari(sube: string | null | undefined, ortak: string): st
 /**
  * Kasanın imzalı isteği: `x-laf-sube` başlığı varsa o şubenin kendi anahtarıyla (tanımlıysa; değilse ortak anahtarla),
  * başlık yoksa ortak anahtarla doğrulanır. Tutarsa kasanın kimliği, tutmazsa 401 `bad_signature` (kasa şube anahtarıyla
- * imzaladıysa ortak anahtarla yineler: server/lib/kafe-anahtari.ts), başlık anlaşılmazsa 400, şubenin anahtarı geçersizse
- * 503 yanıtı döner
+ * imzaladıysa ortak anahtarla yineler: server/lib/kafe-anahtari.ts), başlık anlaşılmazsa 400 yanıtı döner. Şubenin
+ * anahtarı geçersizse 503 yalnız imzası Vercel'deki (geçersiz) değerle ya da ortak anahtarla tutan isteğe: anahtarı
+ * olmayan biri başlıkla hangi şubenin anahtarının bozuk olduğunu, neden bozuk olduğunu öğrenemez (düz 401 alır)
  */
 export function kafeKimligi(req: { method: string; headers: Headers }, url: URL, body: string, ortak: string, dogrula: Dogrula): Kafe | Response {
   const baslik = req.headers.get(SUBE_BASLIGI);
@@ -76,7 +83,11 @@ export function kafeKimligi(req: { method: string; headers: Headers }, url: URL,
   const sube = subeEtiketi(baslik);
   if (!sube) return fail(400, 'Şube başlığı anlaşılamadı', 'bad_branch');
   const d = subeAnahtariDurumu(sube, ortak);
-  if (d.durum === 'gecersiz') return fail(503, `Şube anahtarı geçersiz (${subeAnahtarAdi(sube)} ${d.neden})`, 'branch_key_invalid');
+  if (d.durum === 'gecersiz') {
+    const ham = subeAnahtarlari().get(sube) ?? '';
+    const imzali = (ham && dogrula(ham, req, url, body)) || (ortak.length >= MIN_KEY && dogrula(ortak, req, url, body));
+    return imzali ? fail(503, `Şube anahtarı geçersiz (${subeAnahtarAdi(sube)} ${d.neden})`, 'branch_key_invalid') : fail(401, 'İmza geçersiz', 'bad_signature');
+  }
   const key = d.durum === 'gecerli' ? d.anahtar : ortak;
   if (key.length < MIN_KEY || !dogrula(key, req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
   return { sube, kendi: d.durum === 'gecerli' };
@@ -98,8 +109,14 @@ export function subeErisimi(kafe: Kafe, hedef: string | null, ortak: string): Re
 }
 
 /**
- * Dükkânın (Merkez kurulum kimliği) bağlı olduğu şube: kendi anahtarıyla imzalı ilk yazımda bağlanır (özet itmesinde
- * sürüm kaydına, rapor itmesinde rapor kaydına `s`). Bağlı dükkânın yeni bağı: yazanın şubesi (kendi anahtarıyla)
- * yoksa eski bağ
+ * Dükkânın şubeye bağlanma kanıtı tutuyor mu (shared/baglanti.ts `DUKKAN_KANIT_BASLIGI`): HMAC-SHA256(kurulumun Merkez'de
+ * kayıtlı anahtarı, `dukkanKanitMetni(dükkân, şube)`), base64url, sabit zamanlı karşılaştırma. Yalnız şube anahtarıyla
+ * imzalı istekte okunur: kanıt "bu dükkân bu şubenin" der, istek imzası "ben bu şubeyim" der. İkisi birlikte yalnız o
+ * dükkânın kasasında olur; dükkân kimliğini (görünümden) öğrenen başka şubenin kasası onu kendine bağlayamaz
  */
-export const yeniBag = (kafe: Kafe, eski: string | null | undefined): string | undefined => (kafe.kendi && kafe.sube ? kafe.sube : (eski ?? undefined));
+export function dukkanKanitiTutar(kurulumAnahtari: string, dukkan: string, sube: string, kanit: string | null): boolean {
+  if (!kanit || kurulumAnahtari.length < MIN_KEY) return false;
+  const beklenen = Buffer.from(createHmac('sha256', kurulumAnahtari).update(dukkanKanitMetni(dukkan, sube)).digest('base64url'));
+  const gelen = Buffer.from(kanit.trim().replace(/=+$/, ''));
+  return gelen.length === beklenen.length && timingSafeEqual(gelen, beklenen);
+}

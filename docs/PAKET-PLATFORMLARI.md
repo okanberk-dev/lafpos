@@ -321,7 +321,9 @@ değildir. Sahip bir şubeye kendi anahtarını verince (Vercel'de `ASILPOS_CLOU
 AsilPOS Uzaktan › Şube anahtarı; `docs/07-UZAKTAN-ERISIM.md` §6) o şubenin platform anahtarları ve restoranının gelen
 kutusu (restoranın şubesi `YEMEKSEPETI_<ŞUBE>_REMOTE_ID` / `GETIR_<ŞUBE>_RESTAURANT_ID` adından) yalnız bu anahtarla
 imzalı isteğe açılır; ortak anahtarı bilen başka şubenin kasası 403 `branch_key_required` alır, sorgusuz eski kasa o
-restoranın kutusunu görmez. Anahtarı olmayan şube eskisi gibi ortak anahtarla çalışır.
+restoranın kutusunu görmez. Anahtarı olmayan şube eskisi gibi ortak anahtarla çalışır. Bu yüzden Vercel'e en son
+girilir: şubenin kasası bu sürümde olmalı ve Şube anahtarı alanı önce kasada dolu olmalı; yoksa o şubenin kendi
+kasası da ortak anahtarla kalır ve paket siparişleri ile platform anahtarları gelmez.
 
 ## Otomatik kabul
 İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik

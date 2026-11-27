@@ -8,8 +8,11 @@ import { del, issueSignedToken, list, presignUrl } from '@vercel/blob';
 import type { Kafe } from './_kafe.js';
 
 export interface YedekDeps {
-  /** Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı): tutarsa kasanın kimliği, tutmazsa null */
-  kafe: (body: string) => Kafe | null;
+  /**
+   * Kasanın imzası (ortak anahtar ya da şubenin kendi anahtarı): tutarsa kasanın kimliği, tutmazsa null; yanıt dönerse
+   * (şube anahtarı geçersiz, şube başlığı anlaşılmadı; api/_kafe.ts) o yanıt aynen gider
+   */
+  kafe: (body: string) => Kafe | Response | null;
   shop: string;
   /**
    * Dükkânlardan bu kasanın açabildikleri: şubeye bağlı dükkânın yedekleri yalnız o şubenin kendi anahtarıyla
@@ -46,6 +49,7 @@ export async function yedek(req: Request, path: string, deps: YedekDeps): Promis
   const raw = await req.text();
   if (raw.length > 2000) return fail(413, 'İstek çok büyük', 'too_large');
   const kafe = deps.kafe(raw);
+  if (kafe instanceof Response) return kafe;
   if (!kafe) return fail(401, 'İmza geçersiz', 'bad_signature');
   const kapali = () => fail(403, 'Bu dükkânın yedekleri şubesinin kendi anahtarıyla açılır', 'branch_key_required');
   if (!blobReady()) return fail(503, 'Bulut yedek deposu bağlı değil (Vercel › Storage › Blob)', 'not_configured');

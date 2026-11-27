@@ -27,6 +27,14 @@ export const SUBE_BASLIGI = 'x-laf-sube';
 export const subeAnahtarAdi = (sube: string) => `ASILPOS_CLOUD_SECRET_${sube}`;
 /** Vercel ortamında şube anahtarı adının kalıbı; 1. grup şube etiketi */
 export const SUBE_ANAHTARI_RE = /^ASILPOS_CLOUD_SECRET_([A-Z0-9]{1,32})$/;
+/**
+ * Dükkânın şubeye bağlanma kanıtı (api/_kafe.ts `dukkanKanitiTutar`): kasa şube anahtarıyla imzalı özet ve rapor
+ * itmesine ekler. Değer HMAC-SHA256(kurulumun kendi anahtarı, `dukkanKanitMetni`), base64url: "bu dükkân (Merkez kurulum
+ * kimliği) bu şubenin". Kurulumun anahtarı yalnız o kasada ve Merkez kaydında olduğu için başka şubenin kasası
+ * başkasının dükkânını kendine bağlayamaz
+ */
+export const DUKKAN_KANIT_BASLIGI = 'x-laf-dukkan-kanit';
+export const dukkanKanitMetni = (dukkan: string, sube: string) => `asilpos-dukkan-sube\n${dukkan}\n${sube}`;
 
 export interface ConnField {
   key: string;
