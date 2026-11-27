@@ -7,11 +7,11 @@ import type { BootstrapDTO } from '@shared/types';
 export const PINS = { kasa: '1111', garson: '2222', mudur: '2468', patron: '1897' } as const;
 
 /**
- * Süreç içi AsilPOS: geçici veritabanı, kurulum verisi ve demo personelin oturumları. Sunucu modülleri ortam
+ * Süreç içi AsilPOS: geçici veritabanı, kurulum verisi, şube (varsayılan `marina`) ve demo personelin oturumları. Sunucu modülleri ortam
  * değişkenleri ayarlandıktan sonra yüklenir; vitest her test dosyasını ayrı modül alanında çalıştırdığı için
  * her dosyanın kendi veritabanı olur.
  */
-export async function startApp(extraEnv: Record<string, string> = {}) {
+export async function startApp(extraEnv: Record<string, string> = {}, opts: { branch?: string | null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'asilpos-test-'));
   Object.assign(process.env, { ASILPOS_DATA_DIR: dir, ASILPOS_NO_JOBS: '1', ...extraEnv });
   const { runMigrations } = await import('../server/db/client');
@@ -19,6 +19,8 @@ export async function startApp(extraEnv: Record<string, string> = {}) {
   const { createApp } = await import('../server/app');
   runMigrations();
   seedIfEmpty();
+  // Testlerin kasası Marina'nınki (şubesi belli, çok şubeli sürümden önceki gibi); `branch: null` şubesiz yeni kasayı dener
+  if (opts.branch !== null) (await import('../server/lib/settings')).updateSettings({ branchId: opts.branch ?? 'marina' });
   const app = createApp();
   const tokens: Record<string, string> = {};
 

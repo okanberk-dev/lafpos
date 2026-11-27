@@ -146,12 +146,13 @@ export interface PrivateSettings {
   zNoStart: number | null;
   /**
    * Bu kasanın şubesi: lafmaliyet'teki şube kimliği (`tuzla`, `marina`; lafmaliyet docs/SUBE.md). Gün sonu paketine
-   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Varsayılan `marina` (ilk AsilPOS kasası
-   * Marina'da); başka şubenin kasası kurulurken Yönetim › Ayarlar'dan değiştirilir (yalnız patron). Boş bırakılamaz:
-   * panel yalnız kendi AsilPOS şubesinin (marina) gününü alır, başkasına 409 wrong_branch verir. Platform anahtarlarının Vercel
-   * adındaki şube de bundan gelir (`subeEtiketi`: 'tuzla' → 'TUZLA'; docs/PAKET-PLATFORMLARI.md "Anahtarlar buluttan").
+   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4, §4c). Her fiziksel şubenin kendi kasası olabilir
+   * (sahibin kararı, 26–27 Kasım 2026): yeni kurulum şubesiz açılır (null), şubeyi ladmin'in kurulum bağlantısı verir ya da
+   * patron Yönetim › Ayarlar'a yazar; şube belli olana dek şubeye bağlı senkron bekler (server/lib/sube.ts). Geçmişi olan
+   * eski kasa açılışta eski varsayılan `marina`'yı kalıcı yazar. Platform anahtarlarının Vercel adındaki şube de bundan
+   * gelir (`subeEtiketi`: 'tuzla' → 'TUZLA'; docs/PAKET-PLATFORMLARI.md "Anahtarlar buluttan").
    */
-  branchId: string;
+  branchId: string | null;
   /**
    * Paket platformları: mod, hazırlık süresi, otomatik kabul, tahmini komisyon (shared/platforms.ts). Arayüze
    * bootstrap'la gitmez: komisyon oranı maliyettir; ekranlar `GET /api/platforms`'tan okur (oran yalnız maliyet,
@@ -189,8 +190,9 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   receiptPrinter: null,
   rolePermissions: {},
   zNoStart: null,
-  // İlk AsilPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar ve yedek › Şube kimliği'nden değişir
-  branchId: 'marina',
+  // Yeni kurulum şubesiz: şube ladmin kurulumundan ya da Ayarlar ve yedek › Şube kimliği'nden gelir. Eski kasa açılışta
+  // `marina`'yı kalıcı yazar (server/lib/sube.ts `eskiKasaSubesiniYaz`)
+  branchId: null,
   platforms: PLATFORM_DEFAULTS,
   liveSince: null,
 };

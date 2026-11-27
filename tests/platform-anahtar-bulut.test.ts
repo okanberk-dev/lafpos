@@ -342,10 +342,17 @@ describe('kasanın çekimi', () => {
       expect(await pull()).toEqual({ changed: ['trendyol'] });
       expect(cloudKeys().values).toEqual({ TRENDYOL_SUPPLIER_ID: '999001', TRENDYOL_API_KEY: TUZLA_KEY, TRENDYOL_API_SECRET: TUZLA_SECRET });
 
-      // Şubesiz kasa: buluttan hiçbir anahtar; Tuzla'nınki de artık geçerli değil (şube değişti), bağdaştırıcı bırakır
-      updateSettings({ branchId: '' });
-      expect(await pull()).toEqual({ changed: [] });
-      expect(cloudKeys()).toMatchObject({ values: {}, sube: null });
+      // Şubesiz kasa (çok şubeli sürümde yeni kurulum, şube seçilmeden): buluttan hiç sormaz, hata da saymaz; Tuzla'nınki
+      // artık geçerli değil (şube değişti), bağdaştırıcı bırakır
+      const { activeCloudKeys } = await import('../server/lib/platform-anahtar');
+      const { pullState } = await import('../server/lib/platform-anahtar');
+      const tried = pullState().triedAt;
+      updateSettings({ branchId: null });
+      const { platformKeysBranchChanged } = await import('../server/sync/platform-anahtar');
+      await platformKeysBranchChanged();
+      expect(await pull()).toEqual({ skipped: 'Şube seçilmedi' });
+      expect(pullState().triedAt).toBe(tried);
+      expect(activeCloudKeys()).toEqual({});
       expect((await adapter())!.configured()).toBe(false);
     } finally {
       for (const k of Object.keys(set)) delete vercel[k];

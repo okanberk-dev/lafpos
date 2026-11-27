@@ -4,6 +4,7 @@ import { createApp } from './app';
 import { runMigrations, sqlite } from './db/client';
 import { seedIfEmpty } from './db/seed';
 import { upgradeRoleSets, upgradeStoredSettings } from './lib/settings';
+import { eskiKasaSubesiniYaz } from './lib/sube';
 import { env } from './env';
 import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
@@ -11,6 +12,8 @@ import { recordRestoreResult } from './sync/yedek';
 import { posEnv } from '@shared/pos-env';
 
 runMigrations();
+// Çok şubeli sürümden önce kurulmuş kasa (geçmişi var, şube satırı yok) eski varsayılan şubesiyle sürer: `marina`
+if (eskiKasaSubesiniYaz()) console.log('Şube kimliği eski varsayılandan kalıcı yazıldı: marina');
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; AsilPOS deneme modunda (satışlar gerçek sayılmaz)');
 upgradeRoleSets();
 upgradeStoredSettings();

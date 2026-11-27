@@ -4,7 +4,8 @@ import { db, schema } from '../db/client';
 import { env } from '../env';
 import { settingsFile, writeEnvEdits } from '../lib/ayar-dosyasi';
 import { Effects } from '../lib/effects';
-import { getSettings, getSyncState, setSyncState } from '../lib/settings';
+import { getSyncState, setSyncState } from '../lib/settings';
+import { kasaSubesi } from '../lib/sube';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { envDegeri, yeniAdlarla } from '@shared/pos-env';
@@ -69,11 +70,16 @@ export function dagitimFarki(json: unknown, current: Record<string, string | und
 export const bekleyenBaglanti = () => getSyncState<Bekleyen>(BEKLEYEN);
 const clearPending = () => db.delete(schema.syncState).where(eq(schema.syncState.key, BEKLEYEN)).run();
 
-/** ladmin'e sorar; değişen bağlantıyı bekletir. lafmaliyet bağlantısı yoksa bir şey yapmaz */
+/**
+ * ladmin'e sorar; değişen bağlantıyı bekletir. lafmaliyet bağlantısı yoksa ya da şube seçilmediyse (yeni kasa, kurulum
+ * bağlantısından önce) bir şey yapmaz: bağlantılar şubenindir
+ */
 export async function pullConnections(opts: { fetchImpl?: typeof signedFetch; now?: number } = {}): Promise<Bekleyen | null> {
   if (!env.lafmaliyetUrl || env.lafmaliyetToken.length < 32) return null;
+  const sube = kasaSubesi();
+  if (!sube) return null;
   const url = new URL('/api/panel/pos/baglanti', env.lafmaliyetUrl);
-  url.searchParams.set('sube', getSettings().branchId);
+  url.searchParams.set('sube', sube);
   const applied = getSyncState<{ surum: string }>(UYGULANAN)?.surum ?? '';
   if (applied) url.searchParams.set('uygulanan', applied);
   const res = await (opts.fetchImpl ?? signedFetch)(env.lafmaliyetToken, 'GET', url, undefined, 10_000);

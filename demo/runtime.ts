@@ -115,6 +115,8 @@ async function startServer() {
     openDatabase();
     runMigrations();
   }
+  // Kayıtlı demo veritabanı çok şubeli sürümden önceyse Marina'nın kasası olarak sürer (server/index.ts gibi)
+  (await import('../server/lib/sube')).eskiKasaSubesiniYaz();
   const fresh = seedIfEmpty({ demo: true });
   upgradeRoleSets();
   upgradeStoredSettings();

@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { env } from '../env';
 import { HttpError } from '../lib/http';
-import { getSettings } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
+import { subeGerekli } from '../lib/sube';
 import { lafmaliyetConfigured, lazyErrorText, networkErrorText } from './lafmaliyet';
 
 /**
@@ -92,11 +92,12 @@ async function fetchStaff(sube: string): Promise<LadminStaffList> {
 /**
  * lafmaliyet'in bu şubedeki personel listesi. Önbellek (aynı şube) `maxAgeMs`'den yeniyse ondan; değilse çekilir (aynı
  * anda gelen istekler tek isteği bekler). Bağlantı yoksa, ladmin'e ulaşılamazsa ya da yanıt bozuksa 503 (liste uydurulmaz),
- * lafmaliyet başka şube bekliyorsa 409 `wrong_branch`. Hata önbelleği silmez ama kullanılmaz: bağlama taze liste ister
+ * lafmaliyet başka şube bekliyorsa 409 `wrong_branch`, şube seçilmediyse 409 `no_branch`. Hata önbelleği silmez ama kullanılmaz: bağlama taze liste ister
  */
 export async function ladminStaff(opts: { maxAgeMs?: number } = {}): Promise<LadminStaffList> {
   if (!lafmaliyetConfigured()) throw new HttpError(503, 'lafmaliyet bağlantısı tanımlı değil (LAFMALIYET_URL, LAFMALIYET_SYNC_SECRET)', 'not_configured');
-  const sube = getSettings().branchId;
+  // Liste şubenindir: şube seçilmemiş yeni kasa sormaz (409 `no_branch`, metin ne yapılacağını söyler)
+  const sube = subeGerekli();
   const maxAge = opts.maxAgeMs ?? STAFF_CACHE_MS;
   if (cache && cache.sube === sube && Date.now() - cache.at < maxAge) return cache;
   if (!inflight) {

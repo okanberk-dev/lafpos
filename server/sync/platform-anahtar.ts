@@ -4,7 +4,7 @@ import { rebuildCloudAdapters } from '../delivery/registry';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { cloudKeys, saveCloudKeys, setPullState } from '../lib/platform-anahtar';
-import { getSettings } from '../lib/settings';
+import { kasaSubesi } from '../lib/sube';
 import { signedFetch } from '../lib/signature';
 
 /**
@@ -28,7 +28,9 @@ const same = (a: Record<string, string>, b: Record<string, string>, keys: readon
  */
 export async function pullPlatformKeys(now = Date.now()): Promise<{ changed: string[] } | { skipped: string }> {
   if (!env.cloudUrl || env.cloudSecret.length < 32) return { skipped: 'Uzaktan tanımlı değil' };
-  const branchId = getSettings().branchId ?? '';
+  // Anahtarlar şubenindir: şube seçilmemiş yeni kasa sormaz (hata sayılmaz, Bağlantı bilgileri şubenin seçilmediğini söyler)
+  const branchId = kasaSubesi();
+  if (!branchId) return { skipped: 'Şube seçilmedi' };
   const sube = subeEtiketi(branchId);
   let res: { status: number; json: unknown };
   try {
@@ -69,7 +71,7 @@ export async function pullPlatformKeys(now = Date.now()): Promise<{ changed: str
 }
 
 /**
- * Şube kimliği değişince (Yönetim › Ayarlar ve yedek, yalnız patron): eski şubenin anahtarları hemen bırakılır
+ * Şube kimliği değişince (Yönetim › Ayarlar ve yedek, yalnız patron; ladmin kurulumu şubeyi verince de): eski şubenin anahtarları hemen bırakılır
  * (bağdaştırıcılar yerel ayarlar ve yalnız yeni şube için çekilmiş değerlerle yeniden kurulur) ve yeni şubeninkiler
  * beklemeden çekilir. Uzaktan tanımlı değilse istek yok. Hata kasayı durdurmaz: çekim olmazsa 10 dakikalık çekim yeniden dener
  */

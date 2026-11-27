@@ -167,6 +167,8 @@ export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
   // self Yönetim › Ayarlar › Servis modu'ndan. Var olan kurulumun ayarına dokunulmaz. Deneme modu: örnek PIN'ler ve
   // eğitim yazarkasası; patron "Denemeyi bitir, gerçek kullanıma başla" ile kapatır
   updateSettings({ demoMode: true, okcProvider: 'simulator', serviceMode: 'self' });
+  // Kafe kurulumu şubesiz açılır (şubeyi ladmin kurulumu verir; server/lib/sube.ts); tarayıcı demosu Marina'nın kasasıdır
+  if (demo) updateSettings({ branchId: 'marina' });
   return true;
 }
 

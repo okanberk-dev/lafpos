@@ -666,11 +666,12 @@ describe('yönetim doğrulamaları', () => {
 
 /**
  * Şube kimliği (docs/03-ENTEGRASYON.md §4, 4 Kasım 2026): gün sonu paketi kasanın şubesini taşır, böylece
- * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `marina`: ilk AsilPOS kasası
- * Marina'da (21 Kasım 2026); lafmaliyet AsilPOS'un şubesinden başka şubeye ayarlı kasanın gününü reddeder.
+ * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Testin kasası Marina'nınki (ilk AsilPOS
+ * kasası, 21 Kasım 2026; yeni kurulum şubesiz açılır, §4c); lafmaliyet AsilPOS'un şubesinden başka şubeye ayarlı kasanın
+ * gününü reddeder.
  */
 describe('şube kimliği pakete girer', () => {
-  it('varsayılan marina, ayar değişince paket onu taşır', async () => {
+  it('Marina kasasının paketi marina, ayar değişince paket onu taşır', async () => {
     const day = await freshDay();
     expect((await payloadOf(day.id)).sube).toBe('marina');
 

@@ -12,6 +12,7 @@ import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
 import { DenemeCard } from '@/components/admin/DenemeCard';
 import { branchSlug } from '@shared/baglanti';
+import { SUBE_YOK_METNI } from '@shared/sube';
 import { CloudBackupCard } from '@/components/admin/CloudBackupCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { PrinterCard } from '@/components/admin/PrinterCard';
@@ -62,7 +63,8 @@ type Settings = Record<string, unknown> & {
   posSizeSuffix: { M: string; L: string; TEK: string };
   serviceMode: ServiceMode;
   zNoStart: number | null;
-  branchId: string;
+  /** null: şube seçilmedi (yeni kurulum; ladmin kurulumu verir) */
+  branchId: string | null;
 };
 
 const lines = (a: string[]) => a.join('\n');
@@ -192,7 +194,7 @@ export default function SettingsAdmin() {
   // `acceptedBranch`: lafmaliyet'in kabul ettiği şube (şu anki kimlik değil; ona dönmek onay istemez)
   const branchLock = useQuery({
     queryKey: ['sync', 'branch-lock'],
-    queryFn: () => get<{ locked: boolean; branchId: string; acceptedBranch: string | null }>('/admin/settings/branch-lock'),
+    queryFn: () => get<{ locked: boolean; branchId: string | null; acceptedBranch: string | null }>('/admin/settings/branch-lock'),
   });
   const [s, setS] = useState<Settings | null>(null);
   const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
@@ -250,7 +252,8 @@ export default function SettingsAdmin() {
   // İlk Z numarası yalnız değiştiyse denetlenir (sunucu da öyle): zincir geri alınmaz
   const lastZ = zChain.data ? (zChain.data.lastZ ?? 0) : null;
   // Şube kimliği lafmaliyet'le aynı kuralda (docs/03-ENTEGRASYON.md §4): yanlış kimlik günü yanlış şubeye yazar
-  const branchError = /^[a-z][a-z0-9-]{1,23}$/.test(s.branchId) ? null : 'Harfle başlamalı; küçük harf, rakam ve tire (en az 2 karakter)';
+  // Şubesiz kasa (null) seçene dek hata yok: kayıt şube alanını göndermez
+  const branchError = s.branchId === null || /^[a-z][a-z0-9-]{1,23}$/.test(s.branchId) ? null : 'Harfle başlamalı; küçük harf, rakam ve tire (en az 2 karakter)';
   const zError =
     s.zNoStart != null && s.zNoStart !== data.data?.zNoStart ? (s.zNoStart < 1 ? 'Z numarası 1 ya da daha büyük olmalı' : lastZ != null && s.zNoStart <= lastZ ? `Z numarası geri alınamaz; son Z ${lastZ}` : null) : null;
   // Alarm uyarıdan önce gelirse amber hiç görünmez (bar ekranı önce alarma bakar): alanda hata, Kaydet göndermez
@@ -537,12 +540,16 @@ export default function SettingsAdmin() {
               <div>
                 <Field
                   label="Şube kimliği"
-                  hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır; sitenin online siparişleri, masa çağrıları ve Tükendi'si bu şube adına okunur ve yazılır. Paneldeki kimliğin aynısı olmalı (bugün marina)"
+                  hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır; sitenin online siparişleri, masa çağrıları ve Tükendi'si bu şube adına okunur ve yazılır. ladmin'in kurulum bağlantısıyla kurulan kasada kendiliğinden gelir; paneldeki kimliğin aynısı olmalı"
                   error={branchError}
                 >
                   <Input
-                    value={s.branchId}
-                    onChange={(e) => set({ branchId: branchSlug(e.target.value) })}
+                    value={s.branchId ?? ''}
+                    // Şubesiz kasada alan boşaltılırsa yine şubesiz (kayıt göndermez); şubesi olanda boş kimlik hata
+                    onChange={(e) => {
+                      const v = branchSlug(e.target.value);
+                      set({ branchId: v === '' && base.current?.branchId == null ? null : v });
+                    }}
                     placeholder="marina"
                     autoCapitalize="none"
                     spellCheck={false}
@@ -550,6 +557,11 @@ export default function SettingsAdmin() {
                     className="sm:max-w-60"
                   />
                 </Field>
+                {s.branchId === null && (
+                  <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted" data-sube-yok>
+                    <span>{SUBE_YOK_METNI}</span>
+                  </p>
+                )}
                 {/* lafmaliyet bir günü kabul ettiyse: yanlış değişiklik sonraki günleri başka şubeye yazar. Kayıtta onay sorulur */}
                 {branchLock.data?.locked && (
                   <p id="branch-lock-info" className="mt-1.5 flex items-start gap-1.5 text-xs text-muted">
