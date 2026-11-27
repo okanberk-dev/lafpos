@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { TOKEN_KABLO_DIR, useKabloDir } from '../server/okc/token-kablo';
-import { driverInstalled, DRIVER_TOOL, embeddedZip, killStrayCommand, psQuote, slicePart, tr300Command, x30trCommand } from '../server/okc/token-kablo-kurulum';
+import { deflateRawSync } from 'node:zlib';
+import { driverInstalled, DRIVER_TOOL, embeddedZip, killStrayCommand, psQuote, safeJoin, slicePart, tr300Command, unzip, x30trCommand } from '../server/okc/token-kablo-kurulum';
 import { interruptedRun, type SetupRun } from '../server/okc/token-kablo-servis';
 
 /**
@@ -16,34 +17,47 @@ import { interruptedRun, type SetupRun } from '../server/okc/token-kablo-servis'
 
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
-/** Tek dosyalı, sıkıştırmasız en küçük zip */
-function tinyZip(name: string, body: string): Buffer {
-  const n = Buffer.from(name, 'utf8');
-  const data = Buffer.from(body, 'utf8');
-  const local = Buffer.alloc(30);
-  local.writeUInt32LE(0x04034b50, 0);
-  local.writeUInt16LE(20, 4);
-  local.writeUInt32LE(data.length, 18);
-  local.writeUInt32LE(data.length, 22);
-  local.writeUInt16LE(n.length, 26);
-  const central = Buffer.alloc(46);
-  central.writeUInt32LE(0x02014b50, 0);
-  central.writeUInt16LE(20, 4);
-  central.writeUInt16LE(20, 6);
-  central.writeUInt32LE(data.length, 20);
-  central.writeUInt32LE(data.length, 24);
-  central.writeUInt16LE(n.length, 28);
-  central.writeUInt32LE(0, 42);
-  const dir = Buffer.concat([central, n]);
-  const files = Buffer.concat([local, n, data]);
+/** Küçük bir zip: girdiler sıkıştırmasız ya da deflate; ad UTF-8 bayrağıyla */
+function makeZip(entries: { name: string; body: string | Buffer; deflate?: boolean }[]): Buffer {
+  const files: Buffer[] = [];
+  const dir: Buffer[] = [];
+  let offset = 0;
+  for (const e of entries) {
+    const n = Buffer.from(e.name, 'utf8');
+    const data = Buffer.isBuffer(e.body) ? e.body : Buffer.from(e.body, 'utf8');
+    const packed = e.deflate ? deflateRawSync(data) : data;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x800, 6);
+    local.writeUInt16LE(e.deflate ? 8 : 0, 8);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x800, 8);
+    central.writeUInt16LE(e.deflate ? 8 : 0, 10);
+    central.writeUInt32LE(packed.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(n.length, 28);
+    central.writeUInt32LE(offset, 42);
+    files.push(local, n, packed);
+    dir.push(central, n);
+    offset += 30 + n.length + packed.length;
+  }
+  const d = Buffer.concat(dir);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(dir.length, 12);
-  end.writeUInt32LE(files.length, 16);
-  return Buffer.concat([files, dir, end]);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(d.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...files, d, end]);
 }
+const tinyZip = (name: string, body: string) => makeZip([{ name, body }]);
 
 describe('Token sürücü aracının içindeki kurucular', () => {
   it('parça yerinden alınır; dosya kısaysa ya da özet tutmuyorsa hiçbir şey dönmez', () => {
@@ -79,6 +93,35 @@ describe('Token sürücü aracının içindeki kurucular', () => {
   });
 });
 
+describe('Arşivin açılması (PowerShell olmadan)', () => {
+  it('sıkıştırılmış ve sıkıştırmasız girdiler, Türkçe ad ve alt klasör okunur; klasör girdisi atlanır', () => {
+    const big = Buffer.alloc(50_000, 'a');
+    const zip = makeZip([
+      { name: 'TokenX Connect (Wired) Sürücü Kurulum Aracı v2.9.3.exe', body: big, deflate: true },
+      { name: 'amd64/', body: '' },
+      { name: 'amd64/ftdibus.sys', body: 'surucu' },
+    ]);
+    const files = unzip(zip);
+    expect([...files.keys()]).toEqual(['TokenX Connect (Wired) Sürücü Kurulum Aracı v2.9.3.exe', 'amd64/ftdibus.sys']);
+    expect(files.get('TokenX Connect (Wired) Sürücü Kurulum Aracı v2.9.3.exe')!.equals(big)).toBe(true);
+    expect(files.get('amd64/ftdibus.sys')!.toString()).toBe('surucu');
+  });
+
+  it('bozuk ya da beklenenden büyük arşiv hata verir, yarım içerik dönmez', () => {
+    const zip = makeZip([{ name: 'a.inf', body: Buffer.alloc(4_000, 'x'), deflate: true }]);
+    expect(() => unzip(zip, 1_000)).toThrow(/boyut tutmuyor/);
+    expect(() => unzip(Buffer.from('zip degil'))).toThrow(/sonu bulunamadı/);
+    const broken = Buffer.from(zip);
+    broken.writeUInt32LE(0, 0);
+    expect(() => unzip(broken)).toThrow(/a\.inf okunamadı/);
+  });
+
+  it('arşivden gelen ad klasörün dışına çıkamaz', () => {
+    expect(safeJoin('/veri/ftdi', 'amd64/ftdibus.sys')).toBe(join('/veri/ftdi', 'amd64', 'ftdibus.sys'));
+    for (const bad of ['../x.inf', 'amd64/../../x.sys', 'C:\\Windows\\x.sys', '', '/']) expect(() => safeJoin('/veri/ftdi', bad)).toThrow(/beklenmeyen dosya adı/);
+  });
+});
+
 describe('Token sürücü kurulum komutları', () => {
   it('X30TR: kurucu pencere açmadan çalışır, depodaki .inf pnputil ile kurulur; sürücü yoksa hata kodu', () => {
     const cmd = x30trCommand("C:\\ProgramData\\AsilPOS\\token-kablo\\surucu\\wdi-simple.exe", 'C:\\ProgramData\\AsilPOS\\token-kablo\\surucu');
@@ -92,17 +135,19 @@ describe('Token sürücü kurulum komutları', () => {
     expect(cmd).toContain('@(0, 259, 3010) -notcontains $LASTEXITCODE');
   });
 
-  it('300TR: zip açılır, veri yolu ve seri kapı sürücüsünün ikisi de kurulur', () => {
-    const cmd = tr300Command('C:\\veri\\surucu\\ftdi.zip', 'C:\\veri\\surucu\\ftdi');
-    expect(cmd).toContain("Expand-Archive -LiteralPath 'C:\\veri\\surucu\\ftdi.zip' -DestinationPath 'C:\\veri\\surucu\\ftdi' -Force");
+  it('300TR: çıkarılmış klasördeki veri yolu ve seri kapı sürücüsünün ikisi de kurulur', () => {
+    const cmd = tr300Command('C:\\veri\\surucu\\ftdi');
+    // Windows'un Expand-Archive'i Token'ın arşivinde hata veriyor: arşiv sunucuda açılır
+    expect(cmd).not.toContain('Expand-Archive');
     expect(cmd).toContain("@('ftdibus.inf', 'ftdiport.inf')");
+    expect(cmd).toContain("Join-Path 'C:\\veri\\surucu\\ftdi' $f");
     expect(cmd).toContain('/add-driver $inf /install');
     expect(cmd).toContain('if ($n -lt 2) { exit 20 }');
   });
 
   it('yoldaki kesme işareti komutu bozmaz', () => {
     expect(psQuote("C:\\Users\\O'Neil\\veri")).toBe("'C:\\Users\\O''Neil\\veri'");
-    expect(tr300Command("C:\\O'Neil\\ftdi.zip", "C:\\O'Neil\\ftdi")).toContain("'C:\\O''Neil\\ftdi.zip'");
+    expect(tr300Command("C:\\O'Neil\\ftdi")).toContain("'C:\\O''Neil\\ftdi'");
   });
 
   it('asılı kalan süreçler yalnız sürücü klasöründen çalışanlardır', () => {

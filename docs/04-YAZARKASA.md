@@ -592,6 +592,9 @@ Kasa bilgisayarına AsilPOS'u kurmak yeter; gerisini Yönetim › Yazarkasa POS 
      `pnputil /add-driver … /install` ile kurulur.
    - **300TR (FTDI):** FTDI'nin kendi kendini açan paketindeki zip'ten `ftdibus.inf` ve `ftdiport.inf` pnputil ile kurulur.
 
+   İki arşiv de sunucuda açılır (`unzip`), Windows'un `Expand-Archive`'i ile değil: o komut Token'ın arşivinde hata
+   veriyor (gerçek Windows denemesinde görüldü). Aracın kendisi diske yazılmaz.
+
    Biri kurulamazsa öteki yine kurulur ve eksik kalan sonraki "Kurulumu yap"ta yeniden denenir (`surucu.json` model
    başına tutar). Süre aşımında kurucu, başlattıklarıyla birlikte kapatılır; kurulumun başında sürücü klasöründen
    çalışan eski süreçler (önceki sürümün asılı bıraktığı sihirbaz) kapatılır. Gerçek Windows'taki deneme:

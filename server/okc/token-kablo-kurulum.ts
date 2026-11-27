@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import { dllPath, HUB_DLL, TOKEN_KABLO_DIR, vcRuntimeX86 } from './token-kablo';
 
 /**
@@ -208,6 +209,50 @@ export function embeddedZip(exe: Uint8Array): Buffer {
   throw new Error('Sürücü paketinin içinde arşiv bulunamadı');
 }
 
+/**
+ * Arşivdeki dosyalar (saf): ad → içerik; klasör girdileri atlanır. Windows PowerShell'in Expand-Archive'i Token'ın
+ * arşivinde hata veriyor (gerçek Windows denemesi, 28 Kasım 2026: MethodCountCouldNotFindBest); arşiv burada açılır,
+ * hiçbir şey çalıştırılmadan. Yalnız sıkıştırmasız ve deflate girdiler (bu iki arşivde başkası yok)
+ */
+export function unzip(zip: Uint8Array, maxBytes = 256 * 1024 * 1024): Map<string, Buffer> {
+  const b = Buffer.from(zip.buffer, zip.byteOffset, zip.length);
+  const end = b.lastIndexOf(ZIP_END);
+  if (end < 0 || end + 22 > b.length) throw new Error('Arşiv okunamadı (sonu bulunamadı)');
+  const count = b.readUInt16LE(end + 10);
+  let at = b.readUInt32LE(end + 16);
+  const out = new Map<string, Buffer>();
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    if (at + 46 > b.length || b.readUInt32LE(at) !== ZIP_CENTRAL) throw new Error('Arşiv okunamadı (dizini bozuk)');
+    const utf8 = (b.readUInt16LE(at + 8) & 0x800) !== 0;
+    const method = b.readUInt16LE(at + 10);
+    const packed = b.readUInt32LE(at + 20);
+    const size = b.readUInt32LE(at + 24);
+    const nameLen = b.readUInt16LE(at + 28);
+    const local = b.readUInt32LE(at + 42);
+    const name = b.toString(utf8 ? 'utf8' : 'latin1', at + 46, at + 46 + nameLen);
+    at += 46 + nameLen + b.readUInt16LE(at + 30) + b.readUInt16LE(at + 32);
+    if (name.endsWith('/')) continue;
+    if (local + 30 > b.length || b.readUInt32LE(local) !== ZIP_LOCAL) throw new Error(`Arşivdeki ${name} okunamadı`);
+    const start = local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
+    total += size;
+    if (start + packed > b.length || total > maxBytes) throw new Error(`Arşivdeki ${name} okunamadı (boyut tutmuyor)`);
+    const raw = b.subarray(start, start + packed);
+    if (method !== 0 && method !== 8) throw new Error(`Arşivdeki ${name} açılamadı (sıkıştırma yöntemi ${method})`);
+    const data = method === 0 ? raw : inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) });
+    if (data.length !== size) throw new Error(`Arşivdeki ${name} bozuk`);
+    out.set(name, data);
+  }
+  return out;
+}
+
+/** Arşivden gelen adı klasörün içinde tutar: üst klasöre ya da başka sürücüye çıkan ad reddedilir */
+export function safeJoin(dir: string, name: string): string {
+  const parts = name.split(/[\\/]+/).filter(Boolean);
+  if (!parts.length || parts.some((x) => x === '..' || x === '.' || x.includes(':'))) throw new Error(`Arşivde beklenmeyen dosya adı: ${name.slice(0, 80)}`);
+  return join(dir, ...parts);
+}
+
 /** pnputil'in "kuruldu" sayılan çıkış kodları: 0, 259 (eklendi; takılı aygıt yok ya da zaten güncel), 3010 (yeniden başlat) */
 const PNPUTIL_OK = '@(0, 259, 3010)';
 const PNPUTIL = "(Join-Path $env:SystemRoot 'System32\\pnputil.exe')";
@@ -243,14 +288,13 @@ export function x30trCommand(exe: string, dir: string): string {
 }
 
 /**
- * 300TR (FTDI): paketten çıkan zip açılır, veri yolu ve seri kapı sürücüsü pnputil ile kurulur. Çıkış: 0 tamam, 20
- * zip'te sürücü yok, 21 pnputil reddetti
+ * 300TR (FTDI): paketten çıkarılmış klasördeki veri yolu ve seri kapı sürücüsü pnputil ile kurulur. Çıkış: 0 tamam, 20
+ * sürücü dosyası yok, 21 pnputil reddetti
  */
-export function tr300Command(zip: string, out: string): string {
+export function tr300Command(dir: string): string {
   return [
-    `Expand-Archive -LiteralPath ${psQuote(zip)} -DestinationPath ${psQuote(out)} -Force`,
     '$bad = 0; $rb = 0; $n = 0',
-    `foreach ($f in @('ftdibus.inf', 'ftdiport.inf')) { $inf = Join-Path ${psQuote(out)} $f; if (Test-Path -LiteralPath $inf) { $n++; & ${PNPUTIL} /add-driver $inf /install | Out-Null; if ($LASTEXITCODE -eq 3010) { $rb = 1 }; if (${PNPUTIL_OK} -notcontains $LASTEXITCODE) { $bad = $LASTEXITCODE } } }`,
+    `foreach ($f in @('ftdibus.inf', 'ftdiport.inf')) { $inf = Join-Path ${psQuote(dir)} $f; if (Test-Path -LiteralPath $inf) { $n++; & ${PNPUTIL} /add-driver $inf /install | Out-Null; if ($LASTEXITCODE -eq 3010) { $rb = 1 }; if (${PNPUTIL_OK} -notcontains $LASTEXITCODE) { $bad = $LASTEXITCODE } } }`,
     'Write-Output "inf=$n pnputil=$bad reboot=$rb"',
     'if ($n -lt 2) { exit 20 }',
     'if ($bad -ne 0) { exit 21 }',
@@ -270,16 +314,13 @@ export async function installDriver(): Promise<DriverResult> {
   await runPowershell(killStrayCommand(dir), 60_000).catch(() => undefined);
   const buf = await download(DRIVER_TOOL.url, 120 * 1024 * 1024);
   if (sha256(buf) !== DRIVER_TOOL.sha256) throw new Error('Token sürücü aracının özeti tutmuyor (Token yeni sürüm yayımlamış olabilir); çalıştırılmadı');
+  // Araç diske yazılmaz: arşiv bellekte açılır, yalnız içindeki iki kurucu çıkarılır
+  const tool = [...unzip(buf)].find(([name]) => name.toLowerCase().endsWith('.exe'))?.[1];
+  if (!tool) throw new Error('Token sürücü aracının arşivinde program yok');
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const zip = join(dir, 'surucu.zip');
-  writeFileSync(zip, buf);
   const result: DriverResult = { x30tr: false, tr300: false, reboot: false, errors: [] };
   try {
-    const open = await runPowershell(`Expand-Archive -LiteralPath ${psQuote(zip)} -DestinationPath ${psQuote(dir)} -Force`, 5 * 60_000);
-    const name = readdirSync(dir).find((f) => f.toLowerCase().endsWith('.exe'));
-    if (open.code !== 0 || !name) throw new Error(`Token sürücü aracının arşivi açılamadı${open.out ? ` (${tail(open.out)})` : ''}`);
-    const tool = readFileSync(join(dir, name));
     const part = async (model: 'x30tr' | 'tr300', label: string, run: () => Promise<{ code: number | null; out: string }>) => {
       try {
         const r = await run();
@@ -296,9 +337,13 @@ export async function installDriver(): Promise<DriverResult> {
       return runPowershell(x30trCommand(exe, dir));
     });
     await part('tr300', '300TR', async () => {
-      const ftdi = join(dir, 'ftdi.zip');
-      writeFileSync(ftdi, embeddedZip(slicePart(tool, DRIVER_TOOL.parts.tr300, '300TR sürücü paketi')));
-      return runPowershell(tr300Command(ftdi, join(dir, 'ftdi')));
+      const out = join(dir, 'ftdi');
+      for (const [name, data] of unzip(embeddedZip(slicePart(tool, DRIVER_TOOL.parts.tr300, '300TR sürücü paketi')))) {
+        const file = safeJoin(out, name);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, data);
+      }
+      return runPowershell(tr300Command(out));
     });
     if (!result.x30tr && !result.tr300) throw new Error(`Token sürücüsü kurulamadı (${result.errors.join('; ')})`);
     writeFileSync(driverMarker(), JSON.stringify({ version: DRIVER_TOOL.version, at: Date.now(), x30tr: result.x30tr, tr300: result.tr300, reboot: result.reboot }));
