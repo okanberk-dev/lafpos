@@ -3,7 +3,7 @@ import { SUBE_YOK_METNI, subeAdiOf } from '@shared/sube';
 import { db, schema, tx } from '../db/client';
 import { Effects } from './effects';
 import { conflict } from './http';
-import { getSettings, getSyncState, updateSettings } from './settings';
+import { getSettings, getSyncState, setSyncState, updateSettings } from './settings';
 
 /**
  * Kasanın şubesi (docs/03-ENTEGRASYON.md §4c "Çok şubeli kasa"). Yeni kurulum şubesiz açılır: şubeyi ladmin'in kurulum
@@ -12,7 +12,8 @@ import { getSettings, getSyncState, updateSettings } from './settings';
  * platform anahtarları) istek göndermez, hata döngüsüne de girmez: ekranlar `SUBE_YOK_METNI`'ni gösterir.
  *
  * 26 Kasım 2026'ya kadar her kurulum `marina` varsayılanıyla açılırdı ve kimlik ayar satırı olarak yazılmazdı. Geçmişi
- * olan eski kasa açılışta `marina`'yı kalıcı yazar (`eskiKasaSubesiniYaz`): Marina'nın kasası olduğu gibi çalışır.
+ * olan eski kasa çok şubeli sürümdeki ilk açılışında `marina`'yı kalıcı yazar (`eskiKasaSubesiniYaz`, veritabanı başına
+ * bir kez): Marina'nın kasası olduğu gibi çalışır.
  */
 
 /** Eski kasaların varsayılan şubesi: ilk AsilPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026) */
@@ -61,24 +62,38 @@ export function kasaGecmisiVar(): boolean {
 }
 
 /**
- * Açılışta (göçlerden sonra): şube kimliği satırı yoksa ama kasanın geçmişi varsa eski varsayılan `marina` kalıcı yazılır
- * ve denetime düşer. Kimlik satırı varsa ya da kasa yeniyse (geçmiş yok) dokunulmaz. Yazdıysa true
+ * Eski kasa denetiminin yapıldığı işareti (`sync_state`): `{ at, yazildi }`. Çok şubeli sürümün her veritabanındaki ilk
+ * açılışta yazılır; varsa denetim bir daha yapılmaz. Yedeğin şubesi de buna bakar (`server/sync/yedek.ts` `yedekSubesi`)
  */
-export function eskiKasaSubesiniYaz(): boolean {
+export const ESKI_KASA_DENETIMI = 'sube.eskiKasaDenetimi';
+
+/**
+ * Açılışta (göçlerden sonra), veritabanı başına bir kez: şube kimliği satırı yoksa ama kasanın geçmişi varsa eski varsayılan
+ * `marina` kalıcı yazılır ve denetime düşer. Kimlik satırı varsa ya da kasa yeniyse (geçmiş yok) dokunulmaz. Sonuç ne
+ * olursa olsun işaret (`ESKI_KASA_DENETIMI`) aynı işlemde yazılır: denetim yalnız çok şubeli sürümden önceki veritabanına
+ * (yükseltilen kasa ya da geri yüklenen eski yedek) bir kez yapılır. Yeni kasa ilk açılışta (veritabanı boşken) işaretlenir;
+ * sonra açtığı deneme günü ya da gerçek kullanımı onu Marina yapmaz, şubesi ladmin kurulumundan ya da Ayarlar'dan gelir.
+ * Yazdıysa true
+ */
+export function eskiKasaSubesiniYaz(now = Date.now()): boolean {
+  if (getSyncState(ESKI_KASA_DENETIMI) != null) return false;
   const row = db.select({ key: schema.settings.key }).from(schema.settings).where(eq(schema.settings.key, 'branchId')).get();
-  if (row || !kasaGecmisiVar()) return false;
+  const yaz = !row && kasaGecmisiVar();
   const fx = new Effects();
   tx((t) => {
-    updateSettings({ branchId: ESKI_VARSAYILAN_SUBE }, t);
-    fx.audit(t, {
-      action: 'settings.branchId',
-      entity: 'settings',
-      entityId: 'branchId',
-      message: `Şube kimliği eski varsayılandan kalıcı yazıldı: ${ESKI_VARSAYILAN_SUBE} (bu kasa çok şubeli sürümden önce kuruldu)`,
-      data: { from: null, to: ESKI_VARSAYILAN_SUBE, eskiVarsayilan: true },
-    });
-    fx.emit({ topic: 'settings', kind: 'settings.updated' });
+    if (yaz) {
+      updateSettings({ branchId: ESKI_VARSAYILAN_SUBE }, t);
+      fx.audit(t, {
+        action: 'settings.branchId',
+        entity: 'settings',
+        entityId: 'branchId',
+        message: `Şube kimliği eski varsayılandan kalıcı yazıldı: ${ESKI_VARSAYILAN_SUBE} (bu kasa çok şubeli sürümden önce kuruldu)`,
+        data: { from: null, to: ESKI_VARSAYILAN_SUBE, eskiVarsayilan: true },
+      });
+      fx.emit({ topic: 'settings', kind: 'settings.updated' });
+    }
+    setSyncState(ESKI_KASA_DENETIMI, { at: now, yazildi: yaz });
   });
   fx.flush();
-  return true;
+  return yaz;
 }

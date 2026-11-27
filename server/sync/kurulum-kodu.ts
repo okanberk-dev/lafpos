@@ -203,7 +203,8 @@ function apply(answer: { sube: { id: string; ad: string }; edits: Record<string,
   fx.flush();
   retire();
   // Şube belli oldu ya da değişti: eski şubenin önbellekleri bırakılır, bekleyen günler ve yeni şubenin platform
-  // anahtarları beklemeden (bağlantılar yeni yazıldıysa bekçi sunucuyu yeniden başlatır, açılış da çeker)
+  // anahtarları beklemeden (bağlantılar yeni yazıldıysa bekçi sunucuyu yeniden başlatır, açılış da çeker). Şube aynı kalıp
+  // yalnız anahtar değiştiyse şube retiyle bekleyen günleri yeni anahtarla açılan sunucu öne alır (`lafmaliyetBaglantisiDegisti`)
   if (changed) subeDegisti(before);
   return save({ ok: !locked, sube: answer.sube, at: now, hata: locked ? `Şube kimliği kilitli (${before}); ${answer.sube.id} yapılmadı` : null, ...(locked ? { kilitli: true, kalici: true } : {}) });
 }

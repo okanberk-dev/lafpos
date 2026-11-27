@@ -9,10 +9,12 @@ import { env } from './env';
 import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
 import { recordRestoreResult } from './sync/yedek';
+import { lafmaliyetBaglantisiDegisti } from './sync/lafmaliyet';
 import { posEnv } from '@shared/pos-env';
 
 runMigrations();
-// Çok şubeli sürümden önce kurulmuş kasa (geçmişi var, şube satırı yok) eski varsayılan şubesiyle sürer: `marina`
+// Çok şubeli sürümden önce kurulmuş kasa (geçmişi var, şube satırı yok) eski varsayılan şubesiyle sürer: `marina`.
+// Veritabanı başına bir kez: yeni kasanın sonraki açılışları dokunulmaz (şubesi ladmin kurulumundan)
 if (eskiKasaSubesiniYaz()) console.log('Şube kimliği eski varsayılandan kalıcı yazıldı: marina');
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; AsilPOS deneme modunda (satışlar gerçek sayılmaz)');
 upgradeRoleSets();
@@ -20,6 +22,9 @@ upgradeStoredSettings();
 upgradeOptionProfiles();
 // Bekçinin buluttan geri yükleme sonucu denetim kaydına (bir kez)
 recordRestoreResult();
+// lafmaliyet anahtarı değiştiyse (ladmin'in yeni kurulum bağlantısı, Bağlantı bilgileri): şube retiyle bekleyen günler hemen
+const yenidenDenenen = lafmaliyetBaglantisiDegisti();
+if (yenidenDenenen) console.log(`lafmaliyet bağlantısı değişti: şube retiyle bekleyen ${yenidenDenenen} gün yeniden gönderilecek`);
 
 const app = createApp();
 

@@ -975,7 +975,7 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
 | 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay, nextOpening, staff }` | Gönderildi, ancak gövde `ok: true` ve gönderilen `date` ise (değilse adres lafmaliyet değil: yeniden denenir, gün işaretlenmez). `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines`, `nextOpening`, `staff` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
 | 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; AsilPOS'u ve lafmaliyet'i güncelleyip Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
 | 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki ASILPOS_SYNC_SECRET (eski adıyla LAFPOS_SYNC_SECRET) ile aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)" |
-| 409 | `{ error: "wrong_branch", sube, expected }` | Kasanın şubesi (`sube`) lafmaliyet'in bu anahtarla beklediği şube (`expected`, bugün marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği ya da ladmin'deki şube anahtarı düzeltilir. Park edilmez: günde bir kendiliğinden, kasanın şubesi değişince hemen yeniden denenir (§4c). Şube gönderirken güncel ayardan yazılır |
+| 409 | `{ error: "wrong_branch", sube, expected }` | Kasanın şubesi (`sube`) lafmaliyet'in bu anahtarla beklediği şube (`expected`, bugün marina) değil; Yönetim › Ayarlar ve yedek › Şube kimliği ya da ladmin'deki şube anahtarı düzeltilir. Park edilmez: günde bir kendiliğinden, kasanın şubesi ya da lafmaliyet anahtarı değişince hemen yeniden denenir (§4c). Şube gönderirken güncel ayardan yazılır |
 | 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › AsilPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
 | 413 | `{ error: "too_large" }` | Kalıcı (gövde 256 KB'tan büyük) |
 | 422 | (lafmaliyet bugün göndermez) | Kalıcı |
@@ -1396,9 +1396,13 @@ kendi imza anahtarından tanır (panelin işi "B1", sonra); bugün yalnız Marin
 - **Şubesiz yeni kurulum.** Yeni kurulum şube kimliği olmadan açılır (`branchId: null`; eskiden varsayılan `marina`).
   Şubeyi ladmin'in kurulum bağlantısı verir (§4b) ya da patron Yönetim › Ayarlar ve yedek › Şube kimliği'ne yazar.
   Tarayıcı demosu Marina'nın kasasıdır.
-- **Eski kasa Marina olarak sürer.** Açılışta, göçlerden hemen sonra: şube satırı yok ama kasanın geçmişi varsa (iş
-  günü, eğitim günü dahil; lafmaliyet'in kabul ettiği gün sonu; gerçek kullanım işareti `liveSince`) `marina` kalıcı
-  yazılır, denetime `settings.branchId` düşer (`eskiKasaSubesiniYaz`). Şube satırı olan kasaya dokunulmaz.
+- **Eski kasa Marina olarak sürer.** Açılışta, göçlerden hemen sonra, veritabanı başına bir kez: şube satırı yok ama
+  kasanın geçmişi varsa (iş günü, eğitim günü dahil; lafmaliyet'in kabul ettiği gün sonu; gerçek kullanım işareti
+  `liveSince`) `marina` kalıcı yazılır, denetime `settings.branchId` düşer (`eskiKasaSubesiniYaz`). Şube satırı olan
+  kasaya dokunulmaz. Sonuç ne olursa olsun `sync_state` `sube.eskiKasaDenetimi` işareti aynı işlemde yazılır ve denetim
+  bir daha yapılmaz: yalnız çok şubeli sürümden önceki veritabanı (yükseltilen kasa, geri yüklenen eski yedek) denetlenir.
+  Yeni kasa ilk açılışta, veritabanı boşken işaretlenir; sonra açtığı deneme günü ya da gerçek kullanımı onu Marina
+  yapmaz (bağlantılar yazılınca, güncellemede ya da elektrik kesilince yeniden açılsa da), şubesi kurulumdan gelir.
 - **Şube belli olana dek şubeye bağlı senkron bekler**, hata döngüsüne girmez: lafmaliyet gün sonu (gün giden kutusunda
   bekler), devir, ModPOS dönemi, personel listesi, bağlantı dağıtımı (`/api/panel/pos/baglanti`), sitenin imzalı uçları
   (siparişler, sürüm sinyali, Tükendi, masa çağrıları, karaoke, panel menüsü) ve platform anahtarları istek atmaz. Elle
@@ -1418,13 +1422,18 @@ kendi imza anahtarından tanır (panelin işi "B1", sonra); bugün yalnız Marin
   ve `baglanti` zaten taşıyordu.
 - **409 `wrong_branch` günde bir yeniden** (§4.2): gün sonu reti park edilmez; kayıt `response: { "parked":
   "wrong_branch" }` işaretiyle 24 saat sonra yeniden denenir, kasanın şubesi değişince hemen (`retryWrongBranch`).
-  Panel şubeyi bu kasanın anahtarına bağlayınca bekleyen günler elle "Gönder"e kalmadan gider. Öbür kalıcı retler (400,
-  409 `z_conflict`, 413, 422) eskisi gibi park edilir.
+  Şube aynı kalıp lafmaliyet anahtarı (ya da adresi) değişince de hemen: ladmin'in yeni kurulum bağlantısı aynı şubeye
+  kendi anahtarını verir ya da patron anahtarı Bağlantı bilgileri'nden veya ayarlar dosyasından değiştirir. Anahtar
+  yalnız açılışta okunduğu için bunu yeni anahtarla açılan sunucu yapar (`lafmaliyetBaglantisiDegisti`, zamanlayıcılardan
+  önce); `sync_state` `lafmaliyet.baglantiIzi` bağlantının kısa özetini tutar, anahtarın kendisini değil. Panel şubeyi bu
+  kasanın anahtarına bağlayınca bekleyen günler elle "Gönder"e kalmadan gider. Öbür kalıcı retler (400, 409 `z_conflict`,
+  413, 422) eskisi gibi park edilir.
 - **Bildirim ve gün sonu başlığı şubenin adını taşır:** bildirimin `shop`'u ve WhatsApp gün sonu metninin başlığı işletme
   adı ve şube ("L'Affogato Marina"; işletme adı şubeyi zaten içeriyorsa eklenmez). Şubenin adı ladmin kurulumundan,
   yoksa kimlikten ("marina" → "Marina"); açılış verisinde `branchName`.
 - **Başka şubenin yedeği yüklenmez:** buluttan geri yüklemede şubesi belli kasa yedeğin şubesini okur (ayar satırı;
-  satır yoksa geçmişi olan yedek `marina`); başka şubeninse 409 `wrong_branch`, hazır dosya bırakılmaz. Şubesiz kasa ve
+  satır yoksa açılıştaki kuralla: eski kasa denetimi yapılmış yedek şubesiz, denetimsiz eski yedekte geçmiş varsa
+  `marina`); başka şubeninse 409 `wrong_branch`, hazır dosya bırakılmaz. Şubesiz kasa ve
   şubesi okunamayan yedek serbest (yeni bilgisayara kendi yedeğini yüklemek).
 - **Merkez kapalıyken uyarı:** `ASILPOS_MERKEZ_URL=0` iken Uzaktan özet, rapor ve yedekleri bütün kasaların ortak
   `default` dükkânına yazar; Marina dışındaki şubenin kasası Yönetim › Bağlantı bilgileri › Şube kurulumu'nda uyarı görür.

@@ -83,8 +83,9 @@ export async function runStaffLink(browser) {
   try {
     const api = apiClient(server.base);
     await api.loginAll();
-    // Kurulum modu kapalı (gün lafmaliyet'e gitsin), eğitim yazarkasası yok
-    await api.call('patron', 'PUT', '/admin/settings', { demoMode: false });
+    // Kurulum modu kapalı (gün lafmaliyet'e gitsin), eğitim yazarkasası yok; kasa Marina'nınki (yeni kurulum şubesiz açılır,
+    // şubesiz kasa personel listesini sormaz ve gün göndermez: docs/03-ENTEGRASYON.md §4c)
+    await api.call('patron', 'PUT', '/admin/settings', { demoMode: false, branchId: 'marina' });
     await api.call('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
     const users = await api.call('patron', 'GET', '/admin/users');
     const kasa = users.find((u) => u.name === 'Kasa');

@@ -264,3 +264,48 @@ describe('409 wrong_branch: günde bir ve şube değişince hemen yeniden', () =
     expect(lm.retryWrongBranch()).toBe(0);
   });
 });
+
+describe('anahtar değişince şube retiyle bekleyen gün hemen yeniden', () => {
+  it('aynı şubeye yeni anahtar (ladmin kurulumu, Bağlantı bilgileri): yeni anahtarla açılan sunucu bekleyen günü öne alır', async () => {
+    const { lm, db, schema, eq, settings } = await mod();
+    const { env } = await import('../server/env');
+    // Bir önceki açılış bağlantının özetini yazdı
+    lm.lafmaliyetBaglantisiDegisti();
+    dayReply = () => ({ status: 409, body: { error: 'wrong_branch', sube: 'marina', expected: 'tuzla' } });
+    const { date } = await closeBack(95000);
+    await lm.flushOutbox();
+    const row = () => db.select().from(schema.outbox).where(eq(schema.outbox.dedupeKey, `gun:${date}`)).get()!;
+    expect(row().response).toEqual({ parked: 'wrong_branch' });
+    expect(row().lastError).toMatch(/şube ya da anahtar düzelince hemen gider/);
+    // Aynı bağlantıyla yeniden açılış: gün günlük denemesini bekler
+    expect(lm.lafmaliyetBaglantisiDegisti()).toBe(0);
+    expect(row().nextAttemptAt - Date.now()).toBeGreaterThan(lm.WRONG_BRANCH_RETRY_MS - 60_000);
+    // Şube aynı, anahtar yeni: bekçi sunucuyu yeni ayarlarla başlattı
+    const old = env.lafmaliyetToken;
+    env.lafmaliyetToken = 'n'.repeat(48);
+    try {
+      expect(lm.lafmaliyetBaglantisiDegisti()).toBe(1);
+      expect(row().nextAttemptAt).toBeLessThanOrEqual(Date.now());
+      // Tutulan yalnız özet, anahtarın kendisi değil
+      expect(JSON.stringify(settings.getSyncState('lafmaliyet.baglantiIzi'))).not.toContain('n'.repeat(48));
+      dayReply = (body) => ({ status: 200, body: { ok: true, date: body?.date, counted: true } });
+      const before = gunPosts().length;
+      await lm.flushOutbox();
+      // Yalnız şube retiyle bekleyen gün gitti; z_conflict ile park edilen öne alınmadı
+      expect(gunPosts().length).toBe(before + 1);
+      expect(gunPosts().at(-1)!.body?.date).toBe(date);
+      expect(row().sentAt).not.toBeNull();
+      expect(lm.lafmaliyetBaglantisiDegisti()).toBe(0);
+    } finally {
+      env.lafmaliyetToken = old;
+    }
+  });
+
+  it('açılışta zamanlayıcılardan önce çalışır', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const index = readFileSync(join(__dirname, '../server/index.ts'), 'utf8');
+    expect(index.indexOf('lafmaliyetBaglantisiDegisti()')).toBeGreaterThan(index.indexOf('runMigrations();'));
+    expect(index.indexOf('lafmaliyetBaglantisiDegisti()')).toBeLessThan(index.indexOf('startJobs();'));
+  });
+});

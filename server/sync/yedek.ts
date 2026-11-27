@@ -8,7 +8,7 @@ import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
-import { ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
+import { ESKI_KASA_DENETIMI, ESKI_VARSAYILAN_SUBE, kasaSubesi } from '../lib/sube';
 import { signedFetch } from '../lib/signature';
 import { cloudEnabled } from './cloud';
 import { remoteShop } from './merkez';
@@ -132,9 +132,11 @@ export const listCloudBackups = (dukkan?: string) => cloud<{ shop: string; dukka
 export const underBekci = () => posEnv(process.env, 'STDIN_CONTROL') === '1';
 
 /**
- * Yedek dosyasının şubesi (çok şubeli kasa, docs/03-ENTEGRASYON.md §4c): ayarlardaki şube kimliği; satır yoksa yedekte
- * geçmiş varsa (iş günü ya da gerçek kullanım) eski varsayılan `marina`, yoksa null (şubesiz yeni kurulum). Dosya okunamazsa
- * undefined: bilinmiyor. Dosya çalışan veritabanına salt okuma için kısa süre eklenir (ATTACH), sonra çıkarılır
+ * Yedek dosyasının şubesi (çok şubeli kasa, docs/03-ENTEGRASYON.md §4c): ayarlardaki şube kimliği. Satır yoksa açılıştaki
+ * kuralla (`eskiKasaSubesiniYaz`): eski kasa denetimi yapılmış yedek (çok şubeli sürümün veritabanı) şubesizdir, null;
+ * denetimsiz (eski sürümün) yedekte geçmiş varsa (iş günü ya da gerçek kullanım) eski varsayılan `marina`, yoksa null
+ * (şubesiz yeni kurulum). Dosya okunamazsa undefined: bilinmiyor. Dosya çalışan veritabanına salt okuma için kısa süre
+ * eklenir (ATTACH), sonra çıkarılır
  */
 export function yedekSubesi(file: string): string | null | undefined {
   try {
@@ -149,6 +151,14 @@ export function yedekSubesi(file: string): string | null | undefined {
       const v = JSON.parse(branch.value) as unknown;
       return typeof v === 'string' && v ? v : null;
     }
+    // Denetim işareti olan yedek, açılışta Marina yapılmamış şubesiz kasanındır
+    let denetlendi = false;
+    try {
+      denetlendi = db.all(sql`SELECT 1 FROM geri_yukle_denetim.sync_state WHERE key = ${ESKI_KASA_DENETIMI} LIMIT 1`).length > 0;
+    } catch {
+      // işaret okunamadı: eski sürümün yedeği sayılır
+    }
+    if (denetlendi) return null;
     const live = rows.some((r) => r.key === 'liveSince' && JSON.parse(r.value) != null);
     const days = db.all(sql`SELECT 1 FROM geri_yukle_denetim.business_days LIMIT 1`).length > 0;
     return live || days ? ESKI_VARSAYILAN_SUBE : null;

@@ -148,10 +148,11 @@ Hesabım sayfasına) şubeye özel indirme bağlantısı gider. Kasa bilgisayar�
 kurulumundan gelene dek gün sonu, devir, personel listesi, site ve platform anahtarları bekler; Yönetim › Bağlantı
 bilgileri › Şube kurulumu ve Entegrasyon bunu söyler, hata vermez. Kapanan günler giden kutusunda kalır, şube gelince
 hemen gider. Kurulum kodu olmadan elle kurulan kasada şubeyi patron Yönetim › Ayarlar ve yedek › Şube kimliği'ne yazar.
-Çok şubeli sürümden önce kurulmuş kasa (geçmişi olan, şube satırı olmayan) ilk açılışta `marina`'yı kalıcı yazar ve
-Marina'nın kasası olarak sürer. Bugünkü panel tek AsilPOS şubesinin gününü alır: ikinci şubenin günleri `wrong_branch`
-ile kasada bekler, günde bir yeniden denenir; panel şubeyi kasanın anahtarından tanıyınca kendiliğinden gider. Ayrıntı
-`docs/03-ENTEGRASYON.md` §4c.
+Çok şubeli sürümden önce kurulmuş kasa (geçmişi olan, şube satırı olmayan) bu sürümdeki ilk açılışında `marina`'yı
+kalıcı yazar ve Marina'nın kasası olarak sürer; bu denetim veritabanı başına bir kez yapılır, yeni kasanın deneme günleri
+ve sonraki açılışları onu Marina yapmaz. Bugünkü panel tek AsilPOS şubesinin gününü alır: ikinci şubenin günleri
+`wrong_branch` ile kasada bekler, günde bir yeniden denenir; panel şubeyi kasanın anahtarından tanıyınca kendiliğinden,
+kasa yeni anahtarla (aynı şubenin yeni kurulum bağlantısı) açılınca hemen gider. Ayrıntı `docs/03-ENTEGRASYON.md` §4c.
 
 ### İlk açılış: deneme modu, sonra gerçek kullanım
 

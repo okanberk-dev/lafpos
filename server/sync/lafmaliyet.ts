@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { cleanRecipientName } from '@shared/teslim';
@@ -968,8 +969,8 @@ const PERMANENT = new Set([400, 409, 413, 422]);
 const PARKED_MS = 365 * 86400_000;
 /**
  * 409 `wrong_branch` alan kayıt günde bir kez yeniden denenir (çok şubeli kasa, §4c): panel şubeyi kasanın anahtarından
- * tanır; şube ladmin'de bu kasaya bağlanınca ya da kasanın şube kimliği düzeltilince (o an hemen, `retryWrongBranch`)
- * bekleyen günler elle "Gönder"e kalmadan gider
+ * tanır; şube ladmin'de bu kasaya bağlanınca, kasanın şube kimliği düzeltilince ya da kasa yeni anahtarla açılınca (o an
+ * hemen, `retryWrongBranch`; `subeDegisti`, `lafmaliyetBaglantisiDegisti`) bekleyen günler elle "Gönder"e kalmadan gider
  */
 export const WRONG_BRANCH_RETRY_MS = 24 * 3600_000;
 /** Şube retiyle bekleyen kaydın işareti (gönderilmemiş kaydın `response` alanı; 200 gelince yanıtla ezilir) */
@@ -1009,7 +1010,7 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
   const detail = errorDetail(json);
   if (isWrongBranch(status, json)) {
     const b = json as { sube?: unknown; expected?: unknown };
-    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Bu kasa "${String(b.expected)}" şubesininse Yönetim › Ayarlar ve yedek › Şube kimliği'ni düzeltin; "${String(b.sube)}" şubesininse ladmin'de bu şubenin kurulum bağlantısıyla kendi anahtarını alın. Gün günde bir kendiliğinden yeniden denenir, şube düzelince hemen gider`;
+    return `lafmaliyet bu kasanın gün sonunu almıyor: bu kasa "${String(b.sube)}" şubesine ayarlı, lafmaliyet yalnız "${String(b.expected)}" şubesini alıyor. Bu kasa "${String(b.expected)}" şubesininse Yönetim › Ayarlar ve yedek › Şube kimliği'ni düzeltin; "${String(b.sube)}" şubesininse ladmin'de bu şubenin kurulum bağlantısıyla kendi anahtarını alın. Gün günde bir kendiliğinden yeniden denenir; şube ya da anahtar düzelince hemen gider`;
   }
   if (status === 409) {
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
@@ -1362,6 +1363,25 @@ export function retryWrongBranch(now = Date.now()): number {
     .where(inArray(schema.outbox.id, rows.map((r) => r.id)))
     .run();
   return rows.length;
+}
+
+/** lafmaliyet bağlantısının son açılıştaki özeti (`sync_state`): `{ iz, at }`; anahtarın kendisi tutulmaz */
+const BAGLANTI_IZI = 'lafmaliyet.baglantiIzi';
+
+/**
+ * Açılışta: lafmaliyet bağlantısı (adres ya da anahtar) son açılıştan beri değiştiyse şube retiyle bekleyen günler hemen
+ * yeniden denenir (`retryWrongBranch`), günlük denemeyi beklemez. Ör. ladmin'in yeni kurulum bağlantısı aynı şubeye kendi
+ * anahtarını verdi (şube değişmedi, `subeDegisti` çalışmaz) ya da patron anahtarı Bağlantı bilgileri'nden veya ayarlar
+ * dosyasından değiştirdi. Anahtar yalnız açılışta okunur (`env`): yazıldığı anda öne almak eski anahtarla yeniden gönderir,
+ * gün bir gün daha beklerdi; bu yüzden yeni anahtarla açılan sunucu yapar. Kaç kayıt öne alındıysa onu döner; gönderimi
+ * zamanlayıcı başlatır (`flushOutbox`, dakikada bir)
+ */
+export function lafmaliyetBaglantisiDegisti(now = Date.now()): number {
+  if (!configured()) return 0;
+  const iz = createHash('sha256').update(`${env.lafmaliyetUrl}\n${env.lafmaliyetToken}`).digest('hex').slice(0, 16);
+  if (getSyncState<{ iz?: string }>(BAGLANTI_IZI)?.iz === iz) return 0;
+  setSyncState(BAGLANTI_IZI, { iz, at: now });
+  return retryWrongBranch(now);
 }
 
 /**

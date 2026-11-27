@@ -7,7 +7,8 @@ import { type Harness, startApp } from './harness';
 
 /**
  * Çok şubeli kasa (docs/03-ENTEGRASYON.md §4c): eski kasalar `marina` ile sürer (geçmişi olan ama şube satırı olmayan
- * kasa açılışta `marina`'yı kalıcı yazar; yeni kasa şubesiz kalır), bildirim ve gün sonu başlığı şubenin adını taşır,
+ * kasa çok şubeli sürümdeki ilk açılışında `marina`'yı kalıcı yazar, veritabanı başına bir kez; yeni kasa deneme gününden ve
+ * gerçek kullanımdan sonra da şubesiz kalır), bildirim ve gün sonu başlığı şubenin adını taşır,
  * başka şubenin bulut yedeği şubesi belli kasaya yüklenmez, Merkez kapalıyken ikinci şubenin kasası uyarılır ve ladmin
  * kurulumu şubeyi verince eski şubenin önbellekleri bırakılır.
  */
@@ -31,21 +32,30 @@ async function mod() {
 }
 
 describe('eski kasa marina ile sürer, yeni kasa şubesiz', () => {
-  it('geçmişi olmayan yeni kasa şubesiz kalır', async () => {
+  /** Çok şubeli sürümden önceki veritabanı: eski kasa denetiminin işareti yok (yükseltilen kasa, geri yüklenen eski yedek) */
+  async function eskiSurumVeritabani() {
+    const { db, schema, eq, sube } = await mod();
+    db.delete(schema.syncState).where(eq(schema.syncState.key, sube.ESKI_KASA_DENETIMI)).run();
+  }
+
+  it('geçmişi olmayan yeni kasa şubesiz kalır; denetim işaretlenir', async () => {
     const { sube, branchRow, settings } = await mod();
     expect(sube.eskiKasaSubesiniYaz()).toBe(false);
     expect(branchRow()).toBeNull();
     expect(settings.getSettings().branchId).toBeNull();
     expect(sube.kasaSubesi()).toBeNull();
     expect(sube.subeAdi()).toBeNull();
+    expect(settings.getSyncState(sube.ESKI_KASA_DENETIMI)).toMatchObject({ yazildi: false });
   });
 
-  it('gerçek kullanım işareti olan kasa marina yazar (bir kez, denetime düşer)', async () => {
+  it('gerçek kullanım işareti olan eski kasa marina yazar (bir kez, denetime düşer)', async () => {
     const { sube, branchRow, settings } = await mod();
+    await eskiSurumVeritabani();
     settings.updateSettings({ liveSince: Date.now() - 86400_000 });
     expect(sube.eskiKasaSubesiniYaz()).toBe(true);
     expect(branchRow()?.value).toBe('marina');
     expect(settings.getSettings().branchId).toBe('marina');
+    expect(settings.getSyncState(sube.ESKI_KASA_DENETIMI)).toMatchObject({ yazildi: true });
     expect(sube.eskiKasaSubesiniYaz()).toBe(false);
     const audit = await h.ok<{ action: string; message: string; data: Record<string, unknown> | null }[]>('patron', 'GET', '/admin/audit?severity=tum&limit=50');
     const row = audit.find((a) => a.action === 'settings.branchId')!;
@@ -55,16 +65,37 @@ describe('eski kasa marina ile sürer, yeni kasa şubesiz', () => {
     expect(branchRow()).toBeNull();
   });
 
-  it('lafmaliyet’in kabul ettiği gün ya da iş günü olan kasa da marina yazar', async () => {
-    const { sube, branchRow, settings, db, schema, eq } = await mod();
+  it('lafmaliyet’in kabul ettiği günü olan eski kasa da marina yazar', async () => {
+    const { sube, settings, db, schema, eq } = await mod();
+    await eskiSurumVeritabani();
     settings.setSyncState('lafmaliyet.push', { acceptedBranch: 'marina', lastSuccessAt: Date.now() });
     expect(sube.eskiKasaSubesiniYaz()).toBe(true);
     settings.updateSettings({ branchId: null });
     db.delete(schema.syncState).where(eq(schema.syncState.key, 'lafmaliyet.push')).run();
     expect(sube.kasaGecmisiVar()).toBe(false);
-    // Deneme modunda açılıp kapanan gün de geçmiştir (eğitim günü)
+  });
+
+  it('yeni kasa sonraki açılışlarda marina olmaz: deneme günü ve gerçek kullanım şubeyi vermez', async () => {
+    const { sube, branchRow, settings } = await mod();
+    // İlk açılış (veritabanı boşken) denetimi yaptı
+    expect(settings.getSyncState(sube.ESKI_KASA_DENETIMI)).not.toBeNull();
+    expect(sube.kasaGecmisiVar()).toBe(false);
+    // Deneme modunda gün açılıp kapandı (eğitim günü), sonra yeniden açılış (bağlantılar yazıldı, güncelleme, elektrik)
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: 0 });
+    expect(sube.kasaGecmisiVar()).toBe(true);
+    expect(sube.eskiKasaSubesiniYaz()).toBe(false);
+    expect(branchRow()).toBeNull();
+    // Deneme bitti (gerçek kullanım), yine yeniden açılış
+    settings.updateSettings({ liveSince: Date.now() });
+    expect(sube.eskiKasaSubesiniYaz()).toBe(false);
+    expect(sube.kasaSubesi()).toBeNull();
+    settings.updateSettings({ liveSince: null });
+  });
+
+  it('iş günü (eğitim günü dahil) olan eski kasa marina yazar', async () => {
+    const { sube, branchRow } = await mod();
+    await eskiSurumVeritabani();
     expect(sube.kasaGecmisiVar()).toBe(true);
     expect(sube.eskiKasaSubesiniYaz()).toBe(true);
     expect(branchRow()?.value).toBe('marina');
@@ -72,9 +103,11 @@ describe('eski kasa marina ile sürer, yeni kasa şubesiz', () => {
 
   it('şube satırı olan kasaya dokunulmaz', async () => {
     const { sube, settings } = await mod();
+    await eskiSurumVeritabani();
     settings.updateSettings({ branchId: 'tuzla' });
     expect(sube.eskiKasaSubesiniYaz()).toBe(false);
     expect(settings.getSettings().branchId).toBe('tuzla');
+    expect(settings.getSyncState(sube.ESKI_KASA_DENETIMI)).toMatchObject({ yazildi: false });
   });
 
   it('açılışta göçlerden hemen sonra, kurulum verisinden önce çalışır (sunucu ve tarayıcı demosu)', () => {
@@ -136,11 +169,16 @@ describe('Merkez kapalıyken ikinci şube uyarılır', () => {
 
 describe('başka şubenin bulut yedeği yüklenmez', () => {
   /** Yalnız ayar ve gün tablosu olan küçük bir yedek dosyası (better-sqlite3; sql.js projesi diske bağlanamaz) */
-  async function backupFile(rows: { branchId?: string; liveSince?: number; day?: boolean }): Promise<string> {
+  async function backupFile(rows: { branchId?: string; liveSince?: number; day?: boolean; denetim?: boolean }): Promise<string> {
     const Database = (await import('better-sqlite3')).default;
     const file = join(mkdtempSync(join(tmpdir(), 'asilpos-yedek-')), 'yedek.db');
     const d = new Database(file);
     d.exec('CREATE TABLE settings (key text PRIMARY KEY NOT NULL, value text NOT NULL, updated_at integer NOT NULL); CREATE TABLE business_days (id text PRIMARY KEY NOT NULL)');
+    // Çok şubeli sürümün veritabanı: açılıştaki eski kasa denetiminin işareti (eski sürümün yedeğinde yok)
+    if (rows.denetim) {
+      d.exec('CREATE TABLE sync_state (key text PRIMARY KEY NOT NULL, value text NOT NULL, updated_at integer NOT NULL)');
+      d.prepare('INSERT INTO sync_state VALUES (?, ?, 0)').run('sube.eskiKasaDenetimi', JSON.stringify({ at: 0, yazildi: false }));
+    }
     if (rows.branchId) d.prepare('INSERT INTO settings VALUES (?, ?, 0)').run('branchId', JSON.stringify(rows.branchId));
     if (rows.liveSince) d.prepare('INSERT INTO settings VALUES (?, ?, 0)').run('liveSince', JSON.stringify(rows.liveSince));
     if (rows.day) d.prepare('INSERT INTO business_days VALUES (?)').run('g1');
@@ -148,13 +186,16 @@ describe('başka şubenin bulut yedeği yüklenmez', () => {
     return file;
   }
 
-  it('yedeğin şubesi: ayar satırı, yoksa geçmişi olan yedekte marina, boş yedekte null, okunamazsa bilinmiyor', async (ctx) => {
+  it('yedeğin şubesi: ayar satırı, yoksa eski sürümün geçmişi olan yedeğinde marina, boş yedekte null, okunamazsa bilinmiyor', async (ctx) => {
     if (ctx.task.file.projectName === 'sqljs') ctx.skip();
     const { yedekSubesi } = await import('../server/sync/yedek');
     expect(yedekSubesi(await backupFile({ branchId: 'tuzla' }))).toBe('tuzla');
+    expect(yedekSubesi(await backupFile({ branchId: 'tuzla', denetim: true }))).toBe('tuzla');
     expect(yedekSubesi(await backupFile({ day: true }))).toBe('marina');
     expect(yedekSubesi(await backupFile({ liveSince: 1 }))).toBe('marina');
     expect(yedekSubesi(await backupFile({}))).toBeNull();
+    // Çok şubeli sürümde şubesiz kalmış yeni kasanın yedeği (deneme günü, gerçek kullanım) Marina'nın sayılmaz
+    expect(yedekSubesi(await backupFile({ day: true, liveSince: 1, denetim: true }))).toBeNull();
     const bozuk = join(mkdtempSync(join(tmpdir(), 'asilpos-yedek-')), 'bozuk.db');
     writeFileSync(bozuk, 'bu bir veritabanı değil');
     expect(yedekSubesi(bozuk)).toBeUndefined();
