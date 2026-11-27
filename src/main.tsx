@@ -11,6 +11,7 @@ import { DemoFailed, DemoFrame } from './demo/DemoBar';
 import { ApprovalHost } from './lib/approval';
 import { DEMO, startDemo } from './lib/demo';
 import { PrintHost } from './lib/print';
+import { listenInstallPrompt } from './lib/pwa';
 import { REMOTE } from './lib/remote';
 import { onSessionEnd } from './lib/sessionEnd';
 import { initTheme } from './lib/theme';
@@ -36,6 +37,9 @@ window.addEventListener('vite:preloadError', (e) => {
   e.preventDefault();
   window.location.reload();
 });
+
+// Tablet ve telefonda ana ekrana ekleme: tarayıcının "yükle" olayı sayfa açılır açılmaz gelir (kullanıcı menüsü sunar)
+listenInstallPrompt();
 
 const queryClient = new QueryClient({
   defaultOptions: {

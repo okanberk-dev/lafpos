@@ -1,4 +1,4 @@
-import { Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, SquarePlus, WifiOff } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
@@ -20,6 +20,7 @@ import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
+import { useInstallOffer } from '@/lib/pwa';
 import { ClosingReminder } from './ClosingReminder';
 import { CommandPalette } from './CommandPalette';
 import { InternetBadge } from './InternetBadge';
@@ -137,6 +138,19 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     setMenuOpen(false);
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => null);
     else void document.documentElement.requestFullscreen().catch(() => toast.warn('Tarayıcı tam ekrana izin vermedi'));
+  };
+  // Ana ekrana ekle: Chrome ve Edge'de tarayıcının yükleme penceresi, Safari'de ve http'deki Android'de yol tarifi
+  const installOffer = useInstallOffer();
+  const addToHome = () => {
+    if (!installOffer) return;
+    setMenuOpen(false);
+    if (installOffer.way !== 'prompt') {
+      toast.info(installOffer.hint);
+      return;
+    }
+    void installOffer.install().then((ok) => {
+      if (ok) toast.ok('AsilPOS ana ekrana eklendi');
+    });
   };
 
   // Servis moduna göre menü: self modlarda "Satış" başta, Masalar ikinci planda (shared/service-mode.ts)
@@ -666,6 +680,13 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             <button type="button" onClick={toggleFull} className={drawerRow}>
               <DrawerLabel hint={full ? 'Tarayıcının sekme ve adres çubuğu geri gelir' : 'Tarayıcının sekme ve adres çubuğu gizlenir'}>{full ? 'Tam ekrandan çık' : 'Tam ekran'}</DrawerLabel>
               {full ? <Shrink aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" /> : <Expand aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />}
+            </button>
+          )}
+          {/* Tablet ve telefonda ana ekrana ekleme (src/lib/pwa.ts); kasa bilgisayarında AsilPOS zaten kurulu program */}
+          {installOffer && !DEMO && (
+            <button type="button" onClick={addToHome} className={drawerRow}>
+              <DrawerLabel hint={installOffer.hint}>Ana ekrana ekle</DrawerLabel>
+              <SquarePlus aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
             </button>
           )}
         </DrawerGroup>

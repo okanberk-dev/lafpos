@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
+import { ALAN_ADI, ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
 
 /**
  * Masaüstü programı (sahibin isteği, 27 Kasım 2026: "exe olarak kurulu bilgisayarda ve bu tamamen bir program olacak
@@ -297,3 +297,66 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
   });
 });
 
+describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
+  const ipad = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const iphoneChrome = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0 Mobile/15E148 Safari/604.1';
+  const android = 'Mozilla/5.0 (Linux; Android 14; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
+  const windows = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
+  const base = { standalone: false, kasaPc: false, hasPrompt: false, touchPoints: 0, secure: false };
+
+  it('yol cihaza göre: yükleme penceresi, Safari Paylaş, http\'deki Android menüsü; kasa bilgisayarında ve eklenmişte yok', async () => {
+    const { installWay } = await import('../src/lib/pwa-yol');
+    expect(installWay({ ...base, ua: android, hasPrompt: true, secure: true })).toBe('prompt');
+    expect(installWay({ ...base, ua: windows, hasPrompt: true, secure: true })).toBe('prompt');
+    expect(installWay({ ...base, ua: iphone })).toBe('ios');
+    // iPadOS masaüstü kimliğiyle gelir: dokunma noktasından tanınır
+    expect(installWay({ ...base, ua: ipad, touchPoints: 5 })).toBe('ios');
+    expect(installWay({ ...base, ua: ipad, touchPoints: 0 })).toBeNull();
+    expect(installWay({ ...base, ua: iphoneChrome })).toBeNull();
+    // Kafenin ağındaki http adresi: tam yükleme yok, menüden kısayol
+    expect(installWay({ ...base, ua: android })).toBe('android');
+    expect(installWay({ ...base, ua: android, secure: true })).toBeNull();
+    // Kasa bilgisayarı (sunucunun kendisi) ve zaten ana ekrandan açılmış uygulama
+    expect(installWay({ ...base, ua: windows, hasPrompt: true, secure: true, kasaPc: true })).toBeNull();
+    expect(installWay({ ...base, ua: iphone, standalone: true })).toBeNull();
+    const { isLoopbackHost } = await import('../src/lib/pwa-yol');
+    for (const h of ['localhost', '127.0.0.1', '[::1]']) expect(isLoopbackHost(h), h).toBe(true);
+    for (const h of ['192.168.1.20', 'kasa.local', ALAN_ADI]) expect(isLoopbackHost(h), h).toBe(false);
+  });
+
+  it('manifest uygulamanın kimliği ve kapsamıyla; simgeler var; sayfalar önbelleğe alınmaz (eklenen uygulama da güncel açılır)', () => {
+    const m = JSON.parse(read('public/manifest.webmanifest'));
+    expect(m).toMatchObject({ id: '/', start_url: '/', scope: '/', display: 'standalone', short_name: 'AsilPOS' });
+    const sizes = m.icons.map((i: any) => i.sizes);
+    for (const s of ['192x192', '512x512']) expect(sizes, s).toContain(s);
+    expect(m.icons.some((i: any) => i.purpose === 'maskable')).toBe(true);
+    for (const i of m.icons) expect(existsSync(new URL(`public${i.src}`, root)), i.src).toBe(true);
+    // Hizmet çalışanı yalnız bildirim: getirme işleyicisi yok, sayfa saklanmaz
+    const sw = read('public/sw.js');
+    expect(sw).not.toMatch(/addEventListener\(\s*['"]fetch['"]/);
+    expect(sw).not.toMatch(/caches\./);
+  });
+
+  it('görev çubuğu simgesi: bit eşlem simge ve PNG bağlantıları (kasa programının penceresi), SVG sekmede', () => {
+    const html = read('index.html');
+    expect(html).toContain('<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />');
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />');
+    expect(html.indexOf('/favicon.ico')).toBeLessThan(html.indexOf('/favicon.svg'));
+    expect(html).toContain('<title>AsilPOS</title>');
+    const ico = readFileSync(new URL('public/favicon.ico', root));
+    expect([ico.readUInt16LE(0), ico.readUInt16LE(2)]).toEqual([0, 1]);
+    const n = ico.readUInt16LE(4);
+    expect([...Array(n)].map((_, i) => ico[6 + i * 16])).toEqual([16, 32, 48]);
+  });
+
+  it('kullanıcı menüsünde yalnız yol varken; olay ilk iş yakalanır, kasa bilgisayarında saklanmaz', () => {
+    const shell = read('src/components/AppShell.tsx');
+    expect(shell).toContain('{installOffer && !DEMO && (');
+    expect(shell).toContain('<DrawerLabel hint={installOffer.hint}>Ana ekrana ekle</DrawerLabel>');
+    expect(read('src/main.tsx')).toContain('listenInstallPrompt();');
+    const pwa = read('src/lib/pwa.ts');
+    expect(pwa).toContain('e.preventDefault();');
+    expect(pwa).toContain('if (!isLoopbackHost(window.location.hostname)) usePrompt.setState(');
+  });
+});
