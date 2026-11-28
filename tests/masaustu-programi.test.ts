@@ -375,6 +375,9 @@ describe('kasa programı: hızlı ve markalı açılış, günlük, çöken penc
     // Çöken pencerenin yenisi öne gelir; kısayolun isteğiyle açılan pencere öne fırlamaz
     expect(bekci).toContain('if ($cokmeOne) { Show-KasaWindow $yeni }');
     expect(bekci.match(/Show-KasaWindow/g)).toHaveLength(1);
+    // Pencere açıkken bekleyen istek silinir: kullanıcının sonra kapattığı pencere eski bir istekle yeniden açılmaz
+    expect(bekci).toContain('if ($kasaAcik) {\n        # Pencere acik: bekleyen istek yerine gelmis sayilir');
+    expect(bekci).toContain('if (Test-KasaAcIstegi) { Clear-KasaAcIstegi }');
     // Kullanıcının kapattığı pencere: istek yok, müşteri ekranı kapanır (#195)
     expect(bekci).toContain('} elseif ($kasaAcikti) {\n        # Kullanici kasa penceresini kapatti: yeniden acilmaz, musteri ekrani da kapanir');
     // Bir turun hatası bekçiyi durdurmaz (aynı hata tekrar tekrar yazılmaz)

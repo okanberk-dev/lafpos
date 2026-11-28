@@ -272,7 +272,8 @@ sayar; o zaman açma isteği bırakır, pencere sunucu gelince (en geç yarım d
 okunamazsa, değer yoksa ya da başkaysa, çıkış kodu 0 ise çökme sayılmaz: emin olunamayan pencere açılmaz. Tarayıcı
 değeri açılıştan ~10 sn sonra diske yazdığı için açılır açılmaz çöken pencere de açılmaz (güvenli taraf). Bakım arasında
 (aşağıda) çöken pencere açılmaz; tarayıcı her açılışta çöküyorsa döngü olmasın diye 10 dakikada en çok 3 kez açılır,
-sonra kısayolla açılır. Bekçinin görmediği pencere (bekçi açılmadan önce kapanan) için karar verilmez. Windows CI ikisini
+sonra kısayolla açılır. Bekçinin görmediği pencere (bekçi açılmadan önce kapanan) için karar verilmez. Pencere açıkken
+bekleyen açma isteği silinir: kullanıcının sonra kapattığı pencere eski bir istekle yeniden açılmaz. Windows CI ikisini
 de gerçek Chrome'la dener (§9): düzgün kapatılan (pencereye kapatma iletisi) gelmez, zorla kapatılan gelir.
 3. Chrome ya da Edge yoksa Windows uyarısı ("Chrome ya da Edge bulunamadı").
 

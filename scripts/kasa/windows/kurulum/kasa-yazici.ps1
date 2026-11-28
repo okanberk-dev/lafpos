@@ -822,12 +822,16 @@ if ($Bekci) {
         $surecler = @(Get-TarayiciSurecleri)
       }
       if ($kasaAcik) {
+        # Pencere acik: bekleyen istek yerine gelmis sayilir (sonra kullanicinin kapattigi pencere bu istekle yeniden acilmaz)
+        if (Test-KasaAcIstegi) { Clear-KasaAcIstegi }
+        $cokmeOne = $false
         if (-not (Test-CustomerDisplay $surecler)) { [void](Start-CustomerDisplay $displayBase) }
       } elseif ($kasaAcikti) {
         # Kullanici kasa penceresini kapatti: yeniden acilmaz, musteri ekrani da kapanir (sahibin istegi, 28 Kas 2026)
         Stop-CustomerDisplay
       }
       $kasaAcikti = $kasaAcik
+      $sonHata = ''
     } catch {
       $m = 'bekci turu hatasi: ' + (($_.Exception.Message -replace '[\r\n]+', ' ').Trim())
       if ($m -ne $sonHata) { Write-Log $m }
