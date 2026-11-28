@@ -345,7 +345,9 @@ describe('kasa programı: hızlı ve markalı açılış, günlük, çöken penc
   });
 
   it('bekçi çöken pencereyi yeniden açar, kullanıcının kapattığını açmaz; emin olunamayan açılmaz', () => {
-    // İşaret: profilin Default\Preferences'ında tek profile.exit_type; iki okumada da (3 sn arayla) "Crashed" ve çıkış kodu 0 değil
+    // Belirleyici işaret sürecin çıkış kodu (bilinmeli ve 0 olmamalı); ön koşul profilin Default\Preferences'ında tek
+    // profile.exit_type, iki okumada da (3 sn arayla) "Crashed". exit_type tek başına yetmez: geri yükleme sorusu kapalıyken
+    // Chromium bir çökmeden sonra düzgün kapanışta da "Crashed" bırakır (Windows CI, 28 Kasım)
     const tur = between(ps1, 'function Get-ExitType', 'function Watch-KasaProcess');
     expect(tur).toContain("Read-ScriptBytes (Join-Path $profil 'Default\\Preferences')");
     expect(tur).toContain(`'"exit_type"\\s*:\\s*"(\\w+)"'`);
@@ -353,7 +355,7 @@ describe('kasa programı: hızlı ve markalı açılış, günlük, çöken penc
     const kapanis = between(ps1, 'function Get-KasaKapanis', 'function Remove-TemporaryKasaWatcher');
     expect(kapanis).toContain("if (-not $izlenen.Surec.WaitForExit(3000)) { return @{ karar = 'acik'; metin = 'surec calisiyor' } }");
     expect(kapanis).toMatch(/if \(\$ilk -eq 'Crashed'\) \{\n\s+Start-Sleep -Seconds 3\n\s+\$son = Get-ExitType \$izlenen\.Profil/);
-    expect(kapanis).toContain("if ($ilk -eq 'Crashed' -and $son -eq 'Crashed' -and $kod -ne 0) { return @{ karar = 'coktu'");
+    expect(kapanis).toContain("if ($ilk -eq 'Crashed' -and $son -eq 'Crashed' -and $null -ne $kod -and $kod -ne 0) { return @{ karar = 'coktu'");
     // Başka her durum (Normal, SessionEnded, okunamadı, çıkış kodu 0) çökme sayılmaz
     expect(kapanis.slice(kapanis.indexOf("karar = 'coktu'"))).toContain("return @{ karar = 'kapatildi'");
     // Süreç pencere açıkken izlenir (tutamak: çıkış kodu), profil komut satırından
@@ -391,12 +393,12 @@ describe('kasa programı: hızlı ve markalı açılış, günlük, çöken penc
       "step('D5. Kullanıcının kapattığı pencereyi bekçi yeniden açmaz",
       "await bekciGordu('D5');",
       "const kapatD5 = ps('kapat', ['-Duzgun']);",
-      "if (exitType() !== 'Normal') fail(",
       "'bekçi kullanıcının kapattığı kasa penceresini yeniden açtı'",
+      '/kullanici kapatti[^\\n]*cikis kodu 0 /',
       "step('D5b. Çöken (zorla kapatılan) pencereyi bekçi yeniden açar');",
       "const kasaOnceD5b = await bekciGordu('D5b');",
       "ps('kapat');\nconst d5b = await waitSayfa(tCokme, () => true, 'bekçi çöken kasa penceresini yeniden açmadı', 120_000);",
-      '/kasa penceresi kapandi, coktu: exit_type Crashed/',
+      '/kasa penceresi kapandi, coktu: exit_type Crashed, cikis kodu -?[1-9]/',
     ];
     const at = order.map((t) => ci.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(order.filter((_, i) => at[i]! <= 0))).toBe(true);

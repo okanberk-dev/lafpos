@@ -242,7 +242,8 @@ const kasaGunlugu = () => {
 };
 /**
  * Kasa profilinin Default\Preferences'ındaki profile.exit_type: tarayıcı açılışta "Crashed" yazar (birkaç saniye içinde
- * diske), düzgün kapanınca "Normal". Bekçinin çökme ayrımı buna bakar (kasa-yazici.ps1 Get-KasaKapanis)
+ * diske), düzgün kapanınca "Normal"; bir çökmeden sonra geri yükleme sorusu kapalıyken "Crashed" kalır. Bekçinin çökme
+ * ayrımının ön koşulu; belirleyici işaret sürecin çıkış kodu (kasa-yazici.ps1 Get-KasaKapanis)
  */
 function exitType(profil = 'chrome') {
   try {
@@ -627,16 +628,19 @@ ekran('ikinci-tiklama-one-getirir');
 
 step('D5. Kullanıcının kapattığı pencereyi bekçi yeniden açmaz (sahibin isteği, 28 Kas 2026); kısayol açar');
 await bakim(false);
-// Kullanıcının Alt+F4'u gibi (pencereye kapatma iletisi): tarayıcı düzgün kapanır, profil "Normal" yazar
+// Kullanıcının Alt+F4'u gibi (pencereye kapatma iletisi): tarayıcı düzgün kapanır, çıkış kodu 0. Profil D3'teki zorla
+// kapatmadan beri "Crashed" (geri yükleme sorusu kapalı, Chromium çökmeyi onaylanana dek tutar): ayrım çıkış kodundan
 await until('kasa profili açılışta exit_type "Crashed" yazmadı', () => exitType() === 'Crashed', 60_000, 1000);
 await bekciGordu('D5');
 const kapatD5 = ps('kapat', ['-Duzgun']);
 if (kapatD5.gonderilen < 1 || kapatD5.kalan) fail(`kasa penceresi düzgün kapanmadı: ${JSON.stringify(kapatD5)}`);
-if (exitType() !== 'Normal') fail(`düzgün kapanan pencerenin profili "${exitType()}" diyor (beklenen "Normal")`);
+console.log(`  düzgün kapanış: profil exit_type "${exitType()}"`);
 await sleep(35_000);
 if (kasaSurecleri().length) fail('bekçi kullanıcının kapattığı kasa penceresini yeniden açtı');
-if (!/kasa penceresi kapandi, kullanici kapatti/.test(kasaGunlugu())) fail(`bekçi kapanışı günlüğe yazmadı:\n${tail(KASA_GUNLUGU, 30)}`);
-console.log('  düzgün kapatılan pencere 35 sn sonra hâlâ kapalı');
+// Bekçinin son kapanış kararı bu pencereninki (D4'te pencere kapanmadı)
+const kapanisD5 = kasaGunlugu().split(/\r?\n/).filter((l) => l.includes('kasa penceresi kapandi, ')).at(-1);
+if (!kapanisD5 || !/kullanici kapatti[^\n]*cikis kodu 0 /.test(kapanisD5)) fail(`bekçi düzgün kapanışı (çıkış kodu 0) görmedi:\n${tail(KASA_GUNLUGU, 30)}`);
+console.log(`  düzgün kapatılan pencere 35 sn sonra hâlâ kapalı; ${kapanisD5.replace(/^.*kasa penceresi kapandi, /, '')}`);
 const tD5 = Date.now();
 kasaAc();
 const d5 = await waitSayfa(tD5, () => true, 'kasa kısayolu pencereyi açmadı', 120_000);
@@ -653,7 +657,7 @@ if (d5b.script !== sYeni) fail(`yeniden açılan pencere eski sürümü gösterd
 const kasaSonraD5b = await until('yeniden açılan kasa penceresinin süreci yok', () => (kasaSurecleri().length === 1 ? kasaSurecleri() : null), 30_000);
 if (kasaSonraD5b[0].pid === kasaOnceD5b[0].pid) fail('zorla kapatılan pencerenin süreci hâlâ çalışıyor');
 for (const f of ['--kiosk', '--kiosk-printing', `--app=${VEKIL}`]) if (!kasaSonraD5b[0].komut.includes(f)) fail(`yeniden açılan pencerede ${f} yok: ${kasaSonraD5b[0].komut}`);
-if (!/kasa penceresi kapandi, coktu: exit_type Crashed/.test(kasaGunlugu()) || !/coken kasa penceresi yeniden acilacak/.test(kasaGunlugu())) fail(`bekçi çökmeyi günlüğe yazmadı:\n${tail(KASA_GUNLUGU, 30)}`);
+if (!/kasa penceresi kapandi, coktu: exit_type Crashed, cikis kodu -?[1-9]/.test(kasaGunlugu()) || !/coken kasa penceresi yeniden acilacak/.test(kasaGunlugu())) fail(`bekçi çökmeyi günlüğe yazmadı:\n${tail(KASA_GUNLUGU, 30)}`);
 console.log(`  çöken pencere ${Math.round((d5b.t - tCokme) / 1000)} sn içinde yeniden açıldı (süreç ${kasaOnceD5b[0].pid} → ${kasaSonraD5b[0].pid})`);
 ekran('coken-pencere-geri-geldi');
 await bakim(true);

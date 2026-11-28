@@ -262,15 +262,18 @@ yeniden açılır. Bekçi müşteri ekranını yalnız kasa penceresi açıkken 
 (sayfa yeni sürümü kendisi yükler); güncellemeyle gelen yeni betik bekçiyi oturum kapanmadan yeniler.
 
 **Çöken pencere geri gelir** (28 Kasım 2026; bekçi sürümü 7). Sürüm 6 kullanıcının kapattığıyla çökeni ayırmıyordu:
-vardiya ortasında tarayıcı düşerse kasa ve müşteri ekranı kapanır, kasiyer masaüstünde kalırdı. Chromium (Chrome da Edge
-de) açılıştan birkaç saniye sonra profilin `Default\Preferences` dosyasına `profile.exit_type` = `"Crashed"` yazar; düzgün
-kapanınca (Alt+F4, kapatma düğmesi) `"Normal"`, Windows oturumu kapanırken `"SessionEnded"`. Süreç çöker ya da zorla
-kapatılırsa (Görev Yöneticisi'nde "Görevi sonlandır", bellek) `"Crashed"` kalır; tarayıcı "sayfaları geri yükle" sorusunu
-da buna göre sorar. İkinci işaret sürecin çıkış kodu: bekçi pencereyi görünce sürecin tutamağını alır, düzgün kapanışta
-kod 0'dır. Bekçi pencereyi yalnız dosya iki okumada da (3 sn arayla) `"Crashed"` derse ve çıkış kodu 0 değilse çökmüş
-sayar; o zaman açma isteği bırakır, pencere sunucu gelince (en geç yarım dakikada) yeniden açılır ve öne gelir. Dosya
-okunamazsa, değer yoksa ya da başkaysa, çıkış kodu 0 ise çökme sayılmaz: emin olunamayan pencere açılmaz. Tarayıcı
-değeri açılıştan ~10 sn sonra diske yazdığı için açılır açılmaz çöken pencere de açılmaz (güvenli taraf). Bakım arasında
+vardiya ortasında tarayıcı düşerse kasa ve müşteri ekranı kapanır, kasiyer masaüstünde kalırdı. Belirleyici işaret
+tarayıcı sürecinin çıkış kodu: bekçi pencereyi görünce sürecin tutamağını alır; düzgün kapanışta (Alt+F4, kapatma düğmesi)
+kod 0, süreç çöker ya da zorla kapatılırsa (Görev Yöneticisi'nde "Görevi sonlandır", bellek) 0 değil (zorla kapatmada -1).
+Ön koşul profilin `Default\Preferences` dosyasındaki `profile.exit_type`: Chromium (Chrome da Edge de) açılıştan birkaç
+saniye sonra `"Crashed"` yazar, düzgün kapanınca `"Normal"` (Windows oturumu kapanırken `"SessionEnded"`); çöken süreç
+`"Crashed"` bırakır. Tek başına yetmez: bir çökmeden sonra Chromium `"Crashed"`ı kullanıcı "sayfaları geri yükle" sorusunu
+kapatana dek korur; soru kasada kapalı (`--disable-session-crashed-bubble`) olduğu için sonraki düzgün kapanışlarda da
+`"Crashed"` kalır (Windows CI'ın ilk koşusu, 28 Kasım 2026; Chromium `exit_type_service.cc`). Bekçi pencereyi yalnız dosya
+iki okumada da (3 sn arayla) `"Crashed"` derse ve çıkış kodu bilinip 0 değilse çökmüş sayar; o zaman açma isteği bırakır,
+pencere sunucu gelince (en geç yarım dakikada) yeniden açılır ve öne gelir. Dosya okunamazsa, değer başkaysa, çıkış kodu 0
+ya da bilinmiyorsa çökme sayılmaz: emin olunamayan pencere açılmaz. Hiç çökmemiş profilde tarayıcı değeri açılıştan ~10 sn
+sonra diske yazdığı için açılır açılmaz çöken pencere de açılmaz (güvenli taraf). Bakım arasında
 (aşağıda) çöken pencere açılmaz; tarayıcı her açılışta çöküyorsa döngü olmasın diye 10 dakikada en çok 3 kez açılır,
 sonra kısayolla açılır. Bekçinin görmediği pencere (bekçi açılmadan önce kapanan) için karar verilmez. Pencere açıkken
 bekleyen açma isteği silinir: kullanıcının sonra kapattığı pencere eski bir istekle yeniden açılmaz. Windows CI ikisini
@@ -772,8 +775,8 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
    kısayol açar (ilk sayfa yeni sürüm ve sunucudan, yerel depo kalıcı, eski bekçi yenisiyle değişir); ikinci tıklama
    ikinci pencere açmaz ve öne getirir (masaüstü varsa); Uygulamalar kaydı yeni sürümü, boyutu ve tarihi gösterir; kasa
    programının günlüğü açılış penceresinin göründüğünü ve açılışın adım sürelerini yazar; bekçi düzgün kapatılan pencereyi
-   (pencereye kapatma iletisi, Alt+F4 gibi; profil "Normal") yeniden açmaz, kısayol açar; zorla kapatılan (çöken; profil
-   "Crashed") pencereyi kendisi yeniden açar ve kararını günlüğe yazar; Edge kalıcı
+   (pencereye kapatma iletisi, Alt+F4 gibi; çıkış kodu 0) yeniden açmaz, kısayol açar; zorla kapatılan (çöken; çıkış kodu
+   -1, profil "Crashed") pencereyi kendisi yeniden açar ve kararını günlüğe yazar; Edge kalıcı
    profille tam ekran (`--kiosk` ve InPrivate yok): sayfanın yerel depoya yazdığı değer diske geçince (en çok 30 sn
    beklenir) pencere zorla kapatılıp yeniden açılır, değer yerindedir. Tutmazsa profilin depo dosyaları ve Edge
    politikaları (kayıt defteri) yazılır.

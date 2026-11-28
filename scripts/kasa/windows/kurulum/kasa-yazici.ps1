@@ -555,14 +555,17 @@ function Open-KasaWindow([bool]$SunucuGerek, [bool]$OneGetir = $false) {
 }
 
 # Cokme ayrimi (28 Kas 2026; bekci surumu 7). #195'ten beri bekci kullanicinin kapattigi pencereyi yeniden acmiyor; pencere
-# cokerse de acmiyordu (vardiya ortasinda kasiyer masaustunde kalirdi). Chromium (Chrome da Edge de) acilistan birkac saniye
-# sonra profilin Default\Preferences dosyasina profile.exit_type = "Crashed" yazar; duzgun kapaninca (Alt+F4, kapatma
-# dugmesi) "Normal", Windows oturumu kapanirken "SessionEnded". Surec coker ya da zorla kapatilirsa (Gorev Yoneticisi'nde
-# Gorevi sonlandir, bellek) "Crashed" kalir; tarayici da "sayfalari geri yukle" sorusunu buna gore sorar. Ikinci isaret
-# surecin cikis kodu (bekci tutamagi pencere acikken alir): duzgun kapanista 0. Coktu sayilmasi icin dosya iki okumada da
-# (3 sn arayla) "Crashed" demeli ve cikis kodu 0 olmamali. Dosya okunamazsa, deger yoksa, birden cok ya da baskaysa ya da
-# cikis kodu 0 ise coktu SAYILMAZ: emin olunamayan pencere yeniden acilmaz. Tarayici degeri acilistan ~10 sn sonra diske
-# yazar: daha once coken pencere de yeniden acilmaz (guvenli taraf). Dondurdugu: Preferences'taki deger ya da $null
+# cokerse de acmiyordu (vardiya ortasinda kasiyer masaustunde kalirdi). Belirleyici isaret tarayici surecinin cikis kodu:
+# bekci pencereyi gorunce surecin tutamagini alir; duzgun kapanista (Alt+F4, kapatma dugmesi) kod 0, surec coker ya da zorla
+# kapatilirsa (Gorev Yoneticisi'nde Gorevi sonlandir, bellek) 0 degil (zorla kapatmada -1; Windows CI). On kosul profilin
+# Default\Preferences dosyasindaki profile.exit_type: Chromium (Chrome da Edge de) acilistan birkac saniye sonra "Crashed"
+# yazar, duzgun kapaninca "Normal" (Windows oturumu kapanirken "SessionEnded"); coken surec "Crashed" birakir. Tek basina
+# yetmez: bir cokmeden sonra tarayici "Crashed"i kullanici "sayfalari geri yukle" sorusunu kapatana dek korur, soru kasada
+# kapali (--disable-session-crashed-bubble) oldugu icin sonraki duzgun kapanislarda da "Crashed" kalir (Windows CI,
+# Chromium exit_type_service.cc). Coktu sayilmasi icin dosya iki okumada da (3 sn arayla) "Crashed" demeli VE cikis kodu
+# bilinmeli ve 0 olmamali. Dosya okunamazsa, deger baskaysa, cikis kodu 0 ya da bilinmiyorsa coktu SAYILMAZ: emin olunamayan
+# pencere yeniden acilmaz. Tarayici degeri acilistan ~10 sn sonra diske yazar: hic cokmemis profilde daha once coken pencere
+# de yeniden acilmaz (guvenli taraf). Dondurdugu: Preferences'taki deger ya da $null
 function Get-ExitType([string]$profil) {
   $b = Read-ScriptBytes (Join-Path $profil 'Default\Preferences')
   if ($null -eq $b -or $b.Length -eq 0) { return $null }
@@ -578,7 +581,7 @@ function Watch-KasaProcess($kasa) {
     $surec = [System.Diagnostics.Process]::GetProcessById([int]$kasa.ProcessId)
     [void]$surec.Handle
   } catch {
-    Write-Hata 'kasa sureci izleme (cikis kodu bilinmeyecek)' $_
+    Write-Hata 'kasa sureci izleme (cikis kodu bilinmeyecek, cokerse yeniden acilmaz)' $_
     $surec = $null
   }
   $profil = 'chrome'
@@ -615,7 +618,7 @@ function Get-KasaKapanis($izlenen) {
   $kodMetni = 'bilinmiyor'
   if ($null -ne $kod) { $kodMetni = [string]$kod }
   $metin = 'exit_type ' + $(if ($son) { $son } else { 'okunamadi' }) + ', cikis kodu ' + $kodMetni + ' (' + (Split-Path -Leaf $izlenen.Profil) + ')'
-  if ($ilk -eq 'Crashed' -and $son -eq 'Crashed' -and $kod -ne 0) { return @{ karar = 'coktu'; metin = 'coktu: ' + $metin } }
+  if ($ilk -eq 'Crashed' -and $son -eq 'Crashed' -and $null -ne $kod -and $kod -ne 0) { return @{ karar = 'coktu'; metin = 'coktu: ' + $metin } }
   return @{ karar = 'kapatildi'; metin = 'kullanici kapatti ya da emin olunamadi: ' + $metin }
 }
 

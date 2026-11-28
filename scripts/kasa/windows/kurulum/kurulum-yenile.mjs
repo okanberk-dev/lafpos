@@ -59,7 +59,7 @@ export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
  * pencerede; bekçi diskteki betik değişince (güncelleme) yenisiyle yeniden başlar, sonraki sürümler oturum kapanmayı beklemez
  * 6 (28 Kas 2026): bekçi kapanan kasa penceresini yeniden açmaz, yalnız kasa kısayolunun isteğiyle açar; kasa penceresi
  * kapanınca müşteri ekranını da kapatır (sahibin isteği: "kapatınca kapansın, ben açınca açılsın"). 7 (28 Kas 2026):
- * çöken kasa penceresini yeniden açar, kullanıcının kapattığını açmaz (profilin exit_type'ı ve sürecin çıkış kodu);
+ * çöken kasa penceresini yeniden açar, kullanıcının kapattığını açmaz (sürecin çıkış kodu ve profilin exit_type'ı);
  * kararlarını kasa programının günlüğüne yazar
  */
 export const WATCHER_VERSION = 7;
