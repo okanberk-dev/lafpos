@@ -197,6 +197,49 @@ describe('kurulumun kök dosyaları ve kısayolları', () => {
     expect(calls).toHaveLength(3);
   });
 
+  /**
+   * Uygulamalar listesindeki sürüm (28 Kasım 2026): otomatik güncelleme yalnız app\ ve node\'u değiştirir; kayıt
+   * kurulumdaki sürümde, boyutta ve tarihte kalıyordu. Güncellemeden sonra kısayollarla birlikte (derleme başına bir kez)
+   * yenilenir. Gerçek Windows'ta ci-kurulum.mjs D2 dener
+   */
+  it('güncellemeden sonra Uygulamalar kaydı yeni sürümü, boyutu ve tarihi gösterir', async () => {
+    const { displayVersion, refreshInstall, shortcutArgs, installArgs } = await load('kurulum-yenile.mjs');
+    // Sürüm ve derlemenin tarihi, Güncelleme kartındaki gibi (bilgisayarın saatiyle)
+    const b = Math.floor(new Date(2026, 10, 28, 14, 5).getTime() / 1000);
+    expect(displayVersion('0.3.0', b)).toBe('0.3.0 (28.11.2026 14:05)');
+    for (const [v, n] of [['', b], ['0.3', b], [undefined, b], ['0.3.0', 0], ['0.3.0', null], ['0.3.0', 1.5]]) expect(displayVersion(v, n), `${v} ${n}`).toBeNull();
+    // Kısayol betiğine -Surum yalnız sürüm varsa; kurulumların kısayol adımı kayda hiç dokunmaz
+    const args = shortcutArgs({ appDir: 'C:\\K\\app', installDir: 'C:\\K', listFile: 'C:\\V\\l.json', surum: '0.3.0 (28.11.2026 14:05)' });
+    expect(args.slice(-2)).toEqual(['-Surum', '0.3.0 (28.11.2026 14:05)']);
+    expect(shortcutArgs({ appDir: 'C:\\K\\app', installDir: 'C:\\K', listFile: 'C:\\V\\l.json' })).not.toContain('-Surum');
+    expect(installArgs({ appDir: 'C:\\K\\app', listFile: 'C:\\V\\l.json', groups: [] })).not.toContain('-Surum');
+    // Yenileme sürümü kurulu app\package.json'dan, derlemeyi bekçiden alır; UYARI satırları günlüğe
+    const { dir, app, home } = install();
+    writeFileSync(join(app, 'kisayollar.ps1'), '# deneme');
+    writeFileSync(join(app, 'package.json'), JSON.stringify({ version: '0.3.0', build: b }));
+    const seen: any[] = [];
+    await refreshInstall({ appDir: app, installDir: dir, home, build: b, log: () => {}, platform: 'win32', setWarning: () => {}, runShortcuts: async (o: any) => (seen.push(o), null) });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].surum).toBe('0.3.0 (28.11.2026 14:05)');
+    expect(typeof seen[0].log).toBe('function');
+    // kisayollar.ps1: kayıt varsa sürüm, tarih (yyyyMMdd) ve kurulum klasörünün boyutu (KB); hata kısayolları durdurmaz
+    const ps = read('scripts/kasa/windows/kurulum/kisayollar.ps1').replace(/\r\n/g, '\n');
+    expect(ps).toContain("[string]$Gruplar = '', [string]$Surum = '')");
+    const blok = ps.slice(ps.indexOf('if ($Kayit -and $Surum) {'), ps.indexOf('$sira = 0'));
+    expect(blok).toContain("Set-ItemProperty -LiteralPath $Kayit -Name 'DisplayVersion' -Value $Surum");
+    expect(blok).toContain("Set-ItemProperty -LiteralPath $Kayit -Name 'InstallDate' -Value ([DateTime]::Now.ToString('yyyyMMdd', [System.Globalization.CultureInfo]::InvariantCulture))");
+    expect(blok).toContain("New-ItemProperty -LiteralPath $Kayit -Name 'EstimatedSize' -Value $boyut -PropertyType DWord -Force");
+    expect(blok).toContain("Measure-Object -Property Length -Sum).Sum / 1024)");
+    expect(blok).toContain("Write-Output ('UYARI surum: ' + $_.Exception.Message)");
+    expect(blok).not.toMatch(/\$hata\+\+|exit /);
+    // Kaldırıcı adımından sonra, kısayollardan önce (kaldırıcı adımı olmazsa betik orada biter, kayıt da değişmez)
+    expect(ps.indexOf('if ($Kayit -and $Surum) {')).toBeGreaterThan(ps.indexOf('if ($Kurulum -and $Kayit -and $YeniMenu) {'));
+    expect(ps.indexOf('if ($Kayit -and $Surum) {')).toBeLessThan(ps.indexOf('foreach ($k in $items)'));
+    // Kurulumlar da aynı adları yazar (kurulum dosyası ve siteden kurulum)
+    expect(read('scripts/kasa/windows/kurulum/asilpos.nsi')).toContain('WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" $1');
+    expect(read('scripts/kasa/windows/kurulum/web-kurucu.ps1')).toContain("New-ItemProperty -LiteralPath $anahtar -Name 'EstimatedSize' -Value $boyut -PropertyType DWord -Force");
+  });
+
   it('kısayol betiği önce Uygulamalar kaydını yeniler: eski Kaldir.exe yerine siteden kurulumun kaldırıcısı, görünen ad AsilPOS', async () => {
     const { shortcutArgs, UNINSTALL_KEY, IF_PRESENT_ROOT_FILES, MENU } = await load('kurulum-yenile.mjs');
     // Kayıt anahtarı kurulumların yazdığıyla aynı (kurulum dosyası 32 bit: WOW6432Node)

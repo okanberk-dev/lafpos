@@ -244,16 +244,36 @@ menüsündeki ve Başlangıç'taki **AsilPOS Kasa** kısayolu konsolsuz PowerShe
 
 1. Kasa penceresi zaten açıksa **öne getirir** (küçültülmüşse açar): ikinci tıklama ikinci pencere açmaz. İki tıklama üst
    üste gelirse ikincisi beklemez.
-2. Açık değilse küçük bir **"AsilPOS açılıyor"** penceresi görünür (görev çubuğunda AsilPOS simgesiyle; kendi iş
-   parçacığında, bekleme onu dondurmaz). Kasa bekçisi açılır, sunucu en çok 90 sn beklenir, yazıcılar bildirilir,
-   müşteri ekranı açılır, kasa penceresi açılır, küçük pencere kapanır. Sunucu 90 sn'de gelmezse pencere açılmaz (hata
-   sayfası kalmaz): kısayol bir açma isteği bırakır (kasa profilinin yanında `kasa-ac.istek`), sunucu gelince bekçi
-   pencereyi açar ve isteği siler (30 dakikadan eski istek sayılmaz).
+2. Açık değilse tam ekran markalı **açılış penceresi** görünür (28 Kasım 2026, sahibin isteği: "estetikleştir,
+   hızlandır"): ev yeşilinin degradesi (DESIGN.md marka rayının üç durağı), ortada AsilPOS simgesi, "AsilPOS açılıyor" ve
+   "Kasa ekranı hazırlanıyor"; görev çubuğunda AsilPOS simgesiyle, kendi iş parçacığında (bekleme onu dondurmaz). Sıra:
+   açılış penceresi, sunucu (en çok 90 sn), **kasa penceresi** (ekrana gelince açılış penceresi kapanır), sonra müşteri
+   ekranı ve yazıcılar. Yazıcı sorgusu 15 sn'ye kadar sürebildiği için pencereyi artık bekletmez; ilk fişten önce biter
+   (araya PIN girişi girer). Müşteri ekranı yeni açıldıysa kasa penceresi yeniden öne gelir (klavye ve barkod okuyucu
+   kasaya yazar). Sunucu 20 sn'de gelmezse yazı "Sunucu bekleniyor..." olur; Esc her an, 20 sn'den sonra ekrana dokunmak
+   da açılış penceresini kapatır (kasiyer kilitlenmez, kasa sunucu gelince yine açılır). Sunucu 90 sn'de gelmezse pencere
+   açılmaz (hata sayfası kalmaz): kısayol bir açma isteği bırakır (kasa profilinin yanında `kasa-ac.istek`), sunucu
+   gelince bekçi pencereyi açar ve isteği siler (30 dakikadan eski istek sayılmaz). Sunucu hazırsa bekçiye pencereden
+   sonra bakılır; değilse beklemeden önce (sunucu geç gelirse pencereyi o açar).
 
 **Kapatınca kapanır** (sahibin isteği, 28 Kasım 2026; bekçi sürümü 6): kullanıcı kasa penceresini kapatırsa bekçi onu
 yeniden açmaz (eskiden 15 sn içinde açıyordu) ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla
 yeniden açılır. Bekçi müşteri ekranını yalnız kasa penceresi açıkken açık tutar. Güncelleme pencereyi kapatmaz
 (sayfa yeni sürümü kendisi yükler); güncellemeyle gelen yeni betik bekçiyi oturum kapanmadan yeniler.
+
+**Çöken pencere geri gelir** (28 Kasım 2026; bekçi sürümü 7). Sürüm 6 kullanıcının kapattığıyla çökeni ayırmıyordu:
+vardiya ortasında tarayıcı düşerse kasa ve müşteri ekranı kapanır, kasiyer masaüstünde kalırdı. Chromium (Chrome da Edge
+de) açılıştan birkaç saniye sonra profilin `Default\Preferences` dosyasına `profile.exit_type` = `"Crashed"` yazar; düzgün
+kapanınca (Alt+F4, kapatma düğmesi) `"Normal"`, Windows oturumu kapanırken `"SessionEnded"`. Süreç çöker ya da zorla
+kapatılırsa (Görev Yöneticisi'nde "Görevi sonlandır", bellek) `"Crashed"` kalır; tarayıcı "sayfaları geri yükle" sorusunu
+da buna göre sorar. İkinci işaret sürecin çıkış kodu: bekçi pencereyi görünce sürecin tutamağını alır, düzgün kapanışta
+kod 0'dır. Bekçi pencereyi yalnız dosya iki okumada da (3 sn arayla) `"Crashed"` derse ve çıkış kodu 0 değilse çökmüş
+sayar; o zaman açma isteği bırakır, pencere sunucu gelince (en geç yarım dakikada) yeniden açılır ve öne gelir. Dosya
+okunamazsa, değer yoksa ya da başkaysa, çıkış kodu 0 ise çökme sayılmaz: emin olunamayan pencere açılmaz. Tarayıcı
+değeri açılıştan ~10 sn sonra diske yazdığı için açılır açılmaz çöken pencere de açılmaz (güvenli taraf). Bakım arasında
+(aşağıda) çöken pencere açılmaz; tarayıcı her açılışta çöküyorsa döngü olmasın diye 10 dakikada en çok 3 kez açılır,
+sonra kısayolla açılır. Bekçinin görmediği pencere (bekçi açılmadan önce kapanan) için karar verilmez. Windows CI ikisini
+de gerçek Chrome'la dener (§9): düzgün kapatılan (pencereye kapatma iletisi) gelmez, zorla kapatılan gelir.
 3. Chrome ya da Edge yoksa Windows uyarısı ("Chrome ya da Edge bulunamadı").
 
 Pencerenin başlığı "AsilPOS", görev çubuğunda ve Alt+Tab'da AsilPOS simgesi (`public/favicon.ico` ve 32 px PNG; sekmede
@@ -290,15 +310,16 @@ koşusu pencereyi yazımdan 2 sn sonra kapattığı için "tutmadı" görünmü�
 | `--no-first-run`, `--disable-session-crashed-bubble`, `--noerrdialogs` | Elektrik kesintisinden sonra "geri yükle" balonu çıkmaz |
 
 **Fiş yazıcısı (kablolu/USB, kendiliğinden):** yazıcıyı USB ile takın; Windows sürücüsünü kurar (kurmazsa
-üreticinin sürücüsü). Kasa programı (`app\kasa-yazici.ps1 -Ac`, oturumdaki kullanıcı) kasa penceresini açmadan önce:
+üreticinin sürücüsü). Kasa programı (`app\kasa-yazici.ps1 -Ac`, oturumdaki kullanıcı) kasa penceresini açtıktan sonra
+(28 Kasım 2026'dan beri; önceden pencere yazıcı sorgusunu bekliyordu):
 bilgisayardaki yazıcıları AsilPOS'a bildirir (`POST /api/kasa/yazicilar`, oturumsuz, yalnız bu bilgisayardan) ve
 AsilPOS'un söylediği yazıcıyı o kullanıcının **varsayılan yazıcısı** yapar ("varsayılan yazıcıyı Windows yönetsin"
 kapanır); `--kiosk-printing` fişi, Z'yi ve X'i önizlemesiz ona basar. Hangi yazıcı: Yönetim › Ayarlar ve yedek › **Fiş
 yazıcısı**'nda seçilen; seçilmediyse PDF, XPS, OneNote ve faks dışındaki tek yazıcı, birden çoksa adından fiş yazıcısı
 olduğu anlaşılan tek yazıcı (`server/lib/yazici.ts`, testi `tests/yazici.test.ts`). Kart yazıcıları ve son bildirimi
 gösterir; "Bunu kullan" seçer, "Deneme fişi yazdır" kasa bilgisayarında basılınca seçili yazıcıdan çıkar. Seçim kasa
-ekranının bir sonraki açılışında geçer (Alt+F4, masaüstünde AsilPOS Kasa). Yazıcı adımı hata verirse sessizce geçilir,
-kasa yine açılır. Betik güncellemeyle gelir (`app\`); kısayolları sunucu bekçisi güncellemeden sonra aynı listeden
+ekranının bir sonraki açılışında geçer (Alt+F4, masaüstünde AsilPOS Kasa). Yazıcılar bir kez sorulur (eskiden iki
+kez). Yazıcı adımı hata verirse kasa programının günlüğüne yazılıp geçilir; kasa penceresi zaten açıktır. Betik güncellemeyle gelir (`app\`); kısayolları sunucu bekçisi güncellemeden sonra aynı listeden
 yeniden yazar (`kurulum-yenile.mjs`). Chrome bir yazıcıya elle
 basıldıysa "son kullanılan"ı hatırlayabilir: yazdırma önizlemesini kapatan Chrome ayarını açmayın.
 
@@ -316,7 +337,8 @@ Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması i�
 kullanıcı hesabı önerilir.
 
 Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini yeniden açmaz (28 Kasım 2026'dan
-beri; önceden 15 sn içinde açıyordu, §3 "Kapatınca kapanır"); yalnız kasa kısayolunun bıraktığı açma isteğini yerine getirir.
+beri; önceden 15 sn içinde açıyordu, §3 "Kapatınca kapanır"); yalnız kasa kısayolunun bıraktığı açma isteğini yerine getirir
+ve çöken pencereyi yeniden açar (§3 "Çöken pencere geri gelir").
 Bakım için (Windows ayarı, yazıcı kurulumu, başka bir program) Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
 **15 dakika bakım arası** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca kısayolun bekleyen açma
 isteğini de yerine getirmez, pencere sunucu gelince kendiliğinden açılmaz (`GET /api/kasa/bakim`, oturumsuz, yalnız bu
@@ -329,6 +351,24 @@ otomatik güncelleme `app\`'i değiştirince (betik farklı) kilidini bırakıp 
 kuralları oturum kapanmayı beklemez. Betik silme paylaşımıyla okunur (güncelleme o an `app\`'i taşıyabilir). Diskteki
 betik 5'ten eskiyse (elle geri dönüş) çalışan bekçi sürer. 5'ten önceki bekçi (kendini yenilemeyi bilmez) kasa kısayolunun
 güncellemeden sonraki ilk açılışında ya da oturum yeniden açılınca yenisiyle değişir.
+
+**Hız** (28 Kasım 2026, sahibin isteği: "hızlandır"). Açılışı yavaşlatanlar kalktı: Win32 işlevleri (DPI, pencereyi öne
+getirme) C# derlemesiyle (`Add-Type`, yavaş kasada 1-3 sn) değil bellekte kurulan tipten çağrılır; tarayıcı önbelleği her
+açılışta değil kurulu derleme değişince silinir (§6 "Tarayıcının kendi önbelleği"); yazıcı sorgusu pencereden sonraya
+alındı ve bir kez sorulur; bekçi turda tarayıcı süreçlerini bir kez sorar. Arayüzün kendisi de beklerken boş kalmaz:
+`index.html` betik yüklenene dek `#root`'ta markalı açılış ekranını (uygulamanın zemini, AsilPOS simgesi ve adı; dış
+kaynak yok, koyu temada koyu) gösterir, React ilk çizimde yerini alır (`tests/acilis-ekrani.test.ts`).
+
+### Kasa programının günlüğü
+
+`%LocalAppData%\LafPOS\logs\kasa-programi.log` (oturumdaki kullanıcının, kasa profillerinin yanında; 28 Kasım 2026).
+1 MB'a varınca `kasa-programi.log.1`'e döner (tek yedek). Kasa kısayolu (`ac`) ve bekçi (`bekci`) aynı dosyaya yazar;
+satır başında an, kip ve süreç numarası. İçinde: her açılışın adım süreleri tek satırda (`acilis: powershell … ms,
+denetim … ms, acilis penceresi … ms, sunucu … ms, kasa penceresi … ms, bekci … ms, musteri ekrani … ms, yazicilar … ms;
+toplam … ms`), açılış penceresinin göründüğü an, açılan pencereler, silinen önbellek, bekçinin gördüğü ve kapanan
+pencereler (`exit_type` ve çıkış kodu, karar), yeniden açmalar, eski bekçinin değişmesi ve eskiden sessizce geçilen her
+hatanın iletisi. PIN, parola, anahtar ya da istek gövdesi yazılmaz (`tests/masaustu-programi.test.ts`). Başlat menüsünde
+kısayolu yok: dosya Not Defteri'yle açılır. Sunucunun günlüğü ayrı (`C:\ProgramData\LafPOS\logs\sunucu.log`).
 
 ### Müşteri ekranı ikinci ekranda (kendiliğinden)
 
@@ -539,9 +579,12 @@ Otomatik güncellemeden sonra sahip kasayı (kiosk penceresi ya da tarayıcı) i
 **Tarayıcının kendi önbelleği** (27 Kasım 2026 incelemesi): kasa bekçisi ve kasa kısayolu kasa penceresini ya da müşteri
 ekranını yeni bir tarayıcı süreciyle açmadan önce o profilin HTTP önbelleğini (`%LocalAppData%\LafPOS\chrome`, `\edge`
 ve `\chrome-musteri` altında `Default\Cache`) siler (`app\kasa-yazici.ps1` `Clear-BrowserCache`). Yalnız o profilin
-tarayıcısı açık değilken, pencere kilidinin altında; oturum, ayarlar ve yerel depolama kalır. Dosyalar yerel sunucudan
-geldiği için bedeli ilk yüklemenin yeniden yapılmasıdır. Böylece eski sunucunun başlıksız verdiği ve profilde kalmış
-`index.html` bilgisayar yeniden açılınca ya da pencere yeniden açılınca kullanılmaz.
+tarayıcısı açık değilken, pencere kilidinin altında; oturum, ayarlar ve yerel depolama kalır. Böylece eski sunucunun
+başlıksız verdiği ve profilde kalmış `index.html` güncellemeden sonra kullanılmaz. 28 Kasım 2026'dan beri her açılışta
+değil, yalnız kurulu derleme (`app\package.json` `build`) o profilin son silindiği derlemeden farklıysa silinir: her
+açılışta silmek arayüz dosyalarını yeniden yükletip açılışı yavaşlatıyordu. Profilin son silindiği derleme kasa
+profillerinin yanındaki `onbellek-derleme.txt`'de (`profil=derleme` satırları); önbellek tam silinemezse yazılmaz,
+sonraki açılışta yeniden denenir. Derleme okunamazsa (git ile çalışan kurulum) eskisi gibi her açılışta silinir.
 
 **Bu sürüme geçişte bir kez:** yeni denetim yeni sürümün betiğindedir. Bu düzeltmeyi getiren güncelleme kurulurken eski
 sürümün giriş ekranı açıksa o açık sayfa bir kez daha eski görünebilir: elle yenileyince (F5) düzelir. Bilgisayar
@@ -629,7 +672,7 @@ aynı şekilde kurup çalıştırabilmeli; bu iki şeye de uyumlu olsun."_
 
 **Program.** Kasa ekranı bir program gibi davranır (§3): kendi kısayolu ve simgesi, konsolsuz açılış ve "AsilPOS
 açılıyor" penceresi, tek pencere (ikinci tıklama öne getirir), Windows açılınca kendiliğinden (Başlangıç; oturum açılması
-gerekir: otomatik oturum Başlat › AsilPOS › Kasa hazırlığı'nda), kullanıcı kapatınca kapanır (bekçi yeniden açmaz, müşteri ekranı da kapanır), adres çubuğu yok,
+gerekir: otomatik oturum Başlat › AsilPOS › Kasa hazırlığı'nda), kullanıcı kapatınca kapanır (bekçi yeniden açmaz, müşteri ekranı da kapanır), çökerse bekçi yeniden açar, adres çubuğu yok,
 Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepet kalır.
 
 **Aynı program, iki yol.** Kurulum dosyası (`AsilPOS-Kurulum.exe`, `asilpos.nsi`) ve siteden kurulum (`AsilPOS-Kur.cmd`,
@@ -651,7 +694,11 @@ Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepe
 | Fark | programı içinde taşır (internetsiz kurar); kaldırıcı `Kaldir.exe` | programı indirir; kaldırıcı `LafPOS-Kaldir.ps1`; şube kodu (ladmin) |
 
 Kısayol listesi tek yerde (`kurulum-yenile.mjs` `shortcutSpec`); güncelleme aynı listeyi aynı betikle (`kisayollar.ps1`)
-yeniler. Biri kuruluyken öbürüyle onarılır ya da güncellenir. Türkçe harfli adlar ("AsilPOS ayarları", "Sunucu günlüğü",
+yeniler. Güncellemeden sonra Uygulamalar kaydında sürüm (`DisplayVersion`: kurulu sürüm ve derlemenin tarihi, Güncelleme
+kartındaki gibi "0.3.0 (28.11.2026 14:05)"), boyut (`EstimatedSize`, kurulum klasörü) ve tarih (`InstallDate`) de
+yenilenir (28 Kasım 2026; derleme başına bir kez, kısayollarla birlikte; `displayVersion`). Önceden otomatik güncelleme
+yalnız adı ve simgeyi yeniliyor, liste kurulumdaki sürümü gösteriyordu. Kurulum dosyası kendi sürüm numarasını
+(`0.3.<çalıştırma>`) yazar; ilk açılışta bekçi aynı biçime çevirir. Windows CI güncellemeden sonra kaydı denetler (D2). Biri kuruluyken öbürüyle onarılır ya da güncellenir. Türkçe harfli adlar ("AsilPOS ayarları", "Sunucu günlüğü",
 "AsilPOS'u kaldır"): Windows'un kısayol nesnesi (WScript.Shell) yolu "Unicode olmayan programlar" diline çevirir; Türkçe
 olmayan Windows'ta ad en yakın harfle yazılırdı ("ayarlari.lnk"; Windows CI, 27 Kasım). Kısayol aynı klasörde ASCII adlı
 geçici kopyada yazılıp asıl adına kopyalanır (`kisayollar.ps1`, `web-kurucu.ps1`); Türkçe Windows'ta sonuç aynı. İndir sayfası (AsilPOS Uzaktan) bunu söyler; kurulum

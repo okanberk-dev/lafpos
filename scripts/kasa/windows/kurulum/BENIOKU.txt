@@ -7,6 +7,7 @@ NE KURULDU
 - Kasa ekranı: masaüstündeki "AsilPOS Kasa". Kasa programı tam ekran açılır (Chrome, yoksa Edge; adres çubuğu
   yok), fişler önizlemesiz varsayılan yazıcıdan çıkar. Açıkken yeniden basmak aynı pencereyi öne getirir.
   Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz; yeniden açmak için AsilPOS Kasa.
+  Kasa ekranı çökerse (ya da zorla kapatılırsa) yarım dakika içinde kendiliğinden yeniden açılır.
   Bakım yaparken pencerenin hiç kendiliğinden açılmaması için: Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
   15 dakika bakım arası.
 - Siteden kurulum (AsilPOS-Kur.cmd) ve bu kurulum dosyası aynı programı kurar; biriyle kurulanı öbürüyle

@@ -178,6 +178,8 @@ export const ESKI_AD_METINLERI: readonly string[] = [
   ...yol(KURULUM_KLASORU, 'chrome'),
   ...yol(KURULUM_KLASORU, 'edge'),
   ...yol(KURULUM_KLASORU, 'modpos-uyari.txt'),
+  // Kasa programının günlüğü (kasa-yazici.ps1; kasa profillerinin klasöründe, 28 Kasım 2026)
+  ...yol(KURULUM_KLASORU, 'logs'),
   `${KURULUM_KLASORU}\\\\(chrome|edge)`,
   `${KURULUM_KLASORU}-Kasa.command`,
   `Application Support/${KURULUM_KLASORU}`,
