@@ -699,7 +699,8 @@ yeniler. Güncellemeden sonra Uygulamalar kaydında sürüm (`DisplayVersion`: k
 kartındaki gibi "0.3.0 (28.11.2026 14:05)"), boyut (`EstimatedSize`, kurulum klasörü) ve tarih (`InstallDate`) de
 yenilenir (28 Kasım 2026; derleme başına bir kez, kısayollarla birlikte; `displayVersion`). Önceden otomatik güncelleme
 yalnız adı ve simgeyi yeniliyor, liste kurulumdaki sürümü gösteriyordu. Kurulum dosyası kendi sürüm numarasını
-(`0.3.<çalıştırma>`) yazar; ilk açılışta bekçi aynı biçime çevirir. Windows CI güncellemeden sonra kaydı denetler (D2). Biri kuruluyken öbürüyle onarılır ya da güncellenir. Türkçe harfli adlar ("AsilPOS ayarları", "Sunucu günlüğü",
+(`0.3.<çalıştırma>`) yazar; ilk açılışta bekçi aynı biçime çevirir. Windows CI güncellemeden sonra kaydı denetler (D2).
+Biri kuruluyken öbürüyle onarılır ya da güncellenir. Türkçe harfli adlar ("AsilPOS ayarları", "Sunucu günlüğü",
 "AsilPOS'u kaldır"): Windows'un kısayol nesnesi (WScript.Shell) yolu "Unicode olmayan programlar" diline çevirir; Türkçe
 olmayan Windows'ta ad en yakın harfle yazılırdı ("ayarlari.lnk"; Windows CI, 27 Kasım). Kısayol aynı klasörde ASCII adlı
 geçici kopyada yazılıp asıl adına kopyalanır (`kisayollar.ps1`, `web-kurucu.ps1`); Türkçe Windows'ta sonuç aynı. İndir sayfası (AsilPOS Uzaktan) bunu söyler; kurulum
@@ -769,7 +770,10 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
    ayırt edilir.
 3. Güncellemeden önce açılmış pencere kendiliğinden yeni sürüme geçer; kısayollar programa döner; kapanan pencereyi yeni
    kısayol açar (ilk sayfa yeni sürüm ve sunucudan, yerel depo kalıcı, eski bekçi yenisiyle değişir); ikinci tıklama
-   ikinci pencere açmaz ve öne getirir (masaüstü varsa); bekçi kapanan pencereyi yeniden açmaz, kısayol açar; Edge kalıcı
+   ikinci pencere açmaz ve öne getirir (masaüstü varsa); Uygulamalar kaydı yeni sürümü, boyutu ve tarihi gösterir; kasa
+   programının günlüğü açılış penceresinin göründüğünü ve açılışın adım sürelerini yazar; bekçi düzgün kapatılan pencereyi
+   (pencereye kapatma iletisi, Alt+F4 gibi; profil "Normal") yeniden açmaz, kısayol açar; zorla kapatılan (çöken; profil
+   "Crashed") pencereyi kendisi yeniden açar ve kararını günlüğe yazar; Edge kalıcı
    profille tam ekran (`--kiosk` ve InPrivate yok): sayfanın yerel depoya yazdığı değer diske geçince (en çok 30 sn
    beklenir) pencere zorla kapatılıp yeniden açılır, değer yerindedir. Tutmazsa profilin depo dosyaları ve Edge
    politikaları (kayıt defteri) yazılır.
