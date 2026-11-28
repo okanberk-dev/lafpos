@@ -23,7 +23,8 @@ sessizce çıkar. Neden tek sistem: `docs/06-TEK-SISTEM.md`.
 `AsilPOS-Kurulum.exe` GitHub'daki sürüm sayfasından (Releases › Latest; `main`'e her push'ta yayımlanır) bir kez
 indirilir; Node, Git ya da komut satırı gerekmez, sahibin adımları README'de ("Windows'a kurulum"). Sonraki
 sürümleri kasa kendisi alır (§6). Dosya imzasız olduğu için Windows "Bilgisayarınız korundu" der: **Ek bilgi ›
-Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
+Yine de çalıştır**. Kurulum yönetici izni ister, başka bir şey sormaz (sayfa yok; §9 "Sorusuz kurulum") ve şunları
+yapar:
 
 | | |
 |---|---|
@@ -31,8 +32,8 @@ Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
 | Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
 | Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Görev bekçiyi başlatıcıdan açar (`baslat.cmd`, çalışma klasörü kurulum klasörü): otomatik güncelleme bekçiyi 75 koduyla kapatınca başlatıcı onu yeni sürümle yeniden açar, güncelleme Node'u da değiştirdiyse önce `node.yeni`'yi `node`'un yerine koyar. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği sınırlı (`--max-old-space-size`): varsayılan bilgisayarın belleğinin dörtte biri, en az 1024, en çok 4096 MB (8 GB'lık bilgisayarda 2048). Bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar; taban, uzun dönem raporunun (bir yıl, iki dönem birden) sığması için. Gerekirse `ayarlar.env`'de `ASILPOS_MAX_HEAP_MB` (256-4096; örnek dosyada açıklamalı, yorumlu satır); bekçi seçilen sınırı günlüğe yazar |
 | Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
-| Kısayollar | Masaüstünde ve Başlangıç'ta "AsilPOS Kasa" (seçilebilir; Başlangıç'ta yanında kasa bekçisi); Başlat › AsilPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır. "AsilPOS Kasa" kasa programını konsolsuz açar (§3). Liste tek yerde (`kurulum-yenile.mjs` `shortcutSpec`): kurulum dosyası, siteden kurulum ve güncelleme aynı betikle yazar (§9) |
-| Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
+| Kısayollar | Masaüstünde ve Başlangıç'ta "AsilPOS Kasa" (her kurulumda; Başlangıç'ta yanında kasa bekçisi); Başlat › AsilPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır. "AsilPOS Kasa" kasa programını konsolsuz açar (§3). Liste tek yerde (`kurulum-yenile.mjs` `shortcutSpec`): kurulum dosyası, siteden kurulum ve güncelleme aynı betikle yazar (§9) |
+| Güç | "Prizdeyken uyku kapalı" (her kurulumda): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
 
 - **Ayarlar** (site, lafmaliyet, AsilPOS Uzaktan, Token ve paket platformu anahtarları): programın içinden,
   **Yönetim › Bağlantı bilgileri** (aşağıda). Dosyanın kendisi `C:\ProgramData\LafPOS\ayarlar.env`; Başlat › AsilPOS ›
@@ -41,10 +42,12 @@ Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
   Yazarkasa POS'ta (`docs/04-YAZARKASA.md` §8.1).
   İlk kurulumda site bağlantısı kapalıdır (`LAFFOGATO_URL` satırı yorumlu): AsilPOS siteye hiç bağlanmaz, menü
   kurulumdaki gibi kalır. Açmak için `docs/03-ENTEGRASYON.md` §8 (açılış sırası).
-- **Güncelleme:** kendiliğinden (§6). Elle: yeni kurulum dosyasını çalıştırın. Gün açıksa sorar (sessiz kurulumda
-  kurmaz), yeni sürümü önce yan klasöre (`kurulum.gecici`) açar, sunucuyu durdurur, veritabanını
-  `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı eskisiyle yer değiştirir (yazılamazsa eski sürüm
-  döner, sunucu eskisiyle açılır), sunucuyu başlatıp yeni sürümle açıldığını bekler (en çok 2 dk); veri ve ayarlar kalır. **27 Ekim 2026'dan önceki kurulumu güncellerken:** eski `ayarlar.env`'de
+- **Güncelleme:** kendiliğinden (§6). Elle: yeni kurulum dosyasını çalıştırın. Bu bilgisayarda daha yeni bir derleme
+  kuruluysa bir şey değiştirmez; aynı anda ikinci kurulum çalışmaz. Gün açıksa sorar (sessiz kurulumda kurmaz), yeni
+  sürümü önce yan klasöre (`kurulum.gecici`) açar, sunucuyu durdurur, veritabanını
+  `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı eskisiyle yer değiştirir (yazılamazsa ya da kurulum
+  başka bir yerde yarıda kalırsa eski sürüm döner, sunucu eskisiyle açılır), güncelleme isteğini yazar, sunucuyu başlatıp
+  bu sürümle (ya da isteğin hemen getirdiği daha yenisiyle) açıldığını bekler (en çok 2 dk); veri ve ayarlar kalır. **27 Ekim 2026'dan önceki kurulumu güncellerken:** eski `ayarlar.env`'de
   `LAFFOGATO_URL=https://laffogato.net` satırı yorumsuz durur (o günkü örnek dosyadan gelir) ve güncelleme ayar
   dosyasına dokunmaz; site bağlantısı açık kalır. Açılış sırasına (`docs/03-ENTEGRASYON.md` §8) kadar satırı silin
   ya da başına `#` koyun.
@@ -470,6 +473,12 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   sorun çıkmış sürüm bir daha denenmez. İki dakikada alınmayan istek beklenmez (bekçi çalışmıyor), bekçi de
   10 dakikadan eski isteği yok sayar. Kurulum bitince kart yeni derlemeyi görür ve "Yenile" önerir. Denetim kaydına
   `guncelleme` düşer. Yalnız Windows kurulumunda (bekçi); git ile çalışan sunucuda düğme yok.
+- **Kurulumdan hemen sonra** (28 Kasım 2026): kurulum dosyası (`asilpos.nsi`) sunucuyu açmadan önce aynı dosyayı aynı
+  biçimde yazar (`{"at":<ms>,"by":"kurulum","simdi":false}`). Bekçi açılışta alır, kanala hemen sorar (ilk denetimin iki
+  dakikasını beklemez); daha yeni sürüm varsa indirir ve gün kapalıyken kurar, gün açıkken asla. Düğme gibi Merkez'in
+  tutmasını aşar (siteden kurulum da zaten kanalın son sürümünü kurar). Kimsenin basmadığı bu istek otomatik güncelleme
+  kapalıyken (`ASILPOS_GUNCELLEME=kapali`) yok sayılır (`bekci.mjs` `takeRequest`, `tests/kurulum-yenile.test.ts`).
+  Siteden kurulum istek yazmaz: kanalın son sürümünü zaten kurar.
 - **Uzaktan'dan Şimdi güncelle** (AsilPOS Uzaktan › Merkez › dükkân › "Şimdi güncelle"; `POST /api/merkez/simdi-guncelle`):
   Merkez dükkânın hedefini kanalın son derlemesi yapar ve isteğin anını (`guncelleIstek`) saklar. Kasa bunu bir sonraki
   nabzın yanıtında alır (en geç 5 dakika; ayrı istek yok) ve kasadaki düğmenin yazdığı `istek.json`'un aynısını yazar,
@@ -629,13 +638,15 @@ Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepe
 | | Kurulum dosyası | Siteden kurulum |
 |---|---|---|
 | Klasörler, görev, güvenlik duvarı, Uygulamalar kaydı | aynı | aynı |
-| Kısayollar | `node app\kurulum-yenile.mjs kisayollar --gruplar <seçilenler>` | aynı komut, iki grup (masaüstü, Başlangıç) |
-| Gün açıksa | sorar (sessiz kurulumda kurmaz) | sorar |
+| Kısayollar | `node app\kurulum-yenile.mjs kisayollar --gruplar <gruplar>`, hep iki grup (masaüstü, Başlangıç) | aynı komut, iki grup |
+| Soru | yok (sayfa yok); yalnız gün açıkken, veritabanı kopyası alınamayınca ve hatada | yalnız gün açıkken ve hatada |
+| Gün açıksa | sorar (sessiz kurulumda kurmaz, kod 3) | sorar (sessizde kurmaz) |
 | Çalışan sunucu | görevi kapatıp bitirir | aynı, ayrıca kurulum klasörünün Node'undan çalışan süreçleri (bekçi önce) durdurur |
-| Yeni sürüm | yan klasöre açılır, yer değiştirir, yazılamazsa eski döner | aynı |
-| Kurulu sürüm daha yeniyse | kurar (sürüm geri düşer) | kurmaz, söyleyip çıkar |
-| Aynı anda iki kurulum | denetlenmez | ikincisi söyleyip çıkar |
-| Sonunda | sunucunun bu derlemeyle açılmasını bekler | aynı (ya da daha yenisiyle); başarıda pencere 10 sn sonra kendiliğinden kapanır |
+| Yeni sürüm | yan klasöre açılır, yer değiştirir, yazılamazsa ya da kurulum yarıda kalırsa (`.onInstFailed`) eski döner, sunucu yeniden açılır | aynı |
+| Kurulu sürüm daha yeniyse | kurmaz, söyleyip çıkar (sessizde kod 5) | kurmaz, söyleyip çıkar |
+| Aynı anda iki kurulum | ikincisi söyleyip çıkar (aynı kilit `Global\AsilPOS-Kurulum`; sessizde kod 6) | aynı |
+| Kanaldaki daha yeni sürüm | sunucuyu açmadan önce güncelleme isteği yazar, bekçi hemen ister (§6) | gerekmez: kanalın son sürümünü kurar |
+| Sonunda | sunucunun bu derlemeyle (ya da daha yenisiyle) açılmasını bekler; başarıda kasa ekranı açılır, pencere kapanır | aynı; başarıda pencere 10 sn sonra kendiliğinden kapanır |
 | Güncelleme kanalı | aynı (`lafpos.laffogato.net/guncelleme`) | aynı |
 | Fark | programı içinde taşır (internetsiz kurar); kaldırıcı `Kaldir.exe` | programı indirir; kaldırıcı `LafPOS-Kaldir.ps1`; şube kodu (ladmin) |
 
@@ -668,6 +679,28 @@ klasörü `app\` olduğu için Windows klasörün adını değiştirmeyi reddett
   siler.
 
 Kafede bu kurulum dosyası gerekmez: kasanın içinden "Şimdi güncelle" aynı işi bekçinin güncelleyicisiyle yapar (§6).
+
+**Sorusuz kurulum (28 Kasım 2026).** Sahibin isteği: _"Windows'a kurarken hiçbir şey sormasın, tek seferde bitsin;
+güncelleme varsa onu da alsın."_ Kurulum dosyası (`asilpos.nsi`):
+
+- Hoş geldiniz, Bileşenler ve Bitiş sayfaları yok: Windows'un izin sorusundan sonra kurulum hemen başlar. Masaüstü
+  kısayolu, oturum açılınca kasa ekranı ve prizdeyken uyku kapalı her kurulumda açık (gizli bölümler; sessiz kurulum ve
+  CI bugünkü gibi). Başarıda kasa ekranı kendiliğinden açılır (Gezgin üzerinden, kullanıcı olarak) ve pencere kapanır;
+  sessiz kurulumda kasa ekranı açılmaz. Sunucu iki dakikada açılmazsa pencere iletiyle açık kalır. Tablet adresi ve örnek
+  PIN'ler kurulum notlarında (Başlat › AsilPOS › Kurulum notları) ve programın içinde.
+- Kalan sorular: gün açıkken "yine de şimdi kurulsun mu", veritabanı kopyası alınamadı (Tamam/İptal), hata kutuları ve
+  kaldırma onayı. Her kutunun sessiz kip yanıtı var.
+- Aynı anda tek kurulum: siteden kurulumla aynı adlı kilit (`Global\AsilPOS-Kurulum`), sahiplenilerek kurulur; tutan
+  varsa "Bu bilgisayarda başka bir AsilPOS kurulumu sürüyor" deyip çıkar. Kurulu derleme (`app\package.json`) bu dosyanın
+  derlemesinden büyükse kurmaz: "Bu bilgisayarda daha yeni bir AsilPOS kurulu; bir şey yapmanız gerekmez."
+- Yarıda kalırsa (kopya alınamadı, yer değiştirme olmadı ya da başka bir hata, `.onInstFailed`) yalnız bu kurulumun
+  taşıdığı klasörler geri alınır (bayraklarla: otomatik güncellemenin bıraktığı `app.eski` kurulu sürümün yerine geçmez),
+  görevi bu kurulum kapattıysa yeniden açılır. Hiçbir hata yolunda görev kapalı, sunucu durmuş kalmaz. Yer değiştirme
+  bittikten sonraki bir hatada yeni sürüm yerinde kalır, sunucu yeniden açılır (kök dosyaları yeni bekçi yeniler).
+- Sessiz kurulumun çıkış kodları: 0 kuruldu, 2 yarıda kaldı, 3 gün açık (kurmadı), 5 daha yeni sürüm kurulu (kurmadı),
+  6 başka kurulum sürüyor.
+- Kalan: kurulum tam yer değiştirirken elektrik kesilirse açılışta sunucu başlamaz (görev kapalı); kurulum yeniden
+  çalıştırılınca düzelir (`docs/KALANLAR.md` §4).
 
 **Bugün kurulu kasalarla uyum.** Hiçbir ad değişmedi: kısayolların adları (eski `Kaldir.exe` sabit adları siler),
 tarayıcı profilleri (`%LocalAppData%\LafPOS\chrome`, `…\LafPOS\edge`, müşteri ekranınınki), kilit adları, görev, veri klasörü,
@@ -704,6 +737,12 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
    süreçlerinden bulup durdurur ve tamamlar. Son olarak çalışma klasörü `app\` olan başka bir program açıkken kurucu
    sıfırdan farklı çıkar ama eski sürüm yerinde kalır (sağlık yanıt verir, `app\bekci.mjs` yerinde, görev açık ve
    çalışıyor); program kapanınca yeniden çalıştırılan kurucu tamamlar.
+7. Sorusuz kurulum: daha yeni kurulumun üzerine bu derlemenin (artık eski) kurulum dosyası sessiz çalışınca 5 koduyla
+   kurmadan çıkar (kurulu derleme, sunucunun süreçleri, görev aynen); kurulum dosyasının güncelleme isteği bekçiye ulaşır
+   (otomatik güncelleme kapalıyken yok sayıldığı günlükte); gün açıkken (patron girişiyle açılır) sessiz kurulum dosyası 3
+   koduyla, sessiz siteden kurulum 0 koduyla kurmadan çıkar. Önceki sürüm kurulmadan önce güncelleme kanalı yerel kanala
+   çevrilir: kurulumun isteği sitenin kanalına gitmez. İki kurulumun görev karşılaştırması görev okunamazsa geçmez (görev
+   Görev Zamanlayıcı nesnesinden okunur).
 
 Deneme ortamı kafeye benzetilir: adım pwsh'ta (PowerShell 7) koşar, pwsh'un `PSModulePath`'i oradan açılan Windows
 PowerShell 5.1'e geçince 5.1 kendi modüllerini (`Get-FileHash` gibi) yükleyemez; deneme bu değişkeni siler (kafede

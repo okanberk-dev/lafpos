@@ -21,9 +21,8 @@ NE KURULDU
 - Güç ayarlarında "ekranı kapatma: hiçbir zaman" seçin; otomatik oturum açma isteğe bağlı.
 - Ağ kartının güç tasarrufunu kapatın, yoksa Windows boşta kartı kapatır ve tabletler bir an bağlantıyı
   kaybeder: Aygıt Yöneticisi › Ağ bağdaştırıcıları › (Ethernet ya da Wi-Fi kartı) › Özellikler › Güç Yönetimi
-  › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretini kaldırın. Kurulumdaki "Prizdeyken
-  uyku kapalı" seçeneği uykuyu, hazırda bekletmeyi ve USB aygıtlarının (yazıcı, dokunmatik ekran) askıya
-  alınmasını zaten kapatır.
+  › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretini kaldırın. Kurulum prizdeyken
+  uykuyu, hazırda bekletmeyi ve USB aygıtlarının (yazıcı, dokunmatik ekran) askıya alınmasını zaten kapatır.
 
 TABLET VE TELEFONLAR (kafenin ağında)
 - Adres: http://<bu bilgisayarın IP adresi>:4000
@@ -53,6 +52,18 @@ GÜNCELLEME
 - Kapatmak için AsilPOS ayarları'na ASILPOS_GUNCELLEME=kapali satırını ekleyin.
 - Elle: GitHub › okanberk-dev/lafpos › Releases'tan son AsilPOS-Kurulum.exe'yi indirip çalıştırın. Önce
   veritabanının bir kopyası alınır, sonra sunucu yeni sürümle başlar.
+
+KURULUM DOSYASI NE SORAR
+- Yalnız Windows'un "değişiklik yapmasına izin verilsin mi" sorusu (Evet). Gerisi kendiliğinden: masaüstü
+  kısayolu, Windows'a girilince kasa ekranı ve prizdeyken uyku kapalı her kurulumda açık. Bitince kasa ekranı
+  açılır, kurulum penceresi kapanır.
+- Gün açıksa "yine de şimdi kurulsun mu" diye sorar (kurulum sırasında AsilPOS bir dakika kadar kapanır).
+  Veritabanının kopyası alınamazsa kopyasız devam edilsin mi diye sorar (seyrek).
+- Kurulum biter bitmez AsilPOS daha yeni sürüm var mı diye bakar; varsa onu da indirip gün kapalıyken kurar
+  (otomatik güncelleme kapalıysa bakmaz).
+- Bu bilgisayarda daha yeni bir AsilPOS kuruluysa bir şey değiştirmez. Başka bir AsilPOS kurulumu sürerken
+  açılırsa bunu söyleyip çıkar.
+- Yarıda kalırsa eski sürüm yerine döner ve sunucu yeniden açılır; veriler yerinde.
 
 İNTERNET YOKKEN
 - Kasa, masalar, ödeme ve yazarkasa internetsiz çalışır. lafmaliyet'e, siteye ve AsilPOS Uzaktan'a
