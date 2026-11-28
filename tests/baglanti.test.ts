@@ -44,6 +44,12 @@ describe('ayarlar dosyasının düzenlenmesi', () => {
   it('değer denetimi: adres http(s), gizli anahtarın en kısa boyu, boşluk ve satır sonu yok, boş değer kaldırır', () => {
     expect(checkConnValue(connField('LAFMALIYET_URL')!, ' https://ladmin.laffogato.net/ ')).toEqual({ value: 'https://ladmin.laffogato.net' });
     expect(checkConnValue(connField('LAFMALIYET_URL')!, 'ladmin.laffogato.net')).toHaveProperty('error');
+    // Yönetim konsolunun adresi panel adresi olarak yazılamaz (konsol kasaya uç sunmaz); başka alanda engel yok
+    expect(checkConnValue(connField('LAFMALIYET_URL')!, 'https://yonetim.laffogato.net')).toEqual({
+      error: 'Adres: bu yönetim konsolunun adresi; panelin adresini yazın (örnek https://ladmin.laffogato.net)',
+    });
+    expect(checkConnValue(connField('LAFMALIYET_URL')!, 'https://Yonetim.ornek.com/')).toHaveProperty('error');
+    expect(checkConnValue(connField('LAFFOGATO_URL')!, 'https://yonetim.ornek.com')).toEqual({ value: 'https://yonetim.ornek.com' });
     expect(checkConnValue(connField('ASILPOS_CLOUD_SECRET')!, 'kisa')).toEqual({ error: 'Anahtar: en az 32 karakter' });
     expect(checkConnValue(connField('TOKENX_CLIENT_ID')!, 'a b')).toHaveProperty('error');
     expect(checkConnValue(connField('TOKENX_CLIENT_ID')!, '  ')).toEqual({ value: null });
