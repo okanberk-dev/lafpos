@@ -300,11 +300,11 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     expect((nsi.match(/CreateShortcut /g) ?? []).length).toBe(1);
     expect(nsi).toContain('CreateShortcut "$SMPROGRAMS\\AsilPOS\\AsilPOS\'u kaldır.lnk" "$INSTDIR\\Kaldir.exe"');
     expect(nsi).not.toContain('WriteINIStr');
-    expect(between(nsi, 'Section "Masaüstüne kısayol" SecDesktop', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,masaustu"');
-    expect(between(nsi, 'Section "Oturum açılınca kasa ekranını aç" SecStartup', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,baslangic"');
-    // Kısayol bölümü seçimlerden (ve güç ayarından) sonra; kısayollar sunucudan önce
+    expect(between(nsi, 'Section "-Masaüstüne kısayol" SecDesktop', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,masaustu"');
+    expect(between(nsi, 'Section "-Oturum açılınca kasa ekranını aç" SecStartup', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,baslangic"');
+    // Kısayol bölümü üç seçenekten (ve güç ayarından) sonra; kısayollar sunucudan önce
     const son = between(nsi, 'Section "-Kisayollar ve sunucu" SecSon', 'SectionEnd');
-    expect(nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon')).toBeGreaterThan(nsi.indexOf('Section "Prizdeyken uyku kapalı" SecPower'));
+    expect(nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon')).toBeGreaterThan(nsi.indexOf('Section "-Prizdeyken uyku kapalı" SecPower'));
     expect(son.indexOf('kurulum-yenile.mjs" kisayollar --gruplar "$GRUPLAR"')).toBeLessThan(son.indexOf('/Run /TN'));
     // Siteden kurulum aynı komutu iki grupla
     const web = read(`${K}web-kurucu.ps1`);
@@ -329,11 +329,11 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     expect(dur).toBeLessThan(yedek);
     expect(yedek).toBeLessThan(tasi);
     expect(main).toContain('SetOutPath "$INSTDIR\\kurulum.gecici"');
-    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\app" "$INSTDIR\\app"');
-    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\node" "$INSTDIR\\node"');
-    expect(main.slice(main.indexOf('${If} $R8 != 0'))).toMatch(/Call RollbackFiles[\s\S]*Call RestoreServer[\s\S]*Abort/);
+    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\app" "$INSTDIR\\app" $YENI_APP');
+    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\node" "$INSTDIR\\node" $YENI_NODE');
+    expect(main.slice(main.indexOf('${If} $R8 != 0'))).toMatch(/^\$\{If\} \$R8 != 0\n {4}Call GeriAl\n[\s\S]*?Abort/);
     // Sunucu yeni durdu: yer değiştirme 10 sn'ye kadar yeniden denenir
-    const tasiMakro = between(nsi, '!macro Tasi FROM TO', '!macroend');
+    const tasiMakro = between(nsi, '!macro Tasi FROM TO BAYRAK', '!macroend');
     expect(tasiMakro).toContain('${If} $R7 >= 10');
     expect(tasiMakro).toContain('Sleep 1000');
     const geri = between(nsi, 'Function RollbackFiles', 'FunctionEnd');
@@ -342,9 +342,10 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     // Eski düzen (önce sil, sonra aç) yok: yarıda kalan kurulum uygulamasız bırakmaz
     expect(main).not.toContain('RMDir /r "$INSTDIR\\app"\n');
     expect(main).toContain('File "${STAGE}${SEP}kok${SEP}*"');
-    // Yeni sürüm: sağlık ucu bu derlemeyi söyleyene dek (en çok 2 dk)
+    // Yeni sürüm: sağlık ucu bu derlemeyi ya da daha yenisini söyleyene dek (en çok 2 dk; siteden kurulum da -ge)
     const son = between(nsi, 'Section "-Kisayollar ve sunucu" SecSon', 'SectionEnd');
-    expect(son).toContain('/api/health).build -eq ${BUILD}');
+    expect(son).toContain('if ([long](Invoke-RestMethod -UseBasicParsing -TimeoutSec 2 -Uri http://127.0.0.1:${PORT}/api/health).build -ge ${BUILD}) { exit 0 }');
+    expect(nsi).not.toContain('.build -eq ${BUILD}');
     expect(nsi).toContain('!ifndef BUILD');
     expect(read(`${K}derle.mjs`)).toContain('`-DBUILD=${BUILD.build}`');
   });
@@ -475,7 +476,8 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
       expect(t, ad).not.toContain('kapanırsa yeniden açılır');
       expect(t, ad).not.toContain('kapanırsa 15 saniyede');
     }
-    expect(metinler.nsi).toContain('kasa ekranı tam ekran açılır; kapatınca kapanır, AsilPOS Kasa kısayoluyla yeniden açılır.');
+    // Kurulum dosyasında seçenek sayfası yok (28 Kasım 2026): açıklama metni de yok
+    expect(metinler.nsi).not.toContain('MUI_DESCRIPTION_TEXT');
     expect(metinler.benioku).toContain('Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz');
     expect(metinler.readme).toContain('kapatınca kapanır (müşteri ekranı da)');
     expect(metinler.ag).toContain('Kasa penceresi kapatılınca kapanır, kendiliğinden yeniden açılmaz');

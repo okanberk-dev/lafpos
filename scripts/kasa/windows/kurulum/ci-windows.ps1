@@ -4,7 +4,7 @@
 #   surecler     kasa penceresi, musteri ekrani (Chrome/Edge ana surecleri) ve kasa bekcileri (powershell -Bekci)
 #   on           on plandaki pencere (surec ve baslik) ve oturum (0: etkilesimsiz)
 #   kayit        Uygulamalar listesindeki kayit
-#   gorev        "LafPOS Sunucu" gorevinin XML'i (kayit tarihi ve yazar disinda)
+#   gorev        "LafPOS Sunucu" gorevinin XML'i (kayit tarihi ve yazar disinda; Gorev Zamanlayici nesnesinden)
 #   gorev-durum  gorev acik mi, calisiyor mu (Gorev Zamanlayici nesnesinden; dil ve konsol kod sayfasindan bagimsiz)
 #   sunucu       -Klasor'deki Node'dan calisan surecler (bekci, sunucu): pid ve komut satiri
 #   duvar        guvenlik duvari kurallari
@@ -110,9 +110,20 @@ switch ($Islem) {
     Json $o
   }
   'gorev' {
-    $r = Native (Join-Path $env:SystemRoot 'System32\schtasks.exe') @('/Query', '/TN', 'LafPOS Sunucu', '/XML') # eski-ad: gorev adi
-    if ($r.kod -ne 0) { Json $null; break }
-    $x = $r.cikti -replace '<Date>[^<]*</Date>', '' -replace '<Author>[^<]*</Author>', '' -replace '<URI>[^<]*</URI>', ''
+    # Gorev Zamanlayici nesnesinden (gorev-durum gibi; dil ve konsol kod sayfasindan bagimsiz), olmazsa schtasks. Ikisi de
+    # okuyamazsa null: karsilastirma (ci-kurulum.mjs compareInstalls) bunu hata sayar
+    $x = $null
+    try {
+      $zs = New-Object -ComObject Schedule.Service
+      $zs.Connect()
+      $x = [string]$zs.GetFolder('\').GetTask('LafPOS Sunucu').Xml # eski-ad: gorev adi
+    } catch { $x = $null }
+    if (-not $x) {
+      $r = Native (Join-Path $env:SystemRoot 'System32\schtasks.exe') @('/Query', '/TN', 'LafPOS Sunucu', '/XML') # eski-ad: gorev adi
+      if ($r.kod -eq 0) { $x = $r.cikti }
+    }
+    if (-not $x) { Json $null; break }
+    $x = $x -replace '<Date>[^<]*</Date>', '' -replace '<Author>[^<]*</Author>', '' -replace '<URI>[^<]*</URI>', ''
     Json $x
   }
   'gorev-durum' {

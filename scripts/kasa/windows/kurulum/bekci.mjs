@@ -260,9 +260,14 @@ watchFile(ENV_FILE, { interval: WATCH_MS }, (cur, prev) => {
 
 /**
  * "Şimdi güncelle" (Yönetim › Ayarlar ve yedek): sunucu guncelleme\istek.json yazar, bekçi 2 sn'de bir bakar, dosyayı
- * siler ve isteği güncelleyiciye iletir. 10 dakikadan eski istek (bekçi kapalıyken yazılmış) yok sayılır
+ * siler ve isteği güncelleyiciye iletir. 10 dakikadan eski istek (bekçi kapalıyken yazılmış) yok sayılır.
+ * Kurulum dosyası da (asilpos.nsi) sunucuyu açmadan önce aynı biçimde yazar (`by: 'kurulum'`, hep `simdi: false`):
+ * kurulum biter bitmez kanaldaki daha yeni sürüm iki dakika beklenmeden istenir, gün kapalıyken kurulur. Kimsenin
+ * basmadığı bu istek otomatik güncelleme kapalıyken (ayarlar.env ASILPOS_GUNCELLEME=kapali) yok sayılır; elle istek
+ * kapalıyken de çalışır
  */
 const REQUEST_FILE = join(HOME, 'guncelleme', 'istek.json');
+const KURULUM_ISTEGI = 'kurulum';
 function takeRequest() {
   if (!updater || stopping || !existsSync(REQUEST_FILE)) return;
   let req = null;
@@ -274,6 +279,15 @@ function takeRequest() {
   rmSync(REQUEST_FILE, { force: true });
   const fresh = req && typeof req.at === 'number' && Date.now() - req.at < 10 * 60_000;
   if (!fresh) return;
+  if (req.by === KURULUM_ISTEGI) {
+    if (updateMode(envFor()) === 'kapali') {
+      log('[bekçi] kurulumun güncelleme isteği yok sayıldı: otomatik güncelleme kapalı');
+      return;
+    }
+    log('[bekçi] kurulumun güncelleme isteği: yeni sürüm hemen denetleniyor');
+    updater.requestNow({ force: false }).catch((e) => log(`[güncelleme] istek işlenemedi: ${e instanceof Error ? e.message : e}`));
+    return;
+  }
   log(`[bekçi] elle güncelleme isteği${req.simdi === true ? ' (şimdi kur)' : ''}`);
   updater.requestNow({ force: req.simdi === true }).catch((e) => log(`[güncelleme] istek işlenemedi: ${e instanceof Error ? e.message : e}`));
 }
