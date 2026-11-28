@@ -110,7 +110,7 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
       'Start-CustomerDisplay $displayBase',
       'if (-not $acik -and $hazir) { if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi } }',
       'Stop-Splash $splash',
-      'Add-PrepShortcut',
+      'Remove-UserPrepShortcut',
     ];
     const at = order.map((t) => ac.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(at)).toBe(true);
@@ -119,6 +119,46 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(ac.slice(ac.indexOf('} finally {'))).toContain('Stop-Splash $splash');
     // Yazıcı adımı işlev oldu: içinde script'i bitiren exit yok
     expect(between(ps1, 'function Send-Printers', '# Sunucu IPv4 dinler')).not.toMatch(/\bexit\b/);
+  });
+
+  it('eski kasa programı sorusu açılışta çıkmaz (sahibin isteği, 28 Kas 2026); kullanıcı menüsündeki ikinci "Kasa hazırlığı" silinir', async () => {
+    // Kasa programı hazırlık betiğini hiç açmaz: haftalık tetik ve işaret dosyası yok, kısayol yazmaz
+    for (const t of ['SadeceModpos', 'modpos-uyari', 'kasa-hazirla.ps1', 'Add-PrepShortcut']) expect(ps1, t).not.toContain(t);
+    const sil = between(ps1, 'function Remove-UserPrepShortcut', '# Yazicilar:');
+    expect(sil).toContain("foreach ($ad in @('AsilPOS', $EskiAd)) {");
+    expect(sil).toContain("$lnk = Join-Path $menu 'Kasa hazirligi.lnk'");
+    expect(sil).toContain('Remove-Item -LiteralPath $lnk -Force');
+    // Menü klasörü yalnız boşaldıysa silinir; hata kasayı durdurmaz
+    expect(sil).toContain('if (-not @(Get-ChildItem -LiteralPath $menu -Force).Count) { Remove-Item -LiteralPath $menu -Force }');
+    expect(sil).toContain('} catch { }');
+    expect(sil).not.toMatch(/CreateShortcut|Start-Process|\bexit\b/);
+    // Kasa kısayolu (-Ac) ve 27 Kasım öncesinin kısayolu (kipsiz) eski kopyayı temizler
+    expect(ac).toContain('Remove-UserPrepShortcut');
+    expect(ps1.slice(ps1.indexOf('# Kipsiz:'))).toContain('Remove-UserPrepShortcut');
+    // Ortak menüdeki "Kasa hazırlığı" kalır: koşulsuz, her kurulumda ve güncellemede yazılır
+    const { shortcutSpec } = await load('kurulum-yenile.mjs');
+    const kur = `C:\\Program Files\\${KURULUM_KLASORU}`;
+    const hazirlik = shortcutSpec(kur, 'C:\\Windows').filter((k: any) => k.ad === 'AsilPOS\\Kasa hazırlığı.lnk');
+    expect(hazirlik).toHaveLength(1);
+    expect(hazirlik[0].klasor).toBe('CommonPrograms');
+    expect(hazirlik[0].grup).toBeUndefined();
+    expect(hazirlik[0].kosul).toBeUndefined();
+    expect(hazirlik[0].arguman).toBe(`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${kur}\\app\\kasa-hazirla.ps1"`);
+  });
+
+  it('kasa hazırlığı eski kasa programını sormaz; eski sürümün -SadeceModpos çağrısı hiçbir şey yapmadan çıkar', () => {
+    const hazirla = read(`${K}kasa-hazirla.ps1`);
+    // Anahtar kabul edilir (parametre bilinmiyor hatası yok) ve pencere, izin isteği ya da ayardan önce çıkılır
+    expect(hazirla).toContain('param([switch]$SadeceModpos)');
+    const cik = hazirla.indexOf('if ($SadeceModpos) { exit 0 }');
+    expect(cik).toBeGreaterThan(hazirla.indexOf('param([switch]$SadeceModpos)'));
+    for (const t of ['Add-Type', 'MessageBox', '-Verb RunAs', 'powercfg']) expect(cik, t).toBeLessThan(hazirla.indexOf(t));
+    expect(hazirla.match(/\$SadeceModpos/g)).toHaveLength(2);
+    for (const t of ['Get-ModposStartup', 'Uyar-Modpos', 'ms-settings:startupapps', 'gafdigi', 'CurrentVersion\\Run']) expect(hazirla, t).not.toContain(t);
+    // Dört soru ve özet kalır
+    expect(hazirla.match(/if \(Sor "/g)).toHaveLength(4);
+    expect(hazirla).toContain('Bilgi ("Tamamlandi.');
+    expect(/^[\x00-\x7f]*$/.test(readFileSync(new URL(`${K}kasa-hazirla.ps1`, root), 'latin1'))).toBe(true);
   });
 
   it('açılış penceresi kendi iş parçacığında (bekleme onu dondurmaz), Türkçe metin ASCII dosyada', () => {
@@ -413,11 +453,40 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
     const ag = read('src/pages/admin/NetworkAdmin.tsx');
     expect(ag).not.toContain('Chrome menüsünden');
     expect(ag).toContain('kişi menüsündeki “Ana ekrana ekle” cihaza göre yolu söyler');
-    // Bekçi kapanan pencereyi 15 sn'de açar: notlar Alt+F4'ü çıkış diye vermez, ekrandaki düğmenin adını verir
+    // Bakım arası ekrandaki düğmenin adıyla anılır; notlar Alt+F4'ü çıkış diye vermez
     expect(metinler.benioku).not.toContain('Çıkmak için Alt+F4');
     expect(metinler.benioku.replace(/\s+/g, ' ')).toContain('Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar › 15 dakika bakım arası');
     expect(ag).toContain('<Card title="Bu bilgisayar">');
     expect(ag).toMatch(/\n\s*15 dakika bakım arası\n/);
+  });
+
+  it('kapatınca kapanır (#195): notlar, kurulum ve ekran "15 saniyede yeniden açılır" demez; güncelleme denetimi koddaki aralıkla', async () => {
+    const tek = (s: string) => s.replace(/\s+/g, ' ');
+    const metinler = {
+      readme: tek(read('README.md')),
+      benioku: tek(read(`${K}BENIOKU.txt`)),
+      nsi: tek(read(`${K}asilpos.nsi`)),
+      ag: tek(read('src/pages/admin/NetworkAdmin.tsx')),
+      bakim: tek(read('server/lib/kasa-bakim.ts')),
+      kasa: tek(read('docs/05-KASA-BILGISAYARI.md')),
+    };
+    for (const [ad, t] of Object.entries(metinler)) {
+      expect(t, ad).not.toMatch(/15 (saniye|sn)[^.]{0,20} yeniden açılır/);
+      expect(t, ad).not.toContain('kapanırsa yeniden açılır');
+      expect(t, ad).not.toContain('kapanırsa 15 saniyede');
+    }
+    expect(metinler.nsi).toContain('kasa ekranı tam ekran açılır; kapatınca kapanır, AsilPOS Kasa kısayoluyla yeniden açılır.');
+    expect(metinler.benioku).toContain('Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz');
+    expect(metinler.readme).toContain('kapatınca kapanır (müşteri ekranı da)');
+    expect(metinler.ag).toContain('Kasa penceresi kapatılınca kapanır, kendiliğinden yeniden açılmaz');
+    expect(metinler.ag).not.toContain('Süre bitince kendiliğinden açılır');
+    // Güncelleme denetimi guncelle.mjs'teki aralık (3 dk); "yarım saat" yazmaz
+    const { CHECK_EVERY_MS, FIRST_CHECK_MS } = await load('guncelle.mjs');
+    expect([FIRST_CHECK_MS, CHECK_EVERY_MS]).toEqual([2 * 60_000, 3 * 60_000]);
+    expect(metinler.readme).toContain('AsilPOS 3 dakikada bir yeni sürüm var mı diye bakar');
+    expect(metinler.benioku).toContain('AsilPOS 3 dakikada bir yeni sürüm var mı diye bakar');
+    expect(metinler.kasa).toContain("Açılıştan 2 dk sonra, sonra 3 dk'da bir");
+    for (const [ad, t] of Object.entries(metinler)) expect(t, ad).not.toMatch(/yarım saatte bir yeni sürüm|30 dk'da bir\. Yeni derleme/);
   });
 
   it('kullanıcı menüsünde yalnız yol varken; olay ilk iş yakalanır, kasa bilgisayarında saklanmaz', () => {

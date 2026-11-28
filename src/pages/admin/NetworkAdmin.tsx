@@ -126,8 +126,9 @@ function RemoteControlCard() {
 }
 
 /**
- * Kasa penceresinin bakım arası (server/lib/kasa-bakim.ts): kasa bekçisi kapatılan kasa penceresini 15 sn içinde yeniden
- * açar. Bakım için (Windows ayarı, yazıcı kurulumu) 15 dakika açmaz; süre bitince ya da "Bitir"le yine açar
+ * Kasa penceresinin bakım arası (server/lib/kasa-bakim.ts): kapatılan kasa penceresi kapalı kalır (#195, 28 Kas 2026;
+ * kasa bekçisi yeniden açmaz). Bekçi yalnız kasa kısayolunun bıraktığı açma isteğini sunucu gelince yerine getirir;
+ * bakım arasında (15 dakika) bunu da yapmaz, süre bitince ya da "Bitir"le yine yapar
  */
 function KasaBakim({ until }: { until: number | null }) {
   const qc = useQueryClient();
@@ -135,7 +136,7 @@ function KasaBakim({ until }: { until: number | null }) {
   const m = useMutation({
     mutationFn: (on: boolean) => post<{ kasaBakim: number | null }>('/admin/kasa-bakim', { on }),
     onSuccess: (r) => {
-      toast.ok(r.kasaBakim ? 'Kasa penceresi 15 dakika yeniden açılmayacak' : 'Bakım arası bitti; kasa penceresi 15 saniye içinde yeniden açılır');
+      toast.ok(r.kasaBakim ? 'Bakım arası başladı: kasa penceresi 15 dakika kendiliğinden açılmaz' : 'Bakım arası bitti; kasa penceresi masaüstündeki AsilPOS Kasa ile açılır');
       void qc.invalidateQueries({ queryKey: ['admin', 'network'] });
     },
     onError: (e) => toast.err(errorMessage(e)),
@@ -145,8 +146,8 @@ function KasaBakim({ until }: { until: number | null }) {
       <p className={LABEL}>Bakım</p>
       <p className={HINT}>
         {active
-          ? `Bakım arası sürüyor (bitiş ${fmtTime(until!)}): kasa penceresi kapatılabilir, bekçi yeniden açmaz. Süre bitince kendiliğinden açılır`
-          : 'Kasa penceresi kapatılınca 15 saniye içinde yeniden açılır. Bilgisayarda bakım yapacaksanız (Windows ayarı, yazıcı kurulumu) aşağıdan 15 dakikalık bakım arası verin'}
+          ? `Bakım arası sürüyor (bitiş ${fmtTime(until!)}): kasa penceresi kendiliğinden açılmaz. Açmak için masaüstündeki AsilPOS Kasa’ya basın`
+          : 'Kasa penceresi kapatılınca kapanır, kendiliğinden yeniden açılmaz; masaüstündeki AsilPOS Kasa ile açılır. Bilgisayarda bakım yapacaksanız (Windows ayarı, yazıcı kurulumu) 15 dakikalık bakım arası verin: bu sürede kasa penceresi kendiliğinden açılmaz'}
       </p>
       <div className="flex flex-wrap gap-2 max-sm:[&>*]:grow">
         {active ? (

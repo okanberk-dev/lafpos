@@ -339,7 +339,9 @@ describe('lafmaliyet geçişi', () => {
       tone: 'idle',
       text: "lafmaliyet 3 Kasım gününü saymıyor (geçiş günü 10 Kasım): deneme olarak saklandı, hesaplara girmez",
     });
-    expect(answerText({ date: '2026-11-03', at: 0, counted: false, switchDay: null }).text).toMatch(/geçiş günü seçilmedi, kasa ModPOS/);
+    expect(answerText({ date: '2026-11-03', at: 0, counted: false, switchDay: null }).text).toBe(
+      'lafmaliyet 3 Kasım gününü saymıyor: geçiş günü seçilmedi, AsilPOS henüz asıl kasa sayılmıyor. Gün deneme olarak saklandı, hesaplara girmez',
+    );
     expect(answerText({ date: '2026-11-12', at: 0, counted: true, switchDay: '2026-11-10' })).toEqual({ tone: 'ok', text: "12 Kasım lafmaliyet'te sayılıyor (geçiş günü 10 Kasım)" });
     expect(answerText({ date: '2026-11-12', at: 0 }).text).toMatch(/geçiş gününü bildirmedi/);
     expect(pushToast({ date: '2026-11-03', at: 0, counted: false, switchDay: null })).toMatch(/deneme/);

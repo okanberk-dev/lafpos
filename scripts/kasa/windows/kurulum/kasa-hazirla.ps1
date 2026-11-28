@@ -1,8 +1,13 @@
 # AsilPOS kasa hazirligi (Baslat > AsilPOS > Kasa hazirligi): bilgisayar yeniden acilinca her sey kendiliginden calissin
 # diye istege bagli Windows ayarlari. Her adim once sorulur (Evet / Hayir); hicbir sey sormadan degismez, hicbir parola
-# saklanmaz. -SadeceModpos: yalniz eski "Modpos & Gafdigi POS" acilista basliyor mu bakar ve uyarir (silmez).
-# Betik guncellemeyle gelir (app\). Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
+# saklanmaz. Betik guncellemeyle gelir (app\). Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
+#
+# Eski kasa programi uyarisi kalkti (28 Kas 2026, sahibin istegi): kasa acilisinda haftada bir cikan "eski kasa programi
+# bilgisayar acilinca hala basliyor" sorusu da, buradaki ayni soru da. -SadeceModpos o haftalik cagrinin anahtariydi:
+# eski surumden kalan bir cagri (guncelleme anina denk gelen eski kasa programi) hata gostermesin diye kabul edilir,
+# betik hicbir sey yapmadan cikar.
 param([switch]$SadeceModpos)
+if ($SadeceModpos) { exit 0 }
 Add-Type -AssemblyName System.Windows.Forms
 
 function Sor([string]$metin) {
@@ -10,35 +15,6 @@ function Sor([string]$metin) {
 }
 function Bilgi([string]$metin) {
   [System.Windows.Forms.MessageBox]::Show($metin, 'AsilPOS kasa hazirligi', 'OK', 'Information') | Out-Null
-}
-
-# Acilista baslayan eski kasa programi (Baslangic klasorleri ve Run kayitlari): yalniz listelenir, silinmez
-function Get-ModposStartup {
-  $bul = @()
-  $klasorler = @((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'), (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'))
-  foreach ($k in $klasorler) {
-    if (Test-Path $k) { Get-ChildItem -LiteralPath $k -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'modpos|gafdigi' } | ForEach-Object { $bul += $_.BaseName } }
-  }
-  foreach ($r in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run')) {
-    try {
-      $p = Get-ItemProperty -Path $r -ErrorAction Stop
-      foreach ($n in $p.PSObject.Properties) { if (($n.Name + ' ' + $n.Value) -match 'modpos|gafdigi') { $bul += $n.Name } }
-    } catch { }
-  }
-  return ($bul | Select-Object -Unique)
-}
-
-function Uyar-Modpos {
-  $liste = @(Get-ModposStartup)
-  if (-not $liste.Count) { return $false }
-  $ac = Sor ("Eski kasa programi bilgisayar acilinca hala basliyor:`n`n  " + ($liste -join "`n  ") + "`n`nAsilPOS'a tam gectiyseniz acilista baslamasini kapatmaniz onerilir (program silinmez). Windows'un 'Baslangic uygulamalari' ekrani acilsin mi?")
-  if ($ac) { Start-Process 'ms-settings:startupapps' }
-  return $true
-}
-
-if ($SadeceModpos) {
-  Uyar-Modpos | Out-Null
-  exit 0
 }
 
 # Ayarlarin cogu yonetici ister: gerekirse yonetici olarak yeniden acilir (Windows izin sorar)
@@ -75,5 +51,4 @@ if (Sor "Bilgisayar acilinca otomatik oturum acilsin mi? Windows'un kendi 'Kulla
   Start-Process 'netplwiz.exe'
   $yapilan += 'Otomatik oturum: Windows ekrani acildi'
 }
-if (Uyar-Modpos) { $yapilan += 'Eski kasa programi uyarisi gosterildi' }
 Bilgi ("Tamamlandi.`n`n" + ($(if ($yapilan.Count) { $yapilan -join "`n" } else { 'Hicbir ayar degismedi.' })) + "`n`nAsilPOS sunucusu, kasa ekrani ve musteri ekrani bilgisayar acilinca kendiliginden baslar.")

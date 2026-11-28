@@ -66,10 +66,7 @@ Son güncelleme: 28 Kasım 2026.
   (`src/lib/print.tsx` `BANKA_KIYAS_BASLIGI`); eski kasaların bastığı eski başlık `shared/eski-adlar.ts`
   `ESKI_BANKA_KIYAS_BASLIGI`'nde belgeli. ladmin'in kâğıt okuyucusu lafmaliyet#166 ile ikisini de tanır; bu sürüm ondan
   önce kurulursa yalnız yapay zekâ okuması kullanılamadığında kodla okuma kıyas satırlarını banka sayar (düşük güvenli
-  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir. Kalan (lafmaliyet'te, bu repoda değil): yapay zekâ
-  okumasının istemi (`src/lib/photo-read/prompts.ts`) kıyas başlığını hâlâ yalnız eski adla anıyor ve
-  `src/lib/asilpos/eski-adlar.ts` notu "yeni kasa da eski adla basar" diyor; istem yeni başlığı ("PAVO - ASILPOS
-  KARŞILAŞTIRMA") anıp eski kasaların eski adla bastığını söylemeli.
+  tutar, kişi bakar). Bu yüzden lafmaliyet#166 önce birleşir. lafmaliyet'in fotoğraf okuma istemi de iki başlığı tanır.
 - **Şube anahtarı (27 Kasım 2026):** şube başına ayrı AsilPOS Uzaktan anahtarı, isteğe bağlı (`docs/07-UZAKTAN-ERISIM.md`
   §6). Vercel'de `ASILPOS_CLOUD_SECRET_<ŞUBE>`, kasada Bağlantı bilgileri › AsilPOS Uzaktan › Şube anahtarı. O şubenin
   platform anahtarları, restoranının paket gelen kutusu, dükkânının özeti, raporları ve bulut yedeği, uzaktan yönetim
@@ -90,6 +87,14 @@ Son güncelleme: 28 Kasım 2026.
 - **28 Kasım 2026: kasa penceresi kapatınca kapanır** (sahibin isteği). Bekçi (sürüm 6) kullanıcının kapattığı kasa
   penceresini artık yeniden açmaz ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla açılır. Kısayol
   sunucuyu beklerken açma isteği bırakır, sunucu gelince pencereyi bekçi açar (`docs/05-KASA-BILGISAYARI.md` §3).
+
+- **28 Kasım 2026: eski kasa programı sorusu açılışta çıkmaz** (sahibin isteği: "ModPOS kısımlarını kaldır"). Kasa
+  programı haftada bir "Eski kasa programı bilgisayar açılınca hâlâ başlıyor" kutusunu açmaz; elle açılan Kasa
+  hazırlığı da eski kasa programını sormaz (dört ayar sorusu kalır). Kullanıcı Başlat menüsündeki simgesiz ikinci "Kasa hazirligi" silinir,
+  ortak menüdeki kalır. Ayarlar › İlk Z numarası ipucu ve lafmaliyet durum cümlesi eski programın adını anmaz;
+  Entegrasyon'daki "ModPOS dönemi" bölümü yalnız o döneme ait gün ya da hata varken görünür. Raporlardaki "ModPOS"
+  etiketi ve geçmiş günler aynen kalır. Kurulum ve yardım metinleri "kapanırsa 15 saniyede yeniden açılır" yerine
+  "kapatınca kapanır" diyor; güncelleme denetimi 3 dakikada bir (eskiden "yarım saat" yazıyordu).
 
 - **28 Kasım 2026: Token kablolu kurulumu "Cihaz görünmedi; Token sürücüsü kuruluyor"da kalmaz.** Token'ın sürücü
   aracı pencereli bir sihirbazmış; kasa onu görünmez oturumda çalıştırıp bekliyordu, sürücü hiç kurulmuyordu. Artık

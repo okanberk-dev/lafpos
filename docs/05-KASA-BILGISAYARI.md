@@ -269,7 +269,7 @@ penceresi (`--app=<adres> --start-fullscreen --kiosk-printing`, profil `…\LafP
 yok); adres çubuğu yine yok, F11 tam ekrandan çıkar. Chrome kiosk kipinde kalır (Chrome'un kiosk'u kalıcı profille).
 Kullanıcı ortam değişkeni `ASILPOS_TARAYICI=edge` Chrome kurulu olsa da Edge'i seçer.
 
-Oturum, sepet ve tercihler pencere kapanıp açılınca (kasiyer kapatır, bekçi açar; ya da kısayol) yerinde kalır. Yerel
+Oturum, sepet ve tercihler pencere kapanıp açılınca (kasiyer kapatır, kısayolla açılır) yerinde kalır. Yerel
 depoyu Chromium (Chrome da Edge de) diske toplu yazar: değişiklikten yaklaşık 5 sn sonra. Pencere düzgün kapanınca
 hepsi yazılır; elektrik kesilir ya da tarayıcı zorla kapatılırsa yalnız son birkaç saniyenin değişikliği kaybolabilir
 (Chrome'da da böyle). Windows CI bunu gerçek Edge'le dener (§9): sayfanın yazdığı değer profilin diskine
@@ -315,9 +315,10 @@ kullanıcı hesabı önerilir.
 Windows kurulumunda kasa bekçisi (`app\kasa-yazici.ps1 -Bekci`) kapatılan kasa penceresini yeniden açmaz (28 Kasım 2026'dan
 beri; önceden 15 sn içinde açıyordu, §3 "Kapatınca kapanır"); yalnız kasa kısayolunun bıraktığı açma isteğini yerine getirir.
 Bakım için (Windows ayarı, yazıcı kurulumu, başka bir program) Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
-**15 dakika bakım arası** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca pencereyi açmaz
-(`GET /api/kasa/bakim`, oturumsuz, yalnız bu bilgisayardan; sunucuya ulaşılamazsa ara yok sayılır). Süre bitince ya da
-**Bakımı bitir**le yine açar; kalıcı kapatma yoktur. Denetim kaydına yazılır. Kasa kısayolu (`-Ac`) aradan etkilenmez.
+**15 dakika bakım arası** (`ayar.yonet`; `POST /api/admin/kasa-bakim`): bekçi o süre boyunca kısayolun bekleyen açma
+isteğini de yerine getirmez, pencere sunucu gelince kendiliğinden açılmaz (`GET /api/kasa/bakim`, oturumsuz, yalnız bu
+bilgisayardan; sunucuya ulaşılamazsa ara yok sayılır). Süre bitince ya da **Bakımı bitir**le bekleyen istek yine yerine
+getirilir; kalıcı kapatma yoktur. Denetim kaydına yazılır. Kasa kısayolu (`-Ac`) aradan etkilenmez.
 Bekçi pencereyi arka planda açar ama öne getirmez (başka bir programın üstüne fırlamaz).
 
 **Bekçi sürümü 5 ve kendini yenileme (27 Kasım 2026).** Bekçi diskteki betiğin özetini 15 sn'de bir karşılaştırır;
@@ -444,9 +445,9 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
 - **Kasadaki güncelleyici** (`guncelle.mjs`, bekçinin içinde): sırayla
   `https://lafpos.laffogato.net/guncelleme/surum.json`, `https://lafpos.vercel.app/guncelleme/surum.json`; yalnız
   HTTPS, başka hosta yönlendirme reddedilir (better-sqlite3'ün GitHub dosyası yalnız GitHub'ın depolama hostlarına).
-  Açılıştan 2 dk sonra, sonra 30 dk'da bir. Yeni derleme varsa zip'i indirip boyunu ve SHA-256'sını doğrular; Node
-  ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki özetle
-  doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
+  Açılıştan 2 dk sonra, sonra 3 dk'da bir (`CHECK_EVERY_MS`). Yeni derleme varsa zip'i indirip boyunu ve SHA-256'sını
+  doğrular; Node ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki
+  özetle doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
 - **Kurulum yalnız açık iş günü yokken:** güncelleyici sunucuya `GET /api/kasa/guncelleme-durumu` ile sorar
   (oturumsuz, yalnız bu bilgisayardan: yerel ağ ve Tailscale 403; yanıtta yalnız `dayOpen`, Merkez'in hedefi
   `merkez`, satış/ödeme sürüyor mu `mesgul` ve cihazda banka gün sonu sürüyor mu `eod`). Gün açıksa 5 dk'da
@@ -687,7 +688,7 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
    ayırt edilir.
 3. Güncellemeden önce açılmış pencere kendiliğinden yeni sürüme geçer; kısayollar programa döner; kapanan pencereyi yeni
    kısayol açar (ilk sayfa yeni sürüm ve sunucudan, yerel depo kalıcı, eski bekçi yenisiyle değişir); ikinci tıklama
-   ikinci pencere açmaz ve öne getirir (masaüstü varsa); bekçi kapanan pencereyi açar, bakım arasında açmaz; Edge kalıcı
+   ikinci pencere açmaz ve öne getirir (masaüstü varsa); bekçi kapanan pencereyi yeniden açmaz, kısayol açar; Edge kalıcı
    profille tam ekran (`--kiosk` ve InPrivate yok): sayfanın yerel depoya yazdığı değer diske geçince (en çok 30 sn
    beklenir) pencere zorla kapatılıp yeniden açılır, değer yerindedir. Tutmazsa profilin depo dosyaları ve Edge
    politikaları (kayıt defteri) yazılır.

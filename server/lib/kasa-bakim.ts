@@ -2,9 +2,10 @@ import { getSyncState, setSyncState } from './settings';
 
 /**
  * Kasa penceresinin bakım arası (Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar): kasa bekçisi (app\kasa-yazici.ps1)
- * kapatılan kasa penceresini 15 sn içinde yeniden açar (#144, kiosk koruması). Bakım için (Windows ayarı, yazıcı
- * kurulumu, başka bir program) yetkili bu süreyi verir; bekçi bu süre boyunca pencereyi açmaz, süre bitince yine açar.
- * Kalıcı kapatma yok: unutulsa da kasa en geç 15 dakikada kendine döner. Sync state `kasa.bakim`
+ * kapatılan kasa penceresini yeniden açmaz (#195, 28 Kas 2026, sahibin isteği; #144'ten beri 15 sn içinde açıyordu).
+ * Bekçi yalnız kasa kısayolunun bıraktığı açma isteğini sunucu gelince yerine getirir. Bakım için (Windows ayarı, yazıcı
+ * kurulumu, başka bir program) yetkili bu süreyi verir; bekçi bu süre boyunca pencereyi açmaz, süre bitince isteği yine
+ * yerine getirir. Kalıcı kapatma yok: unutulsa da ara en geç 15 dakikada biter. Sync state `kasa.bakim`
  */
 const KASA_BAKIM_KEY = 'kasa.bakim';
 export const KASA_BAKIM_MS = 15 * 60_000;
