@@ -445,9 +445,9 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
 - **Kasadaki güncelleyici** (`guncelle.mjs`, bekçinin içinde): sırayla
   `https://lafpos.laffogato.net/guncelleme/surum.json`, `https://lafpos.vercel.app/guncelleme/surum.json`; yalnız
   HTTPS, başka hosta yönlendirme reddedilir (better-sqlite3'ün GitHub dosyası yalnız GitHub'ın depolama hostlarına).
-  Açılıştan 2 dk sonra, sonra 3 dk'da bir (`CHECK_EVERY_MS`). Yeni derleme varsa zip'i indirip boyunu ve SHA-256'sını doğrular; Node
-  ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki özetle
-  doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
+  Açılıştan 2 dk sonra, sonra 3 dk'da bir (`CHECK_EVERY_MS`). Yeni derleme varsa zip'i indirip boyunu ve SHA-256'sını
+  doğrular; Node ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki
+  özetle doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
 - **Kurulum yalnız açık iş günü yokken:** güncelleyici sunucuya `GET /api/kasa/guncelleme-durumu` ile sorar
   (oturumsuz, yalnız bu bilgisayardan: yerel ağ ve Tailscale 403; yanıtta yalnız `dayOpen`, Merkez'in hedefi
   `merkez`, satış/ödeme sürüyor mu `mesgul` ve cihazda banka gün sonu sürüyor mu `eod`). Gün açıksa 5 dk'da

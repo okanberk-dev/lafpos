@@ -49,8 +49,9 @@ Kafedeki bilgisayara AsilPOS bir kez kurulur; sonraki sürümler kendiliğinden 
 oluşturmak gerekmez. İki yol var: siteden kurulum (en kolayı, GitHub hesabı gerekmez) ya da GitHub'daki kurulum
 dosyası. **İkisi de aynı programı kurar:** masaüstünde ve Başlat menüsünde **AsilPOS Kasa**, Windows açılınca
 kendiliğinden açılan tam ekran kasa (adres çubuğu yok), aynı otomatik güncellemeler. Kasa ekranı açıkken AsilPOS Kasa'ya
-yeniden basmak aynı pencereyi öne getirir; kapatınca kapanır (müşteri ekranı da), AsilPOS Kasa'yla yeniden açılır. Biriyle kurulanı öbürüyle
-onarabilir ya da güncelleyebilirsiniz. Ayrıntı [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §3 ve §9.
+yeniden basmak aynı pencereyi öne getirir; kapatınca kapanır (müşteri ekranı da), AsilPOS Kasa'yla yeniden açılır.
+Biriyle kurulanı öbürüyle onarabilir ya da güncelleyebilirsiniz. Ayrıntı
+[docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §3 ve §9.
 
 ### Siteden kurulum
 
