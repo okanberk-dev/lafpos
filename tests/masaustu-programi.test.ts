@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ALAN_ADI, ESKI_URUN_ADI, KURULUM_KLASORU } from '@shared/eski-adlar';
+import { ALAN_ADI, ESKI_URUN_ADI, KURULUM_KLASORU, SUNUCU_GOREVI } from '@shared/eski-adlar';
 
 /**
  * Masaüstü programı (sahibin isteği, 27 Kasım 2026: "exe olarak kurulu bilgisayarda ve bu tamamen bir program olacak
@@ -546,7 +546,7 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
     expect(INJECT).toContain(`var k='${CI_DEPO_ANAHTARI}'`);
   });
 
-  it('kafedeki yolu yürür: önceki sürüm, kısayolla pencere, güncelleme, ilk açılış yeni sürüm, program, geri dönüş, kaldırma, iki kurulum', () => {
+  it('kafedeki yolu yürür: önceki sürüm, kısayolla pencere, güncelleme, ilk açılış yeni sürüm, program, geri dönüş, kaldırma, iki kurulum, çalışan kasada siteden kurulum', () => {
     const ci = read(`${K}ci-kurulum.mjs`);
     const order = [
       'kur(ONCEKI_EXE);',
@@ -574,6 +574,17 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
       "checkUninstalled('bu sürümün kaldırıcısı');",
       "ASILPOS_KUR_SESSIZ: '1'",
       'compareInstalls(exeDurum, webDurum);',
+      // Çalışan kasanın üzerine (kasa penceresi açık), görevin dışında çalışan sunucuyla, klasör başka programda açıkken
+      'const f4 = await siteden();',
+      "await sitedenTamam(f4, 'çalışan kasanın üzerine siteden kurulum', isaret);",
+      "const elle = spawn(join(INSTALL, 'node', 'node.exe'), [join(INSTALL, 'app', 'bekci.mjs')]",
+      'const f4b = await siteden();',
+      "if (durmayan.length) fail(",
+      "const tutan = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)'], { cwd: join(INSTALL, 'app')",
+      'if (f5.status === 0) fail(',
+      "await gorevCalisiyor('yarıda kalan kurulumdan sonra');",
+      'tutan.kill();',
+      "await sitedenTamam(f5b, ",
     ];
     const at = order.map((t) => ci.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(order.filter((_, i) => at[i]! <= 0))).toBe(true);
@@ -594,6 +605,10 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
     const helper = read(`${K}ci-windows.ps1`);
     expect(helper).toContain('$l = $sh.CreateShortcut($Kisayol)');
     expect(helper).toContain('-ArgumentList $l.Arguments -WorkingDirectory $wd');
+    // Görevin durumu Görev Zamanlayıcı'nın nesnesinden (dil ve konsoldan bağımsız); sunucu süreçleri kurulumun Node'undan
+    expect(helper).toContain(`$g = $zs.GetFolder('\\').GetTask('${SUNUCU_GOREVI}')`);
+    expect(helper).toContain('Json ([ordered]@{ acik = [bool]$g.Enabled; durum = [int]$g.State })');
+    expect(helper).toContain("$kok = (Join-Path $Klasor 'node') + '\\'");
     // Kanal derlemesinin işareti ana betiği değiştirir (yeni sürüm penceredeki betikten ayırt edilir); gerçek derlemede yok
     expect(ci).toContain('env.VITE_ASILPOS_CI_DERLEME = String(isaret)');
     expect(read('src/main.tsx')).toContain('if (import.meta.env.VITE_ASILPOS_CI_DERLEME)');

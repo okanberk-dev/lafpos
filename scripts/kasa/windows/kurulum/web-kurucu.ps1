@@ -7,17 +7,23 @@
 # programı internetten indirir, kurulum dosyası içinde taşır) ve kaldırıcısı (LafPOS-Kaldir.ps1, kurulum dosyasında
 # Kaldir.exe). Testi tests/web-kurucu.test.ts ve tests/masaustu-programi.test.ts; gerçek Windows'ta CI (ci-kurulum.mjs).
 #
-# Ne yapar: yönetici izni ister; güncelleme kanalının surum.json'unu okur (okunamazsa
-# dosyaya gömülü derlemeyi kullanır); Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama
-# yükünü kanaldan indirir ve üçünü de SHA-256 ile doğrular; çalışan sunucuyu durdurur, veritabanının kopyasını alır,
-# Program Files\LafPOS'u kurar, "LafPOS Sunucu" görevini, güvenlik duvarı iznini, kısayolları, güç ayarlarını ve
-# Uygulamalar listesindeki kaydı yazar, sunucuyu başlatır. Yeniden çalıştırmak onarır ya da son sürüme günceller;
-# veriler (C:\ProgramData\LafPOS) ve ayarlar kalır. Anahtar ya da parola taşımaz.
+# Ne yapar: yönetici izni ister; aynı anda tek kurulum çalışır; güncelleme kanalının surum.json'unu okur (okunamazsa
+# dosyaya gömülü derlemeyi kullanır); kurulu sürüm daha yeniyse kurmaz; Node'u nodejs.org'dan, better-sqlite3'ün Windows
+# ikilisini GitHub'dan, uygulama yükünü kanaldan indirir ve üçünü de SHA-256 ile doğrular; çalışan sunucuyu durdurur
+# (görev ve kurulum klasöründeki Node süreçleri), veritabanının kopyasını alır, Program Files\LafPOS'u kurar (yer
+# değiştirme olmazsa eski sürüm geri gelir ve sunucusu yeniden açılır), "LafPOS Sunucu" görevini, güvenlik duvarı
+# iznini, kısayolları, güç ayarlarını ve Uygulamalar listesindeki kaydı yazar, sunucuyu başlatır. Yeniden çalıştırmak
+# onarır ya da son sürüme günceller; veriler (C:\ProgramData\LafPOS) ve ayarlar kalır. Anahtar ya da parola taşımaz.
 #
 # PowerShell 5.1 ile uyumlu kalır (tests/web-kurucu.test.ts denetler): boş birleştirme, üçlü koşul ve zincir işleçleri yok.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Konsol UTF-8'e (65001) geçer, Türkçe iletiler bozulmaz. Özgün kod sayfası saklanır: dış komutlar (schtasks, netsh)
+# onunla çalışır (Calistir). Bazı Windows komutları 65001'de hata koduyla dönebilir; sahibin kasasında görev sorgusu
+# çalışan görevi bulamadı ve sunucu durdurulmadan yer değiştirme denendi (28 Kasım 2026)
+$OzgunKodlama = $null
+try { $OzgunKodlama = [Console]::OutputEncoding } catch { }
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 try { $Host.UI.RawUI.WindowTitle = 'AsilPOS kurulumu' } catch { }
 
@@ -46,27 +52,46 @@ $Veri = Join-Path $env:ProgramData 'LafPOS' # eski-ad
 $Gecici = Join-Path $Kur 'kurulum.gecici'
 $SunucuDurdu = $false
 $GorevVardi = $false
+# Program klasörü değiştirilemeyince (bir program app\ ya da node\ klasörünü tutuyor) söylenen: ne oldu, ne yapılır
+$KullanimdaIletisi = 'Program dosyaları kullanımda olduğu için değiştirilemedi; eski sürüm çalışıyor. En kolayı: Yönetim > Ayarlar ve yedek > Sürüm ve güncelleme > Şimdi güncelle. Ya da bilgisayarı yeniden başlatıp bu dosyayı yeniden çalıştırın.'
 
 function Adim([string]$Metin) {
   Write-Host ''
   Write-Host ('> ' + $Metin) -ForegroundColor Cyan
 }
 
+# Hata ve uyarıda pencere Enter'a dek açık kalır (ileti okunsun)
 function Bekle {
   if ($Sessiz) { return }
   Write-Host ''
   try { [void](Read-Host 'Pencereyi kapatmak için Enter tuşuna basın') } catch { }
 }
 
+# Başarıda pencere birkaç saniye sonra kendiliğinden kapanır
+function KendiligindenKapan([int]$Saniye) {
+  if ($Sessiz) { return }
+  Write-Host ''
+  Write-Host ('Bu pencere ' + $Saniye + ' saniye sonra kendiliğinden kapanır.')
+  Start-Sleep -Seconds $Saniye
+}
+
+# Dış komut; sonuç çıkış kodu. Çağrı süresince konsol özgün kod sayfasına döner (yukarıda): komutun başarısı konsolun
+# UTF-8'ine bağlı kalmasın
 function Calistir([string]$Exe, [string[]]$Arg) {
   $eski = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   $kod = 1
+  $dondu = $false
+  if ($null -ne $OzgunKodlama) {
+    try { [Console]::OutputEncoding = $OzgunKodlama; $dondu = $true } catch { }
+  }
   try {
     & $Exe @Arg 2>&1 | Out-Null
     $kod = $LASTEXITCODE
   } catch {
     $kod = 1
+  } finally {
+    if ($dondu) { try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { } }
   }
   $ErrorActionPreference = $eski
   return $kod
@@ -80,13 +105,81 @@ function Sil([string]$Yol) {
   if (Test-Path -LiteralPath $Yol) { throw ($Yol + ' silinemedi (bir program kullanıyor olabilir)') }
 }
 
-# Kurulum yarıda kalırsa eski sunucu yeniden açılır: kafe sunucusuz kalmasın
-function SunucuyuGeriAc {
-  if ($SunucuDurdu -and $GorevVardi) {
-    [void](Calistir (Join-Path $Sys 'schtasks.exe') @('/Change', '/TN', $Gorev, '/ENABLE'))
-    [void](Calistir (Join-Path $Sys 'schtasks.exe') @('/Run', '/TN', $Gorev))
-    Write-Host 'Eski AsilPOS sunucusu yeniden başlatıldı.' -ForegroundColor Yellow
+# Klasörün adını değiştirir (aynı sürücüde taşıma). Sunucu yeni durdu: Windows ya da virüs taraması dosyayı bir an
+# tutabilir, 10 sn'ye kadar yeniden denenir (20 x 500 ms; asilpos.nsi Tasi ve guncelle.mjs de yeniden dener). Hedef
+# varsa taşınmaz: Move-Item klasörü onun içine koyardı
+function Tasi([string]$Nereden, [string]$Nereye) {
+  if (Test-Path -LiteralPath $Nereye) { throw ($Nereye + ' zaten var') }
+  for ($i = 1; $i -le 20; $i++) {
+    try {
+      Move-Item -LiteralPath $Nereden -Destination $Nereye -ErrorAction Stop
+      return
+    } catch {
+      if ($i -ge 20) { throw }
+      Start-Sleep -Milliseconds 500
+    }
   }
+}
+
+# Kurulum klasöründeki Node'dan çalışan süreçler: sunucu bekçisi, sunucu, güncellemenin deneme açılışı (node.yeni).
+# Göreve bakılmaz: görev bulunamasa ya da durdurulamasa da çalışan sunucunun çalışma klasörü app\'tir, klasörü tutar
+function KurulumSurecleri {
+  $nodeKoku = (Join-Path $Kur 'node') + '\'
+  $yeniKoku = (Join-Path $Kur 'node.yeni') + '\'
+  try {
+    return @(Get-CimInstance -ClassName Win32_Process -Filter "Name='node.exe'" -OperationTimeoutSec 15 | Where-Object {
+        $yol = [string]$_.ExecutablePath
+        $yol -and ($yol.StartsWith($nodeKoku, [StringComparison]::OrdinalIgnoreCase) -or $yol.StartsWith($yeniKoku, [StringComparison]::OrdinalIgnoreCase))
+      })
+  } catch {
+    return @()
+  }
+}
+
+# Kurulum klasöründeki Node süreçlerini durdurur; bekçi (komut satırında bekci.mjs) önce, yoksa durdurulan sunucuyu bir
+# saniyede yeniden açar. Hiçbiri kalmayana dek en çok 20 sn. Sonuç: durdurulan süreç sayısı (0: çalışan yoktu)
+function SurecleriDurdur {
+  $durdurulan = 0
+  $bitis = (Get-Date).AddSeconds(20)
+  while ($true) {
+    $kalan = @(KurulumSurecleri)
+    if ($kalan.Count -eq 0 -or (Get-Date) -gt $bitis) { return $durdurulan }
+    $bekciler = @($kalan | Where-Object { [string]$_.CommandLine -match 'bekci\.mjs' })
+    $digerleri = @($kalan | Where-Object { [string]$_.CommandLine -notmatch 'bekci\.mjs' })
+    foreach ($p in ($bekciler + $digerleri)) {
+      try {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
+      } catch {
+        [void](Calistir (Join-Path $Sys 'taskkill.exe') @('/F', '/PID', [string]$p.ProcessId))
+      }
+      $durdurulan++
+    }
+    Start-Sleep -Milliseconds 500
+  }
+}
+
+# Kurulum yarıda kalırsa sunucu yeniden açılır: kafe sunucusuz kalmasın. Görev vardıysa yeniden açılıp çalıştırılır.
+# Görev yoktu (ya da kapatılamadı) ama kurulum klasöründen çalışan sunucu durdurulduysa önce görev denenir; sunucu
+# gelmezse başlatıcı görevin komutuyla bu pencereden bağımsız açılır
+function SunucuyuGeriAc {
+  if (-not $SunucuDurdu) { return }
+  $schtasks = Join-Path $Sys 'schtasks.exe'
+  if ($GorevVardi) {
+    [void](Calistir $schtasks @('/Change', '/TN', $Gorev, '/ENABLE'))
+    [void](Calistir $schtasks @('/Run', '/TN', $Gorev))
+  } else {
+    [void](Calistir $schtasks @('/Run', '/TN', $Gorev))
+    $calisiyor = $false
+    for ($i = 0; $i -lt 20 -and -not $calisiyor; $i++) {
+      Start-Sleep -Milliseconds 500
+      $calisiyor = (@(KurulumSurecleri).Count -gt 0)
+    }
+    $baslatici = Join-Path $Kur 'baslat.cmd'
+    if (-not $calisiyor -and (Test-Path -LiteralPath $baslatici)) {
+      try { Start-Process -FilePath (Join-Path $Sys 'cmd.exe') -ArgumentList ('/d /c ""' + $baslatici + '""') -WorkingDirectory $Kur -WindowStyle Hidden } catch { }
+    }
+  }
+  Write-Host 'AsilPOS sunucusu yeniden başlatıldı.' -ForegroundColor Yellow
 }
 
 function Dur([string]$Metin) {
@@ -109,6 +202,17 @@ if (-not $kimlik.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator
     Dur 'İzin verilmedi; kurulum yapılmadı. Dosyayı yeniden çalıştırıp Evet deyin.'
   }
   exit 0
+}
+
+# Aynı anda tek kurulum: ikisi de kurulum.gecici'yi baştan siler ve aynı klasörleri taşır. Kilit süreç bitince bırakılır;
+# kilit hiç kurulamazsa (Windows izin vermedi) kurulum kilitsiz sürer
+$kilitBende = $true
+try {
+  $Kilit = New-Object System.Threading.Mutex($false, 'Global\AsilPOS-Kurulum')
+  try { $kilitBende = $Kilit.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $kilitBende = $true }
+} catch { }
+if (-not $kilitBende) {
+  Dur 'Bu bilgisayarda başka bir AsilPOS kurulumu sürüyor; bu pencere bir şey değiştirmedi. O bitince gerekirse bu dosyayı yeniden çalıştırın.'
 }
 
 Write-Host 'AsilPOS kurulumu' -ForegroundColor Green
@@ -170,6 +274,24 @@ if ($null -eq $Surum) {
   $Surum.taban = $Kanal[0]
 }
 Write-Host ('  AsilPOS ' + $Surum.version + ' (derleme ' + $Surum.build + ')')
+
+# Sürüm geri düşmez: kurulu derleme (app\package.json; güncelleyici de oradan okur, guncelle.mjs readInstalled) bundan
+# yeniyse kurulmaz. Eski bir kurulum dosyası ya da kanal okunamayınca gömülü sürüm yeni kasayı eskisiyle değiştirmesin
+function KuruluDerleme {
+  try {
+    $p = Get-Content -LiteralPath (Join-Path $Kur 'app\package.json') -Raw | ConvertFrom-Json
+    if ([string]$p.build -match '^\d{10,11}$') { return [long]$p.build }
+  } catch { }
+  return [long]0
+}
+$kuruluDerleme = KuruluDerleme
+if ($kuruluDerleme -gt [long]$Surum.build) {
+  Write-Host ''
+  Write-Host ('Bu bilgisayarda daha yeni bir AsilPOS kurulu (derleme ' + $kuruluDerleme + '); bu dosyadaki sürüm kurulmadı.') -ForegroundColor Green
+  Write-Host 'Bir şey yapmanız gerekmez. Yeni sürümler kendiliğinden gelir: Yönetim > Ayarlar ve yedek > Sürüm ve güncelleme.'
+  KendiligindenKapan 10
+  exit 0
+}
 
 # ─── İndir ve doğrula ────────────────────────────────────────────────────────
 
@@ -234,8 +356,9 @@ try {
     [IO.File]::WriteAllBytes((Join-Path $kabuk $ad), [Convert]::FromBase64String($Dosyalar[$ad]))
   }
 } catch {
-  Sil $Gecici
-  Dur ('Kurulum yapılamadı: ' + $_.Exception.Message)
+  $hata = $_.Exception.Message
+  try { Sil $Gecici } catch { }
+  Dur ('Kurulum yapılamadı: ' + $hata)
 }
 
 # ─── Açık gün ────────────────────────────────────────────────────────────────
@@ -249,7 +372,7 @@ try {
     $cevap = 'H'
     if (-not $Sessiz) { $cevap = Read-Host 'Yine de şimdi kurulsun mu? (E/H)' }
     if ($cevap -notmatch '^\s*[eEyY]') {
-      Sil $Gecici
+      try { Sil $Gecici } catch { }
       Write-Host 'Kurulum bırakıldı. Gün sonundan sonra dosyayı yeniden çalıştırın.'
       Bekle
       exit 0
@@ -262,14 +385,15 @@ try {
 try {
   Adim 'Çalışan AsilPOS sunucusu durduruluyor'
   $schtasks = Join-Path $Sys 'schtasks.exe'
-  $GorevVardi = ((Calistir $schtasks @('/Query', '/TN', $Gorev)) -eq 0)
-  if ($GorevVardi) {
-    # Önce görev kapatılır, yoksa beş dakikalık güvence tetiği kurulum sürerken eski sürümü yeniden başlatabilir
-    [void](Calistir $schtasks @('/Change', '/TN', $Gorev, '/DISABLE'))
-    [void](Calistir $schtasks @('/End', '/TN', $Gorev))
-    $SunucuDurdu = $true
-    Start-Sleep -Seconds 3
-  }
+  # Görevin var olup olmadığı ayrıca sorulmaz (sorgu yanılabilir, yukarıda): görev her durumda kapatılmaya çalışılır,
+  # başarısı görevin var olduğunu söyler (asilpos.nsi de böyle). Önce görev kapatılır, yoksa beş dakikalık güvence
+  # tetiği kurulum sürerken eski sürümü yeniden başlatabilir
+  $GorevVardi = ((Calistir $schtasks @('/Change', '/TN', $Gorev, '/DISABLE')) -eq 0)
+  if ($GorevVardi) { $SunucuDurdu = $true }
+  [void](Calistir $schtasks @('/End', '/TN', $Gorev))
+  if ($GorevVardi) { Start-Sleep -Seconds 3 }
+  # Görevden bağımsız: kurulum klasöründeki Node'dan çalışan her süreç (bekçi önce) durur, yoksa app\ klasörü taşınamaz
+  if ((SurecleriDurdur) -gt 0) { $SunucuDurdu = $true }
 
   $db = Join-Path $Veri 'lafpos.db'
   if (Test-Path -LiteralPath $db) {
@@ -286,27 +410,42 @@ try {
   }
 
   Adim 'AsilPOS kuruluyor'
-  # Otomatik güncellemenin bıraktığı klasörler kalmasın; node.yeni kalırsa başlatıcı onu Node'un yerine koyardı
-  foreach ($k in @('app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni')) { Sil (Join-Path $Kur $k) }
   $app = Join-Path $Kur 'app'
   $node = Join-Path $Kur 'node'
-  if (Test-Path -LiteralPath $app) { Rename-Item -LiteralPath $app -NewName 'app.eski' }
-  if (Test-Path -LiteralPath $node) { Rename-Item -LiteralPath $node -NewName 'node.eski' }
+  $appEski = Join-Path $Kur 'app.eski'
+  $nodeEski = Join-Path $Kur 'node.eski'
+  # Yer değiştirme: app -> app.eski, node -> node.eski, yeniler yerine. Dördü tek denemede; biri olmazsa yerine konan yeni
+  # klasör kaldırılır, eskiler ayrı ayrı geri gelir (kafe programsız kalmaz). Hangisinin taşındığı bayrakla izlenir:
+  # var olan klasöre bakmak yanıltır (önceki kurulumdan kalan app.eski'yi eski sürüm sanıp çalışan app\ silinirdi)
+  $eskiAppTasindi = $false
+  $eskiNodeTasindi = $false
+  $yeniAppKondu = $false
   try {
-    Move-Item -LiteralPath (Join-Path $Gecici 'app') -Destination $app
-    Move-Item -LiteralPath (Join-Path $Gecici 'node') -Destination $node
+    # Otomatik güncellemenin bıraktığı klasörler kalmasın; node.yeni kalırsa başlatıcı onu Node'un yerine koyardı
+    foreach ($k in @('app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni')) { Sil (Join-Path $Kur $k) }
+    if (Test-Path -LiteralPath $app) { Tasi $app $appEski; $eskiAppTasindi = $true }
+    if (Test-Path -LiteralPath $node) { Tasi $node $nodeEski; $eskiNodeTasindi = $true }
+    Tasi (Join-Path $Gecici 'app') $app
+    $yeniAppKondu = $true
+    Tasi (Join-Path $Gecici 'node') $node
   } catch {
-    # Yarım kalan yeni klasörler kaldırılır, eski sürüm yerine döner
-    Sil $app
-    Sil $node
-    if (Test-Path -LiteralPath (Join-Path $Kur 'app.eski')) { Rename-Item -LiteralPath (Join-Path $Kur 'app.eski') -NewName 'app' }
-    if (Test-Path -LiteralPath (Join-Path $Kur 'node.eski')) { Rename-Item -LiteralPath (Join-Path $Kur 'node.eski') -NewName 'node' }
-    throw ('Program klasörü yazılamadı: ' + $_.Exception.Message)
+    $neden = $_.Exception.Message
+    # Yarım kalan yeni klasör kaldırılır, eski sürüm yerine döner; her adımın hatası yutulur, öbürü yine denenir
+    $eskiYerinde = $true
+    if ($yeniAppKondu) { try { Sil $app } catch { $eskiYerinde = $false } }
+    if ($eskiAppTasindi) { try { Tasi $appEski $app } catch { $eskiYerinde = $false } }
+    if ($eskiNodeTasindi) { try { Tasi $nodeEski $node } catch { $eskiYerinde = $false } }
+    if ($eskiYerinde -and (Test-Path -LiteralPath (Join-Path $app 'bekci.mjs')) -and (Test-Path -LiteralPath (Join-Path $node 'node.exe'))) {
+      throw ($KullanimdaIletisi + ' Ayrıntı: ' + $neden)
+    }
+    throw ('Program klasörü yazılamadı: ' + $neden + '. Bilgisayarı yeniden başlatıp bu dosyayı yeniden çalıştırın; veriler yerinde.')
   }
-  Sil (Join-Path $Kur 'app.eski')
-  Sil (Join-Path $Kur 'node.eski')
+  # Eski sürümün artıkları: silinemezse kurulum yine tamamdır (sonraki kurulum ve güncelleme siler)
+  foreach ($k in @($appEski, $nodeEski)) {
+    try { Sil $k } catch { Write-Host ('  ' + $k + ' silinemedi; zararı yok, sonraki güncelleme siler.') -ForegroundColor Yellow }
+  }
   Get-ChildItem -LiteralPath (Join-Path $Gecici 'kabuk') | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Kur $_.Name) -Force }
-  Sil $Gecici
+  try { Sil $Gecici } catch { Write-Host ('  ' + $Gecici + ' silinemedi; sonraki kurulum siler.') -ForegroundColor Yellow }
 
   # Veri klasörü: yalnız SYSTEM (sunucu) ve Yöneticiler. Türkçe Windows'ta grup adı farklı, SID kullanılır
   if (-not (Test-Path -LiteralPath $Veri)) { New-Item -ItemType Directory -Path $Veri | Out-Null }
@@ -453,16 +592,19 @@ try {
   [void](Calistir $schtasks @('/Run', '/TN', $Gorev))
   $SunucuDurdu = $false
 } catch {
-  Sil $Gecici
+  # Önce sunucu geri açılır, sonra geçici klasör silinmeye çalışılır: silinemese de kafe sunucusuz kalmaz
+  $hata = $_.Exception.Message
   SunucuyuGeriAc
-  Dur ('Kurulum yarıda kaldı: ' + $_.Exception.Message)
+  try { Sil $Gecici } catch { }
+  Dur ('Kurulum yarıda kaldı: ' + $hata)
 }
 
+# Sunucu bu derlemeyle (ya da arada kendiliğinden gelen daha yenisiyle) açılana dek
 $acildi = $false
 for ($i = 0; $i -lt 90; $i++) {
   try {
     $saglik = Invoke-RestMethod -UseBasicParsing -Uri ('http://127.0.0.1:' + $Port + '/api/health') -TimeoutSec 2
-    if ([string]$saglik.build -eq $Surum.build) { $acildi = $true; break }
+    if ([long]$saglik.build -ge [long]$Surum.build) { $acildi = $true; break }
   } catch { }
   Start-Sleep -Seconds 1
 }
@@ -476,11 +618,13 @@ if ($acildi) {
   if (-not $Sessiz) {
     try { Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList ('"' + (Join-Path $menu 'AsilPOS Kasa.lnk') + '"') } catch { }
   }
+  # Başarı: Enter beklenmez, pencere kendiliğinden kapanır
+  KendiligindenKapan 10
 } else {
   Write-Host 'AsilPOS kuruldu ama sunucu 90 saniyede açılmadı.' -ForegroundColor Yellow
   Write-Host 'Bir dakika sonra masaüstündeki "AsilPOS Kasa"yı açın. Açılmazsa bilgisayarı yeniden başlatın;'
   Write-Host 'sunucu günlüğü: Başlat > AsilPOS > Sunucu günlüğü.'
+  Bekle
 }
-Bekle
 if (-not $acildi -and $Sessiz) { exit 4 }
 exit 0

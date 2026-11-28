@@ -5,6 +5,8 @@
 #   on           on plandaki pencere (surec ve baslik) ve oturum (0: etkilesimsiz)
 #   kayit        Uygulamalar listesindeki kayit
 #   gorev        "LafPOS Sunucu" gorevinin XML'i (kayit tarihi ve yazar disinda)
+#   gorev-durum  gorev acik mi, calisiyor mu (Gorev Zamanlayici nesnesinden; dil ve konsol kod sayfasindan bagimsiz)
+#   sunucu       -Klasor'deki Node'dan calisan surecler (bekci, sunucu): pid ve komut satiri
 #   duvar        guvenlik duvari kurallari
 #   agac         kurulum klasoru: kok dosyalar (ozetle), app\ ve node\ dosyalarinin yollari
 #   ac           -Kisayol'un hedefini ve argumanlarini bu surecin ortamiyla calistirir (kisayolun yaptigi)
@@ -112,6 +114,22 @@ switch ($Islem) {
     if ($r.kod -ne 0) { Json $null; break }
     $x = $r.cikti -replace '<Date>[^<]*</Date>', '' -replace '<Author>[^<]*</Author>', '' -replace '<URI>[^<]*</URI>', ''
     Json $x
+  }
+  'gorev-durum' {
+    # State: 1 kapali, 3 hazir, 4 calisiyor
+    try {
+      $zs = New-Object -ComObject Schedule.Service
+      $zs.Connect()
+      $g = $zs.GetFolder('\').GetTask('LafPOS Sunucu') # eski-ad: gorev adi
+      Json ([ordered]@{ acik = [bool]$g.Enabled; durum = [int]$g.State })
+    } catch {
+      Json $null
+    }
+  }
+  'sunucu' {
+    $kok = (Join-Path $Klasor 'node') + '\'
+    $l = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ExecutablePath -and ([string]$_.ExecutablePath).StartsWith($kok, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { [ordered]@{ pid = [int]$_.ProcessId; komut = [string]$_.CommandLine } })
+    Json $l
   }
   'duvar' {
     $r = Native (Join-Path $env:SystemRoot 'System32\netsh.exe') @('advfirewall', 'firewall', 'show', 'rule', 'name=LafPOS Sunucu') # eski-ad: kural adi

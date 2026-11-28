@@ -13,6 +13,14 @@ type Mod = Record<string, any>;
 const root = new URL('../', import.meta.url);
 const load = (f: string) => import(/* @vite-ignore */ new URL(`scripts/kasa/windows/kurulum/${f}`, root).href) as Promise<Mod>;
 const read = (f: string) => readFileSync(new URL(f, root), 'utf8');
+/** `a`'dan (dahil) sonraki ilk `b`'ye (hariç) kadar; ikisi de bulunmalı */
+const between = (s: string, a: string, b: string) => {
+  const i = s.indexOf(a);
+  expect(i, a).toBeGreaterThanOrEqual(0);
+  const j = s.indexOf(b, i + a.length);
+  expect(j, b).toBeGreaterThan(i);
+  return s.slice(i, j);
+};
 
 async function build() {
   const { manifestFor } = await load('kanal.mjs');
@@ -232,6 +240,175 @@ describe('siteden kurulum: AsilPOS-Kur.cmd', () => {
     for (const ad of ['AsilPOS-Kur.cmd', ESKI_WEB_KURUCU]) {
       const h = vercel.headers.find((x: any) => x.source === `/guncelleme/${ad}`);
       expect(h.headers.find((x: any) => x.key === 'content-disposition').value, ad).toBe(`attachment; filename="${ad}"`);
+    }
+  });
+});
+
+/**
+ * Çalışan kasada siteden kurulum (28 Kasım 2026, sahibin kasası: "Çalışan AsilPOS sunucusu durduruluyor > AsilPOS
+ * kuruluyor > Kurulum yarıda kaldı: The process cannot access the file because it is being used by another process").
+ * Görev sorgusu görevi bulamadı, sunucu durdurulmadı; çalışma klasörü app\ olan sunucu klasörün taşınmasını engelledi.
+ * Gerçek Windows'ta CI dener (ci-kurulum.mjs F4, F4b, F5); burada sıra ve yapı.
+ */
+describe('siteden kurulum: çalışan kasada', () => {
+  const ps = read('scripts/kasa/windows/kurulum/web-kurucu.ps1').replace(/\r\n/g, '\n');
+  const kur = between(ps, '# ─── Kur ', '$acildi = $false');
+
+  it('görev sorgusuna dayanmaz: görevi her durumda kapatmayı dener, kurulum klasöründeki Node süreçlerini bekçiden başlayarak durdurur', () => {
+    // Sorgu yok: kapatmanın sonucu görevin var olduğunu söyler (asilpos.nsi de böyle)
+    expect(ps).not.toContain("'/Query'");
+    expect(kur).toContain("$GorevVardi = ((Calistir $schtasks @('/Change', '/TN', $Gorev, '/DISABLE')) -eq 0)");
+    expect(kur).toContain('if ($GorevVardi) { $SunucuDurdu = $true }');
+    // Sıra: görev kapanır ve biter, süreçler durur, veritabanı kopyalanır, sonra yer değiştirme
+    const sira = [
+      "@('/Change', '/TN', $Gorev, '/DISABLE')",
+      "@('/End', '/TN', $Gorev)",
+      'if ((SurecleriDurdur) -gt 0) { $SunucuDurdu = $true }',
+      'Copy-Item -LiteralPath $db -Destination $yedek',
+      'Tasi $app $appEski',
+    ].map((t) => kur.indexOf(t));
+    expect(sira.every((i) => i > 0), JSON.stringify(sira)).toBe(true);
+    expect([...sira].sort((a, b) => a - b)).toEqual(sira);
+    // Süreçler görevden bağımsız bulunur: çalıştırılan dosya kurulumun Node'u (ya da güncellemenin node.yeni'si)
+    const surecler = between(ps, 'function KurulumSurecleri', 'function SurecleriDurdur');
+    expect(surecler).toContain('Get-CimInstance -ClassName Win32_Process -Filter "Name=\'node.exe\'"');
+    expect(surecler).toContain("$nodeKoku = (Join-Path $Kur 'node') + '\\'");
+    expect(surecler).toContain("$yeniKoku = (Join-Path $Kur 'node.yeni') + '\\'");
+    expect(surecler).toContain('$yol = [string]$_.ExecutablePath');
+    expect(surecler).toContain('$yol.StartsWith($nodeKoku, [StringComparison]::OrdinalIgnoreCase)');
+    // Bekçi önce (yoksa sunucuyu bir saniyede yeniden açar); hiçbiri kalmayana dek en çok 20 sn
+    const durdur = between(ps, 'function SurecleriDurdur', 'function SunucuyuGeriAc');
+    expect(durdur).toContain("$bekciler = @($kalan | Where-Object { [string]$_.CommandLine -match 'bekci\\.mjs' })");
+    expect(durdur).toContain('foreach ($p in ($bekciler + $digerleri)) {');
+    expect(durdur).toContain('$bitis = (Get-Date).AddSeconds(20)');
+    expect(durdur).toContain('if ($kalan.Count -eq 0 -or (Get-Date) -gt $bitis) { return $durdurulan }');
+    expect(durdur).toContain('Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop');
+    // İşlev betiğin değişkenine yazmaz (kurucu ScriptBlock olarak çalışır: işlevin yazdığı kapsam ayrı); sonucu döndürür
+    expect(ps).not.toMatch(/\$script:/);
+  });
+
+  it('dört yer değiştirme tek denemede, her biri yeniden denenerek; olmazsa yeni klasör kalkar, eskiler ayrı ayrı döner', () => {
+    const tasi = between(ps, 'function Tasi(', 'function KurulumSurecleri');
+    expect(tasi).toContain('for ($i = 1; $i -le 20; $i++) {');
+    expect(tasi).toContain('Start-Sleep -Milliseconds 500');
+    expect(tasi).toContain('if ($i -ge 20) { throw }');
+    // Hedef varsa taşınmaz (Move-Item klasörü onun içine koyardı)
+    expect(tasi.indexOf("if (Test-Path -LiteralPath $Nereye) { throw")).toBeLessThan(tasi.indexOf('Move-Item'));
+    // Kurulum bölümü klasörleri yalnız Tasi ile taşır
+    expect(kur).not.toMatch(/Rename-Item|Move-Item/);
+    const dene = between(kur, "  try {\n    # Otomatik güncellemenin", '  } catch {');
+    const adimlar = [
+      "foreach ($k in @('app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni')) { Sil (Join-Path $Kur $k) }",
+      'Tasi $app $appEski; $eskiAppTasindi = $true',
+      'Tasi $node $nodeEski; $eskiNodeTasindi = $true',
+      "Tasi (Join-Path $Gecici 'app') $app",
+      '$yeniAppKondu = $true',
+      "Tasi (Join-Path $Gecici 'node') $node",
+    ].map((t) => dene.indexOf(t));
+    expect(adimlar.every((i) => i >= 0), JSON.stringify(adimlar)).toBe(true);
+    expect([...adimlar].sort((a, b) => a - b)).toEqual(adimlar);
+    // Geri alma bayraklarla (var olan klasöre bakmak önceki kurulumdan kalan app.eski'yi eski sürüm sanardı); her adım ayrı
+    const geri = between(kur, '$neden = $_.Exception.Message', "throw ('Program klasörü yazılamadı");
+    expect(geri).toContain('if ($yeniAppKondu) { try { Sil $app } catch { $eskiYerinde = $false } }');
+    expect(geri).toContain('if ($eskiAppTasindi) { try { Tasi $appEski $app } catch { $eskiYerinde = $false } }');
+    expect(geri).toContain('if ($eskiNodeTasindi) { try { Tasi $nodeEski $node } catch { $eskiYerinde = $false } }');
+    expect(geri.indexOf('Sil $app')).toBeLessThan(geri.indexOf('Tasi $appEski $app'));
+    // "Eski sürüm çalışıyor" yalnız eski sürüm gerçekten yerindeyse söylenir
+    expect(geri).toContain("if ($eskiYerinde -and (Test-Path -LiteralPath (Join-Path $app 'bekci.mjs')) -and (Test-Path -LiteralPath (Join-Path $node 'node.exe'))) {");
+    // Eski sürümün artıkları silinemezse uyarı; kurulum yarıda kalmaz
+    const sonra = between(kur, "throw ('Program klasörü yazılamadı", "# Veri klasörü:");
+    expect(sonra).toContain('foreach ($k in @($appEski, $nodeEski)) {');
+    expect(sonra).toContain("try { Sil $k } catch { Write-Host (");
+    expect(sonra).toContain('try { Sil $Gecici } catch { Write-Host (');
+    expect(sonra).not.toMatch(/^\s*Sil /m);
+  });
+
+  it('yarıda kalınca önce sunucu geri açılır, sonra geçici klasör (silinemese de); ileti ne olduğunu ve ne yapılacağını söyler', () => {
+    // Kurulum bölümünün dış catch'i (satır başında; içindeki try { } catch { } değil)
+    const dis = ps.slice(ps.lastIndexOf('\n} catch {\n', ps.indexOf('$acildi = $false')), ps.indexOf('$acildi = $false'));
+    const sira = ['$hata = $_.Exception.Message', 'SunucuyuGeriAc', 'try { Sil $Gecici } catch { }', "Dur ('Kurulum yarıda kaldı: ' + $hata)"].map((t) => dis.indexOf(t));
+    expect(sira.every((i) => i >= 0), JSON.stringify(sira)).toBe(true);
+    expect([...sira].sort((a, b) => a - b)).toEqual(sira);
+    // İndirme yarıda kalırsa da geçici klasörün silinememesi iletiyi engellemez
+    expect(ps).toContain("  $hata = $_.Exception.Message\n  try { Sil $Gecici } catch { }\n  Dur ('Kurulum yapılamadı: ' + $hata)");
+    // Geri açma: bir şey durdurulduysa. Görev yalnız vardıysa yeniden açılır; yoksa görev denenir, sunucu gelmezse başlatıcı
+    // görevin komutuyla açılır
+    const geri = between(ps, 'function SunucuyuGeriAc', 'function Dur(');
+    expect(geri).toContain('if (-not $SunucuDurdu) { return }');
+    const varsa = between(geri, 'if ($GorevVardi) {', '} else {');
+    const yoksa = geri.slice(geri.indexOf('} else {'));
+    expect(varsa).toContain("@('/Change', '/TN', $Gorev, '/ENABLE')");
+    expect(varsa).toContain("@('/Run', '/TN', $Gorev)");
+    expect(yoksa).not.toContain("'/ENABLE'");
+    expect(yoksa).toContain("@('/Run', '/TN', $Gorev)");
+    expect(yoksa).toContain('$calisiyor = (@(KurulumSurecleri).Count -gt 0)');
+    expect(yoksa).toContain("Start-Process -FilePath (Join-Path $Sys 'cmd.exe') -ArgumentList ('/d /c \"\"' + $baslatici + '\"\"') -WorkingDirectory $Kur -WindowStyle Hidden");
+    // Başlatıcı görevin komutuyla aynı biçimde (görev XML'i)
+    expect(ps).toContain("('    <Arguments>/d /c \"\"' + $baslat + '\"\"</Arguments>')");
+    // İleti: ne oldu, eski sürüm çalışıyor, ne yapılır (programın içinden Şimdi güncelle ya da yeniden başlatıp yeniden)
+    expect(ps).toContain(
+      "$KullanimdaIletisi = 'Program dosyaları kullanımda olduğu için değiştirilemedi; eski sürüm çalışıyor. En kolayı: Yönetim > Ayarlar ve yedek > Sürüm ve güncelleme > Şimdi güncelle. Ya da bilgisayarı yeniden başlatıp bu dosyayı yeniden çalıştırın.'",
+    );
+    expect(kur).toContain("throw ($KullanimdaIletisi + ' Ayrıntı: ' + $neden)");
+    // İletideki yol kasadaki adlarla aynı
+    expect(read('src/pages/admin/SettingsAdmin.tsx')).toContain('<PageHeader title="Ayarlar ve yedek"');
+    const kart = read('src/components/admin/UpdateCard.tsx');
+    expect(kart).toContain('title="Sürüm ve güncelleme"');
+    expect(kart).toContain("confirmLabel: 'Şimdi güncelle'");
+    // Uzun tire yok (sade metin)
+    expect(ps).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  it('aynı anda tek kurulum; kurulu sürüm daha yeniyse kurmaz; sağlık beklemesi bu derleme ya da yenisi', () => {
+    // Adlı kilit yönetici izninden sonra (izni isteyen ilk kopya tutmaz), sürüm sorulmadan önce; ikinci kopya açıklayıp çıkar
+    const kilit = ps.indexOf("$Kilit = New-Object System.Threading.Mutex($false, 'Global\\AsilPOS-Kurulum')");
+    expect(kilit).toBeGreaterThan(ps.indexOf('Start-Process -FilePath $Kaynak -Verb RunAs'));
+    expect(kilit).toBeLessThan(ps.indexOf("Adim 'Son sürüm soruluyor'"));
+    expect(ps).toContain('try { $kilitBende = $Kilit.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $kilitBende = $true }');
+    expect(between(ps, 'if (-not $kilitBende) {', '\n}')).toContain("Dur 'Bu bilgisayarda başka bir AsilPOS kurulumu sürüyor");
+    // Sürüm geri düşmez: kurulu derleme güncelleyicinin okuduğu yerden; indirmeden önce, başarıyla çıkar
+    const derleme = between(ps, 'function KuruluDerleme', '# ─── İndir');
+    expect(derleme).toContain("Get-Content -LiteralPath (Join-Path $Kur 'app\\package.json') -Raw | ConvertFrom-Json");
+    expect(derleme).toContain('if ($kuruluDerleme -gt [long]$Surum.build) {');
+    expect(derleme).toContain('exit 0');
+    expect(ps.indexOf('$kuruluDerleme = KuruluDerleme')).toBeGreaterThan(ps.indexOf("Write-Host ('  AsilPOS ' + $Surum.version"));
+    expect(ps.indexOf('$kuruluDerleme = KuruluDerleme')).toBeLessThan(ps.indexOf("Adim 'İndiriliyor"));
+    expect(read('scripts/kasa/windows/kurulum/guncelle.mjs')).toContain("readFileSync(join(appDir, 'package.json'), 'utf8')");
+    // Sağlık: bu derleme ya da arada kendiliğinden gelen yenisi
+    expect(ps).toContain('if ([long]$saglik.build -ge [long]$Surum.build) { $acildi = $true; break }');
+    expect(ps).not.toContain('$saglik.build -eq');
+  });
+
+  it('başarıda Enter beklemez, birkaç saniye sonra kendiliğinden kapanır; hata ve uyarıda bekler; sessiz kip aynı', () => {
+    const kapan = between(ps, 'function KendiligindenKapan', 'function Calistir');
+    expect(kapan).toContain('if ($Sessiz) { return }');
+    expect(kapan).toContain('Start-Sleep -Seconds $Saniye');
+    expect(kapan).not.toContain('Read-Host');
+    const son = ps.slice(ps.indexOf('if ($acildi) {', ps.indexOf('$acildi = $false')));
+    const basari = between(son, 'if ($acildi) {', '} else {');
+    expect(basari).toContain('KendiligindenKapan 10');
+    expect(basari).not.toMatch(/\bBekle\b/);
+    expect(son.slice(son.indexOf('} else {'))).toMatch(/\n {2}Bekle\n\}/);
+    expect(between(ps, 'function Dur(', 'exit 1')).toContain('Bekle');
+    // CI'ın çıkış kodları aynı (sessizde sunucu açılmazsa 4)
+    expect(son).toContain('if (-not $acildi -and $Sessiz) { exit 4 }\nexit 0');
+  });
+
+  it('dış komutlar konsolun özgün kod sayfasıyla çalışır; bütün schtasks çağrıları bu yardımcıdan', () => {
+    expect(ps.indexOf('try { $OzgunKodlama = [Console]::OutputEncoding } catch { }')).toBeGreaterThan(0);
+    expect(ps.indexOf('try { $OzgunKodlama = [Console]::OutputEncoding } catch { }')).toBeLessThan(ps.indexOf('try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }'));
+    const calistir = between(ps, 'function Calistir(', 'function Sil(');
+    const once = calistir.indexOf('[Console]::OutputEncoding = $OzgunKodlama');
+    const komut = calistir.indexOf('& $Exe @Arg 2>&1 | Out-Null');
+    const sonra = calistir.indexOf('} finally {');
+    expect(once).toBeGreaterThan(0);
+    expect(komut).toBeGreaterThan(once);
+    expect(sonra).toBeGreaterThan(komut);
+    expect(calistir.slice(sonra)).toContain('if ($dondu) { try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { } }');
+    for (const m of ps.matchAll(/^.*schtasks.*$/gm)) {
+      const satir = m[0].trim();
+      if (satir.startsWith('#') || /^\$schtasks = Join-Path \$Sys 'schtasks\.exe'$/.test(satir)) continue;
+      expect(satir).toMatch(/Calistir \$schtasks @\(/);
     }
   });
 });

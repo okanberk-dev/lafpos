@@ -631,8 +631,11 @@ Chrome güncellemesinden etkilenmez (kasa profili ayrı), Edge'de oturum ve sepe
 | Klasörler, görev, güvenlik duvarı, Uygulamalar kaydı | aynı | aynı |
 | Kısayollar | `node app\kurulum-yenile.mjs kisayollar --gruplar <seçilenler>` | aynı komut, iki grup (masaüstü, Başlangıç) |
 | Gün açıksa | sorar (sessiz kurulumda kurmaz) | sorar |
+| Çalışan sunucu | görevi kapatıp bitirir | aynı, ayrıca kurulum klasörünün Node'undan çalışan süreçleri (bekçi önce) durdurur |
 | Yeni sürüm | yan klasöre açılır, yer değiştirir, yazılamazsa eski döner | aynı |
-| Sonunda | sunucunun bu derlemeyle açılmasını bekler | aynı |
+| Kurulu sürüm daha yeniyse | kurar (sürüm geri düşer) | kurmaz, söyleyip çıkar |
+| Aynı anda iki kurulum | denetlenmez | ikincisi söyleyip çıkar |
+| Sonunda | sunucunun bu derlemeyle açılmasını bekler | aynı (ya da daha yenisiyle); başarıda pencere 10 sn sonra kendiliğinden kapanır |
 | Güncelleme kanalı | aynı (`lafpos.laffogato.net/guncelleme`) | aynı |
 | Fark | programı içinde taşır (internetsiz kurar); kaldırıcı `Kaldir.exe` | programı indirir; kaldırıcı `LafPOS-Kaldir.ps1`; şube kodu (ladmin) |
 
@@ -644,6 +647,27 @@ geçici kopyada yazılıp asıl adına kopyalanır (`kisayollar.ps1`, `web-kuruc
 dosyası hâlâ GitHub'dan (depo özel). Siteden doğrudan `.exe` vermek için iki yol var, ikisi de sahibin bir anahtar
 eklemesini ister: Vercel'de GitHub'ın salt okunur anahtarıyla sürüm dosyasının kısa ömürlü adresine yönlendiren bir uç ya
 da CI'ın dosyayı herkese açık Blob deposuna yüklemesi. Bugün siteden kurulum aynı programı kurduğu için gerekmez.
+
+**Siteden kurulum çalışan kasada (28 Kasım 2026 düzeltmesi).** Sahibin kasasında `AsilPOS-Kur.cmd` "Çalışan AsilPOS
+sunucusu durduruluyor, AsilPOS kuruluyor" dedikten sonra "Kurulum yarıda kaldı: The process cannot access the file
+because it is being used by another process" diye durdu. Kurucu sunucuyu yalnız görev sorgusu görevi bulursa
+durduruyordu; sorgu görevi bulamadı (olası neden: kurucu konsolu UTF-8'e çeviriyor, bazı Windows komutları o kod
+sayfasında hata koduyla dönebiliyor; Türkçe Windows'ta denenmedi), sunucu çalışmaya devam etti. Sunucunun çalışma
+klasörü `app\` olduğu için Windows klasörün adını değiştirmeyi reddetti. Bugün:
+
+- Görev ayrıca sorulmaz: her durumda kapatılır ve bitirilir (`/Change /DISABLE`, başarısı görevin var olduğunu söyler;
+  kurulum dosyası da böyle). Dış komutlar konsolun özgün kod sayfasıyla çalışır.
+- Görevden bağımsız: kurulum klasörünün Node'undan (`node\`, `node.yeni\`) çalışan her süreç durdurulur, bekçi önce
+  (yoksa durdurulan sunucuyu bir saniyede yeniden açar); hiçbiri kalmayana dek en çok 20 sn.
+- Dört yer değiştirme (`app` ve `node` kenara, yenileri yerine) tek denemede, her biri 10 sn'ye kadar yeniden denenir.
+  Biri olmazsa yerine konan yeni klasör kalkar, eskiler ayrı ayrı geri gelir, sunucu yeniden açılır (görev varsa görevle,
+  yoksa başlatıcıyla), sonra geçici klasör silinir. Ekranda: "Program dosyaları kullanımda olduğu için değiştirilemedi;
+  eski sürüm çalışıyor. En kolayı: Yönetim > Ayarlar ve yedek > Sürüm ve güncelleme > Şimdi güncelle. Ya da
+  bilgisayarı yeniden başlatıp bu dosyayı yeniden çalıştırın."
+- Eski sürümün artıkları (`app.eski`, `node.eski`) silinemezse kurulum yine tamamlanır; uyarı yazar, sonraki güncelleme
+  siler.
+
+Kafede bu kurulum dosyası gerekmez: kasanın içinden "Şimdi güncelle" aynı işi bekçinin güncelleyicisiyle yapar (§6).
 
 **Bugün kurulu kasalarla uyum.** Hiçbir ad değişmedi: kısayolların adları (eski `Kaldir.exe` sabit adları siler),
 tarayıcı profilleri (`%LocalAppData%\LafPOS\chrome`, `…\LafPOS\edge`, müşteri ekranınınki), kilit adları, görev, veri klasörü,
@@ -674,6 +698,12 @@ oturumundan açık tutulan dosya yok: geri dönüş (`app.eski`) eskisi gibi ça
    siteden kurulum (`AsilPOS-Kur.cmd`, yalnız CI için yerel kanal `ASILPOS_KUR_KANAL` ve sessiz kip `ASILPOS_KUR_SESSIZ`)
    ayrı ayrı kurulur: dosyalar, kısayollar (listeyle de), görev, güvenlik duvarı ve Uygulamalar kaydı aynı (yalnız
    kaldırıcı ve sürüm satırı farklı). Bu sürümün kaldırıcısı kasa penceresini ve bekçiyi de kapatır.
+6. Siteden kurulum çalışan kasanın üzerine (kasa penceresi açık, sunucu görevle çalışırken): çıkış 0, sunucu bu
+   derlemeyle, `kurulum.gecici`, `app.eski`, `node.eski` kalmaz, veritabanı kopyalanır, görev açık ve çalışıyor. Sonra
+   sahibin durumu: görev kapatılıp bekçi görevin dışından açılır (görevi kapatmak sunucuya dokunmaz); kurucu sunucuyu
+   süreçlerinden bulup durdurur ve tamamlar. Son olarak çalışma klasörü `app\` olan başka bir program açıkken kurucu
+   sıfırdan farklı çıkar ama eski sürüm yerinde kalır (sağlık yanıt verir, `app\bekci.mjs` yerinde, görev açık ve
+   çalışıyor); program kapanınca yeniden çalıştırılan kurucu tamamlar.
 
 Deneme ortamı kafeye benzetilir: adım pwsh'ta (PowerShell 7) koşar, pwsh'un `PSModulePath`'i oradan açılan Windows
 PowerShell 5.1'e geçince 5.1 kendi modüllerini (`Get-FileHash` gibi) yükleyemez; deneme bu değişkeni siler (kafede
