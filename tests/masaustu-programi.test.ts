@@ -10,6 +10,9 @@ import { ALAN_ADI, ESKI_URUN_ADI, KURULUM_KLASORU, SUNUCU_GOREVI } from '@shared
  * şekilde yap; exe ve siteden de isteyen aynı şekilde kurup çalıştırabilmeli"):
  * - kasa kısayolu konsolsuz kasa programını açar (kasa-yazici.ps1 -Ac): tek pencere (ikinci tıklama öne getirir), açılış
  *   penceresi, sunucu beklenir; Edge InPrivate değil; bekçi diskteki betik değişince kendini yeniler;
+ * - 28 Kasım 2026 ("PC'yi doğrudan AsilPOS'a geçir, estetikleştir, hızlandır"): tam ekran markalı açılış penceresi, kasa
+ *   penceresi yazıcılardan önce, derlemesiz Win32 çağrıları, önbellek yalnız derleme değişince silinir, kasa programının
+ *   günlüğü, çöken pencere geri gelir (kullanıcının kapattığı gelmez);
  * - kurulum dosyası (asilpos.nsi) ve siteden kurulum (web-kurucu.ps1) aynı programı kurar: kısayollar tek listeden aynı
  *   betikle (kurulum-yenile.mjs kisayollar), gün açıksa sorulur, yeni sürüm yan klasörden yer değiştirir, sunucunun yeni
  *   sürümle açıldığı beklenir.
@@ -84,8 +87,8 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     const one = ac.indexOf('if ($acik) { Show-KasaWindow $acik }');
     expect(one).toBeGreaterThan(0);
     expect(one).toBeLessThan(ac.indexOf('if (-not $acilisBende) { exit 0 }'));
-    const show = between(ps1, 'function Show-KasaWindow', 'function Test-KasaBakim');
-    for (const t of ['SetForegroundWindow', 'IsIconic($h)) { [void][AsilPos.Pencere]::ShowWindowAsync($h, 9) }', 'MainWindowHandle']) expect(show, t).toContain(t);
+    const show = between(ps1, 'function Show-KasaWindow', 'function Wait-KasaPenceresi');
+    for (const t of ['SetForegroundWindow', 'if ($y::IsIconic($h)) { [void]$y::ShowWindowAsync($h, 9) }', 'MainWindowHandle']) expect(show, t).toContain(t);
     // Kasa kısayolunun eski yolu da öne getirir; bekçi getirmez (arka planda pencere öne fırlamaz)
     expect(between(ps1, 'if ($KasaAc) {', 'if ($Bekci) {')).toContain('Open-KasaWindow $false $true');
     // Bekçi pencereyi yalnız kısayolun isteğiyle açar; kullanıcının kapattığını açmaz, müşteri ekranını kapatır (28 Kas 2026)
@@ -100,23 +103,38 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(open).toContain('[bool]$OneGetir = $false');
   });
 
-  it('sıra: tarayıcı denetimi, açılış penceresi, bekçi, sunucu (90 sn), yazıcılar ve müşteri ekranı, kasa penceresi', () => {
+  it('sıra (28 Kas 2026): tarayıcı denetimi, açılış penceresi, sunucu (90 sn), kasa penceresi, müşteri ekranı, yazıcılar', () => {
     const order = [
       "Show-Message (Tr 'Chrome ya da Edge bulunamad{i}.",
-      'if (-not $acik) { $splash = Start-Splash }',
-      'Start-WatcherIfNeeded',
-      'if (-not $acik) { Set-KasaAcIstegi; $hazir = Wait-Server $displayBase 90 }',
-      'Send-Printers $displayBase',
-      'Start-CustomerDisplay $displayBase',
-      'if (-not $acik -and $hazir) { if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi } }',
+      '$splash = Start-Splash',
+      'Set-KasaAcIstegi',
+      '$hazir = Test-Server $displayBase',
+      '$hazir = Wait-Server $displayBase 90',
+      'if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi }',
+      '$kasa = Wait-KasaPenceresi 5',
       'Stop-Splash $splash',
+      'if (-not $bekciBakildi) { Start-WatcherIfNeeded $psSurecleri',
+      'if ((Start-CustomerDisplay $displayBase) -and $kasa) { Show-KasaWindow $kasa }',
+      'Send-Printers $displayBase',
+      'Stop-TemporaryDisplayWatcher $psSurecleri',
       'Remove-UserPrepShortcut',
     ];
     const at = order.map((t) => ac.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    // Açılış penceresi her durumda kapanır; sunucu 90 sn'de gelmezse pencere açılmaz (bekçi açar), hata sayfası kalmaz
-    expect(ac.slice(ac.indexOf('} finally {'))).toContain('Stop-Splash $splash');
+    // Açılış penceresi yalnız pencere kapalıyken; kasa penceresi açılınca (ekranda görününce) kapanır, her durumda kapanır
+    expect(ac).toContain("if (-not $acik) {\n      $splash = Start-Splash");
+    expect(ac.slice(ac.indexOf('} finally {'))).toMatch(/^\} finally \{\n\s+Stop-Splash \$splash\n\s+\}/);
+    // Yazıcı sorgusu (15 sn'ye kadar) ve müşteri ekranı açılış penceresinin dışında, kasa penceresinden sonra
+    const pencere = ac.slice(0, ac.indexOf('} finally {'));
+    for (const t of ['Send-Printers', 'Start-CustomerDisplay']) expect(pencere, t).not.toContain(t);
+    // Sunucu hazırsa bekçiye pencereden sonra bakılır; değilse bekleme başlamadan (sunucu geç gelirse pencereyi o açar)
+    const soguk = between(ac, 'if (-not $hazir) {', '$hazir = Wait-Server $displayBase 90');
+    expect(soguk).toContain('Start-WatcherIfNeeded');
+    expect(soguk).toContain('$bekciBakildi = $true');
+    // Sunucu 90 sn'de gelmezse pencere açılmaz (bekçi isteği yerine getirir), müşteri ekranı ve yazıcılar da beklenmez
+    expect(ac).toContain('if ($hazir) {\n        if (Open-KasaWindow $false $true) { Clear-KasaAcIstegi }');
+    expect(between(ac, '# Kasa penceresinden sonra', 'Stop-TemporaryDisplayWatcher')).toMatch(/if \(\$hazir\) \{\n\s+if \(\(Start-CustomerDisplay/);
     // Yazıcı adımı işlev oldu: içinde script'i bitiren exit yok
     expect(between(ps1, 'function Send-Printers', '# Sunucu IPv4 dinler')).not.toMatch(/\bexit\b/);
   });
@@ -130,7 +148,7 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(sil).toContain('Remove-Item -LiteralPath $lnk -Force');
     // Menü klasörü yalnız boşaldıysa silinir; hata kasayı durdurmaz
     expect(sil).toContain('if (-not @(Get-ChildItem -LiteralPath $menu -Force).Count) { Remove-Item -LiteralPath $menu -Force }');
-    expect(sil).toContain('} catch { }');
+    expect(sil).toContain("} catch { Write-Hata 'eski hazirlik kisayolu' $_ }");
     expect(sil).not.toMatch(/CreateShortcut|Start-Process|\bexit\b/);
     // Kasa kısayolu (-Ac) ve 27 Kasım öncesinin kısayolu (kipsiz) eski kopyayı temizler
     expect(ac).toContain('Remove-UserPrepShortcut');
@@ -166,9 +184,9 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(splash).toContain("$rs.ApartmentState = 'STA'");
     expect(splash).toContain('$ps.BeginInvoke()');
     expect(splash).toContain('[System.Windows.Forms.Application]::Run($f)');
-    expect(splash).toContain('if ($durum.kapat) { $f.Close() }');
+    expect(splash).toContain('if ($durum.kapat) { $f.Close(); return }');
     expect(splash).toContain("Join-Path $KurulumKlasoru 'asilpos.ico'");
-    expect(splash).toMatch(/catch \{\s+return \$null\s+\}/);
+    expect(splash).toMatch(/catch \{\s+Write-Hata 'acilis penceresi' \$_\s+return \$null\s+\}/);
     // Tr: yer tutucular Türkçe harfe döner (ç, ğ, ı, ö, ş, ü)
     const tr = (s: string) => s.replaceAll('{c}', 'ç').replaceAll('{g}', 'ğ').replaceAll('{i}', 'ı').replaceAll('{o}', 'ö').replaceAll('{s}', 'ş').replaceAll('{u}', 'ü');
     expect(between(ps1, 'function Tr(', 'function Show-Message')).toContain("@(@('{c}', 0x00E7), @('{g}', 0x011F), @('{i}', 0x0131), @('{o}', 0x00F6), @('{s}', 0x015F), @('{u}', 0x00FC))");
@@ -212,7 +230,186 @@ describe('kasa programı: kasa-yazici.ps1 -Ac', () => {
     expect(m).toBe(true);
     const { WATCHER_VERSION } = await load('kurulum-yenile.mjs');
     expect(new RegExp('^\\$BekciSurumu = (\\d+)', 'm').exec(ps1)?.[1]).toBe(String(WATCHER_VERSION));
-    expect(WATCHER_VERSION).toBe(6);
+    expect(WATCHER_VERSION).toBe(7);
+  });
+});
+
+/**
+ * Daha hızlı ve markalı açılış, çöken pencere geri gelir (28 Kasım 2026, sahibin isteği: "PC'yi doğrudan AsilPOS'a geçir,
+ * estetikleştir, hızlandır"). Betik yalnız Windows'ta çalışır: burada metni denetlenir, gerçek Windows'ta ci-kurulum.mjs
+ * D3 (günlük, açılış penceresi), D5 (düzgün kapatılan açılmaz) ve D5b (çöken açılır) dener
+ */
+describe('kasa programı: hızlı ve markalı açılış, günlük, çöken pencere (28 Kas 2026)', () => {
+  const ps1 = read(`${K}kasa-yazici.ps1`);
+  const ac = between(ps1, 'if ($Ac) {', '# Kipsiz:');
+  const bekci = between(ps1, 'if ($Bekci) {', 'if ($Ac) {');
+
+  it('açılış penceresi tam ekran, ev yeşilinin degradesinde (DESIGN.md marka rayı), ortada simge ve "AsilPOS açılıyor"', () => {
+    const splash = between(ps1, 'function Start-Splash', 'function Stop-Splash');
+    for (const t of ['FormBorderStyle]::None', '$f.Bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds', 'LinearGradientMode]::Vertical', '$g.DrawImage($resim', "$f.Icon = New-Object System.Drawing.Icon($ikon)"]) expect(splash, t).toContain(t);
+    // Renkler DESIGN.md'deki marka rayının üç durağı (#0B6449 → #095A42 → #074A37)
+    const design = read('DESIGN.md');
+    const ray = /\| Marka rayı \| `linear-gradient\(180deg, (#\w{6}) → (#\w{6}) → (#\w{6})\)`/.exec(design);
+    expect(ray, 'DESIGN.md marka rayı').not.toBeNull();
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ');
+    expect(splash).toContain(`[System.Drawing.Color[]]@([System.Drawing.Color]::FromArgb(${rgb(ray![1]!)}), [System.Drawing.Color]::FromArgb(${rgb(ray![2]!)}), [System.Drawing.Color]::FromArgb(${rgb(ray![3]!)}))`);
+    // Metinler: Türkçe harfler yer tutucuyla; 20 sn'de sunucu gelmezse "Sunucu bekleniyor...", kapatma yolu yazılır
+    expect(splash).toContain("(Tr 'AsilPOS a{c}{i}l{i}yor')");
+    expect(splash).toContain("$rs.SessionStateProxy.SetVariable('bekleMetni', 'Sunucu bekleniyor...')");
+    expect(splash).toContain("(Tr 'Kapatmak i{c}in Esc''ye bas{i}n ya da ekrana dokunun')");
+    expect(splash).toContain('$bekle = (-not $durum.sunucu) -and (([DateTime]::Now - $basla).TotalSeconds -ge 20)');
+    // Kasiyer kilitlenmez: Esc her an, dokunma 20 sn'den sonra kapatır; pencere en üstte zorlanmaz
+    expect(splash).toContain('if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $durum.kullanici = $true; $f.Close() }');
+    expect(splash).toContain('try { if ($durum.bekliyor) { $durum.kullanici = $true; $f.Close() } }');
+    expect(splash).not.toContain('TopMost');
+    // İş parçacığındaki her olay işleyicisi hatayı yakalar (WinForms'un hata kutusu çıkmaz), ileti günlüğe gider
+    const isleyiciler = [...splash.matchAll(/\$\w+\.Add_(\w+)\(\{/g)].map((m) => m[1]);
+    expect(isleyiciler).toEqual(['Paint', 'KeyDown', 'MouseDown', 'Shown', 'Tick']);
+    for (const ad of isleyiciler) expect(between(splash, `.Add_${ad}({`, '})'), ad).toMatch(/try \{[\s\S]*\} catch \{ \$durum\.hata = /);
+    const durdur = between(ps1, 'function Stop-Splash', 'function Wait-Server');
+    expect(durdur).toContain("if ($s.durum.hata) { Write-Log ('acilis penceresi hatasi: ' + $s.durum.hata) }");
+    expect(durdur).toContain("Write-Log ('acilis penceresi gorundu (' + $s.durum.gorundu + ' ms)')");
+    // Sunucu hazır olunca açılış penceresine bildirilir (bekleme yazısı geri döner)
+    expect(ac).toContain('if ($splash) { $splash.durum.sunucu = $hazir }');
+  });
+
+  it('Win32 işlevleri derlemesiz (Add-Type C# derlemesi yok): DPI, öne getirme', () => {
+    expect(ps1).not.toMatch(/-MemberDefinition|-TypeDefinition|DllImport/);
+    const kod = ps1.split('\n').filter((l) => !l.trim().startsWith('#'));
+    const addType = kod.filter((l) => l.includes('Add-Type')).map((l) => l.trim());
+    expect(addType.length).toBeGreaterThan(0);
+    for (const l of addType) expect(l).toMatch(/^Add-Type -AssemblyName System\.(Windows\.Forms|Drawing)$/);
+    const yerel = between(ps1, 'function Get-Yerel', '\ntry {');
+    expect(yerel).toContain('DefinePInvokeMethod(');
+    expect(yerel).toContain('[System.Reflection.MethodImplAttributes]::PreserveSig');
+    expect(yerel).toContain('if ($script:YerelTip) { return $script:YerelTip }');
+    for (const f of ['SetProcessDPIAware', 'SetForegroundWindow', 'ShowWindowAsync', 'IsIconic', 'keybd_event']) expect(yerel, f).toContain(`@('${f}', (`);
+    // Süreç DPI'ya duyarlı, açılış penceresinden önce (pencere keskin, ikinci ekran gerçek pikselle)
+    expect(ps1.indexOf('[void]$yerel::SetProcessDPIAware()')).toBeLessThan(ps1.indexOf('function Start-Splash'));
+  });
+
+  it('tarayıcı önbelleği her açılışta değil, kurulu derleme değişince silinir (profil başına son derleme dosyada)', () => {
+    const derleme = between(ps1, 'function Get-KuruluDerleme', 'function Clear-BrowserCache');
+    expect(derleme).toContain("Join-Path $PSScriptRoot 'package.json'");
+    expect(derleme).toContain(`'"build"\\s*:\\s*(\\d+)'`);
+    expect(ps1).toContain(`$OnbellekKaydi = Join-Path $env:LOCALAPPDATA '${ESKI_URUN_ADI}\\onbellek-derleme.txt'`);
+    const temizle = between(ps1, 'function Clear-BrowserCache', 'function Get-TarayiciSurecleri');
+    // Aynı derlemede silinmez; derleme yalnız önbellek gerçekten silindiyse yazılır (silinemezse sonra yeniden denenir)
+    const atla = temizle.indexOf('if ($kayit[$ad] -eq $derleme) { return }');
+    const sil = temizle.indexOf('Remove-Item -LiteralPath $cache -Recurse -Force');
+    const kalmis = temizle.indexOf("Write-Log ('onbellek tam silinemedi: ' + $ad)");
+    const yaz = temizle.indexOf('[System.IO.File]::WriteAllLines($OnbellekKaydi');
+    expect(atla).toBeGreaterThan(0);
+    expect(sil).toBeGreaterThan(atla);
+    expect(kalmis).toBeGreaterThan(sil);
+    expect(yaz).toBeGreaterThan(kalmis);
+    // Derleme okunamazsa (git ile çalışan kurulum) eskisi gibi her açılışta silinir
+    expect(temizle).toContain('if ($derleme -and (Test-Path -LiteralPath $OnbellekKaydi)) {');
+  });
+
+  it('tekrarlanan sorgular tekilleşti: yazıcılar bir kez, bekçi turunda tarayıcılar bir kez, kısayolda PowerShell süreçleri bir kez', () => {
+    expect(ps1.match(/Get-CimInstance -ClassName Win32_Printer/g)).toHaveLength(1);
+    expect(between(ps1, 'function Send-Printers', '# Sunucu IPv4 dinler')).toContain('$printer = $yazicilar | Where-Object { $_.Name -eq $name }');
+    // Bekçi: tur başına tek tarayıcı sorgusu, kasa ve müşteri ekranı aynı listeden; müşteri ekranı açıksa yeniden sorulmaz
+    expect(bekci).toContain('$surecler = @(Get-TarayiciSurecleri)\n      $kasa = Get-KasaProcess $surecler');
+    expect(bekci).toContain('if (-not (Test-CustomerDisplay $surecler)) { [void](Start-CustomerDisplay $displayBase) }');
+    // Kasa kısayolu: bekçi ve geçici müşteri ekranı bekçisi aynı süreç listesinden
+    expect(ac).toContain('$psSurecleri = @(Get-PowerShellSurecleri)');
+    expect(ac).toContain('Stop-TemporaryDisplayWatcher $psSurecleri');
+    expect(between(ps1, 'function Start-WatcherIfNeeded', 'function Remove-UserPrepShortcut')).toContain('if ($null -eq $surecler) { $surecler = @(Get-PowerShellSurecleri) }');
+  });
+
+  it('kasa programının günlüğü: yeri, 1 MB\'ta tek yedek, adım süreleri; yakalanan hatalar sessiz geçmez, gizli değer yazılmaz', () => {
+    expect(ps1).toContain(`$Gunluk = Join-Path $env:LOCALAPPDATA '${ESKI_URUN_ADI}\\logs\\kasa-programi.log'`);
+    const log = between(ps1, 'function Write-Log', 'function Write-Hata');
+    expect(log).toContain('if ($fi.Exists -and $fi.Length -ge 1MB) {');
+    expect(log).toContain("$yedek = $Gunluk + '.1'");
+    expect(log).toContain('[System.IO.File]::Move($Gunluk, $yedek)');
+    // Kısayol ve bekçi aynı dosyaya ekler: paylaşımlı açma
+    expect(log).toContain('[System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)');
+    // Açılışın adım süreleri tek satırda
+    expect(ac).toContain("$ozetSatiri = 'acilis: ' + ($adimlar -join ', ') + '; toplam ' + $saat.ElapsedMilliseconds + ' ms'");
+    for (const a of ['denetim', 'acilis penceresi', 'sunucu', 'kasa penceresi', 'bekci', 'musteri ekrani', 'yazicilar']) expect(ac, a).toContain(`Add-Adim '${a}'`);
+    // Boş catch yalnız günlüğün kendisinde (yazılacak yer yok) ve kilit bırakmada; öbürleri günlüğe yazar ya da değer döndürür
+    const bos = [...ps1.matchAll(/catch \{\s*\}/g)].map((m) => ps1.slice(ps1.lastIndexOf('\n', m.index!) + 1, ps1.indexOf('\n', m.index!)).trim());
+    expect(bos.every((l) => l === 'if ($own) { try { $mx.ReleaseMutex() } catch { } }' || l === 'try { $tek.ReleaseMutex() } catch { }'), JSON.stringify(bos)).toBe(true);
+    expect(between(log, '} catch {', '\n  }\n')).toMatch(/^\} catch \{\n\s+# Gunluk yazilamadi/);
+    for (const f of ['Start-CustomerDisplay', 'Stop-TemporaryDisplayWatcher', 'Show-KasaWindow', 'Set-KasaAcIstegi', 'Stop-CustomerDisplay', 'Open-KasaWindow', 'Remove-TemporaryKasaWatcher', 'Start-WatcherIfNeeded', 'Remove-UserPrepShortcut', 'Send-Printers', 'Clear-BrowserCache', 'Show-Message']) {
+      const govde = ps1.slice(ps1.indexOf(`function ${f}`), ps1.indexOf('\n}\n', ps1.indexOf(`function ${f}`)));
+      expect(govde, f).toMatch(/catch \{\s*Write-Hata '/);
+    }
+    // Gizli değer yazılmaz: günlüğe giden satırlarda istek gövdesi, yanıt, PIN, parola ya da anahtar yok
+    const satirlar = ps1.split('\n').filter((l) => /Write-(Log|Hata)\b/.test(l) && !/^\s*function /.test(l));
+    expect(satirlar.length).toBeGreaterThan(20);
+    for (const l of satirlar) expect(l, l).not.toMatch(/\$(body|bytes|res)\b|pin|parola|sifre|token|anahtar|secret|Authorization/i);
+  });
+
+  it('bekçi çöken pencereyi yeniden açar, kullanıcının kapattığını açmaz; emin olunamayan açılmaz', () => {
+    // İşaret: profilin Default\Preferences'ında tek profile.exit_type; iki okumada da (3 sn arayla) "Crashed" ve çıkış kodu 0 değil
+    const tur = between(ps1, 'function Get-ExitType', 'function Watch-KasaProcess');
+    expect(tur).toContain("Read-ScriptBytes (Join-Path $profil 'Default\\Preferences')");
+    expect(tur).toContain(`'"exit_type"\\s*:\\s*"(\\w+)"'`);
+    expect(tur).toContain('if ($m.Count -ne 1) { return $null }');
+    const kapanis = between(ps1, 'function Get-KasaKapanis', 'function Remove-TemporaryKasaWatcher');
+    expect(kapanis).toContain("if (-not $izlenen.Surec.WaitForExit(3000)) { return @{ karar = 'acik'; metin = 'surec calisiyor' } }");
+    expect(kapanis).toMatch(/if \(\$ilk -eq 'Crashed'\) \{\n\s+Start-Sleep -Seconds 3\n\s+\$son = Get-ExitType \$izlenen\.Profil/);
+    expect(kapanis).toContain("if ($ilk -eq 'Crashed' -and $son -eq 'Crashed' -and $kod -ne 0) { return @{ karar = 'coktu'");
+    // Başka her durum (Normal, SessionEnded, okunamadı, çıkış kodu 0) çökme sayılmaz
+    expect(kapanis.slice(kapanis.indexOf("karar = 'coktu'"))).toContain("return @{ karar = 'kapatildi'");
+    // Süreç pencere açıkken izlenir (tutamak: çıkış kodu), profil komut satırından
+    const izle = between(ps1, 'function Watch-KasaProcess', 'function Close-Izlenen');
+    expect(izle).toContain('[System.Diagnostics.Process]::GetProcessById([int]$kasa.ProcessId)');
+    expect(izle).toContain('[void]$surec.Handle');
+    expect(izle).toContain("Write-Log ('kasa penceresi izleniyor: surec ' + $kasa.ProcessId");
+    // Bekçi: yalnız gördüğü pencere kapanınca karar verir; çökmede bakım arası yoksa ve 10 dakikada 3'ü aşmadıysa istek bırakır
+    const karar = between(bekci, '} elseif ($kasaAcikti -and $izlenen) {', '# Kisayolun (ya da coken pencerenin) istegi');
+    const bakim = karar.indexOf('if (Test-KasaBakim $displayBase) {');
+    const sinir = karar.indexOf('} elseif ($cokmeler.Count -ge 3) {');
+    const istek = karar.indexOf('Set-KasaAcIstegi');
+    expect(karar).toContain("if ($kapanis.karar -eq 'coktu') {");
+    expect(bakim).toBeGreaterThan(0);
+    expect(sinir).toBeGreaterThan(bakim);
+    expect(istek).toBeGreaterThan(sinir);
+    expect(karar).toContain('$cokmeler = @($cokmeler | Where-Object { ($simdi - $_).TotalMinutes -lt 10 })');
+    expect(karar.match(/Set-KasaAcIstegi/g)).toHaveLength(1);
+    // Çöken pencerenin yenisi öne gelir; kısayolun isteğiyle açılan pencere öne fırlamaz
+    expect(bekci).toContain('if ($cokmeOne) { Show-KasaWindow $yeni }');
+    expect(bekci.match(/Show-KasaWindow/g)).toHaveLength(1);
+    // Kullanıcının kapattığı pencere: istek yok, müşteri ekranı kapanır (#195)
+    expect(bekci).toContain('} elseif ($kasaAcikti) {\n        # Kullanici kasa penceresini kapatti: yeniden acilmaz, musteri ekrani da kapanir');
+    // Bir turun hatası bekçiyi durdurmaz (aynı hata tekrar tekrar yazılmaz)
+    expect(bekci).toContain('if ($m -ne $sonHata) { Write-Log $m }');
+  });
+
+  it('Windows CI: düzgün kapatılan pencere gelmez, zorla kapatılan (çöken) gelir; günlük ve açılış penceresi denetlenir', () => {
+    const ci = read(`${K}ci-kurulum.mjs`);
+    const order = [
+      "if (masaustu && !/ acilis penceresi gorundu",
+      "step('D5. Kullanıcının kapattığı pencereyi bekçi yeniden açmaz",
+      "await bekciGordu('D5');",
+      "const kapatD5 = ps('kapat', ['-Duzgun']);",
+      "if (exitType() !== 'Normal') fail(",
+      "'bekçi kullanıcının kapattığı kasa penceresini yeniden açtı'",
+      "step('D5b. Çöken (zorla kapatılan) pencereyi bekçi yeniden açar');",
+      "const kasaOnceD5b = await bekciGordu('D5b');",
+      "ps('kapat');\nconst d5b = await waitSayfa(tCokme, () => true, 'bekçi çöken kasa penceresini yeniden açmadı', 120_000);",
+      '/kasa penceresi kapandi, coktu: exit_type Crashed/',
+    ];
+    const at = order.map((t) => ci.indexOf(t));
+    expect(at.every((i) => i > 0), JSON.stringify(order.filter((_, i) => at[i]! <= 0))).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // Zorla kapatmadan önce tarayıcı "Crashed"ı diske yazmış olmalı (yoksa çökme sayılmaz)
+    expect(ci.match(/await until\('kasa profili açılışta exit_type "Crashed" yazmadı', \(\) => exitType\(\) === 'Crashed'/g)).toHaveLength(2);
+    // Düzgün kapatma pencereye kapatma iletisi (Alt+F4 gibi); zorla kapatma süreçleri öldürür
+    const helper = read(`${K}ci-windows.ps1`).replace(/\r\n/g, '\n');
+    const kapat = between(helper, "'kapat' {", "'bekci-kapat' {");
+    expect(kapat).toContain('if ($p -and $p.CloseMainWindow()) { $gonderilen++ }');
+    expect(kapat.slice(kapat.indexOf('$n = 0'))).toContain('Stop-Process -Id $_.ProcessId -Force');
+    // Bekçinin sürümü tek yerden (kurulum-yenile.mjs)
+    expect(ci).not.toMatch(/-BekciSurum \d/);
+    expect(ci.match(/-BekciSurum \$\{WATCHER_VERSION\}/g)).toHaveLength(2);
+    // Başarısızlıkta kasa programının günlüğü de yazılır
+    expect(between(ci, 'function fail(msg) {', '\n}\n')).toContain('tail(KASA_GUNLUGU)');
   });
 });
 

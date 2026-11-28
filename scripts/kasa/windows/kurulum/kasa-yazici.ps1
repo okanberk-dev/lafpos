@@ -52,7 +52,7 @@ $KurulumKlasoru = Split-Path -Parent $PSScriptRoot
 # dosyaya ekler (paylasimli acma; ayni anda yazilamayan satir kaybolur, kasa durmaz)
 $Gunluk = Join-Path $env:LOCALAPPDATA 'LafPOS\logs\kasa-programi.log' # eski-ad: kasa profilleriyle ayni klasor
 $Kip = 'eski'
-if ($Bekci) { $Kip = 'bekci' } elseif ($Ac) { $Kip = 'ac' } elseif ($KasaAc) { $Kip = 'kasa-ac' }
+if ($Bekci.IsPresent) { $Kip = 'bekci' } elseif ($Ac.IsPresent) { $Kip = 'ac' } elseif ($KasaAc.IsPresent) { $Kip = 'kasa-ac' }
 function Write-Log([string]$metin) {
   try {
     $dir = Split-Path -Parent $Gunluk
@@ -200,7 +200,7 @@ function Test-CustomerDisplay($surecler = $null) {
   return [bool]$p
 }
 
-# Musteri ekranini acar (ikinci ekran varsa ve acik degilse). Dondurdugu: yeni pencere acildiysa $true
+# Musteri ekranini acar (ikinci ekran varsa ve acik degilse). Dondurdugu: yeni pencere acildiysa $true (yoksa bos)
 function Start-CustomerDisplay([string]$base) {
   $mx = $null
   $own = $false
@@ -208,17 +208,17 @@ function Start-CustomerDisplay([string]$base) {
   try {
     Add-Type -AssemblyName System.Windows.Forms
     $second = [System.Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | Select-Object -First 1
-    if (-not $second) { return $false }
+    if (-not $second) { return }
     # Acmak kilit altinda (inceleme, 23 Kas 2026): oturum acilinca kisayol ile bekci ayni anda sunucunun kalkmasini
     # bekler. Ikisi birden pencereyi yok gorup Chrome'u acarsa ikinci acilis ilk surece devredilir, ikinci tam ekran acilir
     $mx = New-Object System.Threading.Mutex($false, 'Local\LafPOS-MusteriPencere')
     try { $own = $mx.WaitOne(30000) } catch [System.Threading.AbandonedMutexException] { $own = $true }
-    if (Test-CustomerDisplay) { return $false }
+    if (Test-CustomerDisplay) { return }
     $exe = Get-DisplayExe
-    if (-not $exe) { return $false }
+    if (-not $exe) { return }
     # Sunucu cevap vermiyorsa acilmaz, bekci 15 sn sonra yeniden bakar (inceleme, 23 Kas 2026). Bekci oturum acilinca
     # baslar, sunucu henuz kalkmamis olabilir: hata sayfasiyla acilan pencerenin sureci var oldugu icin bir daha acilmazdi
-    if (-not (Test-Server $base)) { return $false }
+    if (-not (Test-Server $base)) { return }
     $b = $second.Bounds
     $profileDir = Join-Path $env:LOCALAPPDATA 'LafPOS\chrome-musteri'
     $chromeArgs = @(
@@ -583,6 +583,7 @@ function Watch-KasaProcess($kasa) {
   }
   $profil = 'chrome'
   if ([string]$kasa.CommandLine -match '\\LafPOS\\(chrome|edge)(?![\w-])') { $profil = $Matches[1] }
+  Write-Log ('kasa penceresi izleniyor: surec ' + $kasa.ProcessId + ' (' + $profil + ')')
   return @{ Pid = [int]$kasa.ProcessId; Surec = $surec; Profil = (Join-Path $env:LOCALAPPDATA ($EskiAd + '\' + $profil)) }
 }
 

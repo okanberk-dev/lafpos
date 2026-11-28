@@ -10,13 +10,15 @@
 #   duvar        guvenlik duvari kurallari
 #   agac         kurulum klasoru: kok dosyalar (ozetle), app\ ve node\ dosyalarinin yollari
 #   ac           -Kisayol'un hedefini ve argumanlarini bu surecin ortamiyla calistirir (kisayolun yaptigi)
-#   kapat        kasa penceresini (kasa profiliyle calisan tarayicinin butun surecleri) kapatir
+#   kapat        kasa penceresini (kasa profiliyle calisan tarayicinin butun surecleri) zorla kapatir (cokme gibi: profil
+#                "Crashed" kalir); -Duzgun ile kullanicinin Alt+F4'u gibi pencereye kapatma iletisi gider, surecler kendiliginden
+#                biter (en cok 30 sn; sonuc gonderilen ileti ve kalan surec sayisi)
 #   bekci-kapat  kasa bekcilerini kapatir
 #   not-defteri  Not Defteri'ni acip one getirir (one getirme denemesi icin)
 #   ekran        ekranin goruntusunu -Dosya'ya yazar
 #   politika     Edge ve Chrome politikalari (HKLM ve HKCU): InPrivate'i zorlayan ya da cikista veriyi silen ayar var mi
 # Yalniz ASCII (Windows PowerShell 5.1).
-param([Parameter(Mandatory = $true)][string]$Islem, [string]$Kisayol = '', [string]$Dosya = '', [string]$Klasor = '', [string]$Profil = 'chrome')
+param([Parameter(Mandatory = $true)][string]$Islem, [string]$Kisayol = '', [string]$Dosya = '', [string]$Klasor = '', [string]$Profil = 'chrome', [switch]$Duzgun)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 # Kisayol adlarindaki Turkce harfler (Sunucu gunlugu) Node'a bozulmadan gitsin
@@ -106,7 +108,7 @@ switch ($Islem) {
     if (-not (Test-Path -LiteralPath $a)) { Json $null; break }
     $v = Get-ItemProperty -LiteralPath $a
     $o = [ordered]@{}
-    foreach ($n in @('DisplayName', 'DisplayVersion', 'Publisher', 'DisplayIcon', 'InstallLocation', 'UninstallString', 'QuietUninstallString', 'NoModify', 'NoRepair')) { $o[$n] = $v.$n }
+    foreach ($n in @('DisplayName', 'DisplayVersion', 'Publisher', 'DisplayIcon', 'InstallLocation', 'UninstallString', 'QuietUninstallString', 'NoModify', 'NoRepair', 'InstallDate', 'EstimatedSize')) { $o[$n] = $v.$n }
     Json $o
   }
   'gorev' {
@@ -172,6 +174,23 @@ switch ($Islem) {
   }
   'kapat' {
     $re = '\\LafPOS\\' + $Profil + '(?![\w-])' # eski-ad: kurulu kasanin adlari
+    if ($Duzgun) {
+      # Ana surecin (--type= tasimayan) penceresine WM_CLOSE: tarayici profili "Normal" yazip kapanir
+      $gonderilen = 0
+      Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match $re -and $_.CommandLine -notmatch '--type=' } | ForEach-Object {
+        $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+        if ($p -and $p.CloseMainWindow()) { $gonderilen++ }
+      }
+      $kalan = 0
+      $son = (Get-Date).AddSeconds(30)
+      while ($true) {
+        $kalan = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match $re }).Count
+        if ($kalan -eq 0 -or (Get-Date) -ge $son) { break }
+        Start-Sleep -Milliseconds 500
+      }
+      Json ([ordered]@{ gonderilen = $gonderilen; kalan = $kalan })
+      break
+    }
     $n = 0
     Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match $re } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }
     Json $n

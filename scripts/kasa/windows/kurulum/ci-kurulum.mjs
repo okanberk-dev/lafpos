@@ -10,8 +10,9 @@
 //   D. İlk açılış yeni sürümle (27 Kasım şikâyeti: "güncellemeden sonra ilk açılışta eski sürüm, yenileyince düzeliyor"):
 //      güncellemeden önce açılmış pencere kendiliğinden yeni sürüme geçer; pencere kapanıp (gece) yeni kısayolla açılınca
 //      ilk sayfa yeni derlemedir ve sunucudan gelir (önbellekten değil). Program: kısayollar konsolsuz programa döndü,
-//      eski bekçi yenisiyle değişti, ikinci tıklama ikinci pencere açmaz ve öne getirir, bekçi kapanan pencereyi açmaz
-//      (bakım arasında açmaz), Edge kalıcı profille açılır (InPrivate değil).
+//      eski bekçi yenisiyle değişti, ikinci tıklama ikinci pencere açmaz ve öne getirir, bekçi düzgün kapatılan pencereyi
+//      açmaz, çökeni (zorla kapatılanı) yeniden açar (bakım arasında açmaz), Edge kalıcı profille açılır (InPrivate değil).
+//      Kasa programının günlüğü açılışın adım sürelerini yazar; Uygulamalar kaydı güncellemeden sonra yeni sürümü gösterir.
 //   E. Bozuk derleme: kurulur, açılmaz, eski sürüme dönülür. Sonra gece kapanmış pencere (sayfası eski sunucu gibi
 //      saklanmış), yeni arayüz ve yeni kasa betiğiyle güncelleme: bekçi kendini yeniler, sabah ilk açılış yeni sürüm.
 //      Bu derlemenin (artık daha eski) kurulum dosyası daha yeni kurulumun üzerine sessiz çalışınca kurmadan çıkar.
@@ -33,6 +34,7 @@ import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractZip, zipFiles } from './arsiv.mjs';
 import { CI_DEPO_ANAHTARI, mainScript, startProxy } from './ci-vekil.mjs';
+import { displayVersion, WATCHER_VERSION } from './kurulum-yenile.mjs';
 import { buildInfo, ROOT } from './paket.mjs';
 import { NODE_VERSION } from './surumler.mjs';
 
@@ -58,6 +60,8 @@ const ONCEKI_EXE = process.env.ASILPOS_CI_ONCEKI || join(ROOT, 'dist', 'onceki',
 const BU_EXE = join(ROOT, 'dist', 'windows', `AsilPOS-Kurulum-${process.env.ASILPOS_SURUM}.exe`);
 const BU_DERLEME = buildInfo().build;
 const MENU = join(process.env.ProgramData || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'AsilPOS');
+/** Kasa programının günlüğü (kasa-yazici.ps1; oturumdaki kullanıcının, kasa profillerinin klasöründe) */
+const KASA_GUNLUGU = join(process.env.LOCALAPPDATA ?? '', 'LafPOS', 'logs', 'kasa-programi.log'); // eski-ad: profil klasörü
 const KASA_KISAYOLU = join(MENU, 'AsilPOS Kasa.lnk');
 
 const step = (s) => console.log(`\n▸ ${s}`);
@@ -99,6 +103,7 @@ function fail(msg) {
   console.error(`\n✗ ${msg}`);
   const logs = join(HOME, 'logs');
   if (existsSync(logs)) for (const f of readdirSync(logs)) console.error(`\n--- ${f} ---\n${tail(join(logs, f))}`);
+  console.error(`\n--- kasa-programi.log ---\n${tail(KASA_GUNLUGU)}`);
   console.error(`\n--- guncelleme/durum.json ---\n${tail(join(HOME, 'guncelleme', 'durum.json'), 40)}`);
   if (vekil) console.error(`\n--- vekil (son 40) ---\n${vekil.log.slice(-40).map((e) => JSON.stringify(e)).join('\n')}`);
   try {
@@ -217,6 +222,36 @@ const bekciler = () => ps('surecler').bekci ?? [];
 /** Vekilin kasa sayfası bildirimleri (müşteri ekranı hariç) */
 const sayfalar = (since) => vekil.log.filter((e) => e.tur === 'sayfa' && e.t >= since && !String(e.yol).startsWith('/musteri-ekrani'));
 const waitSayfa = (since, pred, label, ms) => until(label, () => sayfalar(since).find(pred) ?? null, ms, 1000);
+/**
+ * Bekçi bu kasa penceresini gördü (günlükte "izleniyor"; en çok 15 sn'de bir bakar). Görmediği pencere kapanınca bekçi
+ * karar vermez: kapatma denemeleri bunu bekler. Dönen: pencerenin süreci
+ */
+async function bekciGordu(label) {
+  const k = await until(`${label}: kasa penceresinin süreci yok`, () => (kasaSurecleri().length === 1 ? kasaSurecleri() : null), 30_000);
+  await until(`${label}: bekçi kasa penceresini görmedi`, () => kasaGunlugu().includes(`kasa penceresi izleniyor: surec ${k[0].pid} `), 40_000, 1000);
+  return k;
+}
+
+/** Kasa programının günlüğü (yoksa boş) */
+const kasaGunlugu = () => {
+  try {
+    return readFileSync(KASA_GUNLUGU, 'utf8');
+  } catch {
+    return '';
+  }
+};
+/**
+ * Kasa profilinin Default\Preferences'ındaki profile.exit_type: tarayıcı açılışta "Crashed" yazar (birkaç saniye içinde
+ * diske), düzgün kapanınca "Normal". Bekçinin çökme ayrımı buna bakar (kasa-yazici.ps1 Get-KasaKapanis)
+ */
+function exitType(profil = 'chrome') {
+  try {
+    const m = [...readFileSync(join(process.env.LOCALAPPDATA ?? '', 'LafPOS', profil, 'Default', 'Preferences'), 'utf8').matchAll(/"exit_type"\s*:\s*"(\w+)"/g)]; // eski-ad: profil klasörü
+    return m.length === 1 ? m[0][1] : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Kasa profilinin yerel deposunun dosyaları (Chromium: Default\Local Storage\leveldb) ve sayfanın anahtarı diskte mi */
 function depoDiski(profil) {
@@ -523,6 +558,13 @@ if (status()?.kurulumUyari) fail(`kurulum uyarısı: ${status().kurulumUyari}`);
 const kasaLnk = ps('kisayollar').find((k) => k.goreli === 'AsilPOS\\AsilPOS Kasa.lnk');
 if (!/powershell\.exe$/i.test(kasaLnk.hedef) || !kasaLnk.arguman.endsWith('kasa-yazici.ps1" -Ac') || !kasaLnk.arguman.includes('-WindowStyle Hidden')) fail(`kasa kısayolu programı açmıyor: ${JSON.stringify(kasaLnk)}`);
 console.log(`  ${nLinks} kısayol listeyle aynı; kasa kısayolu: ${kasaLnk.hedef} ${kasaLnk.arguman}`);
+// Uygulamalar kaydı yeni sürümü gösterir (otomatik güncelleme eskiden yalnız adı ve simgeyi yeniliyordu)
+const kayitD2 = ps('kayit');
+const surumD2 = displayVersion(readJson(join(INSTALL, 'app', 'package.json'))?.version, b1);
+if (!surumD2 || kayitD2?.DisplayVersion !== surumD2) fail(`Uygulamalar kaydı güncellemeden sonra yeni sürümü göstermiyor: "${kayitD2?.DisplayVersion}" (beklenen "${surumD2}")`);
+if (!/^\d{8}$/.test(String(kayitD2.InstallDate ?? ''))) fail(`Uygulamalar kaydının tarihi yok: ${JSON.stringify(kayitD2)}`);
+if (!(Number(kayitD2.EstimatedSize) > 10_000)) fail(`Uygulamalar kaydının boyutu yok: ${JSON.stringify(kayitD2)}`);
+console.log(`  Uygulamalar kaydı: ${kayitD2.DisplayVersion}, ${kayitD2.InstallDate}, ${Math.round(Number(kayitD2.EstimatedSize) / 1024)} MB`);
 
 step('D3. Kapanan pencereyi yeni kasa kısayolu açar: ilk sayfa yeni sürüm ve sunucudan; eski bekçi yenisiyle değişir');
 const bekciOnce = bekciler();
@@ -543,9 +585,19 @@ const kasaD3 = await until('kasa penceresinin süreci yok', () => (kasaSurecleri
 for (const f of ['--kiosk', '--kiosk-printing', `--app=${VEKIL}`]) if (!kasaD3[0].komut.includes(f)) fail(`kasa penceresinde ${f} yok: ${kasaD3[0].komut}`);
 const bekciD3 = await until('yeni bekçi açılmadı', () => {
   const b = bekciler();
-  return b.length === 1 && b[0].komut.includes('-BekciSurum 6') ? b : null;
+  return b.length === 1 && b[0].komut.includes(`-BekciSurum ${WATCHER_VERSION}`) ? b : null;
 }, 60_000);
 console.log(`  ilk sayfa ${d3.script}, başlık ${d3.baslik}; bekçi ${bekciD3[0].pid} (${bekciD3[0].komut.replace(/.*-Bekci/, '-Bekci')})`);
+// Kasa programının günlüğü: açılış penceresi göründü, açılışın adım süreleri (yazıcılardan sonra yazılır)
+const acilisD3 = await until(
+  'kasa programının günlüğünde açılış satırı yok',
+  () => kasaGunlugu().split(/\r?\n/).filter((l) => / ac\[\d+\] acilis: /.test(l)).at(-1) ?? null,
+  90_000,
+  1000,
+);
+if (masaustu && !/ acilis penceresi gorundu \(\d+ ms\)/.test(kasaGunlugu())) fail(`açılış penceresi görünmedi:\n${tail(KASA_GUNLUGU, 30)}`);
+if (/acilis penceresi hatasi/.test(kasaGunlugu())) fail(`açılış penceresinde hata:\n${tail(KASA_GUNLUGU, 30)}`);
+console.log(`  günlük: ${acilisD3.replace(/^.*? acilis: /, '')}`);
 ekran('ilk-acilis-yeni-surum');
 
 step('D4. Tek pencere: kısayola yeniden basınca ikinci pencere açılmaz, açık olan öne gelir');
@@ -573,16 +625,37 @@ if (masaustu) {
 }
 ekran('ikinci-tiklama-one-getirir');
 
-step('D5. Kapanan pencereyi bekçi yeniden açmaz (sahibin isteği, 28 Kas 2026); kısayol açar');
+step('D5. Kullanıcının kapattığı pencereyi bekçi yeniden açmaz (sahibin isteği, 28 Kas 2026); kısayol açar');
 await bakim(false);
-ps('kapat');
+// Kullanıcının Alt+F4'u gibi (pencereye kapatma iletisi): tarayıcı düzgün kapanır, profil "Normal" yazar
+await until('kasa profili açılışta exit_type "Crashed" yazmadı', () => exitType() === 'Crashed', 60_000, 1000);
+await bekciGordu('D5');
+const kapatD5 = ps('kapat', ['-Duzgun']);
+if (kapatD5.gonderilen < 1 || kapatD5.kalan) fail(`kasa penceresi düzgün kapanmadı: ${JSON.stringify(kapatD5)}`);
+if (exitType() !== 'Normal') fail(`düzgün kapanan pencerenin profili "${exitType()}" diyor (beklenen "Normal")`);
 await sleep(35_000);
 if (kasaSurecleri().length) fail('bekçi kullanıcının kapattığı kasa penceresini yeniden açtı');
-console.log('  kapanan pencere 35 sn sonra hâlâ kapalı');
+if (!/kasa penceresi kapandi, kullanici kapatti/.test(kasaGunlugu())) fail(`bekçi kapanışı günlüğe yazmadı:\n${tail(KASA_GUNLUGU, 30)}`);
+console.log('  düzgün kapatılan pencere 35 sn sonra hâlâ kapalı');
 const tD5 = Date.now();
 kasaAc();
 const d5 = await waitSayfa(tD5, () => true, 'kasa kısayolu pencereyi açmadı', 120_000);
 if (d5.script !== sYeni) fail(`kısayol pencereyi eski sürümle açtı: ${d5.script}`);
+
+step('D5b. Çöken (zorla kapatılan) pencereyi bekçi yeniden açar');
+// Tarayıcı exit_type'ı açılıştan birkaç saniye sonra diske yazar; o yazılmadan zorla kapanan pencere çökme sayılmaz
+await until('kasa profili açılışta exit_type "Crashed" yazmadı', () => exitType() === 'Crashed', 60_000, 1000);
+const kasaOnceD5b = await bekciGordu('D5b');
+const tCokme = Date.now();
+ps('kapat');
+const d5b = await waitSayfa(tCokme, () => true, 'bekçi çöken kasa penceresini yeniden açmadı', 120_000);
+if (d5b.script !== sYeni) fail(`yeniden açılan pencere eski sürümü gösterdi: ${d5b.script}`);
+const kasaSonraD5b = await until('yeniden açılan kasa penceresinin süreci yok', () => (kasaSurecleri().length === 1 ? kasaSurecleri() : null), 30_000);
+if (kasaSonraD5b[0].pid === kasaOnceD5b[0].pid) fail('zorla kapatılan pencerenin süreci hâlâ çalışıyor');
+for (const f of ['--kiosk', '--kiosk-printing', `--app=${VEKIL}`]) if (!kasaSonraD5b[0].komut.includes(f)) fail(`yeniden açılan pencerede ${f} yok: ${kasaSonraD5b[0].komut}`);
+if (!/kasa penceresi kapandi, coktu: exit_type Crashed/.test(kasaGunlugu()) || !/coken kasa penceresi yeniden acilacak/.test(kasaGunlugu())) fail(`bekçi çökmeyi günlüğe yazmadı:\n${tail(KASA_GUNLUGU, 30)}`);
+console.log(`  çöken pencere ${Math.round((d5b.t - tCokme) / 1000)} sn içinde yeniden açıldı (süreç ${kasaOnceD5b[0].pid} → ${kasaSonraD5b[0].pid})`);
+ekran('coken-pencere-geri-geldi');
 await bakim(true);
 ps('kapat');
 
@@ -675,7 +748,7 @@ const bekciYeni = await until(
   'bekçi kendini yenilemedi (diskteki yeni betikle)',
   () => {
     const b = bekciler();
-    return b.length === 1 && b[0].pid !== bekciE[0].pid && b[0].komut.includes('-BekciSurum 6') ? b : null;
+    return b.length === 1 && b[0].pid !== bekciE[0].pid && b[0].komut.includes(`-BekciSurum ${WATCHER_VERSION}`) ? b : null;
   },
   120_000,
 );
