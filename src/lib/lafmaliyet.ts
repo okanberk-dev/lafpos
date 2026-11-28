@@ -90,7 +90,7 @@ export function answerText(a: DayAnswer): { tone: 'ok' | 'idle'; text: string } 
       tone: 'idle',
       text: a.switchDay
         ? `lafmaliyet ${day} gününü saymıyor (geçiş günü ${dayLabel(a.switchDay)}): deneme olarak saklandı, hesaplara girmez`
-        : `lafmaliyet ${day} gününü saymıyor: geçiş günü seçilmedi, kasa ModPOS. Gün deneme olarak saklandı, hesaplara girmez`,
+        : `lafmaliyet ${day} gününü saymıyor: geçiş günü seçilmedi, AsilPOS henüz asıl kasa sayılmıyor. Gün deneme olarak saklandı, hesaplara girmez`,
     };
   }
   return { tone: 'idle', text: `${day} lafmaliyet'e gönderildi (lafmaliyet geçiş gününü bildirmedi)` };

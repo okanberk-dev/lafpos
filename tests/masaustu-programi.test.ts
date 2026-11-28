@@ -453,11 +453,40 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
     const ag = read('src/pages/admin/NetworkAdmin.tsx');
     expect(ag).not.toContain('Chrome menüsünden');
     expect(ag).toContain('kişi menüsündeki “Ana ekrana ekle” cihaza göre yolu söyler');
-    // Bekçi kapanan pencereyi 15 sn'de açar: notlar Alt+F4'ü çıkış diye vermez, ekrandaki düğmenin adını verir
+    // Bakım arası ekrandaki düğmenin adıyla anılır; notlar Alt+F4'ü çıkış diye vermez
     expect(metinler.benioku).not.toContain('Çıkmak için Alt+F4');
     expect(metinler.benioku.replace(/\s+/g, ' ')).toContain('Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar › 15 dakika bakım arası');
     expect(ag).toContain('<Card title="Bu bilgisayar">');
     expect(ag).toMatch(/\n\s*15 dakika bakım arası\n/);
+  });
+
+  it('kapatınca kapanır (#195): notlar, kurulum ve ekran "15 saniyede yeniden açılır" demez; güncelleme denetimi koddaki aralıkla', async () => {
+    const tek = (s: string) => s.replace(/\s+/g, ' ');
+    const metinler = {
+      readme: tek(read('README.md')),
+      benioku: tek(read(`${K}BENIOKU.txt`)),
+      nsi: tek(read(`${K}asilpos.nsi`)),
+      ag: tek(read('src/pages/admin/NetworkAdmin.tsx')),
+      bakim: tek(read('server/lib/kasa-bakim.ts')),
+      kasa: tek(read('docs/05-KASA-BILGISAYARI.md')),
+    };
+    for (const [ad, t] of Object.entries(metinler)) {
+      expect(t, ad).not.toMatch(/15 (saniye|sn)[^.]{0,20} yeniden açılır/);
+      expect(t, ad).not.toContain('kapanırsa yeniden açılır');
+      expect(t, ad).not.toContain('kapanırsa 15 saniyede');
+    }
+    expect(metinler.nsi).toContain('kasa ekranı tam ekran açılır; kapatınca kapanır, AsilPOS Kasa kısayoluyla yeniden açılır.');
+    expect(metinler.benioku).toContain('Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz');
+    expect(metinler.readme).toContain('kapatınca kapanır (müşteri ekranı da)');
+    expect(metinler.ag).toContain('Kasa penceresi kapatılınca kapanır, kendiliğinden yeniden açılmaz');
+    expect(metinler.ag).not.toContain('Süre bitince kendiliğinden açılır');
+    // Güncelleme denetimi guncelle.mjs'teki aralık (3 dk); "yarım saat" yazmaz
+    const { CHECK_EVERY_MS, FIRST_CHECK_MS } = await load('guncelle.mjs');
+    expect([FIRST_CHECK_MS, CHECK_EVERY_MS]).toEqual([2 * 60_000, 3 * 60_000]);
+    expect(metinler.readme).toContain('AsilPOS 3 dakikada bir yeni sürüm var mı diye bakar');
+    expect(metinler.benioku).toContain('AsilPOS 3 dakikada bir yeni sürüm var mı diye bakar');
+    expect(metinler.kasa).toContain("Açılıştan 2 dk sonra, sonra 3 dk'da bir");
+    for (const [ad, t] of Object.entries(metinler)) expect(t, ad).not.toMatch(/yarım saatte bir yeni sürüm|30 dk'da bir\. Yeni derleme/);
   });
 
   it('kullanıcı menüsünde yalnız yol varken; olay ilk iş yakalanır, kasa bilgisayarında saklanmaz', () => {

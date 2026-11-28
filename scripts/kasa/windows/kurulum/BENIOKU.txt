@@ -6,8 +6,9 @@ NE KURULDU
   Kimse oturum açmasa da tabletler bağlanabilir. Düşerse birkaç saniye içinde yeniden başlar.
 - Kasa ekranı: masaüstündeki "AsilPOS Kasa". Kasa programı tam ekran açılır (Chrome, yoksa Edge; adres çubuğu
   yok), fişler önizlemesiz varsayılan yazıcıdan çıkar. Açıkken yeniden basmak aynı pencereyi öne getirir.
-  Kapatınca 15 saniyede yeniden açılır. Bilgisayarda başka bir iş için: Yönetim › Ağ ve uzaktan erişim ›
-  Bu bilgisayar › 15 dakika bakım arası.
+  Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz; yeniden açmak için AsilPOS Kasa.
+  Bakım yaparken pencerenin hiç kendiliğinden açılmaması için: Yönetim › Ağ ve uzaktan erişim › Bu bilgisayar ›
+  15 dakika bakım arası.
 - Siteden kurulum (AsilPOS-Kur.cmd) ve bu kurulum dosyası aynı programı kurar; biriyle kurulanı öbürüyle
   onarabilir ya da güncelleyebilirsiniz.
 - Veriler: C:\ProgramData\LafPOS (veritabanı, günlük yedekler, ayarlar, sunucu günlüğü). Güncelleme ve
@@ -45,7 +46,7 @@ AYARLAR (site, lafmaliyet, yazarkasa POS)
 - Sunucu günlüğü: Başlat › AsilPOS › Sunucu günlüğü.
 
 GÜNCELLEME
-- Kendiliğinden: AsilPOS yarım saatte bir yeni sürüm var mı diye bakar, indirir ve yalnız gün kapalıyken
+- Kendiliğinden: AsilPOS 3 dakikada bir yeni sürüm var mı diye bakar, indirir ve yalnız gün kapalıyken
   (gün sonundan sonra) kurar. Önce veritabanının bir kopyası alınır
   (C:\ProgramData\LafPOS\backups\lafpos-guncelleme-...). Yeni sürüm açılmazsa eski sürüme dönülür.
   Durum: Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme.

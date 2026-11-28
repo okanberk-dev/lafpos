@@ -355,13 +355,22 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
   );
 }
 
+/** ModPOS döneminin son başarılı çekimden sonraki hatası (kendiliğinden çekim de yazar) */
+const modposError = (m: ModposStatus) => (m.error && (!m.pulledAt || (m.error.at ?? 0) > m.pulledAt) ? m.error.message : null);
+
+/**
+ * ModPOS dönemi bölümü yalnız o döneme ait gün ya da hata varken çizilir (28 Kas 2026, sahibin isteği): ModPOS'u hiç
+ * olmamış yeni şubede görünmez. Çekim yine günde bir kendiliğinden sürer; gün gelince ya da çekim düşünce bölüm ve elle
+ * çekim düğmesi görünür
+ */
+const showModpos = (m: ModposStatus) => m.days > 0 || !!modposError(m);
+
 /**
  * ModPOS dönemi (AsilPOS'tan önceki günler) lafmaliyet'ten: kaç gün, hangi aralık, son çekim ve hata; elle çekim. Günler
  * Raporlar'da ve Uzaktan'da "ModPOS" etiketiyle görünür, iş gününe ve Z'ye girmez. Tutar yazılmaz (yalnız gün sayısı)
  */
 function ModposSection({ m, canSync, run, busy }: { m: ModposStatus; canSync: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
-  // Son başarılı çekimden sonraki hata (kendiliğinden çekim de yazar)
-  const error = m.error && (!m.pulledAt || (m.error.at ?? 0) > m.pulledAt) ? m.error.message : null;
+  const error = modposError(m);
   const range = m.from && m.to ? (m.from === m.to ? dayLabel(m.from) : `${dayLabel(m.from)} – ${dayLabel(m.to)}`) : null;
   return (
     <div className={SECTION}>
@@ -502,7 +511,7 @@ function LafmaliyetCard({
               </div>
             </div>
 
-            {modpos && <ModposSection m={modpos} canSync={canSync} run={run} busy={busy} />}
+            {modpos && showModpos(modpos) && <ModposSection m={modpos} canSync={canSync} run={run} busy={busy} />}
 
             {/* Maliyet yalnız maliyet yetkisine: personel maliyetin varlığını da görmez (sunucu tarihi de göndermez) */}
             {canCost && (

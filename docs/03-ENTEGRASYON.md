@@ -1086,7 +1086,8 @@ GET {LAFMALIYET_URL}/api/panel/pos/modpos-gunler?sube=<şube kimliği>     (imza
   yalnız zarf bozuksa ya da gün geldiği hâlde hiçbiri okunamıyorsa çekim hata sayılır (önceki günler kalır).
 - **Saklama:** kasada `sync_state` `lafmaliyet.modpos` (shared/gecmis.ts `HistoryStore` biçimi, kaynak "ModPOS").
   Bozuk gövdede, HTTP hatasında ya da başka şubenin yanıtında önceki günler kalır; hata Yönetim › Site ve lafmaliyet ›
-  "ModPOS dönemi"nde görünür. Yalnız gün sayısı ve aralık görünür, tutar değil.
+  "ModPOS dönemi"nde görünür. Yalnız gün sayısı ve aralık görünür, tutar değil. Bölüm yalnız o döneme ait gün ya da
+  hata varken çizilir (28 Kasım 2026): ModPOS'u hiç olmamış yeni şubede görünmez, çekim yine kendiliğinden sürer.
 - **Kullanım:** patron panelinin kıyası, kasadaki Raporlar (Ciro, Ürünler, Saatlik; "ModPOS" etiketli; Ürünler'de dönem
   bloğu yalnız dönemin hepsi seçiliyse) ve AsilPOS Uzaktan: kasa bu günleri kendi dükkân kimliğiyle gün raporu olarak
   iter (server/sync/cloud-reports.ts), yalnız AsilPOS'ta gerçek iş günü olmayan tarihte ve içerik değişince; ürün listesi

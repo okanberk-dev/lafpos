@@ -579,7 +579,7 @@ export default function SettingsAdmin() {
                 )}
               </div>
               <div>
-                <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
+                <Field label="İlk Z numarası" hint="Önceki kasa programının son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
                   <Input
                     value={s.zNoStart == null ? '' : String(s.zNoStart)}
                     onChange={(e) => {
