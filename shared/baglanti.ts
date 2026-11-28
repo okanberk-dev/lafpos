@@ -244,6 +244,10 @@ function localHost(host: string): boolean {
   return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
 }
 
+/** Panelin adresini taşıyan ayar ve yönetim konsolunun alan adı (panel adresi olarak kabul edilmez) */
+const PANEL_ADRESI = 'LAFMALIYET_URL';
+const KONSOL_ADRESI = /^yonetim\./i;
+
 /**
  * Yazılacak değerin denetimi: boş değer "kaldır" demektir (null). Satır sonu, boşluk ve tırnak kabul edilmez (dosyada tek
  * satır kalmalı, sunucunun okuyucusu tırnağı soyar). Adres http(s) olmalı. Hata Türkçe mesaj, yoksa temiz değer
@@ -265,6 +269,10 @@ export function checkConnValue(field: ConnField, raw: string): { value: string |
       if (u.protocol === 'http:' && !localHost(u.hostname)) return { error: `${field.label}: adres https:// ile başlamalı (http yalnız yerel ağda)` };
       if (u.pathname.replace(/\/+$/, '') || u.search || u.hash || u.username || u.password)
         return { error: `${field.label}: yalnız site adresi yazın, sonunda yol olmadan (örnek ${field.placeholder ?? 'https://site.com'})` };
+      // Panelin adresi yerine yönetim konsolunun adresi yazılmasın (28 Kas 2026): konsol kasaya hiçbir uç sunmaz, gün sonu
+      // ve bağlantı sorgusu 404 alırdı. Konsol panelle aynı alan adında "yonetim." ile başlar
+      if (field.key === PANEL_ADRESI && KONSOL_ADRESI.test(u.hostname))
+        return { error: `${field.label}: bu yönetim konsolunun adresi; panelin adresini yazın (örnek ${field.placeholder ?? 'https://ladmin.laffogato.net'})` };
       return { value: u.origin };
     }
     return { value: value.replace(/\/+$/, '') };

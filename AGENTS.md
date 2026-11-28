@@ -46,5 +46,9 @@ Bu repoda çalışan her ajan ve geliştirici için.
 
 ## Git
 
-- Dal adı `claude/<konu>`, PR başlığı Türkçe. `main`'e doğrudan push yok (ilk iskelet hariç).
+- Her iş ayrı dal ve ayrı PR. Dal adı kısa bir konu adıdır, `claude/` ile başlamaz. `main`'e doğrudan push yok.
+- PR squash ile birleşir; başlığı Türkçe ve kullanıcıya dönük tek cümledir, çünkü kasada güncelleme notu olarak görünür.
+  Yalnız "denetim" (ve Windows yollarına dokunulduysa "windows") yeşilken birleşir. Main'e giren her commit canlı kasaya
+  güncelleme olarak gider.
+- Commit ve PR metninde yapay zekâ izi olmaz: `Co-Authored-By`, "Generated with" satırı ya da model adı yazılmaz.
 - `data/` ve `.env` asla commit'lenmez.

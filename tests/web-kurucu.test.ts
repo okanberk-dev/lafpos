@@ -218,6 +218,21 @@ describe('siteden kurulum: AsilPOS-Kur.cmd', () => {
     expect(ps51Problems('if ($a) { (1 }')).toContain('dengesiz ()');
   });
 
+  it('şube kurulumunun iki boş satırı birebir ve birer kez: ladmin şubeye özel kurucuyu bu satırları doldurarak üretir', async () => {
+    // ladmin (lafmaliyet, src/lib/asilpos/kurulum.ts kurucuWithCode) derlenmiş kurucuda bu iki satırı arar ve tam birer kez
+    // bulamazsa şubenin indirmesi "Kurucu şu an alınamadı" ile düşer; satır değişirse şube kurulumu sessizce bozulur
+    const ADRES = "$KurulumAdresi = ''";
+    const KOD = "$KurulumKodu = ''";
+    const sablon = read('scripts/kasa/windows/kurulum/web-kurucu.ps1');
+    const { text } = await build();
+    for (const kaynak of [sablon, text]) {
+      expect(kaynak.split(ADRES)).toHaveLength(2);
+      expect(kaynak.split(KOD)).toHaveLength(2);
+    }
+    // Değerler kurulum-kodu.json'a yazılır (kasa ilk açılışta okur); ikisi de doluysa
+    expect(sablon).toContain('if ($KurulumKodu -and $KurulumAdresi) {');
+  });
+
   it('bozuk manifestle derlenmez', async () => {
     const { manifest } = await build();
     const { webInstaller } = await load('web-kurucu.mjs');

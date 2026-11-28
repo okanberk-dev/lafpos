@@ -273,7 +273,8 @@ PAVO_SERIAL=<cihazın seri numarası>
 
 ## Çalışma kuralları (kısa)
 
-- Dal `claude/<konu>`; `main`'e doğrudan push yok, PR ile. Sahip main'e göndermeyi istedi: CI yeşilse PR birleştirilir.
+- Her iş ayrı dal ve PR; dal adı `claude/` ile başlamaz; `main`'e doğrudan push yok. CI yeşilse squash ile birleşir
+  (kurallar `AGENTS.md` › Git).
 - Commit öncesi `npm run typecheck && npm test`; arayüze dokunduysan `npm run build && npm run e2e`
   (`ASILPOS_E2E_CHROME=/opt/pw-browsers/chromium` bulut ortamında).
 - Gizli değer hiçbir dosyaya ve commit'e girmez; `data/` ve `.env` asla.
