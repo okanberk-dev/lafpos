@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 27 Kasım 2026.
+Son güncelleme: 28 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -96,6 +96,15 @@ Son güncelleme: 27 Kasım 2026.
   aracın içindeki iki kurucu (X30TR libusbK, 300TR FTDI) sessiz kurulur; yarım kalan kurulum kaydı açılışta kapanır
   (`docs/04-YAZARKASA.md` §9.2 adım 4). Gerçek Windows denemesi: "Token sürücü kurulumu" iş akışı.
 
+- **28 Kasım 2026: siteden kurulum çalışan kasada da tamamlanır.** Sahibin kasasında `AsilPOS-Kur.cmd` "Kurulum yarıda
+  kaldı: The process cannot access the file because it is being used by another process" diye durdu: görev sorgusu
+  görevi bulamadı, sunucu durdurulmadı, çalışma klasörü `app\` olan sunucu klasörün taşınmasını engelledi. Kurucu artık
+  görevi her durumda kapatır ve kurulum klasörünün Node'undan çalışan süreçleri (bekçi önce) durdurur; dört yer
+  değiştirme yeniden denenir, olmazsa eski sürüm geri gelir ve sunucu yeniden açılır, ekran ne olduğunu ve ne
+  yapılacağını söyler (Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme › Şimdi güncelle). Kurulu sürüm daha yeniyse
+  kurmaz, aynı anda ikinci kurulum çalışmaz, başarıda pencere kendiliğinden kapanır (`docs/05-KASA-BILGISAYARI.md` §9).
+  Windows CI çalışan kasanın üzerine, görevin dışında çalışan sunucuyla ve klasör başka programda açıkken dener.
+
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
@@ -110,6 +119,11 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   yazıcısı'nda listelenmeli ve "Fiş buradan" yazmalı; "Deneme fişi yazdır" kasa bilgisayarında basılınca kâğıt çıkmalı.
 - **Şimdi güncelle:** bu sürümden sonraki ilk yayında Ayarlar ve yedek › Sürüm ve güncelleme › "Şimdi güncelle";
   gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
+- **Siteden kurulum çalışan kasada (28 Kasım 2026):** Marina'da düzeltme "Şimdi güncelle" ile gelir; kurulum dosyası
+  gerekmez. Yine de bir kez çalışan kasada `AsilPOS-Kur.cmd` çalıştırılırsa sonda "kuruldu ve çalışıyor" yazıp pencere
+  10 sn'de kendiliğinden kapanmalı. Türkçe Windows'ta görev sorgusunun neden yanıldığı (konsolun UTF-8'i mi) yalnız orada
+  görülür: komut isteminde `chcp 65001`, sonra `schtasks /Query /TN "LafPOS Sunucu"` ve `echo %errorlevel%` (0 değilse
+  tahmin doğru; kurucu artık bu sonuca dayanmıyor).
 - **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin
   `C:\ProgramData\LafPOS\backups`'a yazıldığı ve kapanan hesapların Personel'den yeni PIN'le açıldığı görülür.
   Silinen deneme günleri AsilPOS Uzaktan › Raporlar'dan da birkaç dakikada kalkmalı.
@@ -217,7 +231,16 @@ PAVO_SERIAL=<cihazın seri numarası>
    tek seferlik yol (ör. `ASILPOS_UYE_IKI_ADIM_SIFIRLA=<eposta>`); (3) canlı Uzaktan girişini değiştirir: bir hata sahibi
    dışarıda bırakır, ayrı bir bağımsız inceleme ister. Sıra: bulut uçları ve testleri → giriş ekranında ikinci adım →
    Hesabım kartı → Erişim'de rozet ve sıfırlama. Örnek: ladmin'in isteğe bağlı iki adımlı girişi (lafmaliyet#154).
-6. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
+6. **Kurulumların kalanları (28 Kasım 2026, siteden kurulum düzeltmesinden sonra):** (a) Kurulum dosyasında
+   (`asilpos.nsi`) siteden kurulumun yeni korumaları yok: kurulu sürüm daha yeniyse kurmama, aynı anda tek kurulum
+   (siteden kurulumun kilidi `Global\AsilPOS-Kurulum`; kurulum dosyası onu tutmaz, ikisi aynı anda çalışırsa birbirini
+   görmez), yarıda kalınca geri alma (`.onInstFailed`) ve sağlık beklemesinde `-ge`. Ayrı PR. (b) İki kurulum da
+   sunucu görevini kurulum süresince kapatır; tam o sırada elektrik kesilirse açılışta sunucu başlamaz, kurulum
+   yeniden çalıştırılınca düzelir. Öneri: görevi kapatmadan önce açılışta bir kez çalışan küçük bir onarım görevi
+   (ana görevi açar, `app` yoksa `app.eski`'yi geri koyar, kendini siler); kurulum sonunda silinir. (c) Görev yokken durdurulan
+   sunucu yarıda kalan kurulumdan sonra başlatıcıyla, kurulumu çalıştıran kullanıcı olarak açılır (SYSTEM değil);
+   oturum kapanınca durur. Görev yokken çalışan sunucu kafede beklenmiyor.
+7. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
    varsa ladmin "Kime"yi yeniden gönderimde doldurur (`planAsilposRecipientFill`); gerekirse Kasa › Geçmiş günler › Z ›
    "Gönder".
 
