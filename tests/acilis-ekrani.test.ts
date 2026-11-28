@@ -37,8 +37,8 @@ describe('index.html açılış ekranı', () => {
     const script = between(html, '<script>', '</script>');
     expect(script).not.toMatch(/fetch|import|src|XMLHttpRequest/);
     // Sayfanın ana betiği hâlâ tek modül betiği (sayfa denetimi ve Windows CI onu okur)
-    expect(html.match(/<script type="module" src="[^"]+"><\/script>/g)).toEqual(['<script type="module" src="/src/main.tsx"></script>']);
-    expect(html.match(/<script>/g)).toHaveLength(1);
+    const etiketler = html.toLowerCase().split('<script').slice(1).map((t) => t.slice(0, t.indexOf('>') + 1));
+    expect(etiketler).toEqual(['>', ' type="module" src="/src/main.tsx">']);
   });
 
   it('zemin uygulamanın zemini (iki tema); simge ve ad kısa gecikmeyle belirir (hızlı açılışta titreme yok)', () => {
