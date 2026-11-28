@@ -282,12 +282,16 @@ describe('Geçişi tamamla: gerçek olduğu kanıtlı gün silinmeye önerilmez'
 
 describe('Bugün kıyası: deneme günü gerçek satış gibi sayılmaz', () => {
   it('geçen haftanın aynı günü deneme günüyse (trainingDay true) patron kıyasına girmez', async () => {
-    const { updateSettings, getSettings } = await mod();
+    const { db, schema, inArray, updateSettings, getSettings } = await mod();
     const { addDays } = await import('@shared/time');
     updateSettings({ demoMode: false, okcProvider: 'kapali' });
     const today = businessDate(Date.now());
     const lastWeek = addDays(today, -7);
     const yesterday = addDays(today, -1);
+    // Önceki testlerin elle tarihlediği gerçek gün (ör. '2026-11-21') bugünden bir hafta öncesine denk gelebilir (28 Kasım
+    // 2026'da düştü): kıyas yalnız bu testin günlerini görsün, o günler eski tarihlere çekilir
+    const carpisan = db.select().from(schema.businessDays).where(inArray(schema.businessDays.date, [lastWeek, yesterday])).all();
+    carpisan.forEach((d, i) => db.update(schema.businessDays).set({ date: addDays('2026-01-01', i) }).where(inArray(schema.businessDays.id, [d.id])).run());
     await makeDay(lastWeek, true, undefined, 'patron');
     await makeDay(yesterday, false, undefined, 'patron');
     expect(getSettings().demoMode).toBe(false);

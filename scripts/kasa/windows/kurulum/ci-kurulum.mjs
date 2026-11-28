@@ -14,11 +14,14 @@
 //      (bakım arasında açmaz), Edge kalıcı profille açılır (InPrivate değil).
 //   E. Bozuk derleme: kurulur, açılmaz, eski sürüme dönülür. Sonra gece kapanmış pencere (sayfası eski sunucu gibi
 //      saklanmış), yeni arayüz ve yeni kasa betiğiyle güncelleme: bekçi kendini yeniler, sabah ilk açılış yeni sürüm.
+//      Bu derlemenin (artık daha eski) kurulum dosyası daha yeni kurulumun üzerine sessiz çalışınca kurmadan çıkar.
 //   F. Kaldırma ve iki kurulumun eşitliği: kafedeki kaldırıcı (önceki sürümün Kaldir.exe'si) iz bırakmaz; bu derlemenin
 //      kurulum dosyası ve siteden kurulum (AsilPOS-Kur.cmd, yerel kanaldan) aynı dosyaları, kısayolları, görevi, güvenlik
 //      duvarını ve Uygulamalar kaydını yazar. Siteden kurulum çalışan kasanın üzerine de tamamlanır (kasa penceresi açık;
 //      sunucu görevin dışında çalışırken de), program klasörü başka bir programda açıksa yarıda kalır ve eski sürüm
 //      çalışmayı sürdürür (28 Kasım şikâyeti: "Kurulum yarıda kaldı: The process cannot access the file...").
+//      Gün açıkken sessiz kurulum dosyası ve sessiz siteden kurulum kurmadan çıkar. Kurulum dosyasının güncelleme isteği
+//      (guncelleme\istek.json) bekçiye ulaşır; otomatik güncelleme kapalıyken yok sayılır.
 // Ekran görüntüleri dist/ci-ekran'a (iş akışı yükler). Başarısızlıkta sunucu ve bekçi günlüğünün sonu, vekilin son
 // kayıtları ve süreçler yazılır.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -141,12 +144,22 @@ const sha = (buf) => createHash('sha256').update(buf).digest('hex');
 const appScript = () => mainScript(readFileSync(join(INSTALL, 'app', 'dist', 'web', 'index.html'), 'utf8'));
 const taskExists = () => spawnSync('schtasks', ['/Query', '/TN', 'LafPOS Sunucu'], { stdio: 'ignore' }).status === 0;
 
+/** Kurulum dosyasını sessiz çalıştırır, bitmesini bekler; sonuç çıkış kodu */
+function kurKod(exe) {
+  if (!existsSync(exe)) fail(`kurulum dosyası yok: ${exe}`);
+  return spawnSync('powershell.exe', ['-NoProfile', '-Command', `$p = Start-Process -FilePath '${exe}' -ArgumentList '/S' -Wait -PassThru; exit $p.ExitCode`], { stdio: 'inherit' }).status;
+}
 /** Kurulum dosyasını sessiz kurar (bitmesini bekler) */
 function kur(exe) {
-  if (!existsSync(exe)) fail(`kurulum dosyası yok: ${exe}`);
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-Command', `$p = Start-Process -FilePath '${exe}' -ArgumentList '/S' -Wait -PassThru; exit $p.ExitCode`], { stdio: 'inherit' });
-  if (r.status !== 0) fail(`${exe} ${r.status} koduyla bitti`);
+  const kod = kurKod(exe);
+  if (kod !== 0) fail(`${exe} ${kod} koduyla bitti`);
 }
+/** Kurulum dosyasının kurmadan çıkış kodları (asilpos.nsi KOD_GUN_ACIK, KOD_YENISI_KURULU) */
+const KOD_GUN_ACIK = 3;
+const KOD_YENISI_KURULU = 5;
+/** Kurulumun güncelleme isteği (asilpos.nsi, bekci.mjs takeRequest) */
+const ISTEK = join(HOME, 'guncelleme', 'istek.json');
+const sunucuGunlugu = () => tail(join(HOME, 'logs', 'sunucu.log'), 2000);
 
 /** Kurulu Kaldir.exe'yi sessiz ve yerinde çalıştırır (_?=: kopyalayıp arkada sürmesin, bitmesi beklensin) */
 function kaldir() {
@@ -339,6 +352,8 @@ function compareInstalls(a, b) {
     for (const f of ['hedef', 'arguman', 'ikon', 'calismaKlasoru', 'pencere', 'url']) if (low(x[f]) !== low(y[f])) fail(`kısayol ${k} ${f}: exe "${x[f]}", web "${y[f]}"`);
   }
   for (const f of ['DisplayName', 'Publisher', 'DisplayIcon', 'InstallLocation', 'NoModify', 'NoRepair']) if (low(a.kayit?.[f]) !== low(b.kayit?.[f])) fail(`Uygulamalar kaydı ${f}: exe "${a.kayit?.[f]}", web "${b.kayit?.[f]}"`);
+  // Görev okunamadıysa karşılaştırma boş geçmez
+  if (!a.gorev || !b.gorev) fail(`görev okunamadı: exe ${a.gorev ? 'var' : 'yok'}, web ${b.gorev ? 'var' : 'yok'}`);
   if (low(a.gorev) !== low(b.gorev)) fail(`görev farklı:\n--- exe ---\n${a.gorev}\n--- web ---\n${b.gorev}`);
   const rules = (t) => low(t).split('\n').map((l) => l.trim()).filter(Boolean).sort().join('\n');
   if (rules(a.duvar) !== rules(b.duvar)) fail(`güvenlik duvarı farklı:\n--- exe ---\n${a.duvar}\n--- web ---\n${b.duvar}`);
@@ -369,6 +384,41 @@ function checkUninstalled(label) {
   rmSync(INSTALL, { recursive: true, force: true });
 }
 
+/** Kurulum klasöründeki Node'dan çalışan süreçler (bekçi, sunucu) */
+const sunucuSurecleri = () => ps('sunucu', ['-Klasor', INSTALL]) ?? [];
+const guncellemeYedekleri = () => (existsSync(join(HOME, 'backups')) ? readdirSync(join(HOME, 'backups')) : []).filter((f) => f.startsWith('lafpos-guncelleme-') && f.endsWith('.db')).length; // eski-ad: yedeğin adı
+/** Görev açık ve çalışıyor (Görev Zamanlayıcı'nın durumu 4) olana dek, en çok 60 sn */
+async function gorevCalisiyor(label) {
+  let g = null;
+  for (const bitis = Date.now() + 60_000; Date.now() < bitis; await sleep(2000)) {
+    g = ps('gorev-durum');
+    if (g?.acik === true && g.durum === 4) return g;
+  }
+  fail(`${label}: görev açık ve çalışır değil (${JSON.stringify(g)})`);
+}
+
+/**
+ * Kurulum kurmadan çıktı: kurulu derleme, sunucunun süreçleri ve derlemesi, eski app\ klasöründeki işaret aynı; yan
+ * klasör, yeni veritabanı kopyası yok; görev açık ve çalışıyor
+ */
+async function kurmadi(label, once) {
+  if (installedBuild() !== once.build) fail(`${label}: kurulu derleme değişti (${once.build} → ${installedBuild()})`);
+  if (!existsSync(once.isaret)) fail(`${label}: app\\ değişti (eski klasördeki işaret yok)`);
+  if (existsSync(join(INSTALL, 'kurulum.gecici'))) fail(`${label}: kurulum.gecici kaldı`);
+  if (guncellemeYedekleri() !== once.yedek) fail(`${label}: veritabanının kopyası alındı (sunucu durdurulmuş)`);
+  const h = await health();
+  if (h?.build !== once.build) fail(`${label}: sağlık ${JSON.stringify(h)}, beklenen derleme ${once.build}`);
+  const simdi = sunucuSurecleri().map((p) => p.pid).sort((a, b) => a - b);
+  if (JSON.stringify(simdi) !== JSON.stringify(once.pids)) fail(`${label}: sunucu yeniden başladı (süreçler ${once.pids} → ${simdi})`);
+  await gorevCalisiyor(label);
+}
+/** Kurmadan çıkış denemesinden önce: app\'e işaret konur, derleme, süreçler ve kopyalar saklanır */
+function kurulumOncesi(ad) {
+  const isaret = join(INSTALL, 'app', 'ci-kurulmadi.txt');
+  writeFileSync(isaret, ad);
+  return { isaret, build: installedBuild(), pids: sunucuSurecleri().map((p) => p.pid).sort((a, b) => a - b), yedek: guncellemeYedekleri() };
+}
+
 // ─── 0. Ortam ────────────────────────────────────────────────────────────────
 
 step('Ortam');
@@ -380,6 +430,13 @@ if (!existsSync(ONCEKI_EXE)) fail(`önceki sürümün kurulum dosyası yok: ${ON
 // ─── A. Önceki sürüm ────────────────────────────────────────────────────────
 
 step('A. Önceki sürüm (kafede kurulu olan): sessiz kurulum');
+// Güncelleme kanalı baştan yerel kanal (C'de açılır, o zamana dek yanıt yok): kurulum dosyası sunucuyu açmadan önce
+// güncelleme isteği yazar (asilpos.nsi; 28 Kasım 2026'dan sonraki sürümler), bekçi kanala hemen sorar. Sitenin kanalında
+// daha yeni bir derleme varsa (main'de koşu) deneme o sürüme geçerdi. Ayar dosyası kurulumun örneğiyle başlar (kurulum
+// yalnız dosya yoksa örneği koyar)
+mkdirSync(HOME, { recursive: true });
+const ornek = join(ROOT, 'dist', 'windows', 'stage', 'kok', 'ayarlar.env.ornek');
+writeFileSync(ENV_FILE, `${existsSync(ornek) ? readFileSync(ornek, 'utf8').replace(/(\r?\n)+$/, '') : ''}\r\nASILPOS_GUNCELLEME_KANAL=http://127.0.0.1:${KANAL_PORT}/guncelleme/surum.json\r\n`);
 kur(ONCEKI_EXE);
 for (const f of [join(INSTALL, 'node', 'node.exe'), join(INSTALL, 'app', 'bekci.mjs'), join(INSTALL, 'baslat.cmd'), ENV_FILE]) if (!existsSync(f)) fail(`kurulumda yok: ${f}`);
 if (!taskExists()) fail('görev yok');
@@ -634,6 +691,15 @@ console.log(`  sabah ilk sayfa ${sabah.script} (sunucudan)`);
 ekran('sabah-ilk-acilis');
 await bakim(false);
 
+step(`E3. Daha yeni kurulumun (derleme ${b3}) üzerine eski derlemeli kurulum dosyası (${BU_DERLEME}): kurmadan çıkar`);
+// Sürüm geri düşmez (asilpos.nsi .onInit): kurulu sürüm, çalışan sunucu ve görev aynen kalır
+const onceE3 = kurulumOncesi('E3');
+const kodE3 = kurKod(BU_EXE);
+if (kodE3 !== KOD_YENISI_KURULU) fail(`eski derlemeli kurulum dosyası ${kodE3} koduyla bitti, beklenen ${KOD_YENISI_KURULU} (daha yeni sürüm kurulu)`);
+await kurmadi('eski derlemeli kurulum dosyası', onceE3);
+rmSync(onceE3.isaret, { force: true });
+console.log(`  ${kodE3} koduyla çıktı; derleme ${b3}, sunucu ve görev yerinde`);
+
 // ─── F. Kaldırma; kurulum dosyası ve siteden kurulum aynı programı kurar ────
 
 step('F1. Kafedeki kaldırıcı (önceki sürümün Kaldir.exe\'si) iz bırakmaz; veriler kalır');
@@ -658,6 +724,9 @@ await until(
 await until('kısayollar yenilenmedi', () => (marker()?.build === BU_DERLEME && marker()?.ok === true ? marker() : null), 120_000);
 checkLinks(ps('kisayollar'), 'kurulum dosyası');
 if (existsSync(join(INSTALL, 'kurulum.gecici'))) fail('kurulum.gecici kaldı');
+// Kurulumun güncelleme isteği bekçiye ulaştı (biçimi ve anı geçerli); otomatik güncelleme kapalı olduğu için yok sayıldı
+await until('kurulumun güncelleme isteği bekçiye ulaşmadı', () => (!existsSync(ISTEK) && sunucuGunlugu().includes('kurulumun güncelleme isteği yok sayıldı') ? true : null), 60_000);
+console.log('  kurulumun güncelleme isteği bekçiye ulaştı (otomatik güncelleme kapalı: yok sayıldı)');
 const exeDurum = snapshot();
 step('F2b. Kurulum dosyası çalışan kurulumun üzerine (elle güncelleme): kasa penceresi açıkken, sunucu çalışırken');
 const tF2 = Date.now();
@@ -721,21 +790,9 @@ await until('siteden kurulum: kısayollar yenilenmedi', () => (marker()?.build =
 checkLinks(ps('kisayollar'), 'siteden kurulum');
 const webDurum = snapshot();
 compareInstalls(exeDurum, webDurum);
-console.log(`  aynı: ${webDurum.kisayollar.length} kısayol, görev, güvenlik duvarı, Uygulamalar kaydı, ${webDurum.agac.kok.length} kök dosya, ${webDurum.agac.dosyalar.length} program dosyası`);
+console.log(`  aynı: ${webDurum.kisayollar.length} kısayol, görev (${webDurum.gorev.length} karakter), güvenlik duvarı, Uygulamalar kaydı, ${webDurum.agac.kok.length} kök dosya, ${webDurum.agac.dosyalar.length} program dosyası`);
 ekran('siteden-kurulum');
 
-/** Kurulum klasöründeki Node'dan çalışan süreçler (bekçi, sunucu) */
-const sunucuSurecleri = () => ps('sunucu', ['-Klasor', INSTALL]) ?? [];
-const guncellemeYedekleri = () => readdirSync(join(HOME, 'backups')).filter((f) => f.startsWith('lafpos-guncelleme-') && f.endsWith('.db')).length; // eski-ad: yedeğin adı
-/** Görev açık ve çalışıyor (Görev Zamanlayıcı'nın durumu 4) olana dek, en çok 60 sn */
-async function gorevCalisiyor(label) {
-  let g = null;
-  for (const bitis = Date.now() + 60_000; Date.now() < bitis; await sleep(2000)) {
-    g = ps('gorev-durum');
-    if (g?.acik === true && g.durum === 4) return g;
-  }
-  fail(`${label}: görev açık ve çalışır değil (${JSON.stringify(g)})`);
-}
 /** Siteden kurulum tamamlandı: çıkış 0, sunucu bu derlemeyle, artık klasör yok, görev açık ve çalışıyor, app\ yenilendi */
 async function sitedenTamam(r, label, isaret) {
   if (r.status !== 0) fail(`${label}: kurucu ${r.status} koduyla bitti${r.hata ? ` (${r.hata})` : ''}`);
@@ -813,8 +870,28 @@ const f5b = await siteden();
 await sitedenTamam(f5b, 'klasörü tutan program kapandıktan sonra siteden kurulum', isaret);
 console.log('  yarıda kaldı, eski sürüm ve görev yerinde; program kapanınca kurulum tamamlandı');
 
+step('F6. Gün açıkken sessiz kurulum dosyası ve sessiz siteden kurulum kurmadan çıkar');
+// Satış sırasında kurmak sunucuyu bir dakika durdururdu. Gün patron girişiyle açılır (sıfır açılış; kasa zinciri boş)
+const gunAc = await fetch(`http://127.0.0.1:${PORT}/api/cash/day/open`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${await login()}` },
+  body: JSON.stringify({ openingCash: 0 }),
+});
+if (!gunAc.ok) fail(`gün açılamadı (${gunAc.status} ${await gunAc.text()})`);
+const gunDurumu = await (await fetch(`http://127.0.0.1:${PORT}/api/kasa/guncelleme-durumu`)).json();
+if (gunDurumu.dayOpen !== true) fail(`gün açık görünmüyor: ${JSON.stringify(gunDurumu)}`);
+const onceF6 = kurulumOncesi('F6');
+const kodF6 = kurKod(BU_EXE);
+if (kodF6 !== KOD_GUN_ACIK) fail(`gün açıkken sessiz kurulum dosyası ${kodF6} koduyla bitti, beklenen ${KOD_GUN_ACIK}`);
+await kurmadi('gün açıkken kurulum dosyası', onceF6);
+console.log(`  kurulum dosyası ${kodF6} koduyla çıktı; sunucu ve görev yerinde`);
+const f6 = await siteden();
+if (f6.status !== 0) fail(`gün açıkken sessiz siteden kurulum ${f6.status} koduyla bitti${f6.hata ? ` (${f6.hata})` : ''}`);
+await kurmadi('gün açıkken siteden kurulum', onceF6);
+console.log('  siteden kurulum kurmadan çıktı; sunucu ve görev yerinde');
+
 kanalSunucusu.closeAllConnections?.();
 kanalSunucusu.close();
 await vekil.close();
-console.log('\n✓ Gerçek Windows: önceki sürümden güncelleme, ilk açılış yeni sürümle, kasa programı (tek pencere, bekçi, Edge), geri dönüş, kaldırma, iki kurulumun eşitliği ve çalışan kasada siteden kurulum tamam');
+console.log('\n✓ Gerçek Windows: önceki sürümden güncelleme, ilk açılış yeni sürümle, kasa programı (tek pencere, bekçi, Edge), geri dönüş, eski kurulum dosyasının kurmaması, kaldırma, iki kurulumun eşitliği, çalışan kasada siteden kurulum ve gün açıkken kurmama tamam');
 process.exit(0);

@@ -300,11 +300,11 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     expect((nsi.match(/CreateShortcut /g) ?? []).length).toBe(1);
     expect(nsi).toContain('CreateShortcut "$SMPROGRAMS\\AsilPOS\\AsilPOS\'u kaldır.lnk" "$INSTDIR\\Kaldir.exe"');
     expect(nsi).not.toContain('WriteINIStr');
-    expect(between(nsi, 'Section "Masaüstüne kısayol" SecDesktop', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,masaustu"');
-    expect(between(nsi, 'Section "Oturum açılınca kasa ekranını aç" SecStartup', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,baslangic"');
-    // Kısayol bölümü seçimlerden (ve güç ayarından) sonra; kısayollar sunucudan önce
+    expect(between(nsi, 'Section "-Masaüstüne kısayol" SecDesktop', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,masaustu"');
+    expect(between(nsi, 'Section "-Oturum açılınca kasa ekranını aç" SecStartup', 'SectionEnd')).toContain('StrCpy $GRUPLAR "$GRUPLAR,baslangic"');
+    // Kısayol bölümü üç seçenekten (ve güç ayarından) sonra; kısayollar sunucudan önce
     const son = between(nsi, 'Section "-Kisayollar ve sunucu" SecSon', 'SectionEnd');
-    expect(nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon')).toBeGreaterThan(nsi.indexOf('Section "Prizdeyken uyku kapalı" SecPower'));
+    expect(nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon')).toBeGreaterThan(nsi.indexOf('Section "-Prizdeyken uyku kapalı" SecPower'));
     expect(son.indexOf('kurulum-yenile.mjs" kisayollar --gruplar "$GRUPLAR"')).toBeLessThan(son.indexOf('/Run /TN'));
     // Siteden kurulum aynı komutu iki grupla
     const web = read(`${K}web-kurucu.ps1`);
@@ -329,11 +329,11 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     expect(dur).toBeLessThan(yedek);
     expect(yedek).toBeLessThan(tasi);
     expect(main).toContain('SetOutPath "$INSTDIR\\kurulum.gecici"');
-    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\app" "$INSTDIR\\app"');
-    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\node" "$INSTDIR\\node"');
-    expect(main.slice(main.indexOf('${If} $R8 != 0'))).toMatch(/Call RollbackFiles[\s\S]*Call RestoreServer[\s\S]*Abort/);
+    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\app" "$INSTDIR\\app" $YENI_APP');
+    expect(main).toContain('!insertmacro Tasi "$INSTDIR\\kurulum.gecici\\node" "$INSTDIR\\node" $YENI_NODE');
+    expect(main.slice(main.indexOf('${If} $R8 != 0'))).toMatch(/^\$\{If\} \$R8 != 0\n {4}Call GeriAl\n[\s\S]*?Abort/);
     // Sunucu yeni durdu: yer değiştirme 10 sn'ye kadar yeniden denenir
-    const tasiMakro = between(nsi, '!macro Tasi FROM TO', '!macroend');
+    const tasiMakro = between(nsi, '!macro Tasi FROM TO BAYRAK', '!macroend');
     expect(tasiMakro).toContain('${If} $R7 >= 10');
     expect(tasiMakro).toContain('Sleep 1000');
     const geri = between(nsi, 'Function RollbackFiles', 'FunctionEnd');
@@ -342,11 +342,111 @@ describe('kurulumlar aynı programı kurar: tek kısayol listesi', () => {
     // Eski düzen (önce sil, sonra aç) yok: yarıda kalan kurulum uygulamasız bırakmaz
     expect(main).not.toContain('RMDir /r "$INSTDIR\\app"\n');
     expect(main).toContain('File "${STAGE}${SEP}kok${SEP}*"');
-    // Yeni sürüm: sağlık ucu bu derlemeyi söyleyene dek (en çok 2 dk)
+    // Yeni sürüm: sağlık ucu bu derlemeyi ya da daha yenisini söyleyene dek (en çok 2 dk; siteden kurulum da -ge)
     const son = between(nsi, 'Section "-Kisayollar ve sunucu" SecSon', 'SectionEnd');
-    expect(son).toContain('/api/health).build -eq ${BUILD}');
+    expect(son).toContain('if ([long](Invoke-RestMethod -UseBasicParsing -TimeoutSec 2 -Uri http://127.0.0.1:${PORT}/api/health).build -ge ${BUILD}) { exit 0 }');
+    expect(nsi).not.toContain('.build -eq ${BUILD}');
     expect(nsi).toContain('!ifndef BUILD');
     expect(read(`${K}derle.mjs`)).toContain('`-DBUILD=${BUILD.build}`');
+  });
+
+  /**
+   * Sorusuz kurulum (sahibin isteği, 28 Kasım 2026: "Windows'a kurarken hiçbir şey sormasın, tek seferde bitsin;
+   * güncelleme varsa onu da alsın"). Gerçek Windows'ta CI dener (ci-kurulum.mjs E3, F2, F6)
+   */
+  it('kurulum dosyası hiçbir şey sormaz: tek sayfa, üç seçenek hep açık; başarıda kasa ekranı açılır, pencere kapanır', () => {
+    const nsi = read(`${K}asilpos.nsi`);
+    const kur = nsi.slice(0, nsi.indexOf('Section "Uninstall"'));
+    // Hoş geldiniz, Bileşenler ve Bitiş sayfaları yok: kurulum hemen başlar
+    expect([...nsi.matchAll(/^!insertmacro (MUI_PAGE_\w+)/gm)].map((m) => m[1])).toEqual(['MUI_PAGE_INSTFILES']);
+    expect(nsi).not.toMatch(/MUI_(WELCOMEPAGE|FINISHPAGE|ABORTWARNING|COMPONENTSPAGE)/);
+    expect(nsi).not.toContain('Kasa ekranını şimdi aç');
+    expect(nsi).not.toContain('Kurulum notlarını göster');
+    // Seçenek bölümleri gizli (hep seçili; sessiz kurulumda da aynı): masaüstü, oturum açılınca kasa ekranı, uyku
+    const bolumler = [...kur.matchAll(/^Section (\/o )?"([^"]*)" (\w+)/gm)].map((m) => ({ o: m[1], ad: m[2]!, id: m[3] }));
+    expect(bolumler.map((b) => b.id)).toEqual(['SecMain', 'SecDesktop', 'SecStartup', 'SecPower', 'SecSon']);
+    expect(bolumler.every((b) => !b.o)).toBe(true);
+    expect(bolumler.filter((b) => b.id !== 'SecMain').every((b) => b.ad.startsWith('-')), JSON.stringify(bolumler)).toBe(true);
+    // Başarıda pencere kendiliğinden kapanır, kasa ekranı açılır (sessiz kurulumda açılmaz); sunucu açılmazsa pencere açık
+    expect(nsi).toMatch(/^AutoCloseWindow true$/m);
+    expect(between(nsi, 'Function .onInstSuccess', 'FunctionEnd')).toContain('${IfNot} ${Silent}\n    Call OpenKasa');
+    const son = between(nsi, 'Section "-Kisayollar ve sunucu" SecSon', 'SectionEnd');
+    expect(between(son, '${Else}', '${EndIf}')).toContain('SetAutoClose false');
+    // Kalan sorular yalnız bunlar: gün açıkken "yine de kurulsun mu" ve veritabanı kopyası alınamadı; ikisi de sessizde
+    // kurmadan çıkar. Öbürleri bilgi ya da hata kutusu; hepsinin sessiz kip yanıtı var
+    const kutular = [...kur.matchAll(/MessageBox (\S+)[^\n]*/g)].map((m) => m[0]);
+    expect(kutular.filter((k) => /MB_(YESNO|OKCANCEL)/.test(k)).map((k) => k.match(/\/SD \w+/)![0])).toEqual(['/SD IDNO', '/SD IDCANCEL']);
+    for (const k of kutular) expect(k, k).toMatch(/\/SD ID(OK|NO|CANCEL)\b/);
+    // Kaldırma onayı kalır
+    expect(nsi).toContain('!insertmacro MUI_UNPAGE_CONFIRM');
+  });
+
+  it('kurulum dosyası aynı anda tek çalışır (siteden kurulumla aynı kilit); kurulu sürüm daha yeniyse kurmaz', () => {
+    const nsi = read(`${K}asilpos.nsi`);
+    const web = read(`${K}web-kurucu.ps1`);
+    const init = between(nsi, 'Function .onInit', 'FunctionEnd');
+    // Kilidin adı siteden kurulumunkiyle aynı
+    const ad = /^!define KILIT "([^"]+)"$/m.exec(nsi)![1]!;
+    expect(ad).toBe('Global\\AsilPOS-Kurulum');
+    expect(web).toContain(`New-Object System.Threading.Mutex($false, '${ad}')`);
+    // Kilit sahiplenilerek kurulur (siteden kurulumun WaitOne'ı onu tutulu görür); vardıysa ve tutan varsa (WAIT_TIMEOUT)
+    // bilgi verip ayırt edilir kodla çıkar; sahibi kapanmış kilit devralınır
+    const kilit = init.indexOf(`System::Call 'kernel32::CreateMutexW(p 0, i 1, w "\${KILIT}") p .r1 ?e'`);
+    expect(kilit).toBeGreaterThan(0);
+    const kilitBlok = between(init, '${AndIf} $0 = 183', '${EndIf}\n  ${EndIf}');
+    expect(kilitBlok).toContain("System::Call 'kernel32::WaitForSingleObject(p r1, i 0) i .r2'");
+    expect(kilitBlok).toContain('${If} $2 = 258');
+    expect(kilitBlok).toContain('Bu bilgisayarda başka bir AsilPOS kurulumu sürüyor');
+    expect(kilitBlok).toMatch(/SetErrorLevel \$\{KOD_KURULUM_SURUYOR\}\n\s*Abort/);
+    // Sürüm geri düşmez: kurulu app\package.json'ın derlemesi bu dosyanınkinden büyükse kurulmaz (kilitten sonra)
+    const derleme = init.indexOf("Get-Content -LiteralPath '$INSTDIR\\app\\package.json' -Raw | ConvertFrom-Json");
+    expect(derleme).toBeGreaterThan(kilit);
+    expect(init).toContain("if ([string]$$p.build -match '^\\d{10,11}$$' -and [long]$$p.build -gt ${BUILD}) { exit ${KOD_YENISI_KURULU} }");
+    const yeni = between(init, '${If} $0 == ${KOD_YENISI_KURULU}', '${EndIf}');
+    expect(yeni).toContain('MessageBox MB_ICONINFORMATION "Bu bilgisayarda daha yeni bir AsilPOS kurulu; bir şey yapmanız gerekmez." /SD IDOK');
+    expect(yeni).toMatch(/SetErrorLevel \$\{KOD_YENISI_KURULU\}\n\s*Abort/);
+    // Gün açıkken kurmadan çıkış da ayırt edilir; çıkış kodları CI'dakiyle aynı
+    const main = between(nsi, 'Section "AsilPOS sunucusu ve kasa ekranı" SecMain', 'SectionEnd');
+    expect(main).toMatch(/SetErrorLevel \$\{KOD_GUN_ACIK\}\n\s*Abort "Kurulum bırakıldı: kasada gün açık"/);
+    const kod = (n: string) => Number(new RegExp(`^!define ${n} (\\d+)$`, 'm').exec(nsi)![1]);
+    expect([kod('KOD_GUN_ACIK'), kod('KOD_YENISI_KURULU'), kod('KOD_KURULUM_SURUYOR')]).toEqual([3, 5, 6]);
+    const ci = read(`${K}ci-kurulum.mjs`);
+    expect(ci).toContain(`const KOD_GUN_ACIK = ${kod('KOD_GUN_ACIK')};`);
+    expect(ci).toContain(`const KOD_YENISI_KURULU = ${kod('KOD_YENISI_KURULU')};`);
+  });
+
+  it('kurulum dosyası yarıda kalırsa eski sürüm ve sunucusu geri gelir: her hata yolu ve .onInstFailed; geri alma bayraklarla', () => {
+    const nsi = read(`${K}asilpos.nsi`);
+    const main = between(nsi, 'Section "AsilPOS sunucusu ve kasa ekranı" SecMain', 'SectionEnd');
+    expect(between(nsi, 'Function .onInstFailed', 'FunctionEnd')).toContain('Call GeriAl');
+    const geriAl = between(nsi, 'Function GeriAl', 'FunctionEnd');
+    expect(geriAl).toContain('Call RollbackFiles');
+    expect(geriAl).toMatch(/\$\{If\} \$DURDU == 1\n\s*Call RestoreServer\n\s*StrCpy \$DURDU 0/);
+    // Sunucu durdu sayılır: görevi bu kurulum kapattı
+    const dur = main.indexOf('/Change /TN "${TASK}" /DISABLE');
+    expect(main.slice(dur)).toMatch(/^[^\n]*\n {2}\$\{If\} \$0 == 0\n {4}StrCpy \$DURDU 1/);
+    // Sunucu durduktan sonraki her yarıda kalış önce GeriAl'ı çağırır (kopya alınamadı, yer değiştirme olmadı)
+    const kalislar = main.slice(dur).split('Abort "');
+    expect(kalislar.length).toBe(3);
+    for (const k of kalislar.slice(0, -1)) expect(k.slice(k.lastIndexOf('${If}'))).toContain('Call GeriAl');
+    expect(nsi).not.toContain('$R9');
+    // Geri alma yalnız bu kurulumun taşıdıklarını geri koyar: otomatik güncellemenin bıraktığı app.eski (önceki sürüm)
+    // kurulu sürümün yerine geçmez
+    const geri = between(nsi, 'Function RollbackFiles', 'FunctionEnd');
+    expect(geri).not.toContain('FileExists');
+    for (const b of ['$YENI_APP', '$ESKI_APP', '$ESKI_NODE']) expect(geri).toContain(`\${If} ${b} == 1`);
+    expect(geri.indexOf('RMDir /r "$INSTDIR\\app"')).toBeLessThan(geri.indexOf('Rename "$INSTDIR\\app.eski" "$INSTDIR\\app"'));
+    expect(between(nsi, '!macro Tasi FROM TO BAYRAK', '!macroend')).toMatch(/\$\{IfNot\} \$\{Errors\}\n\s*StrCpy \$\{BAYRAK\} 1\n\s*\$\{Break\}/);
+    for (const [kaynak, bayrak] of [['"$INSTDIR\\app" "$INSTDIR\\app.eski"', '$ESKI_APP'], ['"$INSTDIR\\node" "$INSTDIR\\node.eski"', '$ESKI_NODE'], ['"$INSTDIR\\kurulum.gecici\\app" "$INSTDIR\\app"', '$YENI_APP']]) {
+      expect(main).toContain(`!insertmacro Tasi ${kaynak} ${bayrak}`);
+    }
+    // Yer değiştirme bitince bayraklar iner: sonraki bir hata (ör. kök dosyalar) yeni sürümü geri almaz, sunucuyu açar
+    const tamam = main.slice(main.indexOf('Abort "Kurulum yarıda kaldı; eski sürüm çalışıyor"'));
+    expect(tamam.indexOf('StrCpy $ESKI_APP 0')).toBeLessThan(tamam.indexOf('RMDir /r "$INSTDIR\\app.eski"'));
+    expect(tamam.indexOf('StrCpy $YENI_APP 0')).toBeLessThan(tamam.indexOf('File "${STAGE}${SEP}kok${SEP}*"'));
+    // Değişkenler kurulum başında sıfır
+    const init = between(nsi, 'Function .onInit', 'FunctionEnd');
+    for (const v of ['$DURDU', '$ESKI_APP', '$ESKI_NODE', '$YENI_APP', '$YENI_NODE']) expect(init).toContain(`StrCpy ${v} 0`);
   });
 
   it('paket iki klasör: yan klasöre açılan yük ve kök dosyalar; paket denemesi kısayol listesini pakette çalıştırır', () => {
@@ -475,7 +575,8 @@ describe('tablet ve telefon: ana ekrana ekleme (kiosku bozmadan)', () => {
       expect(t, ad).not.toContain('kapanırsa yeniden açılır');
       expect(t, ad).not.toContain('kapanırsa 15 saniyede');
     }
-    expect(metinler.nsi).toContain('kasa ekranı tam ekran açılır; kapatınca kapanır, AsilPOS Kasa kısayoluyla yeniden açılır.');
+    // Kurulum dosyasında seçenek sayfası yok (28 Kasım 2026): açıklama metni de yok
+    expect(metinler.nsi).not.toContain('MUI_DESCRIPTION_TEXT');
     expect(metinler.benioku).toContain('Kapatınca kapanır (müşteri ekranı da), kendiliğinden yeniden açılmaz');
     expect(metinler.readme).toContain('kapatınca kapanır (müşteri ekranı da)');
     expect(metinler.ag).toContain('Kasa penceresi kapatılınca kapanır, kendiliğinden yeniden açılmaz');
@@ -568,8 +669,14 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
       'kanal(b3, b3);',
       "'bekçi kendini yenilemedi (diskteki yeni betikle)'",
       "if (sabah.script !== s3) fail(",
+      // Daha yeni kurulumun üzerine eski derlemeli kurulum dosyası kurmadan çıkar
+      "const kodE3 = kurKod(BU_EXE);",
+      'if (kodE3 !== KOD_YENISI_KURULU) fail(',
+      "await kurmadi('eski derlemeli kurulum dosyası', onceE3);",
       "checkUninstalled('önceki sürümün kaldırıcısı');",
       'kur(BU_EXE);',
+      // Kurulumun güncelleme isteği bekçiye ulaşır (otomatik güncelleme kapalı: yok sayılır)
+      "sunucuGunlugu().includes('kurulumun güncelleme isteği yok sayıldı')",
       "'elle güncellemeden sonra sunucu açılmadı'",
       "checkUninstalled('bu sürümün kaldırıcısı');",
       "ASILPOS_KUR_SESSIZ: '1'",
@@ -585,10 +692,28 @@ describe('Windows CI: önceki sürümden güncelleme ve kasa penceresi (ci-kurul
       "await gorevCalisiyor('yarıda kalan kurulumdan sonra');",
       'tutan.kill();',
       "await sitedenTamam(f5b, ",
+      // Gün açıkken iki kurulum da kurmadan çıkar
+      '/api/cash/day/open',
+      'const kodF6 = kurKod(BU_EXE);',
+      'if (kodF6 !== KOD_GUN_ACIK) fail(',
+      "await kurmadi('gün açıkken kurulum dosyası', onceF6);",
+      'const f6 = await siteden();',
+      "await kurmadi('gün açıkken siteden kurulum', onceF6);",
     ];
     const at = order.map((t) => ci.indexOf(t));
     expect(at.every((i) => i > 0), JSON.stringify(order.filter((_, i) => at[i]! <= 0))).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // Güncelleme kanalı baştan yerel (kurulumun isteği sitenin kanalına gitmesin), önceki sürüm kurulmadan önce
+    expect(ci.indexOf('writeFileSync(ENV_FILE, ')).toBeLessThan(ci.indexOf('kur(ONCEKI_EXE);'));
+    expect(ci).toContain("ASILPOS_GUNCELLEME_KANAL=http://127.0.0.1:${KANAL_PORT}/guncelleme/surum.json\\r\\n`);\nkur(ONCEKI_EXE);");
+    // Kurmadan çıkışta: kurulu derleme, sunucunun süreçleri ve sağlığı, app\ işareti aynı; yeni kopya ve yan klasör yok
+    const kurmadi = between(ci, 'async function kurmadi(', '\n}\n');
+    for (const t of ['installedBuild() !== once.build', 'existsSync(once.isaret)', "existsSync(join(INSTALL, 'kurulum.gecici'))", 'guncellemeYedekleri() !== once.yedek', 'h?.build !== once.build', 'JSON.stringify(simdi) !== JSON.stringify(once.pids)', 'await gorevCalisiyor(label);']) expect(kurmadi, t).toContain(t);
+    // Görev karşılaştırması iki tarafta da boşsa geçmez; görev Görev Zamanlayıcı nesnesinden okunur
+    expect(between(ci, 'function compareInstalls(', '\n}\n')).toContain("if (!a.gorev || !b.gorev) fail(");
+    const gorev = between(read(`${K}ci-windows.ps1`), "'gorev' {", "'gorev-durum' {");
+    expect(gorev).toContain(`$x = [string]$zs.GetFolder('\\').GetTask('${SUNUCU_GOREVI}').Xml`);
+    expect(gorev.indexOf('GetTask(')).toBeLessThan(gorev.indexOf('/Query'));
     // Kasa penceresi kısayolun kendisiyle açılır (hedefi ve argümanları), vekilden bağlanır
     expect(ci).toContain("ps('ac', ['-Kisayol', KASA_KISAYOLU], { ASILPOS_URL: VEKIL, ...env })");
     // Edge'in yerel deposu: Chromium yazımı ~5 sn sonra diske geçirir; zorla kapatmadan önce sayfanın yazımı diskte

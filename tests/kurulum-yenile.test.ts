@@ -45,8 +45,9 @@ function install() {
  * Gerçek bekçiyi (bekci.mjs ve pakete onunla giren betikler) install()'ın kurulum klasöründe sahte bir sunucuyla açar;
  * sunucu hazır deyince durdurur. Kurulum yenilemesi açılışta, sunucunun ilk çıktısından önce kök dosyaları koyar
  */
-async function runWatchdog(extra: Record<string, string>) {
+async function runWatchdog(extra: Record<string, string>, prepare?: (t: ReturnType<typeof install>) => void) {
   const t = install();
+  prepare?.(t);
   for (const f of ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs', 'kurulum-yenile.mjs']) {
     copyFileSync(new URL(`scripts/kasa/windows/kurulum/${f}`, root), join(t.app, f));
   }
@@ -297,6 +298,63 @@ describe('kurulumu yalnız kurulu bekçi yeniler (paket denemesi dokunmaz)', () 
     const derle = read('scripts/kasa/windows/kurulum/derle.mjs');
     expect(derle).toContain("ASILPOS_NO_JOBS: '1', ASILPOS_PAKET_DENEME: '1'");
     expect(derle).toContain("existsSync(join(tmp, 'AsilPOS-Kasa.bat'))");
+  });
+});
+
+describe('kurulumun güncelleme isteği (asilpos.nsi: kurulum yeni sürümü de alsın)', () => {
+  /** Kurulum dosyasının sunucuyu açmadan önce yazdığı istek ("Şimdi güncelle"nin dosyası, aynı biçim) */
+  const istekYaz = (t: { home: string }) => {
+    mkdirSync(join(t.home, 'guncelleme'), { recursive: true });
+    writeFileSync(join(t.home, 'guncelleme', 'istek.json'), JSON.stringify({ at: Date.now(), by: 'kurulum', simdi: false }));
+  };
+  const durum = (home: string) => JSON.parse(readFileSync(join(home, 'guncelleme', 'durum.json'), 'utf8'));
+
+  it('bekçi açılışta alır, kanala hemen sorar (iki dakika beklemez)', async () => {
+    // Kanal bu bilgisayarda ve kapalı: denetim hemen düşer, dışarıya istek gitmez. Paket denemesi kipi kısayollara dokunmaz
+    const r = await runWatchdog({ ASILPOS_PAKET_DENEME: '1', ASILPOS_GUNCELLEME_KANAL: 'http://127.0.0.1:9/guncelleme/surum.json' }, istekYaz);
+    expect(existsSync(join(r.home, 'guncelleme', 'istek.json'))).toBe(false);
+    expect(r.log).toContain('[bekçi] kurulumun güncelleme isteği: yeni sürüm hemen denetleniyor');
+    expect(durum(r.home).sonIstek).toEqual(expect.any(String));
+  });
+
+  it('otomatik güncelleme kapalıysa (ayarlar.env) kurulumun isteği yok sayılır; elle istek kapalıyken de çalışır', async () => {
+    const r = await runWatchdog({ ASILPOS_PAKET_DENEME: '1', ASILPOS_GUNCELLEME: 'kapali' }, istekYaz);
+    expect(existsSync(join(r.home, 'guncelleme', 'istek.json'))).toBe(false);
+    expect(r.log).toContain('[bekçi] kurulumun güncelleme isteği yok sayıldı: otomatik güncelleme kapalı');
+    expect(durum(r.home).sonIstek ?? null).toBeNull();
+    const elle = await runWatchdog({ ASILPOS_PAKET_DENEME: '1', ASILPOS_GUNCELLEME: 'kapali', ASILPOS_GUNCELLEME_KANAL: 'http://127.0.0.1:9/guncelleme/surum.json' }, (t) => {
+      mkdirSync(join(t.home, 'guncelleme'), { recursive: true });
+      writeFileSync(join(t.home, 'guncelleme', 'istek.json'), JSON.stringify({ at: Date.now(), by: 'patron', simdi: false }));
+    });
+    expect(elle.log).toContain('[bekçi] elle güncelleme isteği');
+    expect(durum(elle.home).sonIstek).toEqual(expect.any(String));
+  });
+
+  it('kurulum dosyası isteği sunucuyu açmadan önce, aynı biçimde ve hep simdi: false yazar; an Unix ms', async () => {
+    const nsi = read('scripts/kasa/windows/kurulum/asilpos.nsi');
+    const son = nsi.slice(nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon'), nsi.indexOf('SectionEnd', nsi.indexOf('Section "-Kisayollar ve sunucu" SecSon')));
+    const yaz = son.indexOf('FileOpen $9 "$DATA\\guncelleme\\istek.json.tmp" w');
+    const calistir = son.indexOf('/Run /TN "${TASK}"');
+    expect(yaz).toBeGreaterThan(0);
+    expect(yaz).toBeLessThan(calistir);
+    expect(son.indexOf('Rename "$DATA\\guncelleme\\istek.json.tmp" "$DATA\\guncelleme\\istek.json"')).toBeLessThan(calistir);
+    // Biçim sunucunun "Şimdi güncelle" dosyasıyla aynı (server/lib/surum.ts UpdateRequest): {at, by, simdi}
+    const satir = /FileWrite \$9 '(\{"at":\$1,[^']*\})'/.exec(son)![1]!;
+    const at = 1_795_824_840_000;
+    expect(JSON.parse(satir.replace('$1', String(at)))).toEqual({ at, by: 'kurulum', simdi: false });
+    expect(nsi).not.toMatch(/"simdi":true/);
+    // an: FILETIME (100 ns, 1601'den) → Unix ms
+    expect(son).toContain("System::Call 'kernel32::GetSystemTimeAsFileTime(*l .r1)'");
+    const fark = /System::Int64Op \$1 - (\d+)/.exec(son)![1]!;
+    expect(BigInt(fark)).toBe(BigInt(Date.UTC(1970, 0, 1) - Date.UTC(1601, 0, 1)) * 10_000n);
+    expect(son).toContain('System::Int64Op $1 / 10000');
+    // Bekçi kurulumun isteğini yalnız otomatik güncelleme açıkken iletir, gün açıkken kurdurmaz
+    const bekci = read('scripts/kasa/windows/kurulum/bekci.mjs');
+    expect(bekci).toContain("const KURULUM_ISTEGI = 'kurulum';");
+    const al = bekci.slice(bekci.indexOf('if (req.by === KURULUM_ISTEGI) {'), bekci.indexOf("log(`[bekçi] elle güncelleme isteği"));
+    expect(al).toContain("if (updateMode(envFor()) === 'kapali') {");
+    expect(al).toContain('updater.requestNow({ force: false })');
+    expect(al).not.toContain('req.simdi');
   });
 });
 

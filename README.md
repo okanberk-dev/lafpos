@@ -83,7 +83,9 @@ açıkken çalıştırırsanız önce sorar.
 **Yine de çalıştır**'a basın (dosya imzasız olduğu için böyle der). "Bu uygulamanın değişiklik yapmasına izin
 verilsin mi?" sorusuna **Evet** deyin.
 
-**3. Kurun.** İleri › Kur › Son. AsilPOS arka planda çalışmaya başlar ve bilgisayar her açıldığında kendiliğinden
+**3. Kurun.** Başka bir şey sorulmaz: kurulum kendiliğinden biter, kasa ekranı açılır ve pencere kapanır (gün
+açıksa yalnız "yine de şimdi kurulsun mu" diye sorar). Yeni bir sürüm çıkmışsa AsilPOS onu da hemen indirir, gün
+kapalıyken kurar. AsilPOS arka planda çalışmaya başlar ve bilgisayar her açıldığında kendiliğinden
 açılır. Kasa ekranı masaüstündeki **AsilPOS Kasa** kısayoluyla açılır. Tabletler ve telefonlar için adres ve
 karekod: Yönetim › Ağ ve uzaktan erişim; kurulum gerekmez. iPad ve iPhone'da Safari › Paylaş › **Ana Ekrana Ekle** ile
 uygulama gibi açılır; Android'de kafenin ağında yalnız kısayol eklenir (adres çubuğuyla açılır, tam uygulama için https:

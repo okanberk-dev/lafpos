@@ -110,6 +110,17 @@ Son güncelleme: 28 Kasım 2026.
   kurmaz, aynı anda ikinci kurulum çalışmaz, başarıda pencere kendiliğinden kapanır (`docs/05-KASA-BILGISAYARI.md` §9).
   Windows CI çalışan kasanın üzerine, görevin dışında çalışan sunucuyla ve klasör başka programda açıkken dener.
 
+- **28 Kasım 2026: kurulum dosyası hiçbir şey sormaz, yeni sürümü de kendisi alır.** Sahibin isteği: "Windows'a kurarken
+  hiçbir şey sormasın, tek seferde bitsin; güncelleme varsa onu da alsın." `AsilPOS-Kurulum.exe`'de Hoş geldiniz,
+  Bileşenler ve Bitiş sayfaları yok; masaüstü kısayolu, oturum açılınca kasa ekranı ve prizdeyken uyku kapalı her
+  kurulumda açık; başarıda kasa ekranı açılır, pencere kapanır. Kalan sorular: gün açıkken "yine de kurulsun mu",
+  veritabanı kopyası alınamadı, hata kutuları, kaldırma onayı. Siteden kurulumla aynı kilit (aynı anda tek kurulum),
+  kurulu sürüm daha yeniyse kurmaz, yarıda kalınca eski sürüm ve sunucusu geri gelir (`.onInstFailed`, geri alma
+  bayraklarla), sağlık beklemesi bu derleme ya da yenisi. Sunucuyu açmadan önce güncelleme isteği yazar: bekçi kanala
+  hemen sorar, daha yeni sürümü gün kapalıyken kurar (otomatik güncelleme kapalıysa yok sayar). Windows CI: eski
+  derlemeli kurulum dosyası daha yeni kurulumun üzerine kurmadan çıkar; gün açıkken iki kurulum da kurmadan çıkar;
+  kurulumun isteği bekçiye ulaşır; görev karşılaştırması boş geçmez (`docs/05-KASA-BILGISAYARI.md` §9 "Sorusuz kurulum").
+
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
@@ -124,6 +135,9 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   yazıcısı'nda listelenmeli ve "Fiş buradan" yazmalı; "Deneme fişi yazdır" kasa bilgisayarında basılınca kâğıt çıkmalı.
 - **Şimdi güncelle:** bu sürümden sonraki ilk yayında Ayarlar ve yedek › Sürüm ve güncelleme › "Şimdi güncelle";
   gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
+- **Sorusuz kurulum dosyası (28 Kasım 2026):** ilk gerçek Windows'ta pencereli kurulumda Windows'un izin sorusundan
+  sonra soru çıkmamalı; bitince kasa ekranı açılıp kurulum penceresi kapanmalı. CI yalnız sessiz kipi dener. Kurulum
+  dosyası iki kez art arda açılırsa ikincisi "başka bir AsilPOS kurulumu sürüyor" demeli.
 - **Siteden kurulum çalışan kasada (28 Kasım 2026):** Marina'da düzeltme "Şimdi güncelle" ile gelir; kurulum dosyası
   gerekmez. Yine de bir kez çalışan kasada `AsilPOS-Kur.cmd` çalıştırılırsa sonda "kuruldu ve çalışıyor" yazıp pencere
   10 sn'de kendiliğinden kapanmalı. Türkçe Windows'ta görev sorgusunun neden yanıldığı (konsolun UTF-8'i mi) yalnız orada
@@ -236,13 +250,11 @@ PAVO_SERIAL=<cihazın seri numarası>
    tek seferlik yol (ör. `ASILPOS_UYE_IKI_ADIM_SIFIRLA=<eposta>`); (3) canlı Uzaktan girişini değiştirir: bir hata sahibi
    dışarıda bırakır, ayrı bir bağımsız inceleme ister. Sıra: bulut uçları ve testleri → giriş ekranında ikinci adım →
    Hesabım kartı → Erişim'de rozet ve sıfırlama. Örnek: ladmin'in isteğe bağlı iki adımlı girişi (lafmaliyet#154).
-6. **Kurulumların kalanları (28 Kasım 2026, siteden kurulum düzeltmesinden sonra):** (a) Kurulum dosyasında
-   (`asilpos.nsi`) siteden kurulumun yeni korumaları yok: kurulu sürüm daha yeniyse kurmama, aynı anda tek kurulum
-   (siteden kurulumun kilidi `Global\AsilPOS-Kurulum`; kurulum dosyası onu tutmaz, ikisi aynı anda çalışırsa birbirini
-   görmez), yarıda kalınca geri alma (`.onInstFailed`) ve sağlık beklemesinde `-ge`. Ayrı PR. (b) İki kurulum da
-   sunucu görevini kurulum süresince kapatır; tam o sırada elektrik kesilirse açılışta sunucu başlamaz, kurulum
-   yeniden çalıştırılınca düzelir. Öneri: görevi kapatmadan önce açılışta bir kez çalışan küçük bir onarım görevi
-   (ana görevi açar, `app` yoksa `app.eski`'yi geri koyar, kendini siler); kurulum sonunda silinir. (c) Görev yokken durdurulan
+6. **Kurulumların kalanları (28 Kasım 2026):** (a) Kurulum dosyasının korumaları (kilit, daha yeni sürümü kurmama,
+   `.onInstFailed`, `-ge`): bitti (Main'de olanlar, sorusuz kurulum). (b) Yapılmadı: iki kurulum da sunucu görevini
+   kurulum süresince kapatır; tam o sırada elektrik kesilirse açılışta sunucu başlamaz, kurulum yeniden çalıştırılınca
+   düzelir. Öneri: görevi kapatmadan önce açılışta bir kez çalışan küçük bir onarım görevi (ana görevi açar, `app` yoksa
+   `app.eski`'yi geri koyar, kendini siler); kurulum sonunda silinir. `baslat.cmd`'ye dokunmaz. (c) Görev yokken durdurulan
    sunucu yarıda kalan kurulumdan sonra başlatıcıyla, kurulumu çalıştıran kullanıcı olarak açılır (SYSTEM değil);
    oturum kapanınca durur. Görev yokken çalışan sunucu kafede beklenmiyor.
 7. **ladmin'de eski günlerin "Kime"si:** lafmaliyet#144 birleşti (25 Kasım 2026). Ondan önce gelmiş alıcılı bir gün
