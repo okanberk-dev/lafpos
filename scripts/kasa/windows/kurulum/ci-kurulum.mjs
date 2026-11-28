@@ -16,7 +16,9 @@
 //      saklanmış), yeni arayüz ve yeni kasa betiğiyle güncelleme: bekçi kendini yeniler, sabah ilk açılış yeni sürüm.
 //   F. Kaldırma ve iki kurulumun eşitliği: kafedeki kaldırıcı (önceki sürümün Kaldir.exe'si) iz bırakmaz; bu derlemenin
 //      kurulum dosyası ve siteden kurulum (AsilPOS-Kur.cmd, yerel kanaldan) aynı dosyaları, kısayolları, görevi, güvenlik
-//      duvarını ve Uygulamalar kaydını yazar.
+//      duvarını ve Uygulamalar kaydını yazar. Siteden kurulum çalışan kasanın üzerine de tamamlanır (kasa penceresi açık;
+//      sunucu görevin dışında çalışırken de), program klasörü başka bir programda açıksa yarıda kalır ve eski sürüm
+//      çalışmayı sürdürür (28 Kasım şikâyeti: "Kurulum yarıda kaldı: The process cannot access the file...").
 // Ekran görüntüleri dist/ci-ekran'a (iş akışı yükler). Başarısızlıkta sunucu ve bekçi günlüğünün sonu, vekilin son
 // kayıtları ve süreçler yazılır.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -687,21 +689,25 @@ kanal(BU_DERLEME, null);
 const kurucu = join(KANAL, 'AsilPOS-Kur.cmd');
 // Kurucu yerel kanaldan indirir: kanal sunucusu bu süreçte çalışır. spawnSync olay döngüsünü durdurur, kanal yanıt
 // veremez (27 Kasım koşusu: surum.json 30 sn, uygulama zip'i 15 dk bekleyip düştü); kurucu ayrı süreçte, beklenerek
-const web = await new Promise((done) => {
-  const child = spawn('cmd.exe', ['/d', '/c', kurucu], {
-    stdio: 'inherit',
-    env: { ...process.env, ASILPOS_KUR_KANAL: `http://127.0.0.1:${KANAL_PORT}/guncelleme/`, ASILPOS_KUR_SESSIZ: '1' },
+/** Siteden kurulumu sessiz kipte çalıştırır, bitmesini bekler: `{ status, hata? }` */
+function siteden() {
+  return new Promise((done) => {
+    const child = spawn('cmd.exe', ['/d', '/c', kurucu], {
+      stdio: 'inherit',
+      env: { ...process.env, ASILPOS_KUR_KANAL: `http://127.0.0.1:${KANAL_PORT}/guncelleme/`, ASILPOS_KUR_SESSIZ: '1' },
+    });
+    const timer = setTimeout(() => child.kill(), 20 * 60_000);
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      done({ status: null, hata: e.message });
+    });
+    child.on('exit', (status) => {
+      clearTimeout(timer);
+      done({ status });
+    });
   });
-  const timer = setTimeout(() => child.kill(), 20 * 60_000);
-  child.on('error', (e) => {
-    clearTimeout(timer);
-    done({ status: null, hata: e.message });
-  });
-  child.on('exit', (status) => {
-    clearTimeout(timer);
-    done({ status });
-  });
-});
+}
+const web = await siteden();
 if (web.status !== 0) fail(`siteden kurulum ${web.status} koduyla bitti${web.hata ? ` (${web.hata})` : ''}`);
 await until(
   `siteden kurulum: derleme ${BU_DERLEME} açılmadı`,
@@ -718,8 +724,97 @@ compareInstalls(exeDurum, webDurum);
 console.log(`  aynı: ${webDurum.kisayollar.length} kısayol, görev, güvenlik duvarı, Uygulamalar kaydı, ${webDurum.agac.kok.length} kök dosya, ${webDurum.agac.dosyalar.length} program dosyası`);
 ekran('siteden-kurulum');
 
+/** Kurulum klasöründeki Node'dan çalışan süreçler (bekçi, sunucu) */
+const sunucuSurecleri = () => ps('sunucu', ['-Klasor', INSTALL]) ?? [];
+const guncellemeYedekleri = () => readdirSync(join(HOME, 'backups')).filter((f) => f.startsWith('lafpos-guncelleme-') && f.endsWith('.db')).length; // eski-ad: yedeğin adı
+/** Görev açık ve çalışıyor (Görev Zamanlayıcı'nın durumu 4) olana dek, en çok 60 sn */
+async function gorevCalisiyor(label) {
+  let g = null;
+  for (const bitis = Date.now() + 60_000; Date.now() < bitis; await sleep(2000)) {
+    g = ps('gorev-durum');
+    if (g?.acik === true && g.durum === 4) return g;
+  }
+  fail(`${label}: görev açık ve çalışır değil (${JSON.stringify(g)})`);
+}
+/** Siteden kurulum tamamlandı: çıkış 0, sunucu bu derlemeyle, artık klasör yok, görev açık ve çalışıyor, app\ yenilendi */
+async function sitedenTamam(r, label, isaret) {
+  if (r.status !== 0) fail(`${label}: kurucu ${r.status} koduyla bitti${r.hata ? ` (${r.hata})` : ''}`);
+  await until(`${label}: derleme ${BU_DERLEME} açılmadı`, async () => ((await health())?.build === BU_DERLEME ? true : null), 180_000);
+  for (const d of ['kurulum.gecici', 'app.eski', 'node.eski']) if (existsSync(join(INSTALL, d))) fail(`${label}: ${d} kaldı`);
+  await gorevCalisiyor(label);
+  // Eski sürümün app\ klasörüne konan işaret: yer değiştirme olduysa yeni klasörde yoktur
+  if (existsSync(isaret)) fail(`${label}: app\\ yenilenmedi (eski klasördeki işaret duruyor)`);
+}
+const isaret = join(INSTALL, 'app', 'ci-eski-surum.txt');
+
+step('F4. Siteden kurulum çalışan kasanın üzerine: kasa penceresi açık, sunucu görevle çalışırken');
+const tF4 = Date.now();
+kasaAc();
+await waitSayfa(tF4, () => true, 'kasa penceresi açılmadı', 180_000);
+await gorevCalisiyor('siteden kurulumdan önce');
+// Kurucu sunucuyu süreçlerinden de bulur (çalıştırılan dosya kurulumun Node'u): görevin SYSTEM süreçleri yönetici
+// oturumundan görünmeli, yoksa görev durdurulamadığında kurucu onları bulamazdı
+const f4Once = sunucuSurecleri();
+if (!f4Once.length) fail('görevin çalıştırdığı sunucu süreçleri kurulum klasörünün Node\'u olarak görünmüyor (Win32_Process ExecutablePath)');
+console.log(`  görevin süreçleri: ${f4Once.map((p) => p.pid).join(', ')}`);
+writeFileSync(isaret, 'F4');
+const yedekF4 = guncellemeYedekleri();
+const f4 = await siteden();
+await sitedenTamam(f4, 'çalışan kasanın üzerine siteden kurulum', isaret);
+if (guncellemeYedekleri() <= yedekF4) fail('çalışan kasanın üzerine siteden kurulum veritabanının kopyasını almadı');
+checkLinks(ps('kisayollar'), 'çalışan kasanın üzerine siteden kurulum');
+console.log('  sunucu durdu, veritabanı kopyalandı, yer değiştirdi, görev açık ve çalışıyor');
+ekran('siteden-kurulum-calisan-kasa');
+
+step('F4b. Sunucu görevin dışında çalışırken: siteden kurulum sunucuyu süreçlerinden bulup durdurur, tamamlanır');
+// Sahibin kasasında (28 Kasım) görev sorgusu yanıldı, sunucu durdurulmadan yer değiştirme denendi: sunucunun çalışma
+// klasörü app\ olduğu için Windows taşımayı reddetti. Burada görev kapatılır, bekçi görevin dışından açılır; görevi
+// kapatmak ve bitirmek sunucuya dokunmaz, kurucu onu kurulum klasöründeki Node süreçlerinden bulmalı
+spawnSync('schtasks', ['/Change', '/TN', 'LafPOS Sunucu', '/DISABLE'], { stdio: 'ignore' });
+spawnSync('schtasks', ['/End', '/TN', 'LafPOS Sunucu'], { stdio: 'ignore' });
+await sleep(3000);
+// Görevin bitişi bekçiyi de kapatmadıysa denemenin kendisi kapatır (bekçi önce)
+const gorevSonrasi = sunucuSurecleri();
+if (gorevSonrasi.length) console.log(`  görev bittikten sonra açık: ${gorevSonrasi.map((p) => `${p.pid} ${p.komut}`).join(' · ')}`);
+for (const p of [...gorevSonrasi].sort((a, b) => Number(/bekci\.mjs/.test(b.komut)) - Number(/bekci\.mjs/.test(a.komut)))) {
+  spawnSync('taskkill', ['/F', '/PID', String(p.pid)], { stdio: 'ignore' });
+}
+await until('görevin sunucusu durmadı', () => (sunucuSurecleri().length === 0 ? true : null), 60_000);
+const elle = spawn(join(INSTALL, 'node', 'node.exe'), [join(INSTALL, 'app', 'bekci.mjs')], { cwd: INSTALL, detached: true, stdio: 'ignore', windowsHide: true });
+elle.unref();
+await until('görevin dışından açılan sunucu yanıt vermedi', async () => ((await health())?.build === BU_DERLEME ? true : null), 120_000);
+const elleSurecler = sunucuSurecleri();
+if (!elleSurecler.some((p) => /bekci\.mjs/.test(p.komut))) fail(`görevin dışından açılan bekçi görünmüyor: ${JSON.stringify(elleSurecler)}`);
+console.log(`  görevin dışında: ${elleSurecler.map((p) => p.pid).join(', ')}`);
+writeFileSync(isaret, 'F4b');
+const f4b = await siteden();
+await sitedenTamam(f4b, 'görevin dışında çalışan sunucuyla siteden kurulum', isaret);
+const durmayan = sunucuSurecleri().filter((p) => elleSurecler.some((e) => e.pid === p.pid));
+if (durmayan.length) fail(`görevin dışından açılan süreçler durdurulmadı: ${JSON.stringify(durmayan)}`);
+console.log('  görevin dışındaki bekçi ve sunucu durduruldu, kurulum tamamlandı, sunucu görevle açıldı');
+
+step('F5. Program klasörü başka bir programda açıkken: kurulum yarıda kalır, eski sürüm çalışmayı sürdürür');
+// Kurulumun durdurmadığı bir süreç (çalışma klasörü app\) klasörü tutar: yer değiştirme 10 sn denenir, olmaz; yeni
+// klasörler kalkar, eski sürüm yerinde kalır, görev yeniden açılır. Süreç kapanınca kurulum tamamlanır
+writeFileSync(isaret, 'F5');
+const tutan = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)'], { cwd: join(INSTALL, 'app'), stdio: 'ignore', windowsHide: true });
+await sleep(2000);
+const f5 = await siteden();
+if (f5.status === 0) fail('app\\ klasörü başka bir programda açıkken siteden kurulum başarılı bitti');
+console.log(`  kurucu ${f5.status} koduyla bitti (beklenen)`);
+await until('yarıda kalan kurulumdan sonra eski sürüm yanıt vermedi', async () => ((await health())?.build === BU_DERLEME ? true : null), 120_000);
+if (!existsSync(isaret)) fail('yarıda kalan kurulumdan sonra eski app\\ yerinde değil (işaret yok)');
+for (const f of [join(INSTALL, 'app', 'bekci.mjs'), join(INSTALL, 'node', 'node.exe')]) if (!existsSync(f)) fail(`yarıda kalan kurulumdan sonra yok: ${f}`);
+for (const d of ['kurulum.gecici', 'app.eski', 'node.eski']) if (existsSync(join(INSTALL, d))) fail(`yarıda kalan kurulumdan sonra ${d} kaldı`);
+await gorevCalisiyor('yarıda kalan kurulumdan sonra');
+tutan.kill();
+await sleep(2000);
+const f5b = await siteden();
+await sitedenTamam(f5b, 'klasörü tutan program kapandıktan sonra siteden kurulum', isaret);
+console.log('  yarıda kaldı, eski sürüm ve görev yerinde; program kapanınca kurulum tamamlandı');
+
 kanalSunucusu.closeAllConnections?.();
 kanalSunucusu.close();
 await vekil.close();
-console.log('\n✓ Gerçek Windows: önceki sürümden güncelleme, ilk açılış yeni sürümle, kasa programı (tek pencere, bekçi, Edge), geri dönüş, kaldırma ve iki kurulumun eşitliği tamam');
+console.log('\n✓ Gerçek Windows: önceki sürümden güncelleme, ilk açılış yeni sürümle, kasa programı (tek pencere, bekçi, Edge), geri dönüş, kaldırma, iki kurulumun eşitliği ve çalışan kasada siteden kurulum tamam');
 process.exit(0);
