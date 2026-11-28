@@ -88,6 +88,16 @@ Son güncelleme: 28 Kasım 2026.
   penceresini artık yeniden açmaz ve müşteri ekranını da kapatır; uygulama "AsilPOS Kasa" kısayoluyla açılır. Kısayol
   sunucuyu beklerken açma isteği bırakır, sunucu gelince pencereyi bekçi açar (`docs/05-KASA-BILGISAYARI.md` §3).
 
+- **28 Kasım 2026: kasa daha hızlı ve markalı açılır; çöken pencere kendiliğinden geri gelir** (sahibin isteği: "PC'yi
+  doğrudan AsilPOS'a geçir, estetikleştir, hızlandır"). Kasa kısayolu tam ekran, ev yeşili açılış penceresiyle açılır;
+  sıra açılış penceresi, sunucu, kasa penceresi, müşteri ekranı, yazıcılar (yazıcı sorgusu artık pencereyi
+  bekletmez). C# derlemesi yok, tarayıcı önbelleği yalnız derleme değişince silinir, yazıcılar bir kez sorulur.
+  `index.html` betik gelene dek markalı açılış ekranı gösterir. Kasa programının günlüğü
+  `%LocalAppData%\LafPOS\logs\kasa-programi.log` (adım süreleri, bekçinin kararları, hatalar). Bekçi (sürüm 7)
+  çöken (zorla kapatılan) pencereyi yeniden açar, kullanıcının kapattığını açmaz. Uygulamalar listesi güncellemeden sonra
+  yeni sürümü gösterir (`docs/05-KASA-BILGISAYARI.md` §3, §6, §9). Windows ayarlarını değiştiren "kasa bilgisayarı modu"
+  ayrı iş.
+
 - **28 Kasım 2026: eski kasa programı sorusu açılışta çıkmaz** (sahibin isteği: "ModPOS kısımlarını kaldır"). Kasa
   programı haftada bir "Eski kasa programı bilgisayar açılınca hâlâ başlıyor" kutusunu açmaz; elle açılan Kasa
   hazırlığı da eski kasa programını sormaz (dört ayar sorusu kalır). Kullanıcı Başlat menüsündeki simgesiz ikinci "Kasa hazirligi" silinir,

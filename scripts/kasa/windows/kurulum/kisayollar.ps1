@@ -14,9 +14,13 @@
 # kasa kisayolu kalir ve her oturumda olu adrese tam ekran acar. Kaldirma siteden kurulumun kaldiricisina (-Kaldirici,
 # iki adi da siler) gecer: kurulum klasorune kopyalanir, kayit ve Baslat menusundeki kaldirma kisayolu ona doner, eski
 # Kaldir.exe silinir. Sonra kayitta gorunen ad yeni ad, simge yeni simge olur. Bu adim olmazsa hicbir kisayol degismez
-# (eski kaldirici eski adlari bilir). Ciktida sorunlu her adim icin "HATA <sira>: <neden>"; cikis kodu sorunlu adim
-# sayisi. Betik guncellemeyle gelir (app\). Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
-param([Parameter(Mandatory = $true)][string]$Liste, [string]$EskiMenu = '', [string]$YeniMenu = '', [string]$Kurulum = '', [string]$Kayit = '', [string]$Kaldirici = '', [switch]$Kur, [string]$Gruplar = '')
+# (eski kaldirici eski adlari bilir).
+# -Surum (guncelleme, 28 Kas 2026): Uygulamalar kaydinda surum (DisplayVersion), boyut (EstimatedSize, kurulum klasoru, KB)
+# ve tarih (InstallDate, yyyyMMdd) yenilenir; otomatik guncelleme yalniz app\ ve node\'u degistirir, kayit kurulumdaki
+# surumde kaliyordu. Yazilamazsa "UYARI surum: <neden>" (kisayollar yine yazilir, sorunlu adim sayilmaz).
+# Ciktida sorunlu her adim icin "HATA <sira>: <neden>"; cikis kodu sorunlu adim sayisi. Betik guncellemeyle gelir
+# (app\). Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
+param([Parameter(Mandatory = $true)][string]$Liste, [string]$EskiMenu = '', [string]$YeniMenu = '', [string]$Kurulum = '', [string]$Kayit = '', [string]$Kaldirici = '', [switch]$Kur, [string]$Gruplar = '', [string]$Surum = '')
 $ErrorActionPreference = 'Stop'
 $hata = 0
 $secili = @($Gruplar.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -89,6 +93,21 @@ if ($Kurulum -and $Kayit -and $YeniMenu) {
   } catch {
     Write-Output ('HATA kaldirici: ' + $_.Exception.Message)
     exit 1
+  }
+}
+
+if ($Kayit -and $Surum) {
+  try {
+    if (Test-Path -LiteralPath $Kayit) {
+      Set-ItemProperty -LiteralPath $Kayit -Name 'DisplayVersion' -Value $Surum
+      Set-ItemProperty -LiteralPath $Kayit -Name 'InstallDate' -Value ([DateTime]::Now.ToString('yyyyMMdd', [System.Globalization.CultureInfo]::InvariantCulture))
+      if ($Kurulum -and (Test-Path -LiteralPath $Kurulum)) {
+        $boyut = [int]((Get-ChildItem -LiteralPath $Kurulum -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1024)
+        New-ItemProperty -LiteralPath $Kayit -Name 'EstimatedSize' -Value $boyut -PropertyType DWord -Force | Out-Null
+      }
+    }
+  } catch {
+    Write-Output ('UYARI surum: ' + $_.Exception.Message)
   }
 }
 

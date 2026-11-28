@@ -14,6 +14,7 @@
 //   yazılınca eskisi silinir, Başlat menüsünün eski klasöründe kalanlar (kaldırma, tarayıcı kısayolu) yeni klasöre taşınır.
 //   Kısayollardan önce Uygulamalar kaydı: kurulum dosyasının eski kaldırıcısı (Kaldir.exe) yeni adları bilmez, kaldırma
 //   siteden kurulumun kaldırıcısına (iki adı da siler) geçer; kayıtta görünen ad AsilPOS olur (kisayollar.ps1).
+//   Kısayollarla birlikte Uygulamalar kaydındaki sürüm, boyut ve tarih de yenilenir (28 Kasım 2026; displayVersion).
 // Yapılamayan bir şey kalırsa güncelleme durumuna (durum.json `kurulumUyari`) yazılır; Merkez nabzıyla patron panelinde
 // "Kurulumu yenileyin" görünür. Bağımlılıksız; pakete girer (paket.mjs). Testi tests/kurulum-yenile.test.ts.
 //
@@ -57,9 +58,11 @@ export const MENU = { yeni: 'AsilPOS', eski: 'LafPOS' }; // eski-ad
  * arasında (Yönetim › Ağ) kasa penceresi yeniden açılmaz. 5: program (27 Kas 2026): Edge InPrivate olmayan tam ekran
  * pencerede; bekçi diskteki betik değişince (güncelleme) yenisiyle yeniden başlar, sonraki sürümler oturum kapanmayı beklemez
  * 6 (28 Kas 2026): bekçi kapanan kasa penceresini yeniden açmaz, yalnız kasa kısayolunun isteğiyle açar; kasa penceresi
- * kapanınca müşteri ekranını da kapatır (sahibin isteği: "kapatınca kapansın, ben açınca açılsın")
+ * kapanınca müşteri ekranını da kapatır (sahibin isteği: "kapatınca kapansın, ben açınca açılsın"). 7 (28 Kas 2026):
+ * çöken kasa penceresini yeniden açar, kullanıcının kapattığını açmaz (sürecin çıkış kodu ve profilin exit_type'ı);
+ * kararlarını kasa programının günlüğüne yazar
  */
-export const WATCHER_VERSION = 6;
+export const WATCHER_VERSION = 7;
 /** Kurulumların isteğe bağlı kısayol grupları: masaüstündeki kasa ve oturum açılınca kasa (bekçisiyle) */
 export const INSTALL_GROUPS = ['masaustu', 'baslangic'];
 /** Kasa kısayollarının açtığı program kipi (kasa-yazici.ps1) */
@@ -148,6 +151,28 @@ export function syncRootFiles({ appDir, installDir }) {
   return out;
 }
 
+/**
+ * Uygulamalar listesinde görünen sürüm (DisplayVersion; 28 Kasım 2026): kurulu sürüm ve derlemenin tarihi, Yönetim ›
+ * Ayarlar ve yedek › Güncelleme kartındaki gibi ("0.3.0 (28.11.2026 14:05)", bilgisayarın saatiyle). Otomatik güncelleme
+ * yalnız app\ ve node\'u değiştirir: kayıt kurulumdaki sürümde kalıyordu. Sürüm ya da derleme yoksa null (kayıt değişmez)
+ */
+export function displayVersion(version, build) {
+  if (typeof version !== 'string' || !/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(version) || !Number.isInteger(build) || build <= 0) return null;
+  const d = new Date(build * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${version} (${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())})`;
+}
+
+/** Kurulu app\package.json'un sürümü (okunamazsa boş) */
+function installedVersion(appDir) {
+  try {
+    const v = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8')).version;
+    return typeof v === 'string' ? v : '';
+  } catch {
+    return '';
+  }
+}
+
 /** Panelde görünen uyarı (yapılamayan bir şey yoksa null) */
 export function warningFor({ failed = [], stale = [], shortcuts = null }) {
   const parts = [];
@@ -158,9 +183,9 @@ export function warningFor({ failed = [], stale = [], shortcuts = null }) {
   return `Kurulumu yenileyin (AsilPOS-Kur.cmd'yi yeniden çalıştırın): ${parts.join('; ')}`.slice(0, 300);
 }
 
-/** kisayollar.ps1'in argümanları (liste, Başlat menüsü adları, Uygulamalar kaydı ve kaldırıcı) */
-export function shortcutArgs({ appDir, installDir, listFile }) {
-  return [
+/** kisayollar.ps1'in argümanları (liste, Başlat menüsü adları, Uygulamalar kaydı ve kaldırıcı; varsa kayıttaki sürüm) */
+export function shortcutArgs({ appDir, installDir, listFile, surum = null }) {
+  const args = [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy',
@@ -180,20 +205,22 @@ export function shortcutArgs({ appDir, installDir, listFile }) {
     '-Kaldirici',
     join(appDir, ROOT_DIR, IF_PRESENT_ROOT_FILES[0]),
   ];
+  if (surum) args.push('-Surum', surum);
+  return args;
 }
 
-/** kisayollar.ps1'i çalıştırır; hata yoksa null, varsa kısa açıklama */
-function runShortcutScript({ appDir, installDir, listFile, systemRoot }) {
+/** kisayollar.ps1'i çalıştırır; hata yoksa null, varsa kısa açıklama. UYARI satırları (kayıttaki sürüm) günlüğe */
+function runShortcutScript({ appDir, installDir, listFile, systemRoot, surum = null, log = () => {} }) {
   const ps = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   return new Promise((resolve) => {
     execFile(
       ps,
-      shortcutArgs({ appDir, installDir, listFile }),
+      shortcutArgs({ appDir, installDir, listFile, surum }),
       { timeout: 60_000, windowsHide: true },
       (err, stdout) => {
-        const lines = String(stdout ?? '')
-          .split(/\r?\n/)
-          .filter((l) => l.startsWith('HATA'));
+        const all = String(stdout ?? '').split(/\r?\n/);
+        for (const l of all.filter((x) => x.startsWith('UYARI'))) log(l.slice(0, 200));
+        const lines = all.filter((l) => l.startsWith('HATA'));
         if (!err && !lines.length) return resolve(null);
         resolve(lines.length ? lines.join(' | ').slice(0, 200) : errText(err).slice(0, 200));
       },
@@ -231,7 +258,8 @@ export async function refreshInstall(deps) {
       mkdirSync(dir, { recursive: true });
       const listFile = join(dir, 'kisayollar.json');
       writeFileSync(listFile, JSON.stringify(shortcutSpec(deps.installDir, systemRoot), null, 2));
-      shortcuts = await (deps.runShortcuts ?? runShortcutScript)({ appDir: deps.appDir, installDir: deps.installDir, listFile, systemRoot });
+      const surum = displayVersion(installedVersion(deps.appDir), deps.build);
+      shortcuts = await (deps.runShortcuts ?? runShortcutScript)({ appDir: deps.appDir, installDir: deps.installDir, listFile, systemRoot, surum, log: say });
       writeFileSync(marker, JSON.stringify({ build: deps.build, ok: !shortcuts, at: new Date().toISOString() }));
       say(shortcuts ? `kısayollar yenilenemedi: ${shortcuts}` : 'kısayollar yenilendi');
     }
